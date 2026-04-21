@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno y secretos
+.env
+.env.*
+
+# Claves criptográficas y certificados
+keys/
+certs/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Build / temporales
+dist/
+.tmp/
+tmp/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

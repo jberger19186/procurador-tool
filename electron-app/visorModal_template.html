@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de Novedades - SCW PJN</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #2196F3; --success: #4CAF50; --error: #F44336;
+            --background: #f5f5f5; --card-bg: #ffffff;
+            --text-primary: #212121; --text-secondary: #757575; --border: #e0e0e0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: var(--card-bg);
+            padding: 24px 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+            margin-bottom: 24px;
+            border-top: 4px solid var(--primary);
+        }
+        .header h1    { color: var(--primary); font-size: 24px; margin-bottom: 6px; }
+        .header .subtitle { color: var(--text-secondary); font-size: 13px; }
+
+        /* ── Stats ── */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--card-bg);
+            padding: 18px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+            text-align: center;
+            border-top: 4px solid var(--primary);
+        }
+        .stat-card.success { border-top-color: var(--success); }
+        .stat-card.error   { border-top-color: var(--error); }
+        .stat-card .label  { color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+        .stat-card .value  { font-size: 32px; font-weight: bold; }
+
+        /* ── Filtro ── */
+        .filtros {
+            margin-bottom: 20px;
+        }
+        .filtros input {
+            width: 100%;
+            padding: 11px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--card-bg);
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        }
+        .filtros input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(33,150,243,.12);
+        }
+
+        /* ── Tabla ── */
+        .tabla-container {
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+            overflow: hidden;
+        }
+        .tabla-expedientes {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .tabla-expedientes th {
+            background: var(--primary);
+            color: white;
+            padding: 10px 12px;
+            text-align: left;
+            white-space: nowrap;
+            font-weight: 500;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        .tabla-expedientes td {
+            padding: 9px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            vertical-align: top;
+        }
+        .tabla-expedientes tr:hover td { background: #e3f2fd; }
+        .exp-num { font-weight: 600; color: #1565c0; white-space: nowrap; }
+
+        .btn-ver {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background .2s;
+        }
+        .btn-ver:hover { background: #1976D2; }
+
+        .estado-exitoso { color: #2e7d32; }
+        .estado-fallido { color: #c62828; }
+
+        .no-data { text-align: center; padding: 60px; color: var(--text-secondary); font-size: 1.1em; }
+
+        /* ── Modal ── */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+        }
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn .3s;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .modal-content {
+            background: white;
+            width: 90%; max-width: 1100px; max-height: 90vh;
+            border-radius: 12px; overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,.3);
+            display: flex; flex-direction: column;
+            animation: slideUp .3s;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #1565c0 0%, #1976D2 100%);
+            color: white; padding: 22px 28px; position: relative;
+        }
+        .modal-header h2 { font-size: 1.3em; margin-bottom: 8px; }
+        .modal-header p  { opacity: .9; margin: 4px 0; font-size: .9em; }
+
+        .modal-close {
+            position: absolute; top: 14px; right: 18px;
+            font-size: 28px; cursor: pointer;
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%; transition: background .2s; line-height: 1;
+        }
+        .modal-close:hover { background: rgba(255,255,255,.2); }
+
+        .modal-body   { padding: 28px; overflow-y: auto; flex: 1; }
+        .modal-body h3 { color: var(--primary); margin-bottom: 16px; font-size: 1.2em; }
+
+        .modal-footer {
+            padding: 16px 28px; background: #f8f9fa;
+            border-top: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .btn-nav {
+            padding: 8px 18px; border: none;
+            background: var(--primary); color: white;
+            border-radius: 5px; cursor: pointer;
+            font-size: 14px; transition: background .2s;
+        }
+        .btn-nav:hover:not(:disabled) { background: #1976D2; }
+        .btn-nav:disabled { background: #ccc; cursor: not-allowed; }
+        .modal-contador { font-weight: bold; color: var(--primary); }
+
+        .tabla-movimientos { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        .tabla-movimientos th {
+            background: #f8f9fa; padding: 10px 12px;
+            text-align: left; border-bottom: 2px solid var(--primary);
+            font-weight: bold; color: #333;
+        }
+        .tabla-movimientos td { padding: 10px 12px; border-bottom: 1px solid #eee; vertical-align: top; }
+        .tabla-movimientos tr:hover { background: #f0f7ff; }
+
+        .tipo-badge {
+            display: inline-block; background: var(--primary); color: white;
+            padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: bold;
+        }
+        .link-scw   { color: var(--primary); text-decoration: none; font-weight: 500; }
+        .link-scw:hover { text-decoration: underline; }
+
+        .error-box {
+            background: #ffebee; color: #c62828;
+            padding: 18px; border-radius: 8px; border-left: 4px solid var(--error);
+        }
+        .error-box strong { display: block; margin-bottom: 8px; }
+
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .stats-container { grid-template-columns: repeat(2, 1fr); }
+            .modal-content { width: 95%; max-height: 95vh; }
+            .modal-footer { flex-direction: column; gap: 10px; }
+            .tabla-expedientes th,
+            .tabla-expedientes td { padding: 7px 6px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="resumen" style="display: none;"></div>
+    <div id="filtros" style="display: none;"></div>
+    <div id="tabla-container" style="display: none;"></div>
+
+    <!-- MODAL -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-close" onclick="cerrarModal()">×</div>
+                <h2 id="modal-expediente"></h2>
+                <p id="modal-caratula"></p>
+                <p id="modal-info"></p>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer">
+                <button class="btn-nav" id="btn-anterior" onclick="navegarExpediente(-1)">◄ Anterior</button>
+                <span class="modal-contador" id="modal-contador"></span>
+                <button class="btn-nav" id="btn-siguiente" onclick="navegarExpediente(1)">Siguiente ►</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DATOS_EMBEBIDOS -->
+
+    <script>
+        let datosCompletos = null;
+        let expedientesFiltrados = [];
+        let expedienteActualIndex = 0;
+
+        function cargarDatosEmbebidos(datos) {
+            datosCompletos = datos;
+            expedientesFiltrados = datos.expedientes;
+            mostrarDatos(datos);
+        }
+
+        function mostrarDatos(datos) {
+            mostrarResumen(datos);
+            mostrarFiltros();
+            mostrarTabla(expedientesFiltrados);
+        }
+
+        function mostrarResumen(datos) {
+            const resumenDiv = document.getElementById('resumen');
+            resumenDiv.style.display = 'block';
+
+            const fechaEjecucion = new Date(datos.fechaEjecucion).toLocaleString('es-AR');
+
+            resumenDiv.innerHTML = `
+                <div class="header">
+                    <h1>🔍 Visor de Novedades</h1>
+                    <div class="subtitle">
+                        Ejecutado: ${fechaEjecucion}
+                        ${datos.identificador ? ' &nbsp;·&nbsp; Identificador: ' + datos.identificador : ''}
+                        ${datos.fechaLimite   ? ' &nbsp;·&nbsp; Fecha límite: '  + datos.fechaLimite   : ''}
+                    </div>
+                </div>
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <div class="label">Listados</div>
+                        <div class="value">${datos.resumen.totalListados}</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="label">Exitosos</div>
+                        <div class="value">${datos.resumen.exitosos}</div>
+                    </div>
+                    <div class="stat-card error">
+                        <div class="label">Fallidos</div>
+                        <div class="value">${datos.resumen.fallidos}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Tiempo Total</div>
+                        <div class="value">${datos.resumen.tiempoTotal}s</div>
+                    </div>
+                </div>`;
+        }
+
+        function mostrarFiltros() {
+            const filtrosDiv = document.getElementById('filtros');
+            filtrosDiv.style.display = 'block';
+            filtrosDiv.innerHTML = `
+                <div class="filtros">
+                    <input type="text"
+                           id="busqueda"
+                           placeholder="🔍 Buscar por expediente, carátula, situación, dependencia..."
+                           oninput="filtrarExpedientes()">
+                </div>`;
+        }
+
+        function filtrarExpedientes() {
+            const busqueda = document.getElementById('busqueda').value.toLowerCase();
+
+            if (!busqueda) {
+                expedientesFiltrados = datosCompletos.expedientes;
+            } else {
+                expedientesFiltrados = datosCompletos.expedientes.filter(exp => {
+                    return exp.expediente.toLowerCase().includes(busqueda) ||
+                           exp.caratula.toLowerCase().includes(busqueda)   ||
+                           exp.situacion.toLowerCase().includes(busqueda)  ||
+                           exp.dependencia.toLowerCase().includes(busqueda);
+                });
+            }
+
+            mostrarTabla(expedientesFiltrados);
+        }
+
+        function mostrarTabla(expedientes) {
+            const container = document.getElementById('tabla-container');
+            container.style.display = 'block';
+
+            if (expedientes.length === 0) {
+                container.innerHTML = '<div class="no-data">No se encontraron expedientes que coincidan con la búsqueda</div>';
+                return;
+            }
+
+            let html = `
+                <div class="tabla-container">
+                    <table class="tabla-expedientes">
+                        <thead>
+                            <tr>
+                                <th style="width:12%">Expediente</th>
+                                <th style="width:35%">Carátula</th>
+                                <th style="width:20%">Dependencia</th>
+                                <th style="width:10%">Situación</th>
+                                <th style="width:8%">Últ. Act.</th>
+                                <th style="width:7%">Estado</th>
+                                <th style="width:5%">Movs.</th>
+                                <th style="width:8%">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+            expedientes.forEach((exp, index) => {
+                const estadoClass = exp.estado === 'exitoso' ? 'estado-exitoso' : 'estado-fallido';
+                const estadoIcon  = exp.estado === 'exitoso' ? '✅' : '❌';
+
+                const caratulaCorta = exp.caratula.length > 45
+                    ? exp.caratula.substring(0, 45) + '...'
+                    : exp.caratula;
+
+                const dependenciaCorta = exp.dependencia.length > 28
+                    ? exp.dependencia.substring(0, 28) + '...'
+                    : exp.dependencia;
+
+                html += `
+                    <tr>
+                        <td class="exp-num">${exp.expediente}</td>
+                        <td title="${exp.caratula}">${caratulaCorta}</td>
+                        <td title="${exp.dependencia}">${dependenciaCorta}</td>
+                        <td>${exp.situacion}</td>
+                        <td>${exp.ultimaAct}</td>
+                        <td class="${estadoClass}">${estadoIcon}</td>
+                        <td style="text-align:center">${exp.movimientos ? exp.movimientos.length : 0}</td>
+                        <td><button class="btn-ver" onclick="abrirModal(${index})">Ver</button></td>
+                    </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            container.innerHTML = html;
+        }
+
+        function abrirModal(index) {
+            expedienteActualIndex = index;
+            const exp = expedientesFiltrados[index];
+
+            document.getElementById('modal-expediente').textContent = exp.expediente;
+            document.getElementById('modal-caratula').textContent   = exp.caratula;
+            document.getElementById('modal-info').innerHTML =
+                `<strong>Dependencia:</strong> ${exp.dependencia}<br>` +
+                `<strong>Situación:</strong> ${exp.situacion} | <strong>Última Act:</strong> ${exp.ultimaAct}`;
+
+            let bodyHTML = '';
+            if (exp.estado === 'exitoso' && exp.movimientos && exp.movimientos.length > 0) {
+                bodyHTML = `
+                    <h3>📋 Movimientos (${exp.movimientos.length})</h3>
+                    <table class="tabla-movimientos">
+                        <thead>
+                            <tr>
+                                <th style="width:10%">Fecha</th>
+                                <th style="width:18%">Tipo</th>
+                                <th style="width:57%">Detalle</th>
+                                <th style="width:15%">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+                exp.movimientos.forEach(mov => {
+                    bodyHTML += `
+                        <tr>
+                            <td><strong>${mov.fecha}</strong></td>
+                            <td><span class="tipo-badge">${mov.tipo}</span></td>
+                            <td>${mov.detalle}</td>
+                            <td>${mov.viewHref
+                                ? `<a href="${mov.viewHref}" target="_blank" class="link-scw">🔗 Ver en SCW</a>`
+                                : '—'}</td>
+                        </tr>`;
+                });
+
+                bodyHTML += `</tbody></table>`;
+            } else if (exp.estado === 'fallido') {
+                bodyHTML = `
+                    <div class="error-box">
+                        <strong>⚠️ Error al procesar este expediente</strong>
+                        ${exp.error || 'Error desconocido'}
+                    </div>`;
+            } else {
+                bodyHTML = `<div class="no-data">No hay movimientos disponibles para este expediente</div>`;
+            }
+
+            document.getElementById('modal-body').innerHTML = bodyHTML;
+            document.getElementById('modal-contador').textContent =
+                `Expediente ${index + 1} de ${expedientesFiltrados.length}`;
+            document.getElementById('btn-anterior').disabled = (index === 0);
+            document.getElementById('btn-siguiente').disabled = (index === expedientesFiltrados.length - 1);
+            document.getElementById('modal').classList.add('active');
+        }
+
+        function cerrarModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+        function navegarExpediente(direccion) {
+            const nuevoIndex = expedienteActualIndex + direccion;
+            if (nuevoIndex >= 0 && nuevoIndex < expedientesFiltrados.length) {
+                abrirModal(nuevoIndex);
+            }
+        }
+
+        // Cerrar modal al hacer clic fuera
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) cerrarModal();
+        });
+
+        // Atajos de teclado
+        document.addEventListener('keydown', function(e) {
+            if (document.getElementById('modal').classList.contains('active')) {
+                if      (e.key === 'Escape')     cerrarModal();
+                else if (e.key === 'ArrowLeft')  navegarExpediente(-1);
+                else if (e.key === 'ArrowRight') navegarExpediente(1);
+            }
+        });
+    </script>
+</body>
+</html>

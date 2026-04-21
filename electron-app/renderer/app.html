@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <title>Procurador SCW - Sistema de Automatización</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- ===== BARRA SUPERIOR UNIFICADA (estilo Claude) ===== -->
+        <header class="topbar">
+
+            <!-- FILA 1: título + [tabs en pantalla ancha] + estado/iconos -->
+            <div class="topbar-row1">
+
+                <!-- Lado izquierdo: logo + título -->
+                <div class="topbar-left">
+                    <span class="topbar-logo">⚖️</span>
+                    <span class="topbar-title">Procurador SCW</span>
+                </div>
+
+                <!-- Centro (solo visible en pantalla ancha >= 850px) -->
+                <nav class="topbar-tabs-inline">
+                    <button class="tab-btn tab-run" id="btnRunProcess" title="Procurar">
+                        <span class="tab-icon">▶</span>
+                        <span>Procurar</span>
+                    </button>
+                    <button class="tab-btn" id="btnCustomDate" title="Fecha personalizada">
+                        <span class="tab-icon">📅</span>
+                        <span>Fecha Custom</span>
+                    </button>
+                    <button class="tab-btn" id="btnViewResults" title="Ver resultados">
+                        <span class="tab-icon">👁</span>
+                        <span>Visor</span>
+                    </button>
+                    <button class="tab-btn" id="btnViewExcel" title="Ver Excel">
+                        <span class="tab-icon">📊</span>
+                        <span>Excel</span>
+                    </button>
+                    <button class="tab-btn" id="btnOpenDownloads" title="Abrir descargas">
+                        <span class="tab-icon">📁</span>
+                        <span>Descargas</span>
+                    </button>
+                    <div class="tab-btn-group">
+                        <button class="tab-btn" id="btnCleanMenu" title="Limpiar">
+                            <span class="tab-icon">🗑️</span>
+                            <span>Limpiar</span>
+                            <span class="tab-chevron">▾</span>
+                        </button>
+                        <div class="dropdown-menu" id="cleanDropdown">
+                            <button class="dropdown-item" id="btnCleanTemp">
+                                <span>🗂️</span> Limpiar temporales
+                            </button>
+                            <button class="dropdown-item" id="btnCleanProcesos">
+                                <span>📊</span> Limpiar procesos
+                            </button>
+                            <button class="dropdown-item" id="btnCleanAll">
+                                <span>🗑️</span> Limpiar todo
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+
+                <!-- Lado derecho: estado + info + iconos -->
+                <div class="topbar-right">
+                    <span class="status-badge" id="statusIndicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Inactivo</span>
+                    </span>
+                    <span class="topbar-info" id="headerProgress">0/0 exp</span>
+                    <span class="topbar-info" id="headerSession">Sesión: Verificando...</span>
+                    <button class="topbar-icon-btn" id="btnOpenConfig" title="Configuración">⚙️</button>
+                    <button class="topbar-icon-btn" id="btnOpenStats" title="Estadísticas">📈</button>
+                </div>
+
+            </div>
+
+            <!-- FILA 2: tabs de acción (solo visible en pantalla angosta < 850px) -->
+            <nav class="topbar-row2">
+                <button class="tab-btn tab-run" id="btnRunProcess2" title="Procurar">
+                    <span class="tab-icon">▶</span>
+                    <span>Procurar</span>
+                </button>
+                <button class="tab-btn" id="btnCustomDate2" title="Fecha personalizada">
+                    <span class="tab-icon">📅</span>
+                    <span>Fecha Custom</span>
+                </button>
+                <button class="tab-btn" id="btnViewResults2" title="Ver resultados">
+                    <span class="tab-icon">👁</span>
+                    <span>Visor</span>
+                </button>
+                <button class="tab-btn" id="btnViewExcel2" title="Ver Excel">
+                    <span class="tab-icon">📊</span>
+                    <span>Excel</span>
+                </button>
+                <button class="tab-btn" id="btnOpenDownloads2" title="Abrir descargas">
+                    <span class="tab-icon">📁</span>
+                    <span>Descargas</span>
+                </button>
+                <div class="tab-btn-group">
+                    <button class="tab-btn" id="btnCleanMenu2" title="Limpiar">
+                        <span class="tab-icon">🗑️</span>
+                        <span>Limpiar</span>
+                        <span class="tab-chevron">▾</span>
+                    </button>
+                    <div class="dropdown-menu" id="cleanDropdown2">
+                        <button class="dropdown-item" id="btnCleanTemp2">
+                            <span>🗂️</span> Limpiar temporales
+                        </button>
+                        <button class="dropdown-item" id="btnCleanProcesos2">
+                            <span>📊</span> Limpiar procesos
+                        </button>
+                        <button class="dropdown-item" id="btnCleanAll2">
+                            <span>🗑️</span> Limpiar todo
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+        </header>
+
+        <!-- ===== CONSOLA (sin cambios) ===== -->
+        <div class="console-wrapper" id="consoleWrapper">
+            <div class="console-header">
+                <span class="console-title">📟 Consola</span>
+                <div class="console-controls">
+                    <button class="btn-console-control" id="btnExpandConsole" title="Expandir consola">
+                        ⬇ Contraer
+                    </button>
+                    <button class="btn-console-control" id="btnPositionLeft" title="Posicionar ventana a la derecha">
+                        ◧ Posicionar
+                    </button>
+                    <button class="btn-console-control" id="btnClearConsole" title="Limpiar consola">
+                        🧹 Limpiar
+                    </button>
+                    <button class="btn-console-control btn-console-stop" id="btnStopProcess" title="Detener proceso">
+                        ⏹ Detener
+                    </button>
+                </div>
+            </div>
+            <div class="console-output" id="consoleOutput">
+                <div class="console-line console-info">
+                    <span class="console-time">[INICIO]</span>
+                    <span>Sistema iniciado correctamente ✅</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modal: Configuración -->
+    <div class="modal" id="modalConfig">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>⚙️ Configuración del Proceso</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="configForm" class="config-form">
+                    <div class="form-section">
+                        <h4>General</h4>
+                        <div class="form-group">
+                            <label for="identificador">Identificador (CUIL)</label>
+                            <input type="text" id="identificador" placeholder="27320694359">
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h4>Opciones Procurar</h4>
+                        <div class="form-group">
+                            <label for="fechaLimite">Fecha Límite</label>
+                            <input type="text" id="fechaLimite" placeholder="DD/MM/YYYY" pattern="\d{2}/\d{2}/\d{4}">
+                            <small>Formato: DD/MM/YYYY (ej: 01/11/2025)</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Secciones</label>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="seccionLetrado"><span>Letrado</span></label>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="seccionParte"><span>Parte</span></label>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="seccionAutorizado"><span>Autorizado NE</span></label>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="seccionFavoritos"><span>Favoritos</span></label>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h4>Reportes</h4>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="notificacionesActivadas"><span>Notificaciones de Windows</span></label>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="generarExcel"><span>Generar Excel</span></label>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="abrirVisor"><span>Abrir visor automáticamente</span></label>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h4>🔒 Seguridad</h4>
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="modoHeadless">
+                                <span>Modo headless (Chrome invisible)</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Gestor de contraseñas de Chrome</label>
+                            <div class="security-buttons">
+                                <button type="button" class="btn-security" id="btnAbrirNavegador">
+                                    🌐 Abrir navegador
+                                </button>
+                                <button type="button" class="btn-security btn-security-accent" id="btnAgregarPasswordSCW">
+                                    + Agregar contraseña SCW
+                                </button>
+                            </div>
+                            <small>El botón "Agregar" pre-completa el sitio y usuario — deberás escribir la contraseña manualmente en Chrome.</small>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-secondary" id="btnCancelConfig">Cancelar</button>
+                        <button type="submit" class="btn-primary">💾 Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Estadísticas -->
+    <div class="modal" id="modalStats">
+        <div class="modal-content modal-medium">
+            <div class="modal-header">
+                <h3>📊 Estadísticas del Sistema</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="stat-card stat-blue">
+                        <div class="stat-icon">⚙️</div>
+                        <div class="stat-number" id="statProcuracion">0</div>
+                        <div class="stat-label">Procuración</div>
+                    </div>
+                    <div class="stat-card stat-purple">
+                        <div class="stat-icon">📄</div>
+                        <div class="stat-number" id="statInformes">0</div>
+                        <div class="stat-label">Informes</div>
+                    </div>
+                    <div class="stat-card stat-green">
+                        <div class="stat-icon">🔍</div>
+                        <div class="stat-number" id="statMonitoreo">0</div>
+                        <div class="stat-label">Monitoreo</div>
+                    </div>
+                </div>
+                <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); max-width: 400px; margin: 12px auto 16px;">
+                    <div class="stat-card stat-orange">
+                        <div class="stat-icon">🕒</div>
+                        <div class="stat-number" id="statUltimoProceso" style="font-size: 14px; line-height: 1.3;">-</div>
+                        <div class="stat-label">Última Ejecución</div>
+                    </div>
+                    <div class="stat-card stat-purple">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-number" id="statTasaExito">100%</div>
+                        <div class="stat-label">Tasa de Éxito</div>
+                    </div>
+                </div>
+                <button class="btn-refresh-stats" id="btnRefreshStats">
+                    🔄 Actualizar Estadísticas
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Fecha Personalizada -->
+    <div class="modal" id="modalCustomDate">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📅 Fecha Límite Personalizada</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Ingrese una fecha límite temporal:</p>
+                <input type="text" id="inputCustomDate" class="modal-input" placeholder="DD/MM/YYYY">
+                <small>Formato: DD/MM/YYYY (ej: 01/01/2024)</small>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btnCancelCustomDate">Cancelar</button>
+                <button class="btn-primary" id="btnConfirmCustomDate">Ejecutar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

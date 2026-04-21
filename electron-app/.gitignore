@@ -1,0 +1,43 @@
+# Dependencias
+node_modules/
+
+# Build output
+dist/
+
+# Archivos de entorno y configuración sensible
+.env
+.env.*
+config_proceso.json
+
+# Archivos generados en ejecución
+descargas/
+*.backup
+execution.lock
+estado_secciones.json
+acumulador_resultados.json
+
+# Scripts encriptados temporales
+*.enc
+
+# Claves de firma de extensión Chrome
+*.pem
+*.crx
+
+# Logs
+*.log
+npm-debug.log*
+
+# Carpetas temporales de ejecución segura
+.tmp_*/
+tmp_*/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln

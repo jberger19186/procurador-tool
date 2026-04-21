@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procurador SCW — Panel Administrativo</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+<!-- LOGIN PAGE -->
+<div id="login-page">
+    <div class="login-box">
+        <div class="logo-big">⚖️</div>
+        <h2>Panel Administrativo</h2>
+        <p>Procurador SCW — Acceso restringido</p>
+        <div id="login-error" class="alert alert-error" style="display:none"></div>
+        <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="login-email" placeholder="admin@ejemplo.com" autocomplete="username">
+        </div>
+        <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div style="display:flex;flex-direction:row;align-items:center;gap:8px;margin-bottom:12px">
+            <input type="checkbox" id="login-remember" style="width:16px;height:16px;margin:0;cursor:pointer;accent-color:#3b82f6;flex-shrink:0">
+            <label for="login-remember" style="display:inline;margin:0;font-size:13px;font-weight:400;cursor:pointer;color:#6b7280">Recordar credenciales</label>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="doLogin()">Ingresar</button>
+    </div>
+</div>
+
+<!-- SIDEBAR -->
+<nav id="sidebar" style="display:none">
+    <div class="logo">
+        <h1>⚖️ Procurador SCW</h1>
+        <small>Panel Administrativo</small>
+    </div>
+    <nav>
+        <a onclick="navigate('overview')" data-page="overview">
+            <span class="icon">📊</span> Resumen
+        </a>
+        <a onclick="navigate('users')" data-page="users">
+            <span class="icon">👥</span> Usuarios
+        </a>
+        <a onclick="navigate('tickets')" data-page="tickets">
+            <span class="icon">🎫</span> Tickets
+        </a>
+        <a onclick="navigate('scripts')" data-page="scripts">
+            <span class="icon">📜</span> Scripts
+        </a>
+        <a onclick="navigate('monitor')" data-page="monitor">
+            <span class="icon">🔍</span> Monitor
+        </a>
+        <a onclick="navigate('plans')" data-page="plans">
+            <span class="icon">📋</span> Planes
+        </a>
+    </nav>
+    <div class="sidebar-footer">v1.0 — Solo administradores</div>
+</nav>
+
+<!-- MAIN -->
+<div id="main" style="display:none">
+    <div id="topbar">
+        <h2 id="topbar-title">Resumen</h2>
+        <div class="topbar-right">
+            <span class="admin-badge" id="admin-email">Admin</span>
+            <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
+        </div>
+    </div>
+    <div id="content">
+        <div class="loading">Cargando...</div>
+    </div>
+</div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

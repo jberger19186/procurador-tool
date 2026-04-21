@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Usuario — Procurador SCW</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- ===== LOGIN PAGE ===== -->
+<div id="login-page" style="display:none">
+    <div class="login-box">
+        <div class="login-logo">⚖️</div>
+        <h2>Procurador SCW</h2>
+        <p class="login-subtitle">Portal de Usuario — Ingresá con tu cuenta</p>
+
+        <div id="login-error" style="display:none"></div>
+
+        <!-- Selector de usuarios recordados -->
+        <div id="remembered-users-panel" style="display:none; margin-bottom:16px">
+            <div class="remembered-label">Cuentas guardadas</div>
+            <div id="remembered-users-list"></div>
+            <button type="button" class="btn-other-account" id="btn-other-account">+ Usar otra cuenta</button>
+        </div>
+
+        <form id="login-form" novalidate>
+            <div class="form-group">
+                <label for="login-email">Email</label>
+                <input type="email" id="login-email" name="email" placeholder="tu@email.com" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label for="login-password">Contraseña</label>
+                <input type="password" id="login-password" name="password" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <div class="remember-row">
+                <label class="remember-check">
+                    <input type="checkbox" id="remember-me">
+                    <span>Recordar credenciales</span>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full" id="btn-login">Ingresar</button>
+        </form>
+
+        <div class="login-links">
+            <a href="https://api.procuradortool.com/auth/forgot-password" target="_blank" rel="noopener">¿Olvidaste tu contraseña?</a>
+            <a href="https://api.procuradortool.com/register" target="_blank" rel="noopener">Crear cuenta</a>
+        </div>
+    </div>
+</div>
+
+<!-- ===== DASHBOARD APP ===== -->
+<div id="app">
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebar-overlay"></div>
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside id="sidebar">
+        <div class="sidebar-logo">
+            <h1>⚖️ Procurador SCW</h1>
+            <small>Portal de Usuario</small>
+        </div>
+
+        <nav>
+            <button class="nav-item active" data-section="perfil">
+                <span class="nav-icon">👤</span>
+                Mi Perfil
+            </button>
+            <button class="nav-item" data-section="plan">
+                <span class="nav-icon">📊</span>
+                Mi Plan
+            </button>
+            <button class="nav-item" data-section="facturacion">
+                <span class="nav-icon">💳</span>
+                Facturación
+            </button>
+            <button class="nav-item" data-section="soporte">
+                <span class="nav-icon">🎫</span>
+                Soporte
+            </button>
+            <button class="nav-item" data-section="ia">
+                <span class="nav-icon">🤖</span>
+                Asistente IA
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            Procurador SCW &copy; 2024
+        </div>
+    </aside>
+
+    <!-- ===== MAIN ===== -->
+    <div id="main">
+
+        <!-- Topbar -->
+        <header id="topbar">
+            <div class="topbar-left">
+                <button id="btn-hamburger" aria-label="Menú">&#9776;</button>
+                <h2>Portal de Usuario</h2>
+            </div>
+            <div class="topbar-right">
+                <span class="user-email" id="topbar-email"></span>
+                <span class="plan-badge" id="topbar-plan">Cargando...</span>
+                <button class="btn btn-secondary btn-sm" id="btn-logout">Cerrar sesión</button>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <main id="content">
+
+            <!-- ===== SECCIÓN: PERFIL ===== -->
+            <section class="section active" id="section-perfil">
+                <div class="section-title">Mi Perfil</div>
+                <div class="section-subtitle">Gestioná tus datos personales y seguridad de cuenta</div>
+
+                <!-- Datos personales -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Datos personales</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="profile-alert" class="alert"></div>
+                        <form id="profile-form" novalidate>
+                            <div class="form-group">
+                                <label for="profile-email">Email</label>
+                                <input type="email" id="profile-email" disabled style="background:#f9fafb;color:var(--text-muted)">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="profile-nombre">Nombre</label>
+                                    <input type="text" id="profile-nombre" name="nombre" placeholder="Juan">
+                                </div>
+                                <div class="form-group">
+                                    <label for="profile-apellido">Apellido</label>
+                                    <input type="text" id="profile-apellido" name="apellido" placeholder="Pérez">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="profile-cuit">CUIT / CUIL</label>
+                                    <input type="text" id="profile-cuit" name="cuit" placeholder="20-12345678-9">
+                                </div>
+                                <div class="form-group">
+                                    <label for="profile-telefono">Teléfono</label>
+                                    <input type="tel" id="profile-telefono" name="telefono" placeholder="+54 11 1234-5678">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="profile-domicilio">Domicilio</label>
+                                <input type="text" id="profile-domicilio" name="domicilio" placeholder="Av. Corrientes 1234, CABA">
+                            </div>
+                            <button type="submit" class="btn btn-primary" id="btn-save-profile">Guardar cambios</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Cambiar contraseña -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Cambiar contraseña</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="password-alert" class="alert"></div>
+                        <form id="password-form" novalidate>
+                            <div class="form-group">
+                                <label for="current-password">Contraseña actual</label>
+                                <input type="password" id="current-password" name="currentPassword" placeholder="••••••••" autocomplete="current-password">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="new-password">Nueva contraseña</label>
+                                    <input type="password" id="new-password" name="newPassword" placeholder="Mínimo 8 caracteres" autocomplete="new-password">
+                                </div>
+                                <div class="form-group">
+                                    <label for="confirm-password">Confirmar contraseña</label>
+                                    <input type="password" id="confirm-password" name="confirmPassword" placeholder="Repetí la nueva" autocomplete="new-password">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary" id="btn-save-password">Cambiar contraseña</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== SECCIÓN: PLAN ===== -->
+            <section class="section" id="section-plan">
+                <div class="section-title">Mi Plan</div>
+                <div class="section-subtitle">Estado de tu suscripción y uso del período actual</div>
+
+                <div class="plan-card-main">
+                    <!-- Info del plan -->
+                    <div class="plan-info-box">
+                        <div class="plan-name" id="plan-name-display">-</div>
+                        <div class="plan-status">
+                            <span id="plan-status-badge" class="badge">-</span>
+                        </div>
+                        <div class="plan-expiry" id="plan-expiry-display">-</div>
+                    </div>
+
+                    <!-- Días restantes -->
+                    <div class="plan-days-box">
+                        <div class="plan-days-number" id="plan-days-number">-</div>
+                        <div class="plan-days-label">días restantes del período</div>
+                        <div class="progress-bar-wrap">
+                            <div class="progress-bar-fill" id="plan-days-fill" style="width:0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Descargas -->
+                <div class="card" id="downloads-card">
+                    <div class="card-header">
+                        <h3>Descargas</h3>
+                    </div>
+                    <div class="card-body" id="downloads-body">
+                        <!-- Se renderiza dinámicamente según plan_type -->
+                    </div>
+                </div>
+
+                <!-- Uso por subsistema -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Uso del período actual</h3>
+                        <button class="btn btn-outline btn-sm" onclick="openChangePlanModal()">Ver planes disponibles</button>
+                    </div>
+                    <div class="card-body" style="padding:0">
+                        <div class="table-wrapper">
+                            <table class="usage-table">
+                                <thead>
+                                    <tr>
+                                        <th>Subsistema</th>
+                                        <th>Uso / Límite</th>
+                                        <th>Progreso</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usage-tbody">
+                                    <tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:24px">Cargando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Partes en monitoreo -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Partes en monitoreo</h3>
+                        <span class="parte-counter" id="monitor-partes-count">-</span>
+                    </div>
+                    <div class="card-body" id="monitor-partes-list">
+                        <p style="color:var(--text-muted);font-size:13px">Cargando...</p>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ===== SECCIÓN: FACTURACIÓN ===== -->
+            <section class="section" id="section-facturacion">
+                <div class="section-title">Facturación</div>
+                <div class="section-subtitle">Gestión de pagos y facturas</div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <div class="billing-placeholder">
+                            <div class="billing-icon">💳</div>
+                            <h3>Próximamente disponible</h3>
+                            <p>
+                                Esta sección estará disponible próximamente.
+                                Aquí podrás ver tus facturas, historial de pagos y gestionar tus medios de pago de forma sencilla.
+                            </p>
+                            <div style="margin-top:24px">
+                                <button class="btn btn-outline" onclick="navigateTo('soporte')">Consultar por facturación</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== SECCIÓN: SOPORTE ===== -->
+            <section class="section" id="section-soporte">
+                <div class="section-title">Soporte</div>
+                <div class="section-subtitle">Tus tickets de soporte técnico y consultas</div>
+
+                <!-- Lista de tickets -->
+                <div id="ticket-list-view">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Mis tickets</h3>
+                            <button class="btn btn-primary btn-sm" onclick="openNewTicketModal()">+ Nuevo ticket</button>
+                        </div>
+                        <div class="card-body" id="tickets-list-container">
+                            <div class="empty-state">
+                                <div class="empty-icon">🎫</div>
+                                <p>Cargando tickets...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detalle de ticket -->
+                <div id="ticket-detail-view" style="display:none">
+                    <button class="ticket-detail-back" onclick="backToTicketList()">
+                        ← Volver a mis tickets
+                    </button>
+                    <div id="ticket-detail-content"></div>
+                </div>
+            </section>
+
+            <!-- ===== SECCIÓN: IA ===== -->
+            <section class="section" id="section-ia">
+                <div class="section-title">Asistente IA</div>
+                <div class="section-subtitle">Consultá dudas sobre el sistema, planes y soporte</div>
+
+                <div id="ai-chat-wrap">
+                    <div class="chat-messages" id="chat-messages">
+                        <!-- Messages render here -->
+                    </div>
+                    <div class="chat-input-area">
+                        <textarea
+                            id="chat-input"
+                            placeholder="Escribí tu consulta... (Enter para enviar, Shift+Enter para nueva línea)"
+                            rows="1"
+                        ></textarea>
+                        <button class="chat-send-btn" id="btn-chat-send" aria-label="Enviar">&#10148;</button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ===== MODAL: VER PLANES ===== -->
+<div class="modal-overlay hidden" id="modal-plan">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Planes disponibles</h3>
+            <button class="modal-close" onclick="closePlanModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div id="plans-list">
+                <div class="empty-state"><span class="spinner" style="width:32px;height:32px;border-width:3px;color:var(--text-muted)"></span></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closePlanModal()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: NUEVO TICKET ===== -->
+<div class="modal-overlay hidden" id="modal-ticket">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Nuevo ticket de soporte</h3>
+            <button class="modal-close" onclick="closeNewTicketModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div id="ticket-alert" class="alert"></div>
+            <form id="new-ticket-form" novalidate>
+                <div class="form-group">
+                    <label for="ticket-category">Categoría</label>
+                    <select id="ticket-category" name="category" required>
+                        <option value="">— Seleccioná una categoría —</option>
+                        <option value="technical">🔧 Soporte Técnico</option>
+                        <option value="billing">💳 Facturación</option>
+                        <option value="commercial">📋 Consulta Comercial / Cambio de Plan</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="ticket-title">Título</label>
+                    <input type="text" id="ticket-title" name="title" placeholder="Resumí tu consulta en pocas palabras" maxlength="200" required>
+                </div>
+                <div class="form-group">
+                    <label for="ticket-description">Descripción</label>
+                    <textarea id="ticket-description" name="description" placeholder="Describí el problema o consulta con el mayor detalle posible..." rows="4" required></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeNewTicketModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btn-submit-ticket" onclick="document.getElementById('new-ticket-form').dispatchEvent(new Event('submit'))">Enviar ticket</button>
+        </div>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

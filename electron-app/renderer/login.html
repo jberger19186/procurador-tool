@@ -1,0 +1,106 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <title>Procurador SCW - Login</title>
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <!-- Logo y título -->
+            <div class="login-header">
+                <div class="logo">⚖️</div>
+                <h1>Procurador SCW</h1>
+                <p>Sistema de Automatización de Consultas</p>
+            </div>
+
+            <!-- Cuentas guardadas -->
+            <div id="savedAccountsSection" style="display:none; margin-bottom:1.2rem;">
+                <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">Cuentas recordadas</p>
+                <div id="savedAccountsList" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+            </div>
+
+            <!-- Formulario de login -->
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="email">
+                        <span class="label-icon">📧</span>
+                        Email
+                    </label>
+                    <input type="email"
+                           id="email"
+                           placeholder="tu@email.com"
+                           required
+                           autocomplete="email"
+                           autofocus>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">
+                        <span class="label-icon">🔒</span>
+                        Contraseña
+                    </label>
+                    <input type="password"
+                           id="password"
+                           placeholder="••••••••"
+                           required
+                           autocomplete="current-password">
+                </div>
+
+                <!-- Recordar mis datos -->
+                <div class="form-group remember-group">
+                    <label class="remember-label">
+                        <input type="checkbox" id="rememberMe">
+                        <span>Recordar mis datos</span>
+                    </label>
+                </div>
+
+                <!-- Mensaje de error -->
+                <div id="errorMessage" class="error-message" style="display: none;">
+                    <span class="error-icon">⚠️</span>
+                    <span id="errorText"></span>
+                </div>
+
+                <!-- Información de hardware -->
+                <div class="info-box">
+                    <span class="info-icon">🖥️</span>
+                    <div class="info-text">
+                        <small>ID del dispositivo:</small>
+                        <code id="machineIdDisplay">Cargando...</code>
+                    </div>
+                </div>
+
+                <!-- Botón de login -->
+                <button type="submit" id="loginButton" class="btn-login">
+                    <span class="btn-text">Iniciar Sesión</span>
+                    <span class="btn-icon">→</span>
+                </button>
+
+                <!-- Loading spinner -->
+                <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Verificando credenciales...</p>
+                </div>
+            </form>
+
+            <!-- Footer -->
+            <div class="login-footer">
+                <p>🔐 Conexión segura protegida</p>
+                <small id="connectionStatus">Conectando al servidor...</small>
+            </div>
+        </div>
+
+        <!-- Background decorativo -->
+        <div class="background-decoration">
+            <div class="circle circle-1"></div>
+            <div class="circle circle-2"></div>
+            <div class="circle circle-3"></div>
+        </div>
+    </div>
+
+    <script src="login.js"></script>
+</body>
+</html>

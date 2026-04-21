@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <title>Procurador SCW - Sistema de Automatización</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!-- Portal global para tooltips — posicionado con JS, escapa overflow de modales -->
+<div id="tooltip-portal"></div>
+    <!-- ===== BANNER DE CUOTA (oculto hasta alcanzar 80% de uso) ===== -->
+    <div id="quota-banner" style="
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 9998;
+        color: #fff;
+        padding: 9px 20px;
+        font-size: 13px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+    ">
+        <span id="quota-banner-text"></span>
+        <div style="display:flex; gap:8px; flex-shrink:0;">
+            <button id="quota-upgrade-btn" style="
+                background: #fff;
+                border: none;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+            ">Ver mi plan</button>
+            <button id="quota-dismiss-btn" style="
+                background: transparent;
+                color: #fff;
+                border: 1px solid rgba(255,255,255,0.5);
+                border-radius: 5px;
+                padding: 5px 10px;
+                font-size: 12px;
+                cursor: pointer;
+            ">✕</button>
+        </div>
+    </div>
+
+    <!-- ===== BANNER DE PROMO (vencimiento o extensión de plan promo) ===== -->
+    <div id="promo-banner" style="
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 9997;
+        color: #fff;
+        padding: 9px 20px;
+        font-size: 13px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+    ">
+        <span id="promo-banner-text"></span>
+        <div style="display:flex; gap:8px; flex-shrink:0;">
+            <button id="promo-banner-dismiss" style="
+                background: transparent;
+                color: #fff;
+                border: 1px solid rgba(255,255,255,0.5);
+                border-radius: 5px;
+                padding: 5px 10px;
+                font-size: 12px;
+                cursor: pointer;
+            ">Recordarme después</button>
+        </div>
+    </div>
+
+    <!-- ===== BANNER DE ACTUALIZACIÓN (oculto hasta que haya update listo) ===== -->
+    <div id="update-banner" style="
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 9999;
+        background: #1e40af;
+        color: #fff;
+        padding: 10px 20px;
+        font-size: 13px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    ">
+        <span id="update-banner-text">🔄 Nueva versión disponible</span>
+        <div style="display:flex; gap:8px; flex-shrink:0;">
+            <button id="update-install-btn" style="
+                background: #fff;
+                color: #1e40af;
+                border: none;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+            ">Instalar y reiniciar</button>
+            <button id="update-later-btn" style="
+                background: transparent;
+                color: #bfdbfe;
+                border: 1px solid #bfdbfe;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 12px;
+                cursor: pointer;
+            ">Más tarde</button>
+        </div>
+    </div>
+
+    <div class="app-container">
+
+        <!-- ===== BARRA SUPERIOR UNIFICADA (estilo Claude) ===== -->
+        <header class="topbar">
+
+            <!-- FILA 1: título + [tabs en pantalla ancha] + estado/iconos -->
+            <div class="topbar-row1">
+
+                <!-- Lado izquierdo: logo + título -->
+                <div class="topbar-left">
+                    <span class="topbar-logo">⚖️</span>
+                    <span class="topbar-title">Procurador SCW</span>
+                </div>
+
+                <!-- Centro (solo visible en pantalla ancha >= 850px) -->
+                <nav class="topbar-tabs-inline">
+                    <div class="tab-btn-group">
+                        <button class="tab-btn tab-run split-main" id="btnRunProcess" title="Procurar">
+                            <span class="tab-icon">▶</span>
+                            <span>Procurar</span>
+                        </button>
+                        <button class="tab-btn tab-run split-chevron" id="btnEjecutarDropdown" title="Opciones de ejecución">▾</button>
+                        <div class="dropdown-menu" id="menuEjecutar">
+                            <button class="dropdown-item" id="ddFechaCustom"><span>📅</span> Fecha Custom</button>
+                            <button class="dropdown-item" id="ddProcurarCustom"><span>📁</span> Procurar Custom</button>
+                            <button class="dropdown-item" id="ddVisor"><span>👁</span> Visor</button>
+                            <button class="dropdown-item" id="ddExcel"><span>📊</span> Excel</button>
+                        </div>
+                    </div>
+                    <button class="tab-btn" id="btnInforme" title="Generar informe de expediente">
+                        <span class="tab-icon">📄</span>
+                        <span>Informe</span>
+                    </button>
+                    <button class="tab-btn" id="btnMonitor" title="Monitoreo de partes">
+                        <span class="tab-icon">🔍</span>
+                        <span>Monitor</span>
+                    </button>
+                    <div class="tab-btn-group">
+                        <button class="tab-btn split-main" id="btnOpenDownloads" title="Abrir descargas">
+                            <span class="tab-icon">📁</span>
+                            <span>Descargas</span>
+                        </button>
+                        <button class="tab-btn split-chevron" id="btnDescargasChevron" title="Opciones de limpieza">▾</button>
+                        <div class="dropdown-menu" id="descargasDropdown">
+                            <button class="dropdown-item" id="btnCleanTemp">
+                                <span>🗂️</span> Limpiar temporales
+                            </button>
+                            <button class="dropdown-item" id="btnCleanProcesos">
+                                <span>📊</span> Limpiar procesos
+                            </button>
+                            <button class="dropdown-item" id="btnCleanAll">
+                                <span>🗑️</span> Limpiar todo
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+
+                <!-- Lado derecho: estado + info + iconos -->
+                <div class="topbar-right">
+                    <span class="status-badge" id="statusIndicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Inactivo</span>
+                    </span>
+                    <span class="topbar-info" id="headerProgress">0/0 exp</span>
+                    <span class="topbar-info" id="headerSession">Sesión: Verificando...</span>
+                    <button class="topbar-icon-btn" id="btnOpenConfig" title="Configuración">⚙️</button>
+                    <button class="topbar-icon-btn" id="btnOpenStats" title="Estadísticas">📈</button>
+                    <button class="topbar-icon-btn" id="btnOpenCuenta" title="Mi Cuenta">👤</button>
+                </div>
+
+            </div>
+
+            <!-- FILA 2: tabs de acción (solo visible en pantalla angosta < 850px) -->
+            <nav class="topbar-row2">
+                <div class="tab-btn-group">
+                    <button class="tab-btn tab-run split-main" id="btnRunProcess2" title="Procurar">
+                        <span class="tab-icon">▶</span>
+                        <span>Procurar</span>
+                    </button>
+                    <button class="tab-btn tab-run split-chevron" id="btnEjecutarDropdown2" title="Opciones de ejecución">▾</button>
+                    <div class="dropdown-menu" id="menuEjecutar2">
+                        <button class="dropdown-item" id="ddFechaCustom2"><span>📅</span> Fecha Custom</button>
+                        <button class="dropdown-item" id="ddProcurarCustom2"><span>📁</span> Procurar Custom</button>
+                        <button class="dropdown-item" id="ddVisor2"><span>👁</span> Visor</button>
+                        <button class="dropdown-item" id="ddExcel2"><span>📊</span> Excel</button>
+                    </div>
+                </div>
+                <button class="tab-btn" id="btnInforme2" title="Generar informe de expediente">
+                    <span class="tab-icon">📄</span>
+                    <span>Informe</span>
+                </button>
+                <button class="tab-btn" id="btnMonitor2" title="Monitoreo de partes">
+                    <span class="tab-icon">🔍</span>
+                    <span>Monitor</span>
+                </button>
+                <div class="tab-btn-group">
+                    <button class="tab-btn split-main" id="btnOpenDownloads2" title="Abrir descargas">
+                        <span class="tab-icon">📁</span>
+                        <span>Descargas</span>
+                    </button>
+                    <button class="tab-btn split-chevron" id="btnDescargasChevron2" title="Opciones de limpieza">▾</button>
+                    <div class="dropdown-menu" id="descargasDropdown2">
+                        <button class="dropdown-item" id="btnCleanTemp2">
+                            <span>🗂️</span> Limpiar temporales
+                        </button>
+                        <button class="dropdown-item" id="btnCleanProcesos2">
+                            <span>📊</span> Limpiar procesos
+                        </button>
+                        <button class="dropdown-item" id="btnCleanAll2">
+                            <span>🗑️</span> Limpiar todo
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+        </header>
+
+        <!-- ===== CONSOLA (sin cambios) ===== -->
+        <div class="console-wrapper" id="consoleWrapper">
+            <div class="console-header">
+                <span class="console-title">📟 Consola</span>
+                <div class="console-controls">
+                    <button class="btn-console-control" id="btnExpandConsole" title="Expandir consola" style="display:none">
+                        ⬇ Contraer
+                    </button>
+                    <button class="btn-console-control" id="btnPositionLeft" title="Posicionar ventana a la derecha" style="display:none">
+                        ◧ Posicionar
+                    </button>
+                    <button class="btn-console-control" id="btnDownloadConsole" title="Guardar consola como .txt">
+                        ⬇ Descargar
+                    </button>
+                    <button class="btn-console-control" id="btnClearConsole" title="Limpiar consola">
+                        🧹 Limpiar
+                    </button>
+                    <label class="browser-toggle-wrap" id="browserToggleWrap" title="Mostrar u ocultar el navegador Chrome durante la automatización (solo en modo headless)">
+                        <input type="checkbox" id="browserToggle">
+                        <span class="browser-toggle-slider"></span>
+                        <span class="browser-toggle-label">👁</span>
+                    </label>
+                    <button class="btn-console-control btn-console-stop" id="btnStopProcess" title="Detener proceso">
+                        ⏹ Detener
+                    </button>
+                </div>
+            </div>
+            <div class="console-output" id="consoleOutput">
+                <div class="console-line console-info">
+                    <span class="console-time">[INICIO]</span>
+                    <span>Sistema iniciado correctamente ✅</span>
+                </div>
+            </div>
+
+            <!-- Barra de progreso global (batch, procurar, monitor) -->
+            <div id="batch-progress-wrap">
+                <div id="batch-progress-header">
+                    <span id="batch-progress-label">Procesando...</span>
+                    <span id="batch-progress-eta"></span>
+                </div>
+                <div id="batch-progress-bar-bg">
+                    <div id="batch-progress-bar"></div>
+                </div>
+            </div>
+
+            <div class="console-statusbar" id="consoleStatusbar">
+                <span class="csb-dot" id="csbDot"></span>
+                <span class="csb-text" id="csbText">Inactivo</span>
+                <span class="csb-time" id="csbTime"></span>
+                <span id="appVersionBadge" style="margin-left:auto;color:#6b7280;font-size:0.72rem;letter-spacing:0.02em">v2.0.0</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modal: Configuración -->
+    <div class="modal" id="modalConfig">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>⚙️ Configuración del Proceso</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="configForm" class="config-form">
+                    <div class="form-section">
+                        <h4>General</h4>
+                        <div class="form-group">
+                            <label for="identificador">Identificador (CUIL)<span class="tooltip-icon" data-tip="Tu CUIL es asignado por el administrador al crear tu cuenta. Es el identificador único con el que el sistema PJN te reconoce.">?</span></label>
+                            <input type="text" id="identificador" placeholder="Asignado por administrador" readonly
+                                   style="background: var(--bg-tertiary); cursor: not-allowed; opacity: 0.7;">
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h4>Opciones Procurar</h4>
+                        <div class="form-group">
+                            <label for="fechaLimite">Fecha Límite<span class="tooltip-icon" data-tip="Solo se procuran expedientes con movimientos posteriores a esta fecha. Útil para ignorar expedientes sin actividad reciente. Dejá vacío para procurar todos.">?</span></label>
+                            <input type="text" id="fechaLimite" placeholder="DD/MM/YYYY" pattern="\d{2}/\d{2}/\d{4}">
+                            <small>Formato: DD/MM/YYYY (ej: 01/11/2025)</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Secciones</label>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="seccionLetrado"><span>Letrado</span></label><span class="tooltip-icon" data-tip="Incluye los expedientes donde figurás como letrado patrocinante o apoderado.">?</span>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="seccionParte"><span>Parte</span></label><span class="tooltip-icon" data-tip="Incluye los expedientes donde figurás como parte actora o demandada.">?</span>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="seccionAutorizado"><span>Autorizado NE</span></label><span class="tooltip-icon" data-tip="Incluye los expedientes en los que tenés autorización de notificación electrónica.">?</span>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="seccionFavoritos"><span>Favoritos</span></label><span class="tooltip-icon" data-tip="Incluye los expedientes que marcaste como favoritos en el sistema PJN.">?</span>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h4>Reportes</h4>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="notificacionesActivadas"><span>Notificaciones de Windows</span></label><span class="tooltip-icon" data-tip="Muestra una notificación del sistema al finalizar cada procuración con el resumen de resultados.">?</span>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="generarExcel"><span>Generar Excel</span></label><span class="tooltip-icon" data-tip="Al finalizar la procuración, genera automáticamente un archivo Excel con los expedientes procesados y sus novedades.">?</span>
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label><input type="checkbox" id="abrirVisor"><span>Abrir visor automáticamente</span></label><span class="tooltip-icon" data-tip="Abre el visor de resultados al terminar la procuración sin necesidad de hacerlo manualmente.">?</span>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <h4>🔒 Seguridad</h4>
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="modoHeadless">
+                                <span>Modo headless (Chrome invisible)</span>
+                            </label><span class="tooltip-icon" data-tip="Ejecuta Chrome de forma invisible en segundo plano. Recomendado para uso en producción. Desactivalo solo si necesitas ver qué hace el navegador para depurar un problema.">?</span>
+                        </div>
+                        <div class="form-group">
+                            <label>Gestor de contraseñas de Chrome</label>
+                            <div class="security-buttons">
+                                <button type="button" class="btn-security" id="btnAbrirNavegador">
+                                    🌐 Abrir navegador
+                                </button>
+                                <button type="button" class="btn-security btn-security-accent" id="btnAgregarPasswordSCW">
+                                    + Agregar contraseña SCW
+                                </button>
+                            </div>
+                            <small>El botón "Agregar" pre-completa el sitio y usuario — deberás escribir la contraseña manualmente en Chrome.</small>
+                        </div>
+                        <div class="form-group" style="margin-top:14px">
+                            <label style="display:flex;align-items:center;gap:6px;">
+                                Extensión PJN para Chrome
+                                <span id="btnTooltipExtConfig" title="" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#3b82f6;color:#fff;font-size:10px;font-weight:700;cursor:pointer;flex-shrink:0;line-height:1;">?</span>
+                            </label>
+                            <div id="tooltipExtConfig" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:10px 13px;font-size:12px;color:#1e3a5f;margin-bottom:8px;line-height:1.5;">
+                                Extensión para tu Chrome personal que conecta la app con el portal PJN.<br><br>
+                                <strong>Importante — el portapapeles almacenará información de manera automática de la siguiente manera:</strong>
+                                <ul style="margin:5px 0 5px 16px;padding:0;">
+                                    <li>Al <strong>descargar</strong> la extensión, se copia automáticamente la ruta de la carpeta de instalación donde se encuentra la misma, la cual podrás utilizarla de conformidad a las instrucciones que verás más abajo.</li>
+                                    <li style="margin-top:4px;">Si usás el botón <strong>"Abrir Chrome"</strong>, el portapapeles se <strong>reemplaza</strong> con <code style="background:#dbeafe;padding:1px 4px;border-radius:3px;">chrome://extensions</code>. La ruta ya no estará copiada, así que usala antes o consultala en el recuadro azul.</li>
+                                </ul>
+                                En Chrome: activá el <strong>Modo desarrollador</strong> → "Cargar sin empaquetar" → pegá la ruta de la carpeta.
+                            </div>
+                            <!-- Toggle habilitar/deshabilitar -->
+                            <div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:8px 12px;margin-bottom:8px;">
+                                <span style="font-size:12px;color:#334155;" id="extToggleLabel">Extensión deshabilitada</span>
+                                <label style="position:relative;display:inline-block;width:38px;height:20px;cursor:pointer;">
+                                    <input type="checkbox" id="toggleExtConfig" style="opacity:0;width:0;height:0;position:absolute;">
+                                    <span id="extToggleTrack" style="position:absolute;inset:0;background:#cbd5e1;border-radius:10px;transition:background 0.2s;"></span>
+                                    <span id="extToggleThumb" style="position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left 0.2s;"></span>
+                                </label>
+                            </div>
+                            <!-- Cuerpo de extensión (solo visible si está habilitada) -->
+                            <div id="extConfigBody">
+                            <div id="extVersionStatus" style="font-size:12px; color:#64748b; margin-bottom:8px;">Verificando...</div>
+                            <div class="security-buttons">
+                                <button type="button" class="btn-security btn-security-accent" id="btnInstalarExtension">
+                                    🧩 Descargar extensión
+                                </button>
+                            </div>
+                            <!-- Área de resultado post-descarga -->
+                            <div id="extDownloadResult" style="display:none; margin-top:10px;">
+                                <div style="font-size:11px; color:#475569; margin-bottom:4px;">Dirección de extensiones en Chrome:</div>
+                                <div id="extChromeExtBox" style="display:flex;align-items:center;gap:6px;background:#e0f0ff;border:2px solid #3b82f6;border-radius:6px;padding:6px 10px;cursor:pointer;margin-bottom:8px;" title="Clic para copiar">
+                                    <code style="flex:1;font-size:11px;color:#1e3a5f;font-family:monospace;font-weight:600;">chrome://extensions</code>
+                                    <span style="font-size:15px;flex-shrink:0;">📋</span>
+                                </div>
+                                <span id="extChromeExtCopyMsg" style="display:none;font-size:11px;color:#16a34a;margin-bottom:4px;">✅ Dirección copiada</span>
+                                <div style="font-size:11px; color:#475569; margin-bottom:4px;">Ruta de instalación (copiada al portapapeles):</div>
+                                <div id="extPathBox" style="display:flex;align-items:center;gap:6px;background:#e0f0ff;border:2px solid #3b82f6;border-radius:6px;padding:7px 10px;cursor:pointer;" title="Clic para copiar">
+                                    <code id="extPathText" style="flex:1;font-size:11px;word-break:break-all;color:#1e3a5f;"></code>
+                                    <span style="font-size:15px;flex-shrink:0;">📋</span>
+                                </div>
+                                <div id="extCopyMsg" style="font-size:11px;color:#16a34a;display:none;margin-top:3px;">✅ Ruta copiada al portapapeles</div>
+                                <div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:11.5px;line-height:1.7;color:#334155;">
+                                    <strong style="color:#1e3a5f;">Pasos para instalar en Chrome:</strong><br>
+                                    1. Abrí Chrome y escribí <code>chrome://extensions</code> en la barra<br>
+                                    2. Activá el <strong>Modo desarrollador</strong> (arriba a la derecha)<br>
+                                    3. Clic en <strong>"Cargar extensión sin empaquetar"</strong><br>
+                                    4. En el campo <strong>"Nombre de carpeta"</strong>, pegá la ruta y presioná <strong>Aceptar</strong>
+                                </div>
+                                <button type="button" id="btnGenerarPdfExt" style="margin-top:8px;font-size:12px;padding:6px 12px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;cursor:pointer;color:#334155;">
+                                    📄 Descargar instrucciones en PDF
+                                </button>
+                                <button type="button" id="btnAbrirChromeExt" style="margin-top:6px;width:100%;font-size:12px;padding:6px 12px;background:#3b82f6;border:none;border-radius:5px;cursor:pointer;color:#fff;font-weight:600;">
+                                    🌐 Abrir Chrome
+                                </button>
+                                <div id="msgAbrirChromeExt" style="display:none;margin-top:5px;font-size:11px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:6px 10px;color:#1e40af;">
+                                    ✅ Chrome abierto — <code style="background:#dbeafe;padding:1px 4px;border-radius:3px;">chrome://extensions</code> copiado al portapapeles. Pegalo en la barra de direcciones.
+                                </div>
+                            </div>
+                            </div><!-- /extConfigBody -->
+                        </div>
+                    </div>
+                    <div class="form-actions" style="justify-content:space-between">
+                        <button type="button" class="btn-secondary" id="btnRelanzarWizard" title="Volver a ejecutar el asistente de configuración inicial">
+                            🔄 Relanzar asistente
+                        </button>
+                        <div style="display:flex;gap:8px">
+                            <button type="button" class="btn-secondary" id="btnCancelConfig">Cancelar</button>
+                            <button type="submit" class="btn-primary">💾 Guardar</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Estadísticas -->
+    <div class="modal" id="modalStats">
+        <div class="modal-content modal-medium">
+            <div class="modal-header">
+                <h3>📊 Estadísticas del Sistema</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="stat-card stat-blue">
+                        <div class="stat-icon">⚙️</div>
+                        <div class="stat-number" id="statProcuracion">0</div>
+                        <div class="stat-label">Procuración</div>
+                    </div>
+                    <div class="stat-card stat-purple">
+                        <div class="stat-icon">📄</div>
+                        <div class="stat-number" id="statInformes">0</div>
+                        <div class="stat-label">Informes</div>
+                    </div>
+                    <div class="stat-card stat-green">
+                        <div class="stat-icon">🔍</div>
+                        <div class="stat-number" id="statMonitoreo">0</div>
+                        <div class="stat-label">Monitoreo</div>
+                    </div>
+                </div>
+                <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); max-width: 400px; margin: 12px auto 16px;">
+                    <div class="stat-card stat-orange">
+                        <div class="stat-icon">🕒</div>
+                        <div class="stat-number" id="statUltimoProceso" style="font-size: 14px; line-height: 1.3;">-</div>
+                        <div class="stat-label">Última Ejecución</div>
+                    </div>
+                    <div class="stat-card stat-purple">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-number" id="statTasaExito">100%</div>
+                        <div class="stat-label">Tasa de Éxito</div>
+                    </div>
+                </div>
+                <button class="btn-refresh-stats" id="btnRefreshStats">
+                    🔄 Actualizar Estadísticas
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Fecha Personalizada -->
+    <div class="modal" id="modalCustomDate">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📅 Fecha Límite Personalizada</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Ingrese una fecha límite temporal:</p>
+                <input type="text" id="inputCustomDate" class="modal-input" placeholder="DD/MM/YYYY">
+                <small>Formato: DD/MM/YYYY (ej: 01/01/2024)</small>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btnCancelCustomDate">Cancelar</button>
+                <button class="btn-primary" id="btnConfirmCustomDate">Ejecutar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Procurar Custom -->
+    <div class="modal" id="modalProcurarCustom">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📁 Procurar Custom</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Seleccioná un archivo .txt con expedientes (uno por línea):</p>
+                <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.75rem">
+                    <button class="btn-secondary" id="btnSeleccionarTxtCustom">📂 Seleccionar archivo</button>
+                    <span id="lblArchivoCustom" style="font-size:0.8rem; color:var(--text-secondary)">Sin archivo</span>
+                </div>
+                <div id="resumenCustom" style="display:none; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.75rem"></div>
+                <!-- Aviso de límites de plan -->
+                <div id="batchLimitAviso" style="display:none; margin-bottom:0.75rem; padding:10px 12px; border-radius:8px; font-size:12px; line-height:1.5"></div>
+                <p>Fecha límite (opcional):</p>
+                <input type="text" id="inputFechaCustomProcurar" class="modal-input" placeholder="DD/MM/YYYY — dejá vacío para traer todos">
+                <small>Solo se mostrarán expedientes con movimiento reciente igual o posterior a esta fecha.</small>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btnCancelProcurarCustom">Cancelar</button>
+                <button class="btn-primary" id="btnConfirmProcurarCustom" disabled>▶ Procesar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Mi Cuenta -->
+    <div class="modal" id="modalCuenta">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>👤 Mi Cuenta</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+
+                <!-- Tabs -->
+                <div class="cuenta-tabs">
+                    <button class="cuenta-tab active" data-tab="plan">📦 Mi Plan</button>
+                    <button class="cuenta-tab" data-tab="soporte">🎫 Soporte</button>
+                </div>
+
+                <!-- Tab Plan -->
+                <div class="cuenta-panel" id="cuenta-plan">
+                    <div id="cuenta-loading" class="cuenta-loading">Cargando información...</div>
+                    <div id="cuenta-info" style="display:none">
+                        <div class="cuenta-info-grid">
+                            <div class="cuenta-info-item">
+                                <label>📧 Email</label>
+                                <span id="ci-email">—</span>
+                            </div>
+                            <div class="cuenta-info-item">
+                                <label>🪪 CUIT</label>
+                                <span id="ci-cuit">—</span>
+                            </div>
+                            <div class="cuenta-info-item">
+                                <label>📦 Plan</label>
+                                <span id="ci-plan">—</span>
+                            </div>
+                            <div class="cuenta-info-item">
+                                <label>Estado</label>
+                                <span id="ci-status">—</span>
+                            </div>
+                            <div class="cuenta-info-item">
+                                <label>📅 Vencimiento</label>
+                                <span id="ci-expira">—</span>
+                            </div>
+                            <div class="cuenta-info-item">
+                                <label>💻 Dispositivo</label>
+                                <span id="ci-device">—</span>
+                            </div>
+                            <div class="cuenta-info-item">
+                                <label>📆 Período</label>
+                                <span id="ci-periodo">—</span>
+                            </div>
+                        </div>
+                        <div class="cuenta-uso" style="margin-top:14px">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                                <label style="font-size:12px;font-weight:600">📊 Uso por subsistema — período activo</label>
+                                <span id="ci-plan-desc" style="font-size:11px;color:#6b7280;font-style:italic"></span>
+                            </div>
+                            <div id="ci-subsystem-usage"></div>
+                        </div>
+                    </div>
+                    <div id="cuenta-error" class="cuenta-error" style="display:none"></div>
+                </div>
+
+                <!-- Tab Soporte -->
+                <div class="cuenta-panel" id="cuenta-soporte" style="display:none">
+                    <!-- Vista lista de tickets -->
+                    <div id="soporte-lista">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                            <span style="font-size:13px;color:#6b7280" id="soporte-count">Cargando...</span>
+                            <button class="btn-soporte-nuevo" id="btnNuevoTicket">+ Nuevo ticket</button>
+                        </div>
+                        <div id="tickets-list"></div>
+                    </div>
+
+                    <!-- Vista formulario nuevo ticket -->
+                    <div id="soporte-nuevo" style="display:none">
+                        <button class="btn-back-soporte" id="btnBackTickets">← Volver</button>
+                        <h4 style="margin-bottom:14px;font-size:14px;font-weight:600">Nuevo ticket de soporte</h4>
+                        <div id="nuevo-ticket-error" class="cuenta-error" style="display:none"></div>
+                        <div class="cuenta-form-group">
+                            <label>Categoría</label>
+                            <select id="ticket-cat">
+                                <option value="technical">🔧 Técnico</option>
+                                <option value="billing">💳 Facturación</option>
+                                <option value="commercial">🎁 Beneficio comercial</option>
+                            </select>
+                        </div>
+                        <div class="cuenta-form-group">
+                            <label>Título</label>
+                            <input type="text" id="ticket-titulo" placeholder="Describe brevemente el problema" maxlength="200">
+                        </div>
+                        <div class="cuenta-form-group">
+                            <label>Descripción</label>
+                            <textarea id="ticket-desc" rows="4" placeholder="Detalle completo del problema o solicitud..."></textarea>
+                        </div>
+                        <button class="btn-soporte-nuevo" id="btnEnviarTicket">Enviar ticket</button>
+                    </div>
+
+                    <!-- Vista detalle de ticket -->
+                    <div id="soporte-detalle" style="display:none">
+                        <button class="btn-back-soporte" id="btnBackTicketsDetalle">← Volver</button>
+                        <div id="detalle-header" style="margin-bottom:14px"></div>
+                        <div id="detalle-comments" class="detalle-thread"></div>
+                        <div id="detalle-reply" style="margin-top:12px;display:none">
+                            <textarea id="reply-text" rows="3" placeholder="Escribir respuesta..." style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+                            <div style="margin-top:6px;text-align:right">
+                                <button class="btn-soporte-nuevo" id="btnEnviarReply">Responder</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer" style="justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border-color)">
+                <button class="btn-secondary" id="btnCerrarSesion" style="color:#ef4444;border-color:#ef4444">
+                    🚪 Cerrar sesión
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Informe -->
+    <div class="modal" id="modalInforme">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>📄 Generar Informe de Expediente</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+
+                <!-- Tabs Individual / Batch -->
+                <div class="cuenta-tabs" style="margin-bottom:14px">
+                    <button class="cuenta-tab active" data-informe-tab="individual">Individual</button>
+                    <button class="cuenta-tab" data-informe-tab="batch">Batch (.txt)</button>
+                </div>
+
+                <!-- Panel Individual -->
+                <div id="informe-panel-individual">
+                    <div class="form-group">
+                        <label for="informe-expediente">Expediente<span class="tooltip-icon tooltip-left" data-tip="Ingresá el número en formato SIGLA NUMERO/AÑO. La sigla corresponde a la jurisdicción (ej: FCR = Federal Civil y Comercial Rosario).">?</span></label>
+                        <input type="text" id="informe-expediente" class="modal-input"
+                               placeholder="FCR 018745/2017" style="text-transform:uppercase">
+                        <small>Formato: JUR NUMERO/AÑO &nbsp;(ej: FCR 018745/2017)</small>
+                    </div>
+                </div>
+
+                <!-- Panel Batch -->
+                <div id="informe-panel-batch" style="display:none">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                        <button class="btn-secondary" id="btnSelectBatchFile" style="font-size:13px;padding:6px 12px">📁 Seleccionar .txt</button>
+                        <span id="informe-batch-filename" style="font-size:12px;color:#6b7280">Sin archivo seleccionado</span>
+                        <span class="tooltip-icon" data-tip="Seleccioná un archivo de texto con un expediente por línea para generar informes de múltiples causas en una sola ejecución.">?</span>
+                    </div>
+                    <small style="color:#6b7280">Cada línea del archivo debe contener un expediente (FCR 018745/2017)</small>
+                    <div id="informe-batch-preview" style="display:none;margin-top:8px;font-size:12px;color:#6b7280"></div>
+                </div>
+
+                <!-- Secciones -->
+                <div class="form-section" style="margin-top:18px;border-top:1px solid #e5e7eb;padding-top:14px">
+                    <h4 style="font-size:13px;font-weight:600;margin-bottom:12px;color:#374151">Secciones a incluir</h4>
+                    <div class="form-group" style="margin-bottom:10px">
+                        <label style="font-size:13px">Movimientos actuales<span class="tooltip-icon" data-tip="Sección del informe con los últimos movimientos del expediente. 'Con href' incluye los links a los documentos digitales adjuntos.">?</span></label>
+                        <select id="informe-movact" class="modal-input" style="padding:6px 8px;font-size:13px">
+                            <option value="man">Ninguno</option>
+                            <option value="mam">Movimientos</option>
+                            <option value="mamhref" selected>Movimientos + href</option>
+                            <option value="maa">Archivos</option>
+                            <option value="mama">Movimientos + Archivos</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:12px">
+                        <label style="font-size:13px">Movimientos históricos<span class="tooltip-icon" data-tip="Historial completo de movimientos del expediente. Puede hacer el informe más extenso.">?</span></label>
+                        <select id="informe-movhist" class="modal-input" style="padding:6px 8px;font-size:13px">
+                            <option value="mhn" selected>Ninguno</option>
+                            <option value="mhm">Movimientos</option>
+                            <option value="mhmhref">Movimientos + href</option>
+                            <option value="mha">Archivos</option>
+                            <option value="mhma">Movimientos + Archivos</option>
+                        </select>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:16px">
+                        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                            <input type="checkbox" id="informe-intervinientes"> Intervinientes<span class="tooltip-icon" data-tip="Incluye la lista de letrados, partes y funcionarios que intervienen en la causa.">?</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                            <input type="checkbox" id="informe-vinculados"> Vinculados<span class="tooltip-icon" data-tip="Incluye los expedientes conexos o vinculados a la causa principal.">?</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                            <input type="checkbox" id="informe-recursos"> Recursos<span class="tooltip-icon" data-tip="Incluye los recursos y apelaciones presentados en la causa.">?</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                            <input type="checkbox" id="informe-notas"> Notas<span class="tooltip-icon" data-tip="Incluye las notas internas agregadas al expediente.">?</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="informe-error" class="cuenta-error" style="display:none;margin-top:10px"></div>
+
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btnCancelInforme">Cancelar</button>
+                <button class="btn-primary" id="btnConfirmInforme">▶ Ejecutar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Monitor de Partes -->
+    <div class="modal" id="modalMonitor">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>🔍 Monitoreo de Partes</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:0; overflow-y:auto;">
+
+                <!-- Pestañas -->
+                <div class="cuenta-tabs">
+                    <button class="cuenta-tab active" data-tab="monitor-partes">📋 Partes</button>
+                    <button class="cuenta-tab" data-tab="monitor-expedientes">📑 Expedientes</button>
+                    <button class="cuenta-tab" data-tab="monitor-novedades">
+                        🆕 Novedades
+                        <span id="badge-novedades" style="display:none;background:#ef4444;color:#fff;border-radius:9999px;font-size:10px;padding:1px 6px;margin-left:4px;">0</span>
+                    </button>
+                </div>
+
+                <!-- ── TAB: Partes ── -->
+                <div class="cuenta-panel" id="monitor-partes" style="padding:14px;">
+
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <span style="font-size:13px;color:#6b7280" id="monitor-partes-count">Cargando...</span>
+                        <button class="btn-soporte-nuevo" id="btnMonitorAgregarParte">+ Agregar parte</button>
+                    </div>
+
+                    <div id="monitor-partes-error" class="cuenta-error" style="display:none;margin-bottom:10px;"></div>
+
+                    <!-- Seleccionar todas -->
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e5e7eb;">
+                        <input type="checkbox" id="monitor-check-all" checked>
+                        <label for="monitor-check-all" style="font-size:13px;cursor:pointer;user-select:none;">Seleccionar todas</label><span class="tooltip-icon" data-tip="Marca o desmarca todas las partes de la lista. Solo las partes seleccionadas serán incluidas al ejecutar la consulta inicial o búsqueda de novedades.">?</span>
+                    </div>
+
+                    <!-- Lista de partes -->
+                    <div id="monitor-partes-lista" style="max-height:260px;overflow-y:auto;">
+                        <div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;">Cargando partes...</div>
+                    </div>
+
+                    <!-- Formulario inline agregar/editar -->
+                    <div id="monitor-form-parte" style="display:none;margin-top:16px;padding:14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+                        <h4 id="monitor-form-title" style="margin:0 0 12px;font-size:14px;font-weight:600;">➕ Agregar parte</h4>
+                        <div class="cuenta-form-group">
+                            <label>Jurisdicción<span class="tooltip-icon" data-tip="Seleccioná el fuero al que pertenece la parte que querés monitorear. El sistema buscará sus expedientes dentro de esa jurisdicción del PJN.">?</span></label>
+                            <select id="monitor-form-jurisdiccion">
+                                <option value="">— Seleccionar —</option>
+                                <option value="0"  data-sigla="CSJ">CSJ — Corte Suprema de Justicia de la Nación</option>
+                                <option value="1"  data-sigla="CIV">CIV — Cámara Nacional de Apelaciones en lo Civil</option>
+                                <option value="2"  data-sigla="CAF">CAF — Cámara Nacional de Apelaciones en lo Contencioso Administrativo Federal</option>
+                                <option value="3"  data-sigla="CCF">CCF — Cámara Nacional de Apelaciones en lo Civil y Comercial Federal</option>
+                                <option value="4"  data-sigla="CNE">CNE — Cámara Nacional Electoral</option>
+                                <option value="5"  data-sigla="CSS">CSS — Cámara Federal de la Seguridad Social</option>
+                                <option value="6"  data-sigla="CPE">CPE — Cámara Nacional de Apelaciones en lo Penal Económico</option>
+                                <option value="7"  data-sigla="CNT">CNT — Cámara Nacional de Apelaciones del Trabajo</option>
+                                <option value="8"  data-sigla="CFP">CFP — Cámara Criminal y Correccional Federal</option>
+                                <option value="9"  data-sigla="CCC">CCC — Cámara Nacional de Apelaciones en lo Criminal y Correccional</option>
+                                <option value="10" data-sigla="COM">COM — Cámara Nacional de Apelaciones en lo Comercial</option>
+                                <option value="11" data-sigla="CPF">CPF — Cámara Federal de Casación Penal</option>
+                                <option value="12" data-sigla="CPN">CPN — Cámara Nacional de Casación Penal</option>
+                                <option value="13" data-sigla="FBB">FBB — Justicia Federal de Bahía Blanca</option>
+                                <option value="14" data-sigla="FCR">FCR — Justicia Federal de Comodoro Rivadavia</option>
+                                <option value="15" data-sigla="FCB">FCB — Justicia Federal de Córdoba</option>
+                                <option value="16" data-sigla="FCT">FCT — Justicia Federal de Corrientes</option>
+                                <option value="17" data-sigla="FGR">FGR — Justicia Federal de General Roca</option>
+                                <option value="18" data-sigla="FLP">FLP — Justicia Federal de La Plata</option>
+                                <option value="19" data-sigla="FMP">FMP — Justicia Federal de Mar del Plata</option>
+                                <option value="20" data-sigla="FMZ">FMZ — Justicia Federal de Mendoza</option>
+                                <option value="21" data-sigla="FPO">FPO — Justicia Federal de Posadas</option>
+                                <option value="22" data-sigla="FPA">FPA — Justicia Federal de Paraná</option>
+                                <option value="23" data-sigla="FRE">FRE — Justicia Federal de Resistencia</option>
+                                <option value="24" data-sigla="FSA">FSA — Justicia Federal de Salta</option>
+                                <option value="25" data-sigla="FRO">FRO — Justicia Federal de Rosario</option>
+                                <option value="26" data-sigla="FSM">FSM — Justicia Federal de San Martín</option>
+                                <option value="27" data-sigla="FTU">FTU — Justicia Federal de Tucumán</option>
+                            </select>
+                        </div>
+                        <div class="cuenta-form-group">
+                            <label>Nombre de la parte<span class="tooltip-icon" data-tip="Ingresá el nombre tal como figura en el sistema PJN, en mayúsculas. La búsqueda es por coincidencia parcial — no es necesario escribir el nombre completo.">?</span></label>
+                            <input type="text" id="monitor-form-nombre"
+                                   placeholder="Ej: PEREZ JUAN CARLOS"
+                                   maxlength="255"
+                                   autocomplete="off"
+                                   style="text-transform:uppercase">
+                            <small>Solo letras, números, espacios y guiones. El sistema busca por coincidencia parcial.</small>
+                        </div>
+                        <div id="monitor-form-error" class="cuenta-error" style="display:none;margin-bottom:6px;"></div>
+                        <input type="hidden" id="monitor-form-parte-id" value="">
+                        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+                            <button class="btn-secondary" id="btnMonitorCancelarParte">Cancelar</button>
+                            <button class="btn-primary" id="btnMonitorGuardarParte">Guardar</button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ── TAB: Expedientes ── -->
+                <div class="cuenta-panel" id="monitor-expedientes" style="display:none;padding:14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                        <button class="btn-back-soporte" id="btnMonitorVolverPartes">← Volver a Partes</button>
+                        <button class="btn-back-soporte" id="btnMonitorVerTodos" style="background:#e0f2fe;color:#0369a1;">👁 Ver todos</button><span class="tooltip-icon" data-tip="Muestra todos los expedientes monitoreados, sin filtrar por parte. Útil para tener una vista global del estado de la cartera.">?</span>
+                        <button class="btn-back-soporte" id="btnMonitorVisorExp" style="background:#e8f5e9;color:#15803d;">📊 Generar visor</button><span class="tooltip-icon" data-tip="Genera un reporte HTML con todos los expedientes monitoreados, sus carátulas y última actualización, para visualizar o compartir.">?</span>
+                        <span id="monitor-exp-titulo" style="font-size:13px;color:#6b7280;flex:1;"></span>
+                    </div>
+                    <div id="monitor-exp-loading" style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;">Cargando expedientes...</div>
+                    <div id="monitor-exp-tabla-wrap" style="display:none;overflow-x:auto;max-height:340px;overflow-y:auto;">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                            <thead>
+                                <tr style="background:#f3f4f6;font-weight:600;color:#374151;position:sticky;top:0;">
+                                    <th style="padding:8px 6px;text-align:left;border-bottom:1px solid #e5e7eb;">Expediente</th>
+                                    <th style="padding:8px 6px;text-align:left;border-bottom:1px solid #e5e7eb;">Dependencia</th>
+                                    <th style="padding:8px 6px;text-align:left;border-bottom:1px solid #e5e7eb;">Carátula</th>
+                                    <th style="padding:8px 6px;text-align:left;border-bottom:1px solid #e5e7eb;">Situación</th>
+                                    <th style="padding:8px 6px;text-align:left;border-bottom:1px solid #e5e7eb;">Últ. Act.</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monitor-exp-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div id="monitor-exp-empty" style="display:none;color:#9ca3af;font-size:13px;text-align:center;padding:20px;">Sin expedientes en la línea base.</div>
+                </div>
+
+                <!-- ── TAB: Novedades ── -->
+                <div class="cuenta-panel" id="monitor-novedades" style="display:none;padding:14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                        <span id="monitor-nov-count" style="font-size:13px;color:#6b7280;flex:1;">Cargando novedades...</span>
+                        <button class="btn-back-soporte" id="btnMonitorVisorNov" style="background:#e8f5e9;color:#15803d;">📊 Generar visor</button>
+                    </div>
+                    <!-- Barra de acciones bulk (visible solo cuando hay novedades) -->
+                    <div id="monitor-nov-acciones" style="display:none;display:flex;gap:6px;align-items:center;margin-bottom:8px;padding:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;flex-wrap:wrap;">
+                        <input type="checkbox" id="monitor-nov-check-all" checked style="margin:0;" title="Seleccionar todas">
+                        <span style="font-size:12px;color:#6b7280;flex:1;">Seleccionar todas</span><span class="tooltip-icon" data-tip="Marca o desmarca todas las novedades pendientes. Solo las seleccionadas se incorporarán a la línea base al presionar 'Agregar seleccionadas'.">?</span>
+                        <button class="btn-primary" id="btnMonitorAgregarNovedades" style="font-size:12px;padding:4px 10px;">✅ Agregar seleccionadas</button><span class="tooltip-icon" data-tip="Incorpora los expedientes seleccionados a la línea base de monitoreo. A partir de ese momento el sistema detectará nuevos movimientos en esas causas.">?</span>
+                        <button class="btn-monitor-accion btn-monitor-danger" id="btnMonitorDescartarTodos" style="font-size:12px;padding:4px 10px;">🗑 Descartar todo</button><span class="tooltip-icon" data-tip="Elimina todas las novedades pendientes sin incorporarlas. Usá esta opción si los expedientes encontrados no son relevantes para tu seguimiento.">?</span>
+                    </div>
+                    <div id="monitor-nov-loading" style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;">Cargando...</div>
+                    <div id="monitor-nov-lista" style="display:none;max-height:300px;overflow-y:auto;"></div>
+                    <div id="monitor-nov-empty" style="display:none;color:#9ca3af;font-size:13px;text-align:center;padding:20px;">✅ Sin novedades pendientes.</div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btnMonitorCerrar">Cerrar</button>
+                <span style="display:inline-flex;align-items:center;gap:4px">
+                    <button class="btn-primary" id="btnMonitorConsultaInicial" disabled
+                            title="Ejecuta consulta inicial para partes seleccionadas sin línea base">
+                        📥 Consulta Inicial
+                    </button><span class="tooltip-icon" data-tip="Ejecuta la primera búsqueda de expedientes para las partes seleccionadas que aún no tienen línea base. Puede demorar varios minutos dependiendo de la cantidad de partes.">?</span>
+                </span>
+                <span style="display:inline-flex;align-items:center;gap:4px">
+                    <button class="btn-primary" id="btnMonitorBuscarNovedades" disabled
+                            title="Busca nuevos expedientes para partes seleccionadas con línea base">
+                        🔍 Buscar Novedades
+                    </button><span class="tooltip-icon" data-tip="Consulta el PJN en busca de nuevos expedientes para las partes que ya tienen línea base establecida. Los resultados aparecen en la pestaña Novedades.">?</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+    <script src="onboarding/tour.js"></script>
+</body>
+</html>

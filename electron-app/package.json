@@ -1,0 +1,136 @@
+{
+  "name": "procurador-electron",
+  "version": "2.0.27",
+  "description": "Sistema de Automatización de Consultas SCW PJN - Versión Protegida",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:dir": "electron-builder --dir",
+    "prerelease": "node scripts/cleanup-dist.js",
+    "release": "electron-builder --win --publish always",
+    "prebuild:win": "node scripts/cleanup-dist.js",
+    "clean": "rimraf dist",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{js,json,md}\""
+  },
+  "keywords": [
+    "scw",
+    "pjn",
+    "automatizacion",
+    "expedientes"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "axios": "^1.13.4",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.8.3",
+    "exceljs": "^4.4.0",
+    "fs-extra": "^11.1.0",
+    "javascript-obfuscator": "^5.3.0",
+    "node-notifier": "^10.0.1",
+    "pdf-lib": "^1.17.1",
+    "puppeteer": "^24.32.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.55.0",
+    "prettier": "^3.1.0",
+    "rimraf": "^5.0.5"
+  },
+  "build": {
+    "appId": "com.procurador.scw",
+    "productName": "Procurador SCW",
+    "copyright": "Copyright © 2025",
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": false
+    },
+    "files": [
+      "**/*",
+      "!**/*.md",
+      "!**/*.log",
+      "!**/*.txt",
+      "!backup_*.json",
+      "!execution.lock",
+      "!estado_secciones.json",
+      "!acumulador_resultados.json",
+      "!27320694359*.json",
+      "!27320694359*.txt",
+      "!descargas/**/*",
+      "!dist/**/*",
+      "!build/**/*",
+      "!.git/**/*",
+      "!.gitignore",
+      "!README.md",
+      "!*.bat",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!procesarNovedadesCompleto.js",
+      "!listarSCWPJN.js",
+      "!consultarscwpjn.js",
+      "!testM1.js",
+      "!testM2.js",
+      "!*.ps1",
+      "!*.bat"
+    ],
+    "asarUnpack": [
+      "cerrarNavegador.js",
+      "errorHandler.js",
+      "monitoreo.js",
+      "paths.js",
+      "sessionManager.js",
+      "visorModal_template.html",
+      "config_proceso.json",
+      "src/**/*",
+      "renderer/**/*",
+      "onboarding/**/*"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Procurador SCW",
+      "perMachine": false,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "include": "build/installer.nsh"
+    },
+    "extraResources": [
+      {
+        "from": "visorModal_template.html",
+        "to": "visorModal_template.html"
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "jberger19186",
+      "repo": "procurador-scw",
+      "releaseType": "release"
+    }
+  }
+}

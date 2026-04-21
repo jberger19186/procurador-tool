@@ -1,0 +1,353 @@
+{
+  "busqueda": {
+    "nombre": "PARDO MONTOYA",
+    "jurisdiccion": "14"
+  },
+  "totalExpedientes": 49,
+  "totalPaginas": 4,
+  "expedientes": [
+    {
+      "expediente": "FCR 034000449/2012",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP - DGI C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "23/01/2026"
+    },
+    {
+      "expediente": "FCR 034000503/2010",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP - DGI C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "24/11/2023"
+    },
+    {
+      "expediente": "FCR 034000769/2012",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP - DGI C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "14/06/2023"
+    },
+    {
+      "expediente": "FCR 8339/2023",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "1/09/2023"
+    },
+    {
+      "expediente": "FCR 1423/2023",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "20/03/2024"
+    },
+    {
+      "expediente": "FCR 5194/2022",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "11/09/2023"
+    },
+    {
+      "expediente": "FCR 018745/2017/1",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "RECURSO QUEJA Nº 1 - AFIP-DGI (BD7570/10/2017) C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "19/09/2023"
+    },
+    {
+      "expediente": "FCR 18823/2019",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "4/03/2022"
+    },
+    {
+      "expediente": "FCR 25418/2018",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "20/09/2024"
+    },
+    {
+      "expediente": "FCR 24771/2018",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "20/09/2024"
+    },
+    {
+      "expediente": "FCR 18048/2018",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "20/09/2024"
+    },
+    {
+      "expediente": "FCR 014096/2018",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "PARDO MONTOYA, GABY MIREYA S/SOLICITUD CARTA DE CIUDADANÍA",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "10/04/2019"
+    },
+    {
+      "expediente": "FCR 11875/2018",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "20/09/2024"
+    },
+    {
+      "expediente": "FCR 010002/2018",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "PARDO MONTOYA, SHIRLEY LICET S/SOLICITUD CARTA DE CIUDADANÍA",
+      "situacion": "PARALIZADO",
+      "ultima_actuacion": "9/08/2019"
+    },
+    {
+      "expediente": "FCR 9735/2018",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "23/09/2024"
+    },
+    {
+      "expediente": "FCR 018745/2017",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP-DGI (BD 7570/10/2017) C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "20/11/2025"
+    },
+    {
+      "expediente": "FCR 018123/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR BD 832/06934/004/2017 C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "25/09/2024"
+    },
+    {
+      "expediente": "FCR 018087/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR BD 832/07308/001/2017 C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "19/09/2024"
+    },
+    {
+      "expediente": "FCR 013261/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "18/09/2024"
+    },
+    {
+      "expediente": "FCR 013235/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "25/09/2024"
+    },
+    {
+      "expediente": "FCR 007210/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR (BD 832/06525/002/2016) C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "23/09/2024"
+    },
+    {
+      "expediente": "FCR 005147/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "25/09/2024"
+    },
+    {
+      "expediente": "FCR 005128/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "25/09/2024"
+    },
+    {
+      "expediente": "FCR 005060/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "18/09/2024"
+    },
+    {
+      "expediente": "FCR 005029/2017",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "23/09/2024"
+    },
+    {
+      "expediente": "FCR 016971/2016",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "23/09/2024"
+    },
+    {
+      "expediente": "FCR 019652/2015",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP SUR C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "25/09/2024"
+    },
+    {
+      "expediente": "FCR 013691/2015",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP-DGI C/ PARDO MONTOYA, GABY MIREYA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "PARALIZADO",
+      "ultima_actuacion": "24/01/2018"
+    },
+    {
+      "expediente": "FCR 034000562/2011",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "O.S.E.C.A.C C/ PARDO MONTOYA, GABY MIREYA S/LEY 23.660 – OBRAS SOCIALES",
+      "situacion": "PARALIZADO",
+      "ultima_actuacion": "31/07/2019"
+    },
+    {
+      "expediente": "FCR 034000006/2012",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "O.S.E.C.A.C C/ PARDO MONTOYA, GABY MIREYA S/LEY 23.660 – OBRAS SOCIALES",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "21/08/2019"
+    },
+    {
+      "expediente": "FCR 004305/2015",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "OSECAC C/ PARDO MONTOYA, OSCAR GREGORIO S/LEY 23.660 – OBRAS SOCIALES",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "12/11/2021"
+    },
+    {
+      "expediente": "FCR 016474/2014",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP -DGI- C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "PARALIZADO",
+      "ultima_actuacion": "7/10/2016"
+    },
+    {
+      "expediente": "FCR 016422/2014",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP -DGI- C/ PARDO MONTOYA, OSCAR GREGORIO S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "29/08/2016"
+    },
+    {
+      "expediente": "FCR 016007/2014",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN DESPACHO",
+      "ultima_actuacion": "27/09/2024"
+    },
+    {
+      "expediente": "FCR 013077/2014",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA CIVIL",
+      "caratula": "PARDO MONTOYA, ROXANA ZULEMA S/SOLICITUD CARTA DE CIUDADANÍA",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "22/10/2015"
+    },
+    {
+      "expediente": "FCR 034000101/2013",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "O.S.E.C.A.C C/ PARDO MONTOYA, OSCAR GREGORIO S/LEY 23.660 – OBRAS SOCIALES",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "5/08/2019"
+    },
+    {
+      "expediente": "FCR 006031/2014",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "MINISTERIO DE TRABAJO EMPLEO Y SEGURIDAD SOCIAL C/ PARDO MONTOYA, ANTONIO ESTIVENS S/EJECUCION FISCAL – MINISTERIO DE TRABAJO",
+      "situacion": "PARALIZADO",
+      "ultima_actuacion": "22/03/2023"
+    },
+    {
+      "expediente": "FCR 034000279/2005",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP - DGI C/ PARDO MONTOYA, GABY MIREYA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "4/07/2023"
+    },
+    {
+      "expediente": "FCR 034000132/2006",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP - DGI C/ PARDO MONTOYA, GABY MIREYA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "23/06/2023"
+    },
+    {
+      "expediente": "FCR 006299/2013",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "EN LETRA",
+      "ultima_actuacion": "1/10/2024"
+    },
+    {
+      "expediente": "FCR 002842/2013",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP-DGI C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "PARALIZADO",
+      "ultima_actuacion": "30/11/2015"
+    },
+    {
+      "expediente": "FCR 034000717/2011",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP - DGI C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHIVO",
+      "ultima_actuacion": "6/11/2013"
+    },
+    {
+      "expediente": "FCR 043002676/2013",
+      "dependencia": "JUZGADO FEDERAL DE CALETA OLIVIA - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP C/ PARDO MONTOYA, ROXANA ZULEMA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "PARALIZADO",
+      "ultima_actuacion": "15/09/2017"
+    },
+    {
+      "expediente": "FCR 034000587/2013",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP - DGI C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "PARALIZADO",
+      "ultima_actuacion": "7/10/2016"
+    },
+    {
+      "expediente": "FCR 034000501/2012",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP- DGI C/ PARDO MONTOYA, OSCAR GREGORIO S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHIVO",
+      "ultima_actuacion": "6/11/2013"
+    },
+    {
+      "expediente": "FCR 034019360/2012",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "PARDO MONTOYA, ANTONIO ESTIVENS C/  S/SOLICITUD CARTA DE CIUDADANÍA",
+      "situacion": "ARCHIVO",
+      "ultima_actuacion": "28/10/2013"
+    },
+    {
+      "expediente": "FCR 034000399/2011",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP -DGI- C/ PARDO MONTOYA, SHIRLEY LICET S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHIVO",
+      "ultima_actuacion": "6/11/2013"
+    },
+    {
+      "expediente": "FCR 034000897/2010",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP -DGI- C/ PARDO MONTOYA, GABY MIREYA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "11/08/2023"
+    },
+    {
+      "expediente": "FCR 034000688/2011",
+      "dependencia": "JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL",
+      "caratula": "AFIP DGI C/ PARDO MONTOYA, GABY MIREYA S/EJECUCION FISCAL – A.F.I.P.",
+      "situacion": "ARCHÍVESE",
+      "ultima_actuacion": "11/08/2023"
+    }
+  ]
+}

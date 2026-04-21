@@ -1,0 +1,62 @@
+# ─── Dependencias ───────────────────────────────────────────
+node_modules/
+.npm/
+
+# ─── Secretos y claves — NUNCA commitear ────────────────────
+.env
+.env.*
+!.env.example
+backend-server/certs/
+backend-server/keys/
+backend-server/src/security/keys/
+electron-app/keys/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ─── Builds y distribución ──────────────────────────────────
+dist/
+build/
+out/
+release/
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.crx
+*.zip
+pjn-extension-*.zip
+
+# ─── Logs ───────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Sistema operativo ──────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── IDEs y editores ────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Electron específico ────────────────────────────────────
+electron-app/temp/
+electron-app/secure-temp/
+electron-app/cache/
+
+# ─── Backend específico ─────────────────────────────────────
+backend-server/uploads/
+
+# ─── Archivos temporales ────────────────────────────────────
+*.tmp
+*.temp
+.cache/

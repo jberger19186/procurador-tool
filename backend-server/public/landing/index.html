@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Procurador SCW — Automatizá tu procuración ante el PJN</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       SISTEMA DE DISEÑO — idéntico a la app de escritorio
+    ═══════════════════════════════════════════════════════════════ */
+    :root {
+      --bg:        #f7f7f5;
+      --surface:   #ffffff;
+      --elevated:  #fafaf9;
+      --hover:     #f0f0ee;
+
+      --border:    rgba(0,0,0,0.08);
+      --border-md: rgba(0,0,0,0.13);
+      --border-lg: rgba(0,0,0,0.18);
+
+      --amber:       #d97706;
+      --amber-dk:    #b45309;
+      --amber-lt:    #f59e0b;
+      --amber-muted: rgba(217,119,6,0.10);
+      --amber-glow:  rgba(217,119,6,0.20);
+
+      --text-1: #1a1a1a;
+      --text-2: #4a4a4a;
+      --text-3: #8a8a8a;
+      --text-4: #c0c0c0;
+
+      --green:     #059669;
+      --green-bg:  rgba(5,150,105,0.09);
+      --blue:      #2563eb;
+      --blue-bg:   rgba(37,99,235,0.09);
+      --red:       #dc2626;
+      --red-bg:    rgba(220,38,38,0.09);
+
+      --font:       'Inter', system-ui, sans-serif;
+      --font-serif: 'Crimson Pro', Georgia, serif;
+      --font-mono:  'Cascadia Code', 'Consolas', monospace;
+
+      --r-sm: 6px; --r: 10px; --r-lg: 16px; --r-xl: 24px;
+
+      --sh-sm: 0 1px 4px rgba(0,0,0,0.07);
+      --sh:    0 4px 16px rgba(0,0,0,0.08);
+      --sh-lg: 0 8px 32px rgba(0,0,0,0.10);
+      --sh-xl: 0 20px 60px rgba(0,0,0,0.12);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-1);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── NAVBAR ──────────────────────────────────────────────────── */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      height: 58px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2.5rem;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow .25s;
+    }
+    .nav.scrolled { box-shadow: var(--sh); }
+
+    .nav-brand { display: flex; align-items: center; gap: 9px; text-decoration: none; }
+    .nav-brand-icon {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, var(--amber), var(--amber-lt));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      box-shadow: 0 2px 8px var(--amber-glow);
+    }
+    .nav-brand-name {
+      font-size: 14px; font-weight: 700;
+      color: var(--text-1); letter-spacing: -.02em;
+    }
+    .nav-brand-name b { color: var(--amber); }
+
+    .nav-links { display: flex; align-items: center; gap: 1.6rem; list-style: none; }
+    .nav-links a { font-size: 13px; font-weight: 500; color: var(--text-3); text-decoration: none; transition: color .15s; }
+    .nav-links a:hover { color: var(--text-1); }
+
+    .nav-right { display: flex; align-items: center; gap: 8px; }
+    .btn-nav-ghost {
+      height: 32px; padding: 0 14px;
+      border: 1px solid var(--border-md); border-radius: var(--r-sm);
+      background: transparent; color: var(--text-2);
+      font: 500 12.5px/1 var(--font); cursor: pointer; text-decoration: none;
+      display: flex; align-items: center;
+      transition: .15s;
+    }
+    .btn-nav-ghost:hover { background: var(--hover); color: var(--text-1); }
+    .btn-nav-cta {
+      height: 32px; padding: 0 16px;
+      background: var(--amber); color: #fff;
+      border: none; border-radius: var(--r-sm);
+      font: 600 12.5px/1 var(--font); cursor: pointer; text-decoration: none;
+      display: flex; align-items: center; gap: 6px;
+      box-shadow: 0 2px 10px var(--amber-glow);
+      transition: .15s;
+    }
+    .btn-nav-cta:hover { background: var(--amber-dk); transform: translateY(-1px); }
+
+    /* ─── UTILIDADES ──────────────────────────────────────────────── */
+    section { padding: 96px 2rem; }
+    .wrap   { max-width: 1120px; margin: 0 auto; }
+    .divider { height: 1px; background: var(--border); }
+
+    .label {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 11px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--amber);
+    }
+    .label::before { content:''; width:16px; height:2px; background:var(--amber); border-radius:1px; flex-shrink:0; }
+    .label.center { justify-content: center; }
+    .label.center::before { display: none; }
+
+    .h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(2.8rem, 6vw, 5rem);
+      font-weight: 300; line-height: 1.08; letter-spacing: -.02em;
+      color: var(--text-1);
+    }
+    .h2 {
+      font-family: var(--font-serif);
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 300; line-height: 1.15; letter-spacing: -.015em;
+      color: var(--text-1);
+    }
+    .h3 { font-size: 15px; font-weight: 600; color: var(--text-1); letter-spacing: -.01em; }
+    em { font-style: italic; color: var(--amber); }
+
+    .lead {
+      font-size: 16px; line-height: 1.75; color: var(--text-2);
+      max-width: 580px; margin-top: 16px;
+    }
+    .lead.wide { max-width: 680px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      font: 600 13.5px/1 var(--font); border: none; border-radius: var(--r-sm);
+      padding: 11px 22px; cursor: pointer; text-decoration: none;
+      transition: all .15s; white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--amber); color: #fff;
+      box-shadow: 0 4px 14px var(--amber-glow);
+    }
+    .btn-primary:hover { background: var(--amber-dk); transform: translateY(-2px); box-shadow: 0 6px 20px var(--amber-glow); }
+    .btn-ghost {
+      background: var(--surface); color: var(--text-1);
+      border: 1px solid var(--border-md); box-shadow: var(--sh-sm);
+    }
+    .btn-ghost:hover { background: var(--hover); transform: translateY(-1px); }
+    .btn-lg { padding: 13px 28px; font-size: 14.5px; }
+    .btn svg { flex-shrink: 0; }
+
+    .tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 9px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    }
+    .tag-amber { background: var(--amber-muted); color: var(--amber-dk); border: 1px solid rgba(217,119,6,.18); }
+    .tag-green { background: var(--green-bg);   color: var(--green);   border: 1px solid rgba(5,150,105,.18); }
+    .tag-blue  { background: var(--blue-bg);    color: var(--blue);    border: 1px solid rgba(37,99,235,.18); }
+
+    /* Reveal */
+    .rev { opacity:0; transform:translateY(22px); transition: opacity .6s, transform .6s; }
+    .rev.on { opacity:1; transform:translateY(0); }
+    .rev-d1 { transition-delay:.1s; }
+    .rev-d2 { transition-delay:.2s; }
+    .rev-d3 { transition-delay:.32s; }
+    .rev-d4 { transition-delay:.44s; }
+
+    /* ─── HERO ────────────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center;
+      padding: 130px 2rem 80px;
+      position: relative; overflow: hidden;
+      background: var(--bg);
+    }
+    .hero::before {
+      content:''; position:absolute; inset:0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 52px 52px;
+    }
+    .hero::after {
+      content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
+      width:900px; height:640px;
+      background: radial-gradient(ellipse at top, rgba(217,119,6,.09) 0%, transparent 65%);
+      pointer-events:none;
+    }
+    .hero-inner { position:relative; z-index:1; }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: var(--amber-dk);
+      background: var(--amber-muted); border: 1px solid rgba(217,119,6,.25);
+      padding: 5px 14px; border-radius: 20px; margin-bottom: 2rem;
+      opacity:0; animation: up .6s .15s forwards;
+    }
+    .hero-badge-pulse {
+      width:6px; height:6px; border-radius:50%;
+      background: var(--amber); animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+
+    .hero-icon {
+      width:76px; height:76px;
+      background: linear-gradient(135deg, var(--amber), var(--amber-lt));
+      border-radius: 22px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:36px; margin:0 auto 2rem;
+      box-shadow: 0 10px 30px var(--amber-glow);
+      opacity:0; animation: up .6s .3s forwards;
+    }
+    .hero .h1 { opacity:0; animation: up .7s .45s forwards; }
+    .hero .lead { margin:1.4rem auto 0; opacity:0; animation: up .7s .6s forwards; }
+
+    .hero-divider {
+      width:44px; height:2px; border-radius:1px;
+      background: linear-gradient(90deg, transparent, var(--amber), transparent);
+      margin: 2.5rem auto;
+      opacity:0; animation: up .6s .75s forwards;
+    }
+    .hero-ctas { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; opacity:0; animation: up .7s .9s forwards; }
+
+    /* Pill de stats */
+    .hero-stats {
+      display:flex; margin-top:4rem;
+      background: var(--surface); border:1px solid var(--border-md);
+      border-radius: var(--r-lg); overflow:hidden; box-shadow: var(--sh);
+      opacity:0; animation: up .7s 1.1s forwards;
+    }
+    .hs { padding:14px 28px; text-align:center; border-right:1px solid var(--border); }
+    .hs:last-child { border-right:none; }
+    .hs-n {
+      font-family: var(--font-serif); font-size:1.8rem; font-weight:600;
+      color: var(--amber); line-height:1;
+    }
+    .hs-l { font-size:11px; font-weight:500; color:var(--text-3); letter-spacing:.06em; text-transform:uppercase; margin-top:4px; }
+
+    .scroll-hint {
+      position:absolute; bottom:2.2rem; left:50%; transform:translateX(-50%);
+      display:flex; flex-direction:column; align-items:center; gap:5px;
+      opacity:0; animation: up .6s 1.5s forwards;
+    }
+    .scroll-hint span { font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-4); }
+    .scroll-mouse { width:18px; height:30px; border:1.5px solid var(--border-md); border-radius:9px; position:relative; }
+    .scroll-wheel { width:2px; height:5px; background:var(--amber); border-radius:1px; position:absolute; top:4px; left:50%; transform:translateX(-50%); animation: sw 1.8s infinite; }
+    @keyframes sw { 0%{opacity:1;top:4px} 100%{opacity:0;top:16px} }
+    @keyframes up  { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ─── PROBLEMA ────────────────────────────────────────────────── */
+    #problema { background: var(--surface); }
+    .problema-grid {
+      display:grid; grid-template-columns:1fr 1fr;
+      gap:64px; align-items:center;
+    }
+    .pain-list { list-style:none; margin-top:28px; display:flex; flex-direction:column; gap:0; }
+    .pain-item {
+      display:flex; gap:14px;
+      padding:16px 0; border-bottom:1px solid var(--border);
+    }
+    .pain-item:first-child { border-top:1px solid var(--border); }
+    .pain-icon {
+      width:36px; height:36px; border-radius:var(--r-sm);
+      display:flex; align-items:center; justify-content:center;
+      font-size:16px; flex-shrink:0; margin-top:1px;
+      background:var(--red-bg);
+    }
+    .pain-title { font-size:13.5px; font-weight:600; color:var(--text-1); margin-bottom:3px; }
+    .pain-desc  { font-size:12.5px; color:var(--text-2); line-height:1.6; }
+
+    /* Cita del lado derecho */
+    .quote-block {
+      background: var(--bg); border:1px solid var(--border-md);
+      border-radius: var(--r-xl);
+      padding: 40px; position:relative; overflow:hidden;
+    }
+    .quote-block::before {
+      content:'"'; font-family:var(--font-serif);
+      font-size:12rem; line-height:.8; color:var(--amber-muted);
+      position:absolute; top:-10px; left:20px;
+      pointer-events:none; font-weight:700;
+    }
+    .quote-text {
+      font-family:var(--font-serif); font-size:1.55rem;
+      font-weight:300; font-style:italic;
+      color:var(--text-1); line-height:1.5;
+      position:relative; z-index:1;
+    }
+    .quote-text em { color:var(--amber); }
+    .quote-by { margin-top:20px; font-size:12px; color:var(--text-3); font-weight:500; }
+    .quote-answer {
+      margin-top:28px;
+      background:var(--amber-muted); border:1px solid rgba(217,119,6,.2);
+      border-radius:var(--r); padding:16px 18px;
+    }
+    .quote-answer-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--amber-dk); margin-bottom:6px; }
+    .quote-answer-text  { font-size:14px; font-weight:600; color:var(--text-1); line-height:1.5; }
+
+    /* ─── SOLUCIÓN / APP SHOWCASE ─────────────────────────────────── */
+    #solucion { background: var(--bg); }
+    .solution-header { text-align:center; max-width:640px; margin:0 auto 64px; }
+    .solution-header .label { justify-content:center; }
+    .solution-header .label::before { display:none; }
+    .solution-header .lead { margin:14px auto 0; }
+
+    /* Ventana app */
+    .app-frame {
+      border-radius:var(--r-xl); overflow:hidden;
+      border:1px solid var(--border-md);
+      box-shadow: var(--sh-xl);
+      background: var(--surface);
+    }
+    .app-titlebar {
+      background:var(--elevated); border-bottom:1px solid var(--border);
+      padding:10px 14px; display:flex; align-items:center; gap:7px;
+    }
+    .dot { width:11px; height:11px; border-radius:50%; }
+    .dot-r{background:#ff5f57} .dot-y{background:#febc2e} .dot-g{background:#28c840}
+    .tb-title { font-size:11px; color:var(--text-3); margin-left:8px; }
+    .tb-right  { margin-left:auto; display:flex; align-items:center; gap:6px; }
+    .tb-badge  {
+      font-size:10.5px; font-weight:600;
+      background:var(--green-bg); color:var(--green);
+      border:1px solid rgba(5,150,105,.2);
+      padding:2px 9px; border-radius:10px;
+      display:flex; align-items:center; gap:4px;
+    }
+    .tb-dot { width:5px; height:5px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+
+    .app-topbar {
+      background:var(--surface); border-bottom:1px solid var(--border);
+      padding:7px 14px; display:flex; align-items:center; gap:7px;
+    }
+    .atb-tab {
+      height:28px; padding:0 12px; border-radius:var(--r-sm);
+      font:600 12px var(--font); display:flex; align-items:center; gap:5px;
+    }
+    .atb-tab.active { background:var(--amber-muted); color:var(--amber-dk); }
+    .atb-tab.idle   { background:transparent; color:var(--text-3); }
+    .atb-space { flex:1; }
+    .atb-prog { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--text-3); }
+    .atb-pbar { width:72px; height:4px; background:var(--border-md); border-radius:2px; overflow:hidden; }
+    .atb-pbar-fill { height:100%; background:linear-gradient(90deg,var(--amber),var(--amber-lt)); border-radius:2px; animation:prog 3s ease-in-out infinite alternate; }
+    @keyframes prog { from{width:45%} to{width:78%} }
+    .atb-pct { color:var(--amber); font-weight:700; }
+
+    .app-layout { display:flex; height:360px; }
+
+    .app-sidebar {
+      width:180px; min-width:180px;
+      background:var(--surface); border-right:1px solid var(--border);
+      padding:10px 8px; display:flex; flex-direction:column; gap:1px;
+    }
+    .app-sidebar-lbl {
+      font-size:9.5px; font-weight:700; text-transform:uppercase;
+      letter-spacing:.08em; color:var(--text-4); padding:7px 8px 3px;
+    }
+    .app-sidebar-item {
+      display:flex; align-items:center; gap:7px;
+      padding:6px 8px; border-radius:var(--r-sm);
+      font-size:12px; font-weight:500; color:var(--text-3);
+    }
+    .app-sidebar-item.active { background:var(--amber-muted); color:var(--amber-dk); font-weight:600; }
+    .app-sidebar-item svg { width:12px; height:12px; flex-shrink:0; }
+    .app-sidebar-bot { margin-top:auto; border-top:1px solid var(--border); padding-top:10px; }
+    .app-user { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:var(--r-sm); }
+    .app-avatar { width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,var(--amber),var(--amber-lt)); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#fff; }
+    .app-uname { font-size:11.5px; font-weight:500; color:var(--text-1); }
+    .app-uplan { font-size:10px; color:var(--text-3); }
+
+    .app-console {
+      flex:1; background:var(--bg);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    .app-console-hdr {
+      display:flex; align-items:center; gap:8px;
+      padding:6px 14px; background:var(--surface); border-bottom:1px solid var(--border);
+      font-size:11px; color:var(--text-3);
+    }
+    .app-console-body {
+      flex:1; overflow-y:auto; padding:8px 14px;
+      font-family:var(--font-mono); font-size:11.5px; line-height:1.85;
+    }
+    .c-line { display:flex; gap:10px; padding:1px 4px; border-radius:3px; }
+    .c-line:hover { background:var(--hover); }
+    .c-ts { color:var(--text-4); width:50px; text-align:right; flex-shrink:0; font-size:10.5px; }
+    .c-tag {
+      flex-shrink:0; font-size:9px; font-weight:700;
+      padding:2px 5px; border-radius:3px; text-transform:uppercase;
+      letter-spacing:.05em; height:14px; line-height:10px; margin-top:3px;
+      border:1px solid transparent;
+    }
+    .tok  { background:var(--green-bg); color:var(--green); border-color:rgba(5,150,105,.15); }
+    .tinf { background:var(--blue-bg);  color:var(--blue);  border-color:rgba(37,99,235,.15); }
+    .twrn { background:rgba(217,119,6,.09); color:#92400e; border-color:rgba(217,119,6,.15); }
+    .tsys { background:rgba(0,0,0,.04); color:var(--text-3); border-color:var(--border); }
+    .c-msg { color:var(--text-2); font-size:11.5px; }
+    .c-msg .hl  { color:var(--amber-dk); font-weight:600; }
+    .c-msg .num { color:var(--blue); font-weight:600; }
+    .c-msg .ok  { color:var(--green); font-weight:600; }
+
+    .app-statusbar {
+      height:22px; display:flex; align-items:center; gap:14px;
+      padding:0 14px; background:var(--surface); border-top:1px solid var(--border);
+      font-family:var(--font-mono); font-size:10px; color:var(--text-3);
+    }
+    .ssb-accent { color:var(--amber); }
+
+    /* ─── FEATURES ────────────────────────────────────────────────── */
+    #features { background: var(--surface); }
+    .features-header { text-align:center; margin-bottom:56px; }
+    .features-header .label  { justify-content:center; }
+    .features-header .label::before { display:none; }
+    .features-header .lead { margin:14px auto 0; }
+
+    .feat-grid {
+      display:grid; grid-template-columns:repeat(2,1fr); gap:24px;
+    }
+    .feat-card {
+      background:var(--bg); border:1px solid var(--border-md);
+      border-radius:var(--r-lg); padding:28px; position:relative; overflow:hidden;
+      transition:.2s;
+    }
+    .feat-card:hover { border-color:var(--amber); box-shadow:var(--sh-lg); transform:translateY(-2px); }
+    .feat-card::after {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background:linear-gradient(90deg,transparent,var(--amber),transparent);
+      opacity:0; transition:.25s;
+    }
+    .feat-card:hover::after { opacity:1; }
+
+    .feat-header { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
+    .feat-icon {
+      width:42px; height:42px; border-radius:var(--r-sm); flex-shrink:0;
+      background:var(--amber-muted); border:1px solid rgba(217,119,6,.18);
+      display:flex; align-items:center; justify-content:center; font-size:20px;
+    }
+    .feat-title-block { flex:1; }
+    .feat-name  { font-size:15px; font-weight:600; color:var(--text-1); letter-spacing:-.01em; }
+    .feat-sub   { font-size:12px; color:var(--text-3); margin-top:2px; }
+    .feat-desc  { font-size:13px; color:var(--text-2); line-height:1.75; }
+
+    .feat-pills { display:flex; flex-wrap:wrap; gap:6px; margin-top:16px; }
+    .feat-pill {
+      display:flex; align-items:center; gap:5px;
+      padding:4px 10px; border-radius:20px;
+      font-size:11.5px; font-weight:500;
+      background:var(--surface); border:1px solid var(--border-md);
+      color:var(--text-2);
+    }
+    .feat-pill::before { content:'✓'; color:var(--green); font-size:10px; font-weight:700; }
+
+    .feat-card-wide { grid-column:1/-1; }
+    .feat-wide-inner { display:grid; grid-template-columns:1fr 1fr; gap:32px; align-items:center; }
+
+    /* Mini monitor demo */
+    .mini-monitor {
+      background:var(--surface); border:1px solid var(--border-md);
+      border-radius:var(--r); overflow:hidden; box-shadow:var(--sh);
+    }
+    .mm-hdr {
+      padding:8px 12px; background:var(--elevated); border-bottom:1px solid var(--border);
+      display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-3);
+    }
+    .mm-tabs { display:flex; border-bottom:1px solid var(--border); }
+    .mm-tab {
+      flex:1; padding:7px 10px; font-size:11px; font-weight:500; text-align:center;
+      color:var(--text-3); border-right:1px solid var(--border); cursor:default;
+    }
+    .mm-tab:last-child { border-right:none; }
+    .mm-tab.a { color:var(--amber-dk); border-bottom:2px solid var(--amber); }
+    .mm-body { padding:10px 12px; }
+    .mm-row {
+      display:flex; align-items:center; gap:10px;
+      padding:7px 10px; background:var(--bg); border:1px solid var(--border);
+      border-radius:var(--r-sm); margin-bottom:6px; font-size:12px;
+    }
+    .mm-row:last-child { margin-bottom:0; }
+    .mm-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .mm-name { flex:1; color:var(--text-1); font-weight:500; }
+    .mm-n    { font-size:10.5px; color:var(--text-3); }
+    .mm-new  {
+      font-size:10px; font-weight:700; padding:1px 7px; border-radius:10px;
+      background:var(--amber-muted); color:var(--amber-dk);
+    }
+
+    /* ─── COMO FUNCIONA ───────────────────────────────────────────── */
+    #workflow { background: var(--surface); }
+    .workflow-header { text-align:center; margin-bottom:60px; }
+    .workflow-header .label  { justify-content:center; }
+    .workflow-header .label::before { display:none; }
+    .workflow-header .lead { margin:14px auto 0; }
+
+    .steps-row {
+      display:grid; grid-template-columns:repeat(4,1fr);
+      position:relative; gap:0;
+    }
+    .steps-row::before {
+      content:''; position:absolute;
+      top:28px; left:calc(12.5%); right:calc(12.5%);
+      height:1px;
+      background:linear-gradient(90deg, var(--amber), rgba(217,119,6,.15));
+    }
+    .step {
+      text-align:center; padding:0 20px;
+      opacity:0; transform:translateY(14px);
+      transition: opacity .5s, transform .5s;
+    }
+    .step.on { opacity:1; transform:translateY(0); }
+    .step:nth-child(2) { transition-delay:.12s; }
+    .step:nth-child(3) { transition-delay:.24s; }
+    .step:nth-child(4) { transition-delay:.36s; }
+    .step-num {
+      width:56px; height:56px;
+      background:var(--surface); border:1.5px solid var(--amber);
+      border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      margin:0 auto 20px; position:relative; z-index:1;
+      font-family:var(--font-serif); font-size:1.35rem; font-weight:600; color:var(--amber);
+      box-shadow: 0 0 0 6px var(--bg);
+    }
+    .step h3 { font-size:14.5px; font-weight:600; color:var(--text-1); margin-bottom:8px; }
+    .step p  { font-size:12.5px; color:var(--text-2); line-height:1.7; }
+
+    /* ─── SEGURIDAD / PRIVACIDAD ─────────────────────────────────── */
+    #seguridad { background: var(--bg); }
+    .priv-intro { text-align:center; max-width:620px; margin:0 auto 48px; }
+    .priv-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .priv-card {
+      background:var(--surface); border:1px solid var(--border-md);
+      border-radius:var(--r-lg); padding:24px 20px; text-align:center;
+      transition:.2s;
+    }
+    .priv-card:hover { border-color:var(--amber); transform:translateY(-2px); box-shadow:var(--sh-lg); }
+    .priv-icon {
+      width:44px; height:44px; border-radius:var(--r-sm);
+      display:flex; align-items:center; justify-content:center;
+      font-size:20px; margin:0 auto 14px;
+    }
+    .priv-name { font-size:14px; font-weight:600; color:var(--text-1); margin-bottom:8px; letter-spacing:-.01em; }
+    .priv-desc { font-size:12.5px; color:var(--text-2); line-height:1.65; }
+
+    /* ─── PLANES ──────────────────────────────────────────────────── */
+    #planes { background: var(--surface); }
+    .planes-header { text-align:center; margin-bottom:56px; }
+    .planes-header .label  { justify-content:center; }
+    .planes-header .label::before { display:none; }
+    .planes-header .lead { margin:14px auto 0; }
+
+    .planes-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; max-width:780px; margin:0 auto; }
+
+    /* Planes futuros */
+    .future-sep {
+      display:flex; align-items:center; gap:16px;
+      margin:52px 0 36px;
+    }
+    .future-sep::before, .future-sep::after {
+      content:''; flex:1; height:1px; background:var(--border-md);
+    }
+    .future-sep-label {
+      font-size:11px; font-weight:700; text-transform:uppercase;
+      letter-spacing:.1em; color:var(--text-3); white-space:nowrap;
+      padding:4px 12px; background:var(--bg);
+      border:1px solid var(--border-md); border-radius:20px;
+    }
+    .future-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+    .future-card {
+      background:var(--bg); border:1px solid var(--border);
+      border-radius:var(--r-lg); padding:22px 20px;
+    }
+    .future-badge {
+      display:inline-flex; align-items:center; gap:5px;
+      font-size:10px; font-weight:700; letter-spacing:.08em;
+      text-transform:uppercase; color:var(--text-4);
+      background:rgba(0,0,0,.04); border:1px solid var(--border);
+      padding:2px 9px; border-radius:20px; margin-bottom:12px;
+    }
+    .future-name { font-size:15px; font-weight:700; color:var(--text-2); margin-bottom:4px; letter-spacing:-.01em; }
+    .future-price {
+      font-family:var(--font-serif); font-size:1.5rem; font-weight:300;
+      color:var(--text-3); margin-bottom:8px; line-height:1;
+    }
+    .future-desc { font-size:12px; color:var(--text-3); line-height:1.65; margin-bottom:14px; }
+    .future-feats { list-style:none; display:flex; flex-direction:column; gap:6px; }
+    .future-feat { font-size:12px; color:var(--text-3); display:flex; gap:8px; align-items:flex-start; }
+    .future-feat::before { content:'·'; flex-shrink:0; font-weight:700; color:var(--text-4); }
+
+    .plan-card {
+      background:var(--surface); border:1px solid var(--border-md);
+      border-radius:var(--r-xl); overflow:hidden; position:relative;
+      transition:.2s;
+    }
+    .plan-card:hover { box-shadow:var(--sh-lg); transform:translateY(-3px); }
+    .plan-card.featured {
+      border-color:var(--amber);
+      box-shadow: 0 0 0 1px var(--amber), var(--sh-lg);
+    }
+    .plan-ribbon {
+      position:absolute; top:16px; right:-28px;
+      background:var(--amber); color:#fff;
+      font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+      padding:4px 36px; transform:rotate(45deg);
+    }
+    .plan-header { padding:28px 24px 20px; border-bottom:1px solid var(--border); }
+    .plan-icon { font-size:28px; margin-bottom:12px; }
+    .plan-name { font-size:17px; font-weight:700; color:var(--text-1); letter-spacing:-.01em; }
+    .plan-desc { font-size:12.5px; color:var(--text-2); margin-top:5px; line-height:1.5; }
+    .plan-price { margin-top:16px; }
+    .plan-price-amount {
+      font-family:var(--font-serif); font-size:2.4rem; font-weight:600;
+      color:var(--text-1); letter-spacing:-.02em; line-height:1;
+    }
+    .plan-price-amount.featured { color:var(--amber-dk); }
+    .plan-price-period { font-size:12px; color:var(--text-3); margin-top:4px; }
+
+    .plan-features { padding:20px 24px; list-style:none; display:flex; flex-direction:column; gap:10px; }
+    .plan-feat-item { display:flex; align-items:flex-start; gap:9px; font-size:13px; color:var(--text-2); line-height:1.45; }
+    .plan-feat-item .chk { color:var(--green); font-size:12px; font-weight:700; flex-shrink:0; margin-top:1px; }
+    .plan-feat-item .dash { color:var(--text-4); font-size:12px; flex-shrink:0; margin-top:1px; }
+
+    .plan-cta { padding:0 24px 24px; }
+    .plan-btn {
+      width:100%; height:38px; border-radius:var(--r-sm);
+      font:600 13.5px/1 var(--font); cursor:pointer; border:none;
+      transition:.15s; display:flex; align-items:center; justify-content:center; gap:7px;
+      text-decoration: none;
+    }
+    .plan-btn.primary { background:var(--amber); color:#fff; box-shadow:0 3px 12px var(--amber-glow); }
+    .plan-btn.primary:hover { background:var(--amber-dk); }
+    .plan-btn.outline { background:transparent; color:var(--text-2); border:1px solid var(--border-md); }
+    .plan-btn.outline:hover { background:var(--hover); color:var(--text-1); }
+
+    /* ─── CTA FINAL ───────────────────────────────────────────────── */
+    #cta {
+      background:var(--bg); text-align:center;
+      position:relative; overflow:hidden;
+    }
+    #cta::before {
+      content:''; position:absolute; inset:0;
+      background-image: linear-gradient(var(--border) 1px,transparent 1px), linear-gradient(90deg,var(--border) 1px,transparent 1px);
+      background-size:52px 52px;
+    }
+    #cta::after {
+      content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
+      width:800px; height:600px;
+      background:radial-gradient(ellipse at top, rgba(217,119,6,.08) 0%, transparent 65%);
+      pointer-events:none;
+    }
+    .cta-inner { position:relative; z-index:1; }
+    .cta-title { font-family:var(--font-serif); font-size:clamp(2.2rem,5vw,4rem); font-weight:300; line-height:1.12; }
+    .cta-sub { font-size:15px; color:var(--text-2); margin:18px auto 36px; max-width:480px; line-height:1.8; }
+    .cta-meta {
+      margin-top:28px; font-size:11.5px; color:var(--text-3);
+      display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap;
+    }
+    .cta-meta-sep { width:3px; height:3px; border-radius:50%; background:var(--border-md); }
+
+    /* ─── FOOTER ──────────────────────────────────────────────────── */
+    footer {
+      background:var(--surface); border-top:1px solid var(--border);
+      padding:32px 2rem;
+    }
+    .foot { max-width:1120px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .foot-brand { display:flex; align-items:center; gap:8px; text-decoration:none; }
+    .foot-brand-icon { width:26px; height:26px; background:linear-gradient(135deg,var(--amber),var(--amber-lt)); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:13px; }
+    .foot-brand-name { font-size:13px; font-weight:700; color:var(--text-1); }
+    .foot-brand-name b { color:var(--amber); }
+    .foot-desc { font-size:11.5px; color:var(--text-3); margin-top:3px; }
+    .foot-meta { font-size:11.5px; color:var(--text-3); text-align:right; line-height:1.7; }
+
+    /* ─── RESPONSIVE ──────────────────────────────────────────────── */
+    @media(max-width:960px) {
+      .problema-grid { grid-template-columns:1fr; gap:40px; }
+      .priv-grid { grid-template-columns:1fr 1fr; }
+      .feat-grid { grid-template-columns:1fr; }
+      .feat-card-wide .feat-wide-inner { grid-template-columns:1fr; }
+      .planes-grid { grid-template-columns:1fr; max-width:420px; }
+      .future-grid { grid-template-columns:1fr; }
+      .steps-row { grid-template-columns:1fr 1fr; }
+      .steps-row::before { display:none; }
+      .app-sidebar { display:none; }
+      nav { padding:0 1.2rem; }
+      .nav-links { display:none; }
+    }
+    @media(max-width:600px) {
+      .hero-stats { flex-direction:column; }
+      .hs { border-right:none; border-bottom:1px solid var(--border); }
+      .hs:last-child { border-bottom:none; }
+      .steps-row { grid-template-columns:1fr; }
+      .priv-grid { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ NAVBAR ══════════════════════════════════════════════════════ -->
+<nav class="nav" id="nav">
+  <a href="#" class="nav-brand">
+    <div class="nav-brand-icon">⚖️</div>
+    <span class="nav-brand-name">Procurador <b>SCW</b></span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#solucion">La app</a></li>
+    <li><a href="#features">Funciones</a></li>
+    <li><a href="#extension">Extensión</a></li>
+    <li><a href="#workflow">Cómo funciona</a></li>
+    <li><a href="#seguridad">Seguridad</a></li>
+    <li><a href="#planes">Planes</a></li>
+  </ul>
+  <div class="nav-right">
+    <a href="#planes" class="btn-nav-ghost">Iniciar sesión</a>
+    <a href="#planes" class="btn-nav-cta">
+      Obtener la app
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+    </a>
+  </div>
+</nav>
+
+
+<!-- ═══ HERO ═════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">
+      <div class="hero-badge-pulse"></div>
+      Versión 2.0.27 · Disponible para Windows 10 / 11
+    </div>
+
+    <div class="hero-icon">⚖️</div>
+
+    <h1 class="h1">Procurá 100 expedientes<br>en el tiempo que tardás<br>en revisar <em>uno solo</em></h1>
+
+    <p class="lead wide" style="margin:1.6rem auto 0">
+      Procurador SCW automatiza completamente la consulta, el monitoreo y la generación de informes
+      de expedientes del PJN. Vos cerrás la app y ella trabaja. Sola.
+    </p>
+
+    <div class="hero-divider"></div>
+
+    <div class="hero-ctas">
+      <a href="#planes" class="btn btn-primary btn-lg">
+        Empezar ahora
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+      </a>
+      <a href="#solucion" class="btn btn-ghost btn-lg">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>
+        Ver cómo funciona
+      </a>
+    </div>
+
+    <div class="hero-stats">
+      <div class="hs"><div class="hs-n">9</div><div class="hs-l">Módulos integrados</div></div>
+      <div class="hs"><div class="hs-n">4</div><div class="hs-l">Subsistemas PJN</div></div>
+      <div class="hs"><div class="hs-n">100%</div><div class="hs-l">Automatizado</div></div>
+      <div class="hs"><div class="hs-n">0</div><div class="hs-l">Contraseñas en servidores</div></div>
+    </div>
+  </div>
+  <div class="scroll-hint">
+    <span>Conocer más</span>
+    <div class="scroll-mouse"><div class="scroll-wheel"></div></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+
+<!-- ═══ PROBLEMA ═════════════════════════════════════════════════════ -->
+<section id="problema">
+  <div class="wrap">
+    <div class="problema-grid">
+      <div class="rev">
+        <div class="label">El problema</div>
+        <h2 class="h2" style="margin-top:12px">Revisar el PJN a mano<br><em>consume tu tiempo</em><br>más valioso</h2>
+        <ul class="pain-list">
+          <li class="pain-item">
+            <div class="pain-icon">⏰</div>
+            <div>
+              <div class="pain-title">Horas perdidas cada semana</div>
+              <div class="pain-desc">Entrar al SCW, buscar expediente por expediente, copiar los movimientos… Un proceso repetitivo que puede tomar horas diarias en estudios con cartera grande.</div>
+            </div>
+          </li>
+          <li class="pain-item">
+            <div class="pain-icon">❌</div>
+            <div>
+              <div class="pain-title">Riesgo de perder una novedad</div>
+              <div class="pain-desc">Un nuevo expediente de tu cliente que no viste a tiempo. Un plazo que se venció. El error humano en procesos manuales es inevitable.</div>
+            </div>
+          </li>
+          <li class="pain-item">
+            <div class="pain-icon">📋</div>
+            <div>
+              <div class="pain-title">Informes que llevan horas</div>
+              <div class="pain-desc">Armar un informe completo de movimientos, intervinientes y recursos de un expediente requiere copiar, pegar y formatear durante mucho tiempo.</div>
+            </div>
+          </li>
+          <li class="pain-item">
+            <div class="pain-icon">🔍</div>
+            <div>
+              <div class="pain-title">Sin visibilidad multi-jurisdicción</div>
+              <div class="pain-desc">Rastrear partes en Civil, Laboral, Federal y otras jurisdicciones al mismo tiempo es prácticamente imposible de forma manual.</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="rev rev-d2">
+        <div class="quote-block">
+          <div class="quote-text">
+            ¿Cuántas horas por semana pasás revisando el PJN <em>manualmente</em>?
+          </div>
+          <div class="quote-by">— La pregunta que todo procurador debería hacerse</div>
+          <div class="quote-answer">
+            <div class="quote-answer-label">La respuesta de Procurador SCW</div>
+            <div class="quote-answer-text">Con la app, ese tiempo se reduce a cero.<br>La procuración pasa a ser un proceso desatendido.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+
+<!-- ═══ SOLUCIÓN — APP SHOWCASE ═══════════════════════════════════════ -->
+<section id="solucion">
+  <div class="wrap">
+    <div class="solution-header rev">
+      <div class="label center">La solución</div>
+      <h2 class="h2" style="margin-top:12px;text-align:center">Una app de escritorio que trabaja<br><em>mientras vos te enfocás en lo que importa</em></h2>
+      <p class="lead" style="text-align:center">
+        Procurador SCW se conecta al SCW del PJN, consulta todos tus expedientes, detecta novedades y genera informes. Automáticamente, sin que tengas que hacer nada.
+      </p>
+    </div>
+
+    <!-- Ventana de la app -->
+    <div class="app-frame rev rev-d1">
+      <div class="app-titlebar">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <span class="tb-title">Procurador SCW — v2.0.27</span>
+        <div class="tb-right">
+          <span class="tb-badge"><span class="tb-dot"></span> Conectado · PJN</span>
+        </div>
+      </div>
+      <div class="app-topbar">
+        <div class="atb-tab active">⚡ Procurar</div>
+        <div class="atb-tab idle">📋 Informe</div>
+        <div class="atb-tab idle">🔍 Monitor</div>
+        <div class="atb-tab idle">📁 Descargas</div>
+        <div class="atb-space"></div>
+        <div class="atb-prog">
+          62 / 100 expedientes
+          <div class="atb-pbar"><div class="atb-pbar-fill"></div></div>
+          <span class="atb-pct">62%</span>
+        </div>
+      </div>
+      <div class="app-layout">
+        <div class="app-sidebar">
+          <div class="app-sidebar-lbl">Acciones</div>
+          <div class="app-sidebar-item active">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+            Procurar hoy
+          </div>
+          <div class="app-sidebar-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12v8H2z"/><path d="M5 4V2M11 4V2"/></svg>
+            Por fecha
+          </div>
+          <div class="app-sidebar-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M8 3v10"/></svg>
+            Por lote (.txt)
+          </div>
+          <div class="app-sidebar-lbl" style="margin-top:6px">Informes</div>
+          <div class="app-sidebar-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h7M3 12h5"/></svg>
+            Generar informe
+          </div>
+          <div class="app-sidebar-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h10v10H3z"/><path d="M6 3v10M3 6h10"/></svg>
+            Ver Excel
+          </div>
+          <div class="app-sidebar-bot">
+            <div class="app-user">
+              <div class="app-avatar">JB</div>
+              <div>
+                <div class="app-uname">Juan Berger</div>
+                <div class="app-uplan">Plan Pro · activo</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="app-console">
+          <div class="app-console-hdr">
+            <svg width="7" height="7" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="#059669"/></svg>
+            <span>Ejecución activa</span>
+            <span style="margin-left:auto;font-family:var(--font-mono);font-size:10px">hoy 14:32:08</span>
+          </div>
+          <div class="app-console-body">
+            <div class="c-line"><span class="c-ts">14:31:58</span><span class="c-tag tsys">SYS</span><span class="c-msg">Iniciando sesión en portal <span class="hl">PJN</span> · usuario <span class="hl">20-12345678-9</span></span></div>
+            <div class="c-line"><span class="c-ts">14:31:59</span><span class="c-tag tok">OK</span><span class="c-msg">Sesión establecida · cargando expedientes…</span></div>
+            <div class="c-line"><span class="c-ts">14:32:00</span><span class="c-tag tinf">INFO</span><span class="c-msg">Sección <span class="hl">Letrado</span> · <span class="num">62</span> de <span class="num">100</span> expedientes procesados</span></div>
+            <div class="c-line"><span class="c-ts">14:32:02</span><span class="c-tag tok">OK</span><span class="c-msg">EXP-001/2024 · Civil y Comercial · <span class="num">3</span> movimientos nuevos <span class="ok">✓</span></span></div>
+            <div class="c-line"><span class="c-ts">14:32:03</span><span class="c-tag tok">OK</span><span class="c-msg">EXP-002/2024 · Laboral · <span class="num">1</span> movimiento nuevo <span class="ok">✓</span></span></div>
+            <div class="c-line"><span class="c-ts">14:32:04</span><span class="c-tag twrn">WARN</span><span class="c-msg">EXP-003/2024 · Sin movimientos nuevos en el período</span></div>
+            <div class="c-line"><span class="c-ts">14:32:06</span><span class="c-tag tok">OK</span><span class="c-msg">EXP-004 al EXP-062 · procesados correctamente <span class="ok">✓</span></span></div>
+            <div class="c-line"><span class="c-ts">14:32:08</span><span class="c-tag tinf">INFO</span><span class="c-msg">En cola: <span class="num">38</span> expedientes restantes · ETA estimado <span class="num">~4 min</span></span></div>
+          </div>
+          <div class="app-statusbar">
+            <span>14:32:08</span>
+            <span>·</span>
+            <span>62 / 100 expedientes</span>
+            <span>·</span>
+            <span style="color:var(--green)">0 errores</span>
+            <span style="margin-left:auto" class="ssb-accent">Procurador SCW v2.0.27</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+
+<!-- ═══ FEATURES ═════════════════════════════════════════════════════ -->
+<section id="features">
+  <div class="wrap">
+    <div class="features-header rev">
+      <div class="label center">Funciones</div>
+      <h2 class="h2" style="margin-top:12px;text-align:center">Todo lo que necesitás,<br><em>en un solo lugar</em></h2>
+      <p class="lead" style="text-align:center">Cuatro módulos principales que cubren el 100% de tu flujo de trabajo con el PJN.</p>
+    </div>
+
+    <div class="feat-grid">
+
+      <!-- Procuración -->
+      <div class="feat-card rev">
+        <div class="feat-header">
+          <div class="feat-icon">⚡</div>
+          <div class="feat-title-block">
+            <div class="feat-name">Procuración Automática</div>
+            <div class="feat-sub">El núcleo de la app</div>
+          </div>
+          <span class="tag tag-amber">Principal</span>
+        </div>
+        <p class="feat-desc">
+          Consultá todos tus expedientes del SCW con un clic. La app navega el portal en segundo plano,
+          extrae los movimientos nuevos y guarda todo organizado. Podés ejecutar por fecha, por sección
+          (Letrado, Parte, Autorizado, Favoritos) o importar una lista personalizada desde un archivo .txt.
+        </p>
+        <div class="feat-pills">
+          <span class="feat-pill">Modo automático diario</span>
+          <span class="feat-pill">Procuración por lote</span>
+          <span class="feat-pill">Filtro por sección</span>
+          <span class="feat-pill">Fecha personalizable</span>
+          <span class="feat-pill">Progreso en tiempo real</span>
+        </div>
+      </div>
+
+      <!-- Monitor -->
+      <div class="feat-card rev rev-d1">
+        <div class="feat-header">
+          <div class="feat-icon" style="background:var(--green-bg);border-color:rgba(5,150,105,.18)">👁️</div>
+          <div class="feat-title-block">
+            <div class="feat-name">Monitor de Partes</div>
+            <div class="feat-sub">Nunca más pierdas una novedad</div>
+          </div>
+          <span class="tag tag-green">Destacado</span>
+        </div>
+        <p class="feat-desc">
+          Registrás las partes (clientes, empresas) que querés vigilar y la app rastrea automáticamente
+          si aparecen en nuevos expedientes. Detecta novedades entre jurisdicciones y te muestra
+          cuáles son nuevos respecto a tu línea base. Confirmás los que te interesan con un clic.
+        </p>
+        <div class="feat-pills">
+          <span class="feat-pill">Multi-jurisdicción</span>
+          <span class="feat-pill">Civil, Laboral, Federal y más</span>
+          <span class="feat-pill">Línea base por parte</span>
+          <span class="feat-pill">Confirmación masiva</span>
+          <span class="feat-pill">Notificaciones Windows</span>
+        </div>
+      </div>
+
+      <!-- Informes -->
+      <div class="feat-card rev rev-d2">
+        <div class="feat-header">
+          <div class="feat-icon" style="background:var(--blue-bg);border-color:rgba(37,99,235,.18)">📋</div>
+          <div class="feat-title-block">
+            <div class="feat-name">Generación de Informes</div>
+            <div class="feat-sub">Reportes completos en segundos</div>
+          </div>
+          <span class="tag tag-blue">Exportación</span>
+        </div>
+        <p class="feat-desc">
+          Generá informes detallados de uno o múltiples expedientes. Elegís qué secciones incluir:
+          movimientos actuales o históricos, intervinientes, expedientes vinculados, recursos y notas.
+          El resultado es un visor HTML interactivo con búsqueda + una planilla Excel lista para usar.
+        </p>
+        <div class="feat-pills">
+          <span class="feat-pill">Visor HTML interactivo</span>
+          <span class="feat-pill">Exportación Excel automática</span>
+          <span class="feat-pill">Informe individual o en lote</span>
+          <span class="feat-pill">Secciones configurables</span>
+          <span class="feat-pill">Links a documentos adjuntos</span>
+        </div>
+      </div>
+
+      <!-- Stats / Cuenta -->
+      <div class="feat-card rev rev-d3">
+        <div class="feat-header">
+          <div class="feat-icon" style="background:rgba(0,0,0,.04);border-color:var(--border-md)">📊</div>
+          <div class="feat-title-block">
+            <div class="feat-name">Dashboard y Gestión</div>
+            <div class="feat-sub">Control total de tu operación</div>
+          </div>
+        </div>
+        <p class="feat-desc">
+          Estadísticas de uso en tiempo real: cantidad de procuraciones, informes y monitoreos ejecutados,
+          tasa de éxito por sesión, y última ejecución. Desde el panel de cuenta gestionás tu plan,
+          cuotas por subsistema y tickets de soporte directamente dentro de la app.
+        </p>
+        <div class="feat-pills">
+          <span class="feat-pill">Estadísticas por subsistema</span>
+          <span class="feat-pill">Tasa de éxito en tiempo real</span>
+          <span class="feat-pill">Gestión de cuotas del plan</span>
+          <span class="feat-pill">Soporte integrado con tickets</span>
+          <span class="feat-pill">Actualizaciones automáticas</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+
+<!-- ═══ EXTENSIÓN ════════════════════════════════════════════════════ -->
+<section id="extension" style="background:var(--bg)">
+  <div class="wrap">
+    <div class="features-header rev">
+      <div class="label center">Extensión Chrome</div>
+      <h2 class="h2" style="margin-top:12px;text-align:center">Cinco flujos del PJN,<br>automatizados desde <em>tu navegador</em></h2>
+      <p class="lead" style="text-align:center;margin:14px auto 0">
+        La extensión se instala desde la app con un clic y te permite operar el SCW, escritos, notificaciones y DEOX sin completar formularios manualmente. Ingresás el expediente, ella hace el resto.
+      </p>
+    </div>
+
+    <div class="feat-grid">
+
+      <!-- Flujo 1: Consulta de expedientes -->
+      <div class="feat-card rev">
+        <div class="feat-header">
+          <div class="feat-icon" style="background:var(--amber-muted);border-color:rgba(217,119,6,.18)">🔍</div>
+          <div class="feat-title-block">
+            <div class="feat-name">Consulta de expedientes</div>
+            <div class="feat-sub">scw.pjn.gov.ar · Plan Básico</div>
+          </div>
+          <span class="tag tag-amber">Incluido</span>
+        </div>
+        <p class="feat-desc">
+          Ingresás el número de expediente en la extensión y ella abre el SCW, selecciona la
+          jurisdicción correcta, completa número y año, y ejecuta la búsqueda. Llegás al
+          expediente sin escribir un solo campo manualmente.
+        </p>
+        <div class="feat-pills">
+          <span class="feat-pill">27 jurisdicciones mapeadas</span>
+          <span class="feat-pill">Consulta pública SCW</span>
+          <span class="feat-pill">Llega directo al expediente</span>
+        </div>
+      </div>
+
+      <!-- Flujo 2: Presentación de escritos -->
+      <div class="feat-card rev rev-d1">
+        <div class="feat-header">
+          <div class="feat-icon" style="background:var(--blue-bg);border-color:rgba(37,99,235,.18)">📄</div>
+          <div class="feat-title-block">
+            <div class="feat-name">Presentación de escritos</div>
+            <div class="feat-sub">escritos.pjn.gov.ar + SCW · Básico/Pro</div>
+          </div>
+          <span class="tag tag-blue">2 portales</span>
+        </div>
+        <p class="feat-desc">
+          Dos flujos de escritos: uno en <strong>escritos.pjn.gov.ar</strong> (plan Básico) y otro
+          directamente desde el SCW para abrir el editor de presentación (plan Pro). En ambos casos
+          la extensión completa jurisdicción, número y año, y te deja en el paso de redacción.
+        </p>
+        <div class="feat-pills">
+          <span class="feat-pill">escritos.pjn.gov.ar</span>
+          <span class="feat-pill">SCW — presentar escrito</span>
+          <span class="feat-pill">Formulario multi-paso automático</span>
+        </div>
+      </div>
+
+      <!-- Flujo 3: Notificaciones y DEOX -->
+      <div class="feat-card rev rev-d2">
+        <div class="feat-header">
+          <div class="feat-icon" style="background:var(--green-bg);border-color:rgba(5,150,105,.18)">🔔</div>
+          <div class="feat-title-block">
+            <div class="feat-name">Notificaciones y DEOX</div>
+            <div class="feat-sub">notif.pjn.gov.ar + deox.pjn.gov.ar · Enterprise</div>
+          </div>
+          <span class="tag tag-green">Enterprise</span>
+        </div>
+        <p class="feat-desc">
+          El mismo flujo inteligente aplicado al sistema de notificaciones judiciales y a DEOX
+          (expedientes digitales). Abrís el portal correspondiente con el expediente ya cargado,
+          listo para tu acción — sin formularios, sin errores de tipeo.
+        </p>
+        <div class="feat-pills">
+          <span class="feat-pill">notif.pjn.gov.ar</span>
+          <span class="feat-pill">deox.pjn.gov.ar</span>
+          <span class="feat-pill">React/MUI compatible</span>
+        </div>
+      </div>
+
+      <!-- Flujo 4: Menú contextual -->
+      <div class="feat-card rev rev-d3">
+        <div class="feat-header">
+          <div class="feat-icon" style="background:rgba(0,0,0,.04);border-color:var(--border-md)">🖱️</div>
+          <div class="feat-title-block">
+            <div class="feat-name">Expediente desde cualquier página</div>
+            <div class="feat-sub">Selección de texto · Todos los planes</div>
+          </div>
+        </div>
+        <p class="feat-desc">
+          Seleccionás un número de expediente en cualquier página web — un email, un PDF,
+          un documento — hacés click derecho y elegís "Enviar expediente a PJN". Se pre-rellena
+          automáticamente y lanzás el flujo al instante, sin copiar y pegar.
+        </p>
+        <div class="feat-pills">
+          <span class="feat-pill">Menú contextual</span>
+          <span class="feat-pill">Cualquier sitio web</span>
+          <span class="feat-pill">Formato FCR 18745/2017</span>
+          <span class="feat-pill">Un click derecho</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+
+<!-- ═══ CÓMO FUNCIONA ════════════════════════════════════════════════ -->
+<section id="workflow">
+  <div class="wrap">
+    <div class="workflow-header rev">
+      <div class="label center">Cómo funciona</div>
+      <h2 class="h2" style="margin-top:12px;text-align:center">De la configuración<br>al informe en <em>cuatro pasos</em></h2>
+      <p class="lead" style="text-align:center;margin:14px auto 0">Todo el proceso está completamente automatizado. Una vez configurado, la app hace el trabajo por vos.</p>
+    </div>
+    <div class="steps-row">
+      <div class="step">
+        <div class="step-num">I</div>
+        <h3>Configuración inicial</h3>
+        <p>El asistente de onboarding te guía: conecta el backend, crea tu perfil de Chrome dedicado e instala la extensión PJN. Una sola vez.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">II</div>
+        <h3>Seleccionás qué procurar</h3>
+        <p>Elegís secciones, fecha límite y si querés procurar todo o solo una lista específica de expedientes desde un archivo .txt.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">III</div>
+        <h3>La app trabaja sola</h3>
+        <p>Puppeteer navega el SCW en segundo plano. Ves el progreso en tiempo real en la consola con ETA estimado. Podés seguir trabajando en otra cosa.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">IV</div>
+        <h3>Resultados listos</h3>
+        <p>Informes HTML interactivos, planillas Excel y notificaciones de Windows con las novedades. Todo guardado y listo para usar.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SEGURIDAD & PRIVACIDAD ═══════════════════════════════════════ -->
+<section id="seguridad">
+  <div class="wrap">
+    <div class="priv-intro rev">
+      <div class="label center">Privacidad &amp; seguridad</div>
+      <h2 class="h2" style="margin-top:12px;text-align:center">Tus contraseñas<br>y datos <em>quedan en tu equipo</em></h2>
+      <p class="lead" style="text-align:center;margin:14px auto 0">
+        Procurador SCW — tanto la app como la extensión — fue diseñado para no gestionar ni almacenar tus credenciales del PJN. Eso es responsabilidad tuya, y así debe ser.
+      </p>
+    </div>
+
+    <div class="priv-grid">
+
+      <div class="priv-card rev">
+        <div class="priv-icon" style="background:var(--green-bg)">🔑</div>
+        <div class="priv-name">Contraseñas en Chrome, no en servidores</div>
+        <p class="priv-desc">
+          Tanto la app como la extensión delegan las credenciales del PJN a Chrome. Tu contraseña del portal nunca viaja ni se almacena fuera de tu navegador. Exactamente como lo hacés hoy, sin intermediarios.
+        </p>
+      </div>
+
+      <div class="priv-card rev rev-d1">
+        <div class="priv-icon" style="background:var(--amber-muted)">🖥️</div>
+        <div class="priv-name">La app corre en tu máquina</div>
+        <p class="priv-desc">
+          Procurador SCW es una aplicación de escritorio que opera localmente en tu PC. Los expedientes consultados, los informes generados y los resultados del monitor quedan guardados en tu equipo — no en la nube.
+        </p>
+      </div>
+
+      <div class="priv-card rev rev-d2">
+        <div class="priv-icon" style="background:var(--blue-bg)">🔒</div>
+        <div class="priv-name">Licencia vinculada a tu dispositivo</div>
+        <p class="priv-desc">
+          Tu licencia está asociada a tu hardware. Solo un equipo puede tener tu sesión activa al mismo tiempo, lo que evita que tu cuenta se use desde otros dispositivos sin tu conocimiento.
+        </p>
+      </div>
+
+      <div class="priv-card rev rev-d3">
+        <div class="priv-icon" style="background:rgba(0,0,0,.04)">📡</div>
+        <div class="priv-name">Comunicación cifrada con el backend</div>
+        <p class="priv-desc">
+          Las únicas comunicaciones con nuestro servidor son de autenticación de licencia y actualizaciones de la app. Todo el tráfico usa HTTPS con tokens JWT de corta duración.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+
+<!-- ═══ PLANES ═══════════════════════════════════════════════════════ -->
+<section id="planes">
+  <div class="wrap">
+    <div class="planes-header rev">
+      <div class="label center">Planes</div>
+      <h2 class="h2" style="margin-top:12px;text-align:center">Elegí el plan que<br>se adapta a <em>tu estudio</em></h2>
+      <p class="lead" style="text-align:center;margin:14px auto 0">Precios de lanzamiento disponibles por tiempo limitado. Actualizaciones automáticas incluidas. Sin permanencia mínima.</p>
+    </div>
+
+    <!-- ── 2 planes promo vigentes ─────────────────────────────── -->
+    <div class="planes-grid rev">
+
+      <!-- Extensión Promo -->
+      <div class="plan-card">
+        <div class="plan-header">
+          <div class="plan-icon">🧩</div>
+          <div class="plan-name">Extensión</div>
+          <div class="plan-desc">Acceso completo a la extensión Chrome con los 5 flujos del PJN. Precio de lanzamiento.</div>
+          <div class="plan-price">
+            <div class="plan-price-amount">USD 1</div>
+            <div class="plan-price-period">por mes · promo de lanzamiento · sin permanencia</div>
+          </div>
+        </div>
+        <ul class="plan-features">
+          <li class="plan-feat-item"><span class="chk">✓</span> Consulta de expedientes en el SCW</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Presentación de escritos (escritos.pjn.gov.ar)</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Escritos 1 desde el SCW</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Notificaciones judiciales</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> DEOX — expedientes digitales</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Menú contextual desde cualquier página</li>
+          <li class="plan-feat-item"><span class="dash">–</span> App de escritorio Electron</li>
+        </ul>
+        <div class="plan-cta">
+          <a href="https://api.procuradortool.com/register/" class="plan-btn outline">Empezar por USD 1/mes</a>
+        </div>
+      </div>
+
+      <!-- Combo Promo (destacado) -->
+      <div class="plan-card featured">
+        <div class="plan-ribbon">Recomendado</div>
+        <div class="plan-header">
+          <div class="plan-icon">⚡</div>
+          <div class="plan-name">Combo Beta</div>
+          <div class="plan-desc">Extensión completa + App de escritorio Electron en versión Beta. El paquete completo.</div>
+          <div class="plan-price">
+            <div class="plan-price-amount featured">USD 9,99</div>
+            <div class="plan-price-period">por mes · promo beta · sin permanencia</div>
+          </div>
+        </div>
+        <ul class="plan-features">
+          <li class="plan-feat-item"><span class="chk">✓</span> Todo lo del plan Extensión incluido</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> App Electron — 50 procuraciones/mes</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Generación de informes — 10/mes</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Monitor de Partes — 3 partes activas</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Monitor de Novedades — 10/mes</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Procuración por lote — 20 ejecuciones</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Soporte por ticket integrado</li>
+        </ul>
+        <div class="plan-cta">
+          <a href="https://api.procuradortool.com/register/" class="plan-btn primary">
+            Empezar por USD 9,99/mes
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+    <p class="rev" style="text-align:center;font-size:12px;color:var(--text-3);margin-top:20px">
+      Precios en dólares · Sin permanencia mínima · Disponibles por tiempo limitado durante el lanzamiento.
+    </p>
+
+    <!-- ── Planes permanentes (próximamente) ────────────────────── -->
+    <div class="future-sep rev">
+      <span class="future-sep-label">Planes permanentes · Próximamente</span>
+    </div>
+
+    <div class="future-grid rev">
+
+      <!-- Básico -->
+      <div class="future-card">
+        <div class="future-badge">🌱 Básico</div>
+        <div class="future-name">Básico</div>
+        <div class="future-price">— / mes</div>
+        <p class="future-desc">Para abogados independientes. App Electron con cuotas de entrada y extensión Chrome incluida.</p>
+        <ul class="future-feats">
+          <li class="future-feat">50 procuraciones / mes</li>
+          <li class="future-feat">10 informes / mes</li>
+          <li class="future-feat">3 partes activas en Monitor</li>
+          <li class="future-feat">Extensión Chrome — flujos Básico</li>
+          <li class="future-feat">Actualizaciones automáticas</li>
+        </ul>
+      </div>
+
+      <!-- Profesional -->
+      <div class="future-card" style="border-color:var(--border-md)">
+        <div class="future-badge">⚡ Profesional</div>
+        <div class="future-name">Profesional</div>
+        <div class="future-price">— / mes</div>
+        <p class="future-desc">Para estudios con cartera media y alta. Cuotas extendidas y extensión completa.</p>
+        <ul class="future-feats">
+          <li class="future-feat">200 procuraciones / mes</li>
+          <li class="future-feat">50 informes / mes</li>
+          <li class="future-feat">10 partes activas en Monitor</li>
+          <li class="future-feat">Extensión Chrome — todos los flujos</li>
+          <li class="future-feat">Soporte por ticket integrado</li>
+        </ul>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="future-card">
+        <div class="future-badge">🏛️ Enterprise</div>
+        <div class="future-name">Enterprise</div>
+        <div class="future-price">A medida</div>
+        <p class="future-desc">Para estudios grandes. Sin límites operativos y soporte dedicado.</p>
+        <ul class="future-feats">
+          <li class="future-feat">Procuraciones ilimitadas</li>
+          <li class="future-feat">Informes ilimitados</li>
+          <li class="future-feat">50 partes activas en Monitor</li>
+          <li class="future-feat">Extensión Chrome — todos los flujos</li>
+          <li class="future-feat">Soporte prioritario · condiciones a medida</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CTA FINAL ═════════════════════════════════════════════════════ -->
+<section id="cta">
+  <div class="wrap">
+    <div class="cta-inner">
+      <div class="label center rev" style="justify-content:center;margin-bottom:20px">Empezar hoy</div>
+      <h2 class="cta-title rev rev-d1">
+        Dejá de perder horas<br>en el PJN. <em>Automatizalo.</em>
+      </h2>
+      <p class="cta-sub rev rev-d2">
+        Sumate a los estudios que ya usan Procurador SCW para procurar, monitorear
+        y generar informes de forma completamente automática.
+      </p>
+      <div class="hero-ctas rev rev-d3">
+        <a href="#planes" class="btn btn-primary btn-lg">
+          Ver planes y precios
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+        </a>
+        <a href="#seguridad" class="btn btn-ghost btn-lg">🔑 Tu privacidad, tu control</a>
+      </div>
+      <div class="cta-meta rev rev-d4">
+        <span>Versión 2.0.27</span>
+        <div class="cta-meta-sep"></div>
+        <span>Electron 28</span>
+        <div class="cta-meta-sep"></div>
+        <span>Windows 10 / 11</span>
+        <div class="cta-meta-sep"></div>
+        <span>Requiere licencia activa</span>
+        <div class="cta-meta-sep"></div>
+        <span>Sin permanencia mínima</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══ FOOTER ════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="foot">
+    <div>
+      <a href="#" class="foot-brand">
+        <div class="foot-brand-icon">⚖️</div>
+        <span class="foot-brand-name">Procurador <b>SCW</b></span>
+      </a>
+      <div class="foot-desc">Sistema de automatización para el Poder Judicial de la Nación</div>
+    </div>
+    <div class="foot-meta">
+      Versión 2.0.27 · Electron 28 · Windows 10 / 11<br>
+      Poder Judicial de la Nación · Argentina<br>
+      © 2025 Procurador SCW. Todos los derechos reservados.
+    </div>
+  </div>
+</footer>
+
+
+<script>
+  // Navbar scroll
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 50));
+
+  // Smooth scroll
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const t = document.querySelector(a.getAttribute('href'));
+      if (!t) return;
+      e.preventDefault();
+      t.scrollIntoView({ behavior:'smooth', block:'start' });
+    });
+  });
+
+  // Reveal on scroll
+  const ro = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('on'); });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.rev').forEach(el => ro.observe(el));
+
+  // Steps stagger
+  const stepObs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('on'); });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.step').forEach(el => stepObs.observe(el));
+
+</script>
+
+</body>
+</html>

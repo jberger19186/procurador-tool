@@ -1,0 +1,13 @@
+Informe de Seguridad — Procurador SCW v2.0.19
+Fecha: 18 de marzo de 2026
+
+El instalador y ejecutable principal de Procurador SCW v2.0.19 fueron sometidos a un proceso de verificación de seguridad previo a su distribución, utilizando las plataformas VirusTotal y Windows Defender. El objetivo fue detectar potenciales falsos positivos asociados al uso de Puppeteer/CDP y automatización de Chrome, tecnologías conocidas por generar alertas heurísticas en motores antivirus.
+
+El archivo Procurador SCW-Setup-2.0.19.exe (91.65 MB, SHA-256: e32bc182d9395ce3dbc91dfbb79239ba0aa1eda26261efa83872cebba4521e64) fue analizado por 63 motores antivirus en VirusTotal, obteniendo 0 detecciones. El ejecutable desempaquetado electron.exe (168.62 MB, SHA-256: 67dc2a7036860a68e5312c212c31b8772ac463ed0289fcc44897867f55075e89) fue analizado por 71 motores, obteniendo igualmente 0 detecciones.
+
+Adicionalmente, se ejecutó un escaneo directo con Windows Defender en el entorno de desarrollo mediante Start-MpScan -ScanType CustomScan, confirmado con Get-MpThreatDetection, el cual no arrojó ninguna amenaza detectada.
+
+Con base en estos resultados, se concluye que el instalador es apto para distribución sin requerir firma de código EV ni configuración de exclusiones de antivirus en el proceso de instalación. Estas medidas quedan documentadas como opcionales para versiones futuras en caso de requerimiento por parte de clientes corporativos.
+
+Los hashes SHA-256 registrados en este informe deben conservarse como referencia oficial de integridad para la versión 2.0.19, permitiendo verificar que el binario distribuido no fue alterado post-análisis.
+
