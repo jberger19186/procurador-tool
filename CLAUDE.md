@@ -389,23 +389,54 @@ Servidor DigitalOcean (142.93.64.94 — Ubuntu)
 
 ---
 
-## Git — comandos útiles
+## Git y GitHub
+
+### Repositorio remoto
+- **URL:** https://github.com/jberger19186/procurador-tool
+- **Visibilidad:** privado
+- **Rama principal:** `main`
+- **Tracking configurado:** `main` ↔ `origin/main`
+- **Credenciales:** guardadas en Windows Credential Manager (no hay que reingresar token)
+
+### Workflow diario
 
 ```bash
-# Ver estado
+# Ver qué cambió
 git status
 
-# Guardar cambios (foto del proyecto)
+# Ver el detalle de los cambios (opcional)
+git diff
+
+# Guardar cambios en el historial local
 git add .
 git commit -m "descripción del cambio"
 
+# Subir a GitHub (respaldo en la nube)
+git push
+
 # Ver historial
 git log --oneline
-
-# Conectar a GitHub (una vez que tengas el nuevo token)
-git remote add origin https://github.com/jberger19186/procurador-tool.git
-git push -u origin main
 ```
 
-> **Nota:** El token de GitHub anterior fue expuesto en una sesión de chat y debe regenerarse.
-> Ir a: https://github.com/settings/tokens → revocar el token anterior → crear nuevo.
+### Trabajar en una rama separada (recomendado para cambios grandes)
+
+```bash
+# Crear y cambiar a rama nueva (ej: rediseño UI)
+git checkout -b redesign-ui
+
+# ... hacer cambios, commits ...
+
+# Subir la rama a GitHub
+git push -u origin redesign-ui
+
+# Cuando esté listo, volver a main y fusionar
+git checkout main
+git merge redesign-ui
+git push
+```
+
+### Token de GitHub
+- El token está guardado de forma cifrada en el Windows Credential Manager
+- Si hay que reconfigurarlo, ir a: https://github.com/settings/tokens
+- Permisos mínimos necesarios: `repo` + `workflow`
+- El mismo token sirve para `git push` y para `npm run release` de la app Electron
