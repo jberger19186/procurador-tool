@@ -45,9 +45,9 @@ ProcuradorTool/
 └── docs/                      ← documentación del proyecto
 ```
 
-> **Nota sobre extensiones:** `extension-app/` es la versión de producción (Chrome Web Store).
-> El directorio original `extension-app` (Firefox/dev) permanece en `NodejsConsoleApp1/` como backup archivado.
-> **Regla de desarrollo de extensión:** modificar siempre `extension-app/` localmente, luego generar el ZIP para el store (excluir carpeta `imagenes/`).
+> **Nota sobre extensiones:** `extension-app/` es la **única** versión activa (la que se publica en Chrome Web Store).
+> El directorio antiguo `extension-app` de desarrollo (con URLs de localhost para pruebas) permanece en `NodejsConsoleApp1/` como backup histórico — no se usa más.
+> **Regla de desarrollo:** todos los cambios se hacen directamente en `ProcuradorTool/extension-app/` y desde ahí se genera el ZIP para el store (excluyendo la carpeta `imagenes/`).
 
 ---
 

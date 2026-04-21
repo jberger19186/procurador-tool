@@ -4,8 +4,11 @@ node_modules/
 
 # ─── Secretos y claves — NUNCA commitear ────────────────────
 .env
-.env.*
-!.env.example
+.env.local
+.env.development
+.env.production
+.env.staging
+# .env.example SÍ se commitea (es la plantilla documentada)
 backend-server/certs/
 backend-server/keys/
 backend-server/src/security/keys/
