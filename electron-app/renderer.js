@@ -1034,9 +1034,20 @@ async function updateHeaderUsage() {
         const pctEl   = document.getElementById('topbarProgressPct');
         if (!textEl) return;
 
-        // Ocultar barra de progreso — modo "uso"
-        if (trackEl) trackEl.style.display = 'none';
-        if (pctEl)   pctEl.style.display   = 'none';
+        function setUsageBar(used, limit) {
+            if (limit !== null && limit > 0) {
+                const pct = Math.min(100, Math.round((used / limit) * 100));
+                textEl.textContent = `${used} / ${limit} expedientes`;
+                if (trackEl) { trackEl.style.display = ''; }
+                if (fillEl)  { fillEl.style.width = `${pct}%`; }
+                if (pctEl)   { pctEl.style.display = ''; pctEl.textContent = `${pct}%`; }
+            } else {
+                // Sin límite: solo texto, sin barra
+                textEl.textContent = `${used} expedientes`;
+                if (trackEl) trackEl.style.display = 'none';
+                if (pctEl)   pctEl.style.display   = 'none';
+            }
+        }
 
         const result = await window.electronAPI.getAccount();
         if (result && result.success && result.account?.usage) {
@@ -1048,16 +1059,16 @@ async function updateHeaderUsage() {
                             u.monitor_novedades?.limit, u.monitor_partes?.limit];
             const hasAnyLimit = limits.some(l => l !== null && l !== undefined);
             const totalLimit  = hasAnyLimit ? limits.reduce((a, l) => a + (l ?? 0), 0) : null;
-            textEl.textContent = totalLimit !== null
-                ? `${totalUsed} / ${totalLimit} ejec`
-                : `${totalUsed} ejec`;
+            setUsageBar(totalUsed, totalLimit);
         } else {
             const session = await window.electronAPI.verifySession();
             if (session?.success && session?.subscription) {
                 const { usageCount, usageLimit } = session.subscription;
-                textEl.textContent = `${usageCount} / ${usageLimit} ejec`;
+                setUsageBar(usageCount, usageLimit ?? null);
             } else {
-                textEl.textContent = '- ejec';
+                textEl.textContent = '- expedientes';
+                if (trackEl) trackEl.style.display = 'none';
+                if (pctEl)   pctEl.style.display   = 'none';
             }
         }
     } catch (_) {}
