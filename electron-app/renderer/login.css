@@ -40,13 +40,14 @@ body {
 /* Botón cerrar flotante (esquina superior derecha) */
 .login-close-btn {
     position: fixed;
-    top: 0;
-    right: 0;
-    width: 46px;
-    height: 40px;
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
     border: none;
     background: transparent;
-    color: #5c5c5c;
+    color: var(--text-muted);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -55,7 +56,7 @@ body {
     z-index: 1000;
     -webkit-app-region: no-drag;
 }
-.login-close-btn:hover { background: #c42b1c; color: #ffffff; }
+.login-close-btn:hover { background: var(--error-bg); color: var(--error); }
 
 /* ============ CONTAINER ============ */
 .login-container {

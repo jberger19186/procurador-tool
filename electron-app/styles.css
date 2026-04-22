@@ -104,22 +104,23 @@ body {
 /* Window controls (derecha del topbar — min/max/close) */
 .win-controls {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 4px;
   margin-left: 4px;
   -webkit-app-region: no-drag;
 }
 .win-btn {
-  width: 46px;
-  height: 48px;
+  width: 26px; height: 26px;
+  border-radius: var(--radius-sm);
   border: none;
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-3);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: background 0.12s, color 0.12s;
 }
-.win-btn:hover { background: rgba(0,0,0,0.06); color: var(--text-1); }
-.win-btn-close:hover { background: #c42b1c; color: #ffffff; }
+.win-btn:hover            { background: var(--bg-hover);  color: var(--text-1); }
+.win-btn-close:hover      { background: var(--error-bg);  color: var(--error);  }
 
 .logo-area {
   display: flex;
