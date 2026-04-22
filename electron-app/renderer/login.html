@@ -8,6 +8,17 @@
     <link rel="stylesheet" href="login.css">
 </head>
 <body>
+    <!-- Barra de arrastre (frameless) -->
+    <div class="login-titlebar">
+        <span class="login-titlebar-text">Procurador SCW</span>
+        <button class="login-close-btn" id="loginCloseBtn" title="Cerrar">
+            <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5">
+                <line x1="0.5" y1="0.5" x2="9.5" y2="9.5"/>
+                <line x1="9.5" y1="0.5" x2="0.5" y2="9.5"/>
+            </svg>
+        </button>
+    </div>
+
     <div class="login-container">
         <div class="login-box">
             <!-- Logo y título -->
@@ -102,5 +113,9 @@
     </div>
 
     <script src="login.js"></script>
+    <script>
+        document.getElementById('loginCloseBtn')
+            ?.addEventListener('click', () => window.electronAPI?.closeWindow());
+    </script>
 </body>
 </html>

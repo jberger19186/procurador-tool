@@ -426,10 +426,10 @@ body.window-positioned .sidebar { display: none; }
 .btn-primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 1px 4px var(--accent-glow);
+  border: 1px solid var(--accent-dark); /* misma geometría que btn-ghost */
 }
-.btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 3px 10px var(--accent-glow); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-ghost {
   background: transparent;
   color: var(--text-2);

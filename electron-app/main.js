@@ -1,4 +1,8 @@
 ﻿const { app, BrowserWindow, Menu, ipcMain, clipboard, safeStorage } = require('electron');
+
+// Ignorar EPIPE (broken pipe) al correr desde terminal — no es un error real
+process.stdout.on('error', (err) => { if (err.code !== 'EPIPE') throw err; });
+process.stderr.on('error', (err) => { if (err.code !== 'EPIPE') throw err; });
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { fork } = require('child_process');
@@ -120,8 +124,8 @@ function createLoginWindow() {
         height: 700,
         resizable: false,
         center: true,
-        frame: true,
-        backgroundColor: '#0f172a',
+        frame: false,
+        backgroundColor: '#f7f7f5',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'), // ✅ Asegúrate que la ruta sea correcta
             nodeIntegration: false,
@@ -226,6 +230,10 @@ function createMainWindow() {
 
 // ============ APP READY ============
 app.whenReady().then(() => {
+    // Eliminar el menú nativo de Electron (File/Edit/View/Window/Help)
+    // El menú propio se abre con el botón hamburger vía menu.popup()
+    Menu.setApplicationMenu(null);
+
     initAuthManager();
     if (!isOnboardingComplete()) {
         createOnboardingWindow();
@@ -1404,12 +1412,18 @@ ipcMain.handle('get-stats', async () => {
 });
 
 // ============ WINDOW CONTROLS (frame: false) ============
-ipcMain.handle('window-minimize', () => { mainWindow?.minimize(); });
-ipcMain.handle('window-maximize', () => {
-    if (!mainWindow) return;
-    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+// Actúan sobre la ventana que envía el IPC (funciona para login y main)
+ipcMain.handle('window-minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
 });
-ipcMain.handle('window-close', () => { mainWindow?.close(); });
+ipcMain.handle('window-maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    win.isMaximized() ? win.unmaximize() : win.maximize();
+});
+ipcMain.handle('window-close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+});
 
 ipcMain.handle('show-app-menu', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
