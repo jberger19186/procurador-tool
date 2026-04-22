@@ -440,3 +440,128 @@ git push
 - Si hay que reconfigurarlo, ir a: https://github.com/settings/tokens
 - Permisos mínimos necesarios: `repo` + `workflow`
 - El mismo token sirve para `git push` y para `npm run release` de la app Electron
+
+---
+
+## 📘 Guía simple de Git y GitHub (explicado sin tecnicismos)
+
+### ¿Qué es Git?
+Pensá en Git como un "**Guardar con historial**" para todo el proyecto. Cada vez que hacés cambios importantes, sacás una **"foto"** del estado del proyecto. Si algo se rompe, volvés a cualquier foto anterior. Las "fotos" se llaman **commits**.
+
+### ¿Qué es GitHub?
+GitHub es el **lugar en la nube** donde se guardan esas fotos. Es como Google Drive pero para código. El repo privado asegura que nadie más que vos lo vea.
+
+### ¿Qué es una rama (branch)?
+Una rama es una **"realidad paralela"** del proyecto. Imaginá que estás trabajando en un libro y querés probar un final alternativo sin borrar el actual: hacés una copia ("rama"), experimentás ahí, y si te gusta lo fusionás con el libro original.
+
+En nuestro caso: la rama principal (`main`) siempre tiene el código que funciona. Si querés probar un rediseño UI sin romper la app actual, creás una rama `redesign-ui`, trabajás ahí, y cuando esté listo la fusionás a `main`.
+
+---
+
+### Diccionario rápido de comandos
+
+| Lo que querés hacer | Comando | Qué pasa |
+|---|---|---|
+| Ver si hay cambios sin guardar | `git status` | Lista archivos modificados |
+| Ver detalle de los cambios | `git diff` | Muestra línea por línea qué cambió |
+| Sacar una "foto" del estado actual | `git add .` + `git commit -m "texto"` | Guarda todos los cambios localmente |
+| Subir las fotos a GitHub | `git push` | Respaldo en la nube |
+| Bajar cambios desde GitHub | `git pull` | Trae lo que esté más nuevo en GitHub |
+| Ver historial de fotos | `git log --oneline` | Lista todos los commits |
+| Crear una realidad paralela | `git checkout -b nombre-rama` | Nueva rama, te movés a ella |
+| Volver a la rama principal | `git checkout main` | Volvés al código estable |
+| Fusionar una rama en main | `git merge nombre-rama` | Trae los cambios a main |
+| Ver qué rama estoy usando | `git branch --show-current` | Muestra el nombre |
+| Listar todas las ramas | `git branch -a` | Locales + remotas |
+
+---
+
+### Escenarios comunes explicados
+
+#### 🟢 Escenario 1: Hice un cambio chico, quiero guardarlo
+```bash
+git status                           # ver qué cambió
+git add .                            # marcar todos los cambios para guardar
+git commit -m "corregir texto login" # sacar la foto con un nombre
+git push                             # subir a GitHub
+```
+
+#### 🟢 Escenario 2: Voy a arrancar un cambio grande (ej: rediseño UI)
+```bash
+git checkout -b redesign-ui          # crear rama nueva
+# ... hago cambios y pruebas ...
+git add .
+git commit -m "aplicar nueva paleta"
+git push -u origin redesign-ui       # subir la rama a GitHub (primera vez)
+
+# cuando todo funciona bien y quiero fusionar:
+git checkout main                    # volver a main
+git merge redesign-ui                # traer los cambios
+git push                             # subir main actualizado
+```
+
+#### 🟡 Escenario 3: La cagué, quiero deshacer el último cambio SIN guardar
+```bash
+git checkout -- archivo.js           # descarta cambios en un archivo
+git checkout -- .                    # descarta TODOS los cambios sin commitear
+```
+
+#### 🟡 Escenario 4: Ya guardé una foto mala, quiero deshacerla
+```bash
+git log --oneline                    # ver las fotos, copiar el hash de la buena
+git reset --hard <hash-de-la-buena>  # volver a esa foto (CUIDADO: pierde todo lo posterior)
+```
+
+#### 🟢 Escenario 5: Quiero ver cómo estaba el proyecto hace 3 commits
+```bash
+git log --oneline                    # ver la lista
+git checkout <hash>                  # moverse a esa foto (modo "solo lectura")
+git checkout main                    # volver al presente
+```
+
+---
+
+### Reglas de oro para no arruinar nada
+
+1. **Antes de empezar a trabajar**, hacé `git pull` → así traés lo último de GitHub
+2. **Antes de cambiar de rama**, hacé `git status` → si hay cambios sin guardar, commiteá o descartá primero
+3. **Nunca hagas `git push --force`** — puede borrar el trabajo de GitHub. Si alguna vez te digo de usarlo, te aviso primero
+4. **Commiteá seguido**, no esperes a terminar toda una feature. Mejor 10 commits chicos que 1 gigante
+5. **Los mensajes de commit** deben describir **qué** cambió, no **cómo**. Ej: `corregir login falla en Safari` ✅ vs `cambiar línea 42 de login.js` ❌
+
+---
+
+### Cómo escribir un buen mensaje de commit
+
+Formato recomendado (convencional):
+```
+tipo: descripción corta en minúscula
+
+- detalle adicional si hace falta
+- otro detalle
+```
+
+**Tipos comunes:**
+| Tipo | Cuándo usarlo |
+|---|---|
+| `feat:` | Nueva funcionalidad |
+| `fix:` | Corrección de bug |
+| `docs:` | Cambios en documentación |
+| `style:` | Cambios de estilo/formato (no lógica) |
+| `refactor:` | Reorganización de código sin cambiar comportamiento |
+| `chore:` | Tareas de mantenimiento, configs |
+| `test:` | Agregar o corregir tests |
+
+**Ejemplos reales de este proyecto:**
+- `feat: agregar alerta de actualizacion de extension en Electron`
+- `fix: corregir FLOW_ALIASES en notif de extension`
+- `docs: actualizar seccion Git del CLAUDE.md`
+- `refactor: dividir renderer.js en modulos separados`
+
+---
+
+### ¿Dónde veo mis commits en la web?
+
+En cualquier momento podés abrir: https://github.com/jberger19186/procurador-tool/commits/main
+
+Ahí ves el historial completo con fecha, autor, mensaje y qué archivos cambiaron. Es como el "undo/redo" de Word pero muchísimo más potente.
