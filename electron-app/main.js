@@ -1,4 +1,8 @@
-﻿const { app, BrowserWindow, ipcMain, clipboard, safeStorage } = require('electron');
+﻿const { app, BrowserWindow, Menu, ipcMain, clipboard, safeStorage } = require('electron');
+
+// Ignorar EPIPE (broken pipe) al correr desde terminal — no es un error real
+process.stdout.on('error', (err) => { if (err.code !== 'EPIPE') throw err; });
+process.stderr.on('error', (err) => { if (err.code !== 'EPIPE') throw err; });
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { fork } = require('child_process');
@@ -120,8 +124,8 @@ function createLoginWindow() {
         height: 700,
         resizable: false,
         center: true,
-        frame: true,
-        backgroundColor: '#0f172a',
+        frame: false,
+        backgroundColor: '#f7f7f5',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'), // ✅ Asegúrate que la ruta sea correcta
             nodeIntegration: false,
@@ -158,6 +162,7 @@ function createMainWindow() {
         height: 700,
         minWidth: 800,
         minHeight: 400,
+        frame: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -165,7 +170,7 @@ function createMainWindow() {
             sandbox: true
         },
         icon: path.join(__dirname, 'build', 'icon.ico'),
-        backgroundColor: '#111827',
+        backgroundColor: '#f7f7f5',
         show: false,
         center: true,
         resizable: true
@@ -225,6 +230,10 @@ function createMainWindow() {
 
 // ============ APP READY ============
 app.whenReady().then(() => {
+    // Eliminar el menú nativo de Electron (File/Edit/View/Window/Help)
+    // El menú propio se abre con el botón hamburger vía menu.popup()
+    Menu.setApplicationMenu(null);
+
     initAuthManager();
     if (!isOnboardingComplete()) {
         createOnboardingWindow();
@@ -1400,6 +1409,79 @@ ipcMain.handle('get-stats', async () => {
     } catch (error) {
         return { success: false, error: error.message };
     }
+});
+
+// ============ WINDOW CONTROLS (frame: false) ============
+// Actúan sobre la ventana que envía el IPC (funciona para login y main)
+ipcMain.handle('window-minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+});
+ipcMain.handle('window-maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    win.isMaximized() ? win.unmaximize() : win.maximize();
+});
+ipcMain.handle('window-close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+});
+
+ipcMain.handle('show-app-menu', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const template = [
+        {
+            label: 'Archivo',
+            submenu: [
+                { label: 'Nueva procuración',  click: () => win?.webContents.send('menu-action', 'run-process') },
+                { type: 'separator' },
+                { label: 'Abrir descargas',    click: () => win?.webContents.send('menu-action', 'open-downloads') },
+                { label: 'Exportar consola',   click: () => win?.webContents.send('menu-action', 'download-console') },
+                { type: 'separator' },
+                { label: 'Salir',              role: 'quit' }
+            ]
+        },
+        {
+            label: 'Editar',
+            submenu: [
+                { role: 'copy',      label: 'Copiar' },
+                { role: 'selectAll', label: 'Seleccionar todo' },
+                { type: 'separator' },
+                { label: 'Limpiar consola', click: () => win?.webContents.send('menu-action', 'clear-console') }
+            ]
+        },
+        {
+            label: 'Ver',
+            submenu: [
+                { role: 'reload',         label: 'Recargar' },
+                { role: 'toggleDevTools', label: 'Herramientas de desarrollo' },
+                { type: 'separator' },
+                { role: 'resetZoom',   label: 'Zoom normal' },
+                { role: 'zoomIn',      label: 'Acercar' },
+                { role: 'zoomOut',     label: 'Alejar' },
+                { type: 'separator' },
+                { role: 'togglefullscreen', label: 'Pantalla completa' }
+            ]
+        },
+        {
+            label: 'Ventana',
+            submenu: [
+                { label: 'Minimizar',           click: () => mainWindow?.minimize() },
+                { label: 'Maximizar/Restaurar', click: () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize() },
+                { type: 'separator' },
+                { label: 'Posicionar a la derecha', click: () => win?.webContents.send('menu-action', 'position-left') }
+            ]
+        },
+        {
+            label: 'Ayuda',
+            submenu: [
+                { label: 'Mi cuenta / Soporte', click: () => win?.webContents.send('menu-action', 'open-support') },
+                { label: 'Estadísticas',        click: () => win?.webContents.send('menu-action', 'open-stats') },
+                { type: 'separator' },
+                { label: 'Acerca de Procurador SCW', role: 'about' }
+            ]
+        }
+    ];
+    const menu = Menu.buildFromTemplate(template);
+    menu.popup({ window: win });
 });
 
 ipcMain.handle('resize-window', async (event, width, height) => {

@@ -5,6 +5,10 @@ let isLoading = false;
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🔐 Pantalla de login cargada');
 
+    // Botón cerrar (frameless window)
+    document.getElementById('loginCloseBtn')
+        ?.addEventListener('click', () => window.electronAPI?.closeWindow());
+
     // Verificar que electronAPI esté disponible
     if (typeof window.electronAPI === 'undefined') {
         console.error('❌ electronAPI no está disponible');

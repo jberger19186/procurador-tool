@@ -39,6 +39,17 @@ try {
         positionLeft: () => ipcRenderer.invoke('position-left'),
         restoreWindow: () => ipcRenderer.invoke('restore-window'),
 
+        // Controles de ventana sin marco nativo
+        minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
+        maximizeWindow: () => ipcRenderer.invoke('window-maximize'),
+        closeWindow:    () => ipcRenderer.invoke('window-close'),
+        showAppMenu:    () => ipcRenderer.invoke('show-app-menu'),
+
+        // Acciones del menú nativo recibidas por el renderer
+        onMenuAction: (callback) => {
+            ipcRenderer.on('menu-action', (_, action) => callback(action));
+        },
+
         // ============ RUTAS DE ARCHIVOS ============
         getVisorPath: () => ipcRenderer.invoke('get-visor-path'),
         getLatestExcel: () => ipcRenderer.invoke('get-latest-excel'),

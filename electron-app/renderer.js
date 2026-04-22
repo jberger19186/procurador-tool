@@ -55,6 +55,7 @@ let isWindowPositioned = false; // ✅ AÑADIR ESTA LÍNEA
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeButtons();
+    setupSidebar();
     loadConfiguration();
     loadStatistics();
     setupProcessListeners();
@@ -69,10 +70,26 @@ document.addEventListener('DOMContentLoaded', () => {
     setupProcurarCustomModal();
     setupMonitorModal();
     updateHeaderInfo(); // Actualizar info del header al inicio
+    updateUserChip();   // Poblar user chip del sidebar
     checkQuotaAlert();  // Mostrar banner si cuota >= 80%
     window.electronAPI.getPromoStatus().then(ps => { if (ps) checkPromoAlert(ps); }).catch(() => {});
     addLog('info', 'Sistema iniciado correctamente ✅');
 });
+
+// ============ ACCIONES DEL MENÚ NATIVO ============
+if (window.electronAPI?.onMenuAction) {
+    window.electronAPI.onMenuAction((action) => {
+        switch (action) {
+            case 'run-process':       runProcess();           break;
+            case 'open-downloads':    openDownloadsFolder();  break;
+            case 'download-console':  downloadConsole();      break;
+            case 'clear-console':     clearConsole();         break;
+            case 'position-left':     positionWindowLeft();   break;
+            case 'open-support':      openCuentaModal();      break;
+            case 'open-stats':        openModal('modalStats');break;
+        }
+    });
+}
 
 // ============ TOUR POST-WIZARD ============
 if (window.electronAPI?.onShowTour) {
@@ -145,47 +162,13 @@ function initializeButtons() {
         if (el) el.addEventListener('click', fn);
     }
 
-    // Acciones principales — fila 1 (pantalla ancha)
-    bind('btnRunProcess',     runProcess);
-    bind('btnInforme',        openInformeModal);
-    bind('btnMonitor',        openMonitorModal);
-    bind('btnOpenDownloads',  openDownloadsFolder);
+    // Controles de ventana (frameless)
+    bind('btnWinMin',   () => window.electronAPI.minimizeWindow());
+    bind('btnWinMax',   () => window.electronAPI.maximizeWindow());
+    bind('btnWinClose', () => window.electronAPI.closeWindow());
+    bind('btnHamburger',() => window.electronAPI.showAppMenu());
 
-    // Acciones principales — fila 2 (pantalla angosta / ventana posicionada)
-    bind('btnRunProcess2',    runProcess);
-    bind('btnInforme2',       openInformeModal);
-    bind('btnMonitor2',       openMonitorModal);
-    bind('btnOpenDownloads2', openDownloadsFolder);
-
-    // Dropdown split button Ejecutar — fila 1
-    bind('btnEjecutarDropdown', (e) => { e.stopPropagation(); toggleEjecutarMenu(); });
-    bind('ddEjecutar',        () => { closeEjecutarMenus(); runProcess(); });
-    bind('ddFechaCustom',     () => { closeEjecutarMenus(); showCustomDateModal(); });
-    bind('ddProcurarCustom',  () => { closeEjecutarMenus(); showProcurarCustomModal(); });
-    bind('ddVisor',           () => { closeEjecutarMenus(); viewResults(); });
-    bind('ddExcel',           () => { closeEjecutarMenus(); viewExcel(); });
-
-    // Dropdown split button Ejecutar — fila 2
-    bind('btnEjecutarDropdown2', (e) => { e.stopPropagation(); toggleEjecutarMenu2(); });
-    bind('ddEjecutar2',        () => { closeEjecutarMenus(); runProcess(); });
-    bind('ddFechaCustom2',     () => { closeEjecutarMenus(); showCustomDateModal(); });
-    bind('ddProcurarCustom2',  () => { closeEjecutarMenus(); showProcurarCustomModal(); });
-    bind('ddVisor2',           () => { closeEjecutarMenus(); viewResults(); });
-    bind('ddExcel2',           () => { closeEjecutarMenus(); viewExcel(); });
-
-    // Menú dropdown Descargas (con opciones de limpieza) — fila 1
-    bind('btnDescargasChevron', toggleDescargasMenu);
-    bind('btnCleanTemp',     () => { closeDescargasMenu(); cleanFolder('temp'); });
-    bind('btnCleanProcesos', () => { closeDescargasMenu(); cleanFolder('procesos'); });
-    bind('btnCleanAll',      () => { closeDescargasMenu(); cleanFolder('all'); });
-
-    // Menú dropdown Descargas (con opciones de limpieza) — fila 2
-    bind('btnDescargasChevron2', toggleDescargasMenu2);
-    bind('btnCleanTemp2',     () => { closeDescargasMenu2(); cleanFolder('temp'); });
-    bind('btnCleanProcesos2', () => { closeDescargasMenu2(); cleanFolder('procesos'); });
-    bind('btnCleanAll2',      () => { closeDescargasMenu2(); cleanFolder('all'); });
-
-    // Botón detener en consola
+    // Botón detener en consola (subtoolbar)
     bind('btnStopProcess', stopProcess);
 
     // Botón descargar consola
@@ -199,7 +182,7 @@ function initializeButtons() {
         });
     }
 
-    // Modales
+    // Botones topbar icon
     bind('btnOpenConfig',  () => { openModal('modalConfig'); iniciarToggleExtension(); });
     bind('btnOpenStats',   () => openModal('modalStats'));
     bind('btnOpenCuenta',  openCuentaModal);
@@ -257,15 +240,99 @@ function initializeButtons() {
         document.getElementById('quota-banner').style.display = 'none';
         quotaBannerDismissed = true;
     });
+}
 
-    // Cerrar dropdowns al hacer click fuera
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.tab-btn-group')) {
-            closeDescargasMenu();
-            closeDescargasMenu2();
-            closeEjecutarMenus();
-        }
+// ============ SIDEBAR ============
+function setupSidebar() {
+    // Mapa data-action → función
+    const actions = {
+        'procurar-hoy':   () => runProcess(),
+        'procurar-fecha': () => showCustomDateModal(),
+        'procurar-lote':  () => showProcurarCustomModal(),
+        'informe':        () => openInformeModal(),
+        'monitor':        () => openMonitorModal(),
+        'visor':          () => viewResults(),
+        'excel':          () => viewExcel(),
+        'descargas':      () => openDownloadsFolder(),
+        'estadisticas':   () => openModal('modalStats'),
+        'configuracion':  () => { openModal('modalConfig'); iniciarToggleExtension(); },
+        'extension':      () => { openModal('modalConfig'); iniciarToggleExtension(); },
+        'limpiar-temp':   () => cleanFolder('temp'),
+    };
+
+    // Etiquetas del botón principal de la subtoolbar
+    const mainLabels = {
+        'procurar-hoy':   '▶ Procurar hoy',
+        'procurar-fecha': '📅 Procurar fecha',
+        'procurar-lote':  '📁 Procurar lote',
+        'informe':        '📄 Generar informe',
+        'monitor':        '🔍 Abrir monitor',
+        'visor':          '👁 Ver resultados',
+        'excel':          '📊 Ver Excel',
+        'descargas':      '📁 Abrir descargas',
+        'estadisticas':   '📈 Estadísticas',
+        'configuracion':  '⚙️ Configuración',
+        'extension':      '🧩 Extensión PJN',
+        'limpiar-temp':   '🗂️ Limpiar temp',
+    };
+
+    const allItems = document.querySelectorAll('.sidebar-item[data-action]');
+    const btnMain  = document.getElementById('btnMainAction');
+
+    allItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const action = item.dataset.action;
+
+            // Marcar activo
+            allItems.forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+
+            // Actualizar botón principal de subtoolbar
+            if (btnMain && mainLabels[action]) {
+                btnMain.textContent  = mainLabels[action];
+                btnMain.dataset.fn   = action;
+            }
+
+            // Ejecutar acción
+            actions[action]?.();
+        });
     });
+
+    // Botón principal de la subtoolbar ejecuta la acción del ítem activo
+    if (btnMain) {
+        btnMain.addEventListener('click', () => {
+            const fn = btnMain.dataset.fn || 'procurar-hoy';
+            actions[fn]?.();
+        });
+    }
+
+    // User chip → abrir modal de cuenta
+    document.getElementById('userChip')?.addEventListener('click', openCuentaModal);
+}
+
+// ============ USER CHIP (SIDEBAR) ============
+async function updateUserChip() {
+    try {
+        const result = await window.electronAPI.getAccount();
+        if (!result?.success || !result.account) return;
+
+        const a = result.account;
+
+        // Nombre: email antes del @, o CUIT si no hay email
+        const nameRaw  = a.email ? a.email.split('@')[0] : (a.cuit || '?');
+        const nameEl   = document.getElementById('userNameDisplay');
+        const planEl   = document.getElementById('userPlanDisplay');
+        const initEl   = document.getElementById('userAvatarInitials');
+
+        if (nameEl) nameEl.textContent = nameRaw;
+        if (planEl) {
+            const planName = (typeof a.plan === 'object' ? a.plan?.displayName || a.plan?.name : a.plan) || '—';
+            planEl.textContent = planName;
+        }
+        if (initEl) initEl.textContent = nameRaw.slice(0, 2).toUpperCase();
+    } catch (_) {
+        // Silencioso — el chip queda con los defaults del HTML
+    }
 }
 
 // ============ MENÚ DROPDOWN EJECUTAR ============
@@ -277,9 +344,8 @@ function toggleEjecutarMenu2() {
     if (dd) dd.classList.toggle('active');
 }
 function closeEjecutarMenus() {
-    document.getElementById('menuEjecutar').classList.remove('active');
-    const dd2 = document.getElementById('menuEjecutar2');
-    if (dd2) dd2.classList.remove('active');
+    document.getElementById('menuEjecutar')?.classList.remove('active');
+    document.getElementById('menuEjecutar2')?.classList.remove('active');
 }
 
 // ============ MENÚ DROPDOWN DESCARGAS ============
@@ -287,7 +353,7 @@ function toggleDescargasMenu() {
     document.getElementById('descargasDropdown').classList.toggle('active');
 }
 function closeDescargasMenu() {
-    document.getElementById('descargasDropdown').classList.remove('active');
+    document.getElementById('descargasDropdown')?.classList.remove('active');
 }
 
 // Dropdown fila 2 (ventana angosta)
@@ -302,20 +368,19 @@ function closeDescargasMenu2() {
 
 // ============ CONSOLA - EXPANDIR/CONTRAER ============
 function toggleExpandConsole() {
-    const appContainer = document.querySelector('.app-container');
     const btn = document.getElementById('btnExpandConsole');
 
     consoleExpanded = !consoleExpanded;
 
     if (consoleExpanded) {
-        appContainer.classList.add('console-expanded');
-        btn.textContent = '⬆ Expandir';  // ✅ INVERTIDO
+        document.body.classList.add('console-expanded');
+        btn.textContent = '⬆ Expandir';
 
         // Redimensionar ventana al 50% de altura
         window.electronAPI.resizeWindow(1200, 350);
     } else {
-        appContainer.classList.remove('console-expanded');
-        btn.textContent = '⬇ Contraer';  // ✅ INVERTIDO
+        document.body.classList.remove('console-expanded');
+        btn.textContent = '⬇ Contraer';
 
         // Restaurar tamaño original
         window.electronAPI.resizeWindow(1200, 700);
@@ -500,7 +565,7 @@ async function runProcess() {
             addLog('info', '📐 Posicionando ventana a la derecha...');
             await window.electronAPI.positionLeft();
             isWindowPositioned = true;
-            document.querySelector('.app-container').classList.add('window-positioned');
+            document.body.classList.add('window-positioned');
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
         }
@@ -551,7 +616,7 @@ async function runProcessCustomDate() {
             addLog('info', '📐 Posicionando ventana a la derecha...');
             await window.electronAPI.positionLeft();
             isWindowPositioned = true;
-            document.querySelector('.app-container').classList.add('window-positioned');
+            document.body.classList.add('window-positioned');
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
         }
@@ -996,7 +1061,7 @@ function setProcessRunning(running) {
             toggleInput.checked = false;
             window.electronAPI.restoreWindow().catch(() => {});
             isWindowPositioned = false;
-            document.querySelector('.app-container')?.classList.remove('window-positioned');
+            document.body.classList.remove('window-positioned');
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = '◧ Posicionar'; btn.title = 'Posicionar ventana a la derecha'; }
         }
@@ -1220,7 +1285,6 @@ async function downloadConsole() {
 
 async function toggleBrowserVisibility(show) {
     const btn = document.getElementById('btnPositionLeft');
-    const appContainer = document.querySelector('.app-container');
 
     // 1. Control de Chrome (solo si hay proceso activo)
     if (isProcessRunning) {
@@ -1241,7 +1305,7 @@ async function toggleBrowserVisibility(show) {
             if (!isWindowPositioned) {
                 await window.electronAPI.positionLeft();
                 isWindowPositioned = true;
-                appContainer?.classList.add('window-positioned');
+                document.body.classList.add('window-positioned');
                 if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
             }
         } else {
@@ -1249,7 +1313,7 @@ async function toggleBrowserVisibility(show) {
             if (isWindowPositioned) {
                 await window.electronAPI.restoreWindow();
                 isWindowPositioned = false;
-                appContainer?.classList.remove('window-positioned');
+                document.body.classList.remove('window-positioned');
                 if (btn) { btn.textContent = '◧ Posicionar'; btn.title = 'Posicionar ventana a la derecha'; }
             }
         }
@@ -1817,13 +1881,12 @@ window.addEventListener('unhandledrejection', (event) => {
 async function positionWindowLeft() {
     try {
         const btn = document.getElementById('btnPositionLeft');
-        const appContainer = document.querySelector('.app-container');
 
         if (isWindowPositioned) {
             // Restaurar
             await window.electronAPI.restoreWindow();
             isWindowPositioned = false;
-            appContainer.classList.remove('window-positioned');
+            document.body.classList.remove('window-positioned');
             addLog('info', '📐 Ventana restaurada a posición original');
             showNotification('Ventana restaurada', 'success');
             btn.textContent = '◧ Posicionar';
@@ -1832,7 +1895,7 @@ async function positionWindowLeft() {
             // Posicionar
             await window.electronAPI.positionLeft();
             isWindowPositioned = true;
-            appContainer.classList.add('window-positioned');
+            document.body.classList.add('window-positioned');
             addLog('info', '📐 Ventana posicionada a la derecha');
             showNotification('Ventana posicionada correctamente', 'success');
             btn.textContent = '◨ Restaurar';
@@ -2068,7 +2131,7 @@ async function runProcurarCustom(lines, fechaLimite) {
             addLog('info', '📐 Posicionando ventana a la derecha...');
             await window.electronAPI.positionLeft();
             isWindowPositioned = true;
-            document.querySelector('.app-container').classList.add('window-positioned');
+            document.body.classList.add('window-positioned');
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
         }
@@ -2689,7 +2752,7 @@ async function runMonitoreo(modo, partes) {
             addLog('info', 'Posicionando ventana a la derecha...');
             await window.electronAPI.positionLeft();
             isWindowPositioned = true;
-            document.querySelector('.app-container').classList.add('window-positioned');
+            document.body.classList.add('window-positioned');
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = 'Restaurar'; btn.title = 'Restaurar ventana al centro'; }
         }
