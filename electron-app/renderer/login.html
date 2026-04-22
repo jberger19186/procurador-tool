@@ -8,9 +8,14 @@
     <link rel="stylesheet" href="login.css">
 </head>
 <body>
-    <!-- Topbar de arrastre con botón cerrar (fuera del borde del OS) -->
+    <!-- Topbar de arrastre con botones de ventana (fuera del borde del OS) -->
     <div class="login-titlebar">
-        <button class="login-close-btn" id="loginCloseBtn" title="Cerrar">
+        <button class="login-win-btn" id="loginMinBtn" title="Minimizar">
+            <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5">
+                <line x1="0.5" y1="5" x2="9.5" y2="5"/>
+            </svg>
+        </button>
+        <button class="login-win-btn login-close-btn" id="loginCloseBtn" title="Cerrar">
             <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5">
                 <line x1="0.5" y1="0.5" x2="9.5" y2="9.5"/>
                 <line x1="9.5" y1="0.5" x2="0.5" y2="9.5"/>

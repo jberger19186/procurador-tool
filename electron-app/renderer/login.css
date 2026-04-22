@@ -49,8 +49,8 @@ body {
     -webkit-app-region: drag;  /* zona de arrastre */
 }
 
-/* Botón cerrar — dentro del topbar, NO en el borde del OS */
-.login-close-btn {
+/* Botones de ventana — dentro del topbar, NO en el borde del OS */
+.login-win-btn {
     width: 26px;
     height: 26px;
     border-radius: 6px;
@@ -64,6 +64,7 @@ body {
     transition: background 0.12s, color 0.12s;
     -webkit-app-region: no-drag;
 }
+.login-win-btn:hover { background: rgba(0,0,0,0.06); color: var(--text-primary); }
 .login-close-btn:hover { background: var(--error-bg); color: var(--error); }
 
 /* ============ CONTAINER ============ */

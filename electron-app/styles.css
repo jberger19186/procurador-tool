@@ -843,7 +843,7 @@ body.window-positioned .sidebar { display: none; }
   overflow: hidden;
   width: 520px;
 }
-.modal-content.modal-large  { width: 660px; }
+.modal-content.modal-large  { width: 500px; }
 .modal-content.modal-medium { width: 480px; }
 
 .modal-header {

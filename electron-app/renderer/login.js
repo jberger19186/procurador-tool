@@ -5,7 +5,9 @@ let isLoading = false;
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🔐 Pantalla de login cargada');
 
-    // Botón cerrar (frameless window)
+    // Botones de ventana (frameless)
+    document.getElementById('loginMinBtn')
+        ?.addEventListener('click', () => window.electronAPI?.minimizeWindow());
     document.getElementById('loginCloseBtn')
         ?.addEventListener('click', () => window.electronAPI?.closeWindow());
 
