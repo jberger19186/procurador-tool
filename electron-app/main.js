@@ -121,7 +121,7 @@ function initAuthManager() {
 function createLoginWindow() {
     loginWindow = new BrowserWindow({
         width: 500,
-        height: 700,
+        height: 760,
         resizable: false,
         movable: true,
         center: true,

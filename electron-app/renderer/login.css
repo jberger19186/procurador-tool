@@ -65,7 +65,10 @@ body {
     align-items: center;
     justify-content: center;
     position: relative;
-    padding: 16px;
+    /* top: espacio para el botón X (8px offset + 26px btn + 10px margen = 44px)
+       bottom: mismo valor para simetría visual
+       sides: 16px */
+    padding: 44px 16px;
     /* el form es no-drag; el fondo del container sigue siendo arrastrable */
     -webkit-app-region: drag;
 }
