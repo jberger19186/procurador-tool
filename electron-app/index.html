@@ -321,170 +321,225 @@
 ================================================================ -->
 
 <!-- Modal: Configuración -->
+<!-- Modal: Configuración -->
 <div class="modal" id="modalConfig">
     <div class="modal-content modal-large">
         <div class="modal-header">
-            <h3>⚙️ Configuración del Proceso</h3>
-            <button class="modal-close">&times;</button>
+            <div class="modal-header-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="8" cy="8" r="2.5"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.5 3.5l1 1M11.5 11.5l1 1M12.5 3.5l-1 1M4.5 11.5l-1 1"/></svg>
+            </div>
+            <div>
+                <div class="modal-cfg-title">Configuración</div>
+                <div class="modal-cfg-subtitle">Ajustes de procuración y sistema</div>
+            </div>
+            <button class="modal-close" id="btnCancelConfig">✕</button>
         </div>
+
+        <!-- Tabs -->
+        <div class="modal-cfg-tabs">
+            <div class="modal-cfg-tab active" data-cfg-tab="general">General</div>
+            <div class="modal-cfg-tab" data-cfg-tab="extension">Extensión</div>
+        </div>
+
         <div class="modal-body">
-            <form id="configForm" class="config-form">
-                <div class="form-section">
-                    <h4>General</h4>
-                    <div class="form-group">
-                        <label for="identificador">Identificador (CUIL)
-                            <span class="tooltip-icon" data-tip="Tu CUIL es asignado por el administrador al crear tu cuenta. Es el identificador único con el que el sistema PJN te reconoce.">?</span>
-                        </label>
-                        <input type="text" id="identificador" placeholder="Asignado por administrador" readonly
-                               style="background:var(--bg-elevated);cursor:not-allowed;opacity:0.7">
-                    </div>
-                </div>
-                <div class="form-section">
-                    <h4>Opciones Procurar</h4>
-                    <div class="form-group">
-                        <label for="fechaLimite">Fecha Límite
-                            <span class="tooltip-icon" data-tip="Solo se procuran expedientes con movimientos posteriores a esta fecha. Dejá vacío para procurar todos.">?</span>
-                        </label>
-                        <input type="text" id="fechaLimite" placeholder="DD/MM/YYYY" pattern="\d{2}/\d{2}/\d{4}">
-                        <small>Formato: DD/MM/YYYY (ej: 01/11/2025)</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Secciones</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="seccionLetrado"><span>Letrado</span></label>
-                        <span class="tooltip-icon" data-tip="Incluye los expedientes donde figurás como letrado patrocinante o apoderado.">?</span>
-                    </div>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="seccionParte"><span>Parte</span></label>
-                        <span class="tooltip-icon" data-tip="Incluye los expedientes donde figurás como parte actora o demandada.">?</span>
-                    </div>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="seccionAutorizado"><span>Autorizado NE</span></label>
-                        <span class="tooltip-icon" data-tip="Incluye los expedientes en los que tenés autorización de notificación electrónica.">?</span>
-                    </div>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="seccionFavoritos"><span>Favoritos</span></label>
-                        <span class="tooltip-icon" data-tip="Incluye los expedientes que marcaste como favoritos en el sistema PJN.">?</span>
-                    </div>
-                </div>
-                <div class="form-section">
-                    <h4>Reportes</h4>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="notificacionesActivadas"><span>Notificaciones de Windows</span></label>
-                        <span class="tooltip-icon" data-tip="Muestra una notificación del sistema al finalizar cada procuración con el resumen de resultados.">?</span>
-                    </div>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="generarExcel"><span>Generar Excel</span></label>
-                        <span class="tooltip-icon" data-tip="Al finalizar la procuración, genera automáticamente un archivo Excel con los expedientes procesados y sus novedades.">?</span>
-                    </div>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="abrirVisor"><span>Abrir visor automáticamente</span></label>
-                        <span class="tooltip-icon" data-tip="Abre el visor de resultados al terminar la procuración sin necesidad de hacerlo manualmente.">?</span>
-                    </div>
-                </div>
-                <div class="form-section">
-                    <h4>🔒 Seguridad</h4>
-                    <div class="checkbox-group">
-                        <label>
-                            <input type="checkbox" id="modoHeadless">
-                            <span>Modo headless (Chrome invisible)</span>
-                        </label>
-                        <span class="tooltip-icon" data-tip="Ejecuta Chrome de forma invisible en segundo plano. Recomendado para uso en producción.">?</span>
-                    </div>
-                    <div class="form-group">
-                        <label>Gestor de contraseñas de Chrome</label>
-                        <div class="security-buttons">
-                            <button type="button" class="btn-security" id="btnAbrirNavegador">
-                                🌐 Abrir navegador
-                            </button>
-                            <button type="button" class="btn-security btn-security-accent" id="btnAgregarPasswordSCW">
-                                + Agregar contraseña SCW
-                            </button>
+
+            <!-- ===== TAB GENERAL ===== -->
+            <div id="cfgTabGeneral">
+                <form id="configForm">
+
+                    <!-- Cuenta -->
+                    <div class="cfg-section">
+                        <div class="cfg-section-title">Cuenta</div>
+                        <div class="cfg-form-row">
+                            <label class="cfg-form-label">CUIL / CUIT</label>
+                            <input class="cfg-form-input" id="identificador" readonly
+                                   style="color:var(--text-3);cursor:not-allowed"
+                                   placeholder="Asignado por administrador">
+                            <div class="cfg-form-hint">Campo de solo lectura vinculado a tu licencia.</div>
                         </div>
-                        <small>El botón "Agregar" pre-completa el sitio y usuario — escribí la contraseña manualmente en Chrome.</small>
                     </div>
-                    <div class="form-group" style="margin-top:14px">
-                        <label style="display:flex;align-items:center;gap:6px">
-                            Extensión PJN para Chrome
-                            <span id="btnTooltipExtConfig"
-                                  style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--info);color:#fff;font-size:10px;font-weight:700;cursor:pointer;flex-shrink:0;">?</span>
-                        </label>
-                        <div id="tooltipExtConfig"
-                             style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:10px 13px;font-size:12px;color:#1e3a5f;margin-bottom:8px;line-height:1.5;">
-                            Extensión para tu Chrome personal que conecta la app con el portal PJN.<br><br>
-                            <strong>Importante:</strong> Al <strong>descargar</strong> la extensión, se copia automáticamente la ruta de instalación.<br>
-                            En Chrome: activá <strong>Modo desarrollador</strong> → "Cargar sin empaquetar" → pegá la ruta.
-                        </div>
-                        <!-- Toggle habilitar/deshabilitar -->
-                        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-base);border:1px solid var(--border);border-radius:7px;padding:8px 12px;margin-bottom:8px">
-                            <span style="font-size:12px;color:var(--text-2)" id="extToggleLabel">Extensión deshabilitada</span>
-                            <label style="position:relative;display:inline-block;width:38px;height:20px;cursor:pointer">
-                                <input type="checkbox" id="toggleExtConfig" style="opacity:0;width:0;height:0;position:absolute">
-                                <span id="extToggleTrack" style="position:absolute;inset:0;background:var(--border-strong);border-radius:10px;transition:background 0.2s"></span>
-                                <span id="extToggleThumb" style="position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left 0.2s"></span>
+
+                    <!-- Opciones Procurar -->
+                    <div class="cfg-section">
+                        <div class="cfg-section-title">Opciones Procurar</div>
+                        <div class="cfg-form-row">
+                            <label class="cfg-form-label">
+                                Fecha límite
+                                <span class="tooltip-icon" data-tip="Solo se procuran expedientes con movimientos posteriores a esta fecha. Dejá vacío para procurar todos.">?</span>
                             </label>
+                            <input class="cfg-form-input" id="fechaLimite" placeholder="DD/MM/YYYY"
+                                   pattern="\d{2}/\d{2}/\d{4}" style="width:140px">
+                            <div class="cfg-form-hint">Formato: DD/MM/YYYY (ej: 01/01/2025). Dejá vacío para procurar todos.</div>
                         </div>
-                        <!-- Cuerpo extensión (visible si habilitada) -->
-                        <div id="extConfigBody">
-                            <div id="extVersionStatus" style="font-size:12px;color:var(--text-3);margin-bottom:8px">Verificando...</div>
+                        <label class="cfg-form-label" style="margin-bottom:6px">Secciones a procurar</label>
+                        <div class="cfg-toggle-row" id="tgl-seccionLetrado">
+                            <div>
+                                <div class="cfg-toggle-label">Letrado</div>
+                                <div class="cfg-toggle-desc">Expedientes donde figurás como letrado patrocinante o apoderado</div>
+                            </div>
+                            <div class="cfg-toggle"></div>
+                        </div>
+                        <div class="cfg-toggle-row" id="tgl-seccionParte">
+                            <div>
+                                <div class="cfg-toggle-label">Parte</div>
+                                <div class="cfg-toggle-desc">Expedientes donde figurás como parte actora o demandada</div>
+                            </div>
+                            <div class="cfg-toggle"></div>
+                        </div>
+                        <div class="cfg-toggle-row" id="tgl-seccionAutorizado">
+                            <div>
+                                <div class="cfg-toggle-label">Autorizado NE</div>
+                                <div class="cfg-toggle-desc">Expedientes con autorización de notificación electrónica</div>
+                            </div>
+                            <div class="cfg-toggle"></div>
+                        </div>
+                        <div class="cfg-toggle-row" id="tgl-seccionFavoritos">
+                            <div>
+                                <div class="cfg-toggle-label">Favoritos</div>
+                                <div class="cfg-toggle-desc">Expedientes marcados como favoritos en el sistema PJN</div>
+                            </div>
+                            <div class="cfg-toggle"></div>
+                        </div>
+                    </div>
+
+                    <!-- Reportes -->
+                    <div class="cfg-section">
+                        <div class="cfg-section-title">Reportes</div>
+                        <div class="cfg-toggle-row" id="tgl-notificacionesActivadas">
+                            <div>
+                                <div class="cfg-toggle-label">Notificaciones de Windows</div>
+                                <div class="cfg-toggle-desc">Muestra una notificación al finalizar cada procuración</div>
+                            </div>
+                            <div class="cfg-toggle"></div>
+                        </div>
+                        <div class="cfg-toggle-row" id="tgl-generarExcel">
+                            <div>
+                                <div class="cfg-toggle-label">Generar Excel</div>
+                                <div class="cfg-toggle-desc">Genera automáticamente un Excel con los expedientes procesados</div>
+                            </div>
+                            <div class="cfg-toggle"></div>
+                        </div>
+                        <div class="cfg-toggle-row" id="tgl-abrirVisor">
+                            <div>
+                                <div class="cfg-toggle-label">Abrir visor automáticamente</div>
+                                <div class="cfg-toggle-desc">Abre el visor de resultados al terminar sin hacerlo manualmente</div>
+                            </div>
+                            <div class="cfg-toggle"></div>
+                        </div>
+                    </div>
+
+                    <!-- Seguridad -->
+                    <div class="cfg-section">
+                        <div class="cfg-section-title">Seguridad</div>
+                        <div class="cfg-toggle-row" id="tgl-modoHeadless">
+                            <div>
+                                <div class="cfg-toggle-label">Modo headless (Chrome invisible)</div>
+                                <div class="cfg-toggle-desc">Ejecuta Chrome en segundo plano. Recomendado para producción</div>
+                            </div>
+                            <div class="cfg-toggle"></div>
+                        </div>
+                        <div class="cfg-form-row" style="margin-top:10px">
+                            <label class="cfg-form-label">Gestor de contraseñas de Chrome</label>
                             <div class="security-buttons">
-                                <button type="button" class="btn-security btn-security-accent" id="btnInstalarExtension">
-                                    🧩 Descargar extensión
+                                <button type="button" class="btn-security" id="btnAbrirNavegador">
+                                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/></svg>
+                                    Abrir navegador
+                                </button>
+                                <button type="button" class="btn-security btn-security-accent" id="btnAgregarPasswordSCW">
+                                    + Agregar contraseña SCW
                                 </button>
                             </div>
-                            <div id="extDownloadResult" style="display:none;margin-top:10px">
-                                <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">Dirección de extensiones en Chrome:</div>
-                                <div id="extChromeExtBox"
-                                     style="display:flex;align-items:center;gap:6px;background:#e0f0ff;border:2px solid #3b82f6;border-radius:6px;padding:6px 10px;cursor:pointer;margin-bottom:8px"
-                                     title="Clic para copiar">
-                                    <code style="flex:1;font-size:11px;color:#1e3a5f;font-family:monospace;font-weight:600">chrome://extensions</code>
-                                    <span style="font-size:15px;flex-shrink:0">📋</span>
-                                </div>
-                                <span id="extChromeExtCopyMsg" style="display:none;font-size:11px;color:var(--success);margin-bottom:4px">✅ Dirección copiada</span>
-                                <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">Ruta de instalación (copiada al portapapeles):</div>
-                                <div id="extPathBox"
-                                     style="display:flex;align-items:center;gap:6px;background:#e0f0ff;border:2px solid #3b82f6;border-radius:6px;padding:7px 10px;cursor:pointer"
-                                     title="Clic para copiar">
-                                    <code id="extPathText" style="flex:1;font-size:11px;word-break:break-all;color:#1e3a5f"></code>
-                                    <span style="font-size:15px;flex-shrink:0">📋</span>
-                                </div>
-                                <div id="extCopyMsg" style="font-size:11px;color:var(--success);display:none;margin-top:3px">✅ Ruta copiada al portapapeles</div>
-                                <div style="margin-top:10px;padding:10px 12px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;font-size:11.5px;line-height:1.7;color:var(--text-2)">
-                                    <strong style="color:var(--text-1)">Pasos para instalar en Chrome:</strong><br>
-                                    1. Abrí Chrome → <code>chrome://extensions</code><br>
-                                    2. Activá el <strong>Modo desarrollador</strong> (arriba a la derecha)<br>
-                                    3. Clic en <strong>"Cargar extensión sin empaquetar"</strong><br>
-                                    4. En <strong>"Nombre de carpeta"</strong>, pegá la ruta y presioná <strong>Aceptar</strong>
-                                </div>
-                                <button type="button" id="btnGenerarPdfExt"
-                                        style="margin-top:8px;font-size:12px;padding:6px 12px;background:var(--bg-base);border:1px solid var(--border-strong);border-radius:5px;cursor:pointer;color:var(--text-2)">
-                                    📄 Descargar instrucciones en PDF
-                                </button>
-                                <button type="button" id="btnAbrirChromeExt"
-                                        style="margin-top:6px;width:100%;font-size:12px;padding:6px 12px;background:var(--info);border:none;border-radius:5px;cursor:pointer;color:#fff;font-weight:600">
-                                    🌐 Abrir Chrome
-                                </button>
-                                <div id="msgAbrirChromeExt"
-                                     style="display:none;margin-top:5px;font-size:11px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:6px 10px;color:#1e40af">
-                                    ✅ Chrome abierto — <code style="background:#dbeafe;padding:1px 4px;border-radius:3px">chrome://extensions</code> copiado al portapapeles.
-                                </div>
+                            <div class="cfg-form-hint">El botón "Agregar" pre-completa el sitio y usuario — escribí la contraseña manualmente en Chrome.</div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions" style="justify-content:space-between;margin-top:4px">
+                        <button type="button" class="btn-secondary" id="btnRelanzarWizard">
+                            🔄 Relanzar asistente
+                        </button>
+                        <div style="display:flex;gap:8px">
+                            <button type="button" class="btn-secondary" id="btnCancelConfig2">Cancelar</button>
+                            <button type="submit" class="btn-primary">💾 Guardar</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ===== TAB EXTENSIÓN ===== -->
+            <div id="cfgTabExtension" style="display:none">
+                <div class="cfg-section">
+                    <div class="cfg-section-title">Extensión PJN para Chrome</div>
+                    <div class="cfg-form-hint" style="margin-bottom:12px">
+                        Extensión para tu Chrome personal que conecta la app con el portal PJN.
+                    </div>
+
+                    <!-- Toggle habilitar/deshabilitar -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-base);border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:10px">
+                        <div>
+                            <div class="cfg-toggle-label" id="extToggleLabel">Extensión deshabilitada</div>
+                            <div class="cfg-toggle-desc">Activa para poder usar las funciones de monitoreo PJN</div>
+                        </div>
+                        <label style="position:relative;display:inline-block;width:38px;height:20px;cursor:pointer">
+                            <input type="checkbox" id="toggleExtConfig" style="opacity:0;width:0;height:0;position:absolute">
+                            <span id="extToggleTrack" style="position:absolute;inset:0;background:var(--border-strong);border-radius:10px;transition:background 0.2s"></span>
+                            <span id="extToggleThumb" style="position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left 0.2s"></span>
+                        </label>
+                    </div>
+
+                    <!-- Cuerpo extensión -->
+                    <div id="extConfigBody">
+                        <div id="extVersionStatus" style="font-size:12px;color:var(--text-3);margin-bottom:8px">Verificando...</div>
+                        <div class="security-buttons">
+                            <button type="button" class="btn-security btn-security-accent" id="btnInstalarExtension">
+                                🧩 Descargar extensión
+                            </button>
+                        </div>
+                        <div id="extDownloadResult" style="display:none;margin-top:10px">
+                            <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">Dirección de extensiones en Chrome:</div>
+                            <div id="extChromeExtBox"
+                                 style="display:flex;align-items:center;gap:6px;background:#e0f0ff;border:2px solid #3b82f6;border-radius:6px;padding:6px 10px;cursor:pointer;margin-bottom:8px"
+                                 title="Clic para copiar">
+                                <code style="flex:1;font-size:11px;color:#1e3a5f;font-family:monospace;font-weight:600">chrome://extensions</code>
+                                <span style="font-size:15px;flex-shrink:0">📋</span>
                             </div>
-                        </div><!-- /extConfigBody -->
+                            <span id="extChromeExtCopyMsg" style="display:none;font-size:11px;color:var(--success);margin-bottom:4px">✅ Dirección copiada</span>
+                            <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">Ruta de instalación (copiada al portapapeles):</div>
+                            <div id="extPathBox"
+                                 style="display:flex;align-items:center;gap:6px;background:#e0f0ff;border:2px solid #3b82f6;border-radius:6px;padding:7px 10px;cursor:pointer"
+                                 title="Clic para copiar">
+                                <code id="extPathText" style="flex:1;font-size:11px;word-break:break-all;color:#1e3a5f"></code>
+                                <span style="font-size:15px;flex-shrink:0">📋</span>
+                            </div>
+                            <div id="extCopyMsg" style="font-size:11px;color:var(--success);display:none;margin-top:3px">✅ Ruta copiada al portapapeles</div>
+                            <div style="margin-top:10px;padding:10px 12px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;font-size:11.5px;line-height:1.7;color:var(--text-2)">
+                                <strong style="color:var(--text-1)">Pasos para instalar en Chrome:</strong><br>
+                                1. Abrí Chrome → <code>chrome://extensions</code><br>
+                                2. Activá el <strong>Modo desarrollador</strong> (arriba a la derecha)<br>
+                                3. Clic en <strong>"Cargar extensión sin empaquetar"</strong><br>
+                                4. En <strong>"Nombre de carpeta"</strong>, pegá la ruta y presioná <strong>Aceptar</strong>
+                            </div>
+                            <button type="button" id="btnGenerarPdfExt"
+                                    style="margin-top:8px;font-size:12px;padding:6px 12px;background:var(--bg-base);border:1px solid var(--border-strong);border-radius:5px;cursor:pointer;color:var(--text-2)">
+                                📄 Descargar instrucciones en PDF
+                            </button>
+                            <button type="button" id="btnAbrirChromeExt"
+                                    style="margin-top:6px;width:100%;font-size:12px;padding:6px 12px;background:var(--info);border:none;border-radius:5px;cursor:pointer;color:#fff;font-weight:600">
+                                🌐 Abrir Chrome
+                            </button>
+                            <div id="msgAbrirChromeExt"
+                                 style="display:none;margin-top:5px;font-size:11px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:6px 10px;color:#1e40af">
+                                ✅ Chrome abierto — <code style="background:#dbeafe;padding:1px 4px;border-radius:3px">chrome://extensions</code> copiado al portapapeles.
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="form-actions" style="justify-content:space-between">
-                    <button type="button" class="btn-secondary" id="btnRelanzarWizard">
-                        🔄 Relanzar asistente
-                    </button>
-                    <div style="display:flex;gap:8px">
-                        <button type="button" class="btn-secondary" id="btnCancelConfig">Cancelar</button>
-                        <button type="submit" class="btn-primary">💾 Guardar</button>
-                    </div>
+                <div class="form-actions" style="justify-content:flex-end;margin-top:4px">
+                    <button type="button" class="btn-secondary" id="btnCancelConfig3">Cancelar</button>
                 </div>
-            </form>
-        </div>
+            </div>
+
+        </div><!-- /modal-body -->
     </div>
 </div>
 

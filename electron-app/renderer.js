@@ -226,7 +226,31 @@ function initializeButtons() {
 
     // Configuración
     document.getElementById('configForm').addEventListener('submit', saveConfiguration);
-    bind('btnCancelConfig', () => closeModal('modalConfig'));
+    bind('btnCancelConfig',  () => closeModal('modalConfig'));
+
+    // Config modal: tab switching
+    document.querySelectorAll('.modal-cfg-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.modal-cfg-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const name = tab.dataset.cfgTab;
+            document.getElementById('cfgTabGeneral').style.display   = name === 'general'   ? '' : 'none';
+            document.getElementById('cfgTabExtension').style.display = name === 'extension' ? '' : 'none';
+            if (name === 'extension') iniciarToggleExtension();
+        });
+    });
+
+    // Config modal: toggle click handlers
+    document.querySelectorAll('.cfg-toggle-row').forEach(row => {
+        row.addEventListener('click', () => {
+            const tgl = row.querySelector('.cfg-toggle');
+            if (tgl) tgl.classList.toggle('on');
+        });
+    });
+
+    // Cancelar config (tab general y extensión)
+    bind('btnCancelConfig2', () => closeModal('modalConfig'));
+    bind('btnCancelConfig3', () => closeModal('modalConfig'));
 
     // Seguridad — botones dentro del modal de configuración
     bind('btnAbrirNavegador',    abrirNavegadorPJN);
@@ -274,6 +298,14 @@ function initializeButtons() {
     });
 }
 
+function switchCfgTab(name) {
+    document.querySelectorAll('.modal-cfg-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.cfgTab === name);
+    });
+    document.getElementById('cfgTabGeneral').style.display   = name === 'general'   ? '' : 'none';
+    document.getElementById('cfgTabExtension').style.display = name === 'extension' ? '' : 'none';
+}
+
 // ============ SIDEBAR ============
 function setupSidebar() {
     // Mapa data-action → función
@@ -287,8 +319,8 @@ function setupSidebar() {
         'excel':          () => viewExcel(),
         'descargas':      () => openDownloadsFolder(),
         'estadisticas':   () => openModal('modalStats'),
-        'configuracion':  () => { openModal('modalConfig'); iniciarToggleExtension(); },
-        'extension':      () => { openModal('modalConfig'); iniciarToggleExtension(); },
+        'configuracion':  () => { openModal('modalConfig'); switchCfgTab('general'); iniciarToggleExtension(); },
+        'extension':      () => { openModal('modalConfig'); switchCfgTab('extension'); iniciarToggleExtension(); },
         'limpiar-temp':   () => cleanFolder('temp'),
     };
 
@@ -550,15 +582,21 @@ function populateConfigForm(config) {
     // identificador es readonly y se carga desde la sesión (ver loadConfiguration)
     // maxMovimientos y buscarEnTodos ya no tienen campo en el formulario; se preservan desde config
 
-    document.getElementById('seccionLetrado').checked = config.secciones.letrado || false;
-    document.getElementById('seccionParte').checked = config.secciones.parte || false;
-    document.getElementById('seccionAutorizado').checked = config.secciones.autorizado || false;
-    document.getElementById('seccionFavoritos').checked = config.secciones.favoritos || false;
+    function setTgl(id, val) {
+        document.getElementById(id)?.querySelector('.cfg-toggle')?.classList.toggle('on', !!val);
+    }
+    setTgl('tgl-seccionLetrado',          config.secciones.letrado || false);
+    setTgl('tgl-seccionParte',            config.secciones.parte || false);
+    setTgl('tgl-seccionAutorizado',       config.secciones.autorizado || false);
+    setTgl('tgl-seccionFavoritos',        config.secciones.favoritos || false);
+    setTgl('tgl-notificacionesActivadas', config.notificaciones.activadas || false);
+    setTgl('tgl-generarExcel',            config.excel.generar || false);
+    setTgl('tgl-abrirVisor',              config.visor.abrirAutomaticamente || false);
+    setTgl('tgl-modoHeadless',            config.seguridad?.modoHeadless || false);
+}
 
-    document.getElementById('notificacionesActivadas').checked = config.notificaciones.activadas || false;
-    document.getElementById('generarExcel').checked = config.excel.generar || false;
-    document.getElementById('abrirVisor').checked = config.visor.abrirAutomaticamente || false;
-    document.getElementById('modoHeadless').checked = config.seguridad?.modoHeadless || false;
+function getTgl(id) {
+    return document.getElementById(id)?.querySelector('.cfg-toggle')?.classList.contains('on') ?? false;
 }
 
 async function saveConfiguration(e) {
@@ -580,17 +618,17 @@ async function saveConfiguration(e) {
                 formatoSalida: currentConfig?.opciones?.formatoSalida || 'ambos'
             },
             secciones: {
-                letrado: document.getElementById('seccionLetrado').checked,
-                parte: document.getElementById('seccionParte').checked,
-                autorizado: document.getElementById('seccionAutorizado').checked,
-                favoritos: document.getElementById('seccionFavoritos').checked
+                letrado:    getTgl('tgl-seccionLetrado'),
+                parte:      getTgl('tgl-seccionParte'),
+                autorizado: getTgl('tgl-seccionAutorizado'),
+                favoritos:  getTgl('tgl-seccionFavoritos'),
             },
             visor: {
-                abrirAutomaticamente: document.getElementById('abrirVisor').checked,
+                abrirAutomaticamente: getTgl('tgl-abrirVisor'),
                 navegadorPredeterminado: currentConfig?.visor?.navegadorPredeterminado || true
             },
             notificaciones: {
-                activadas: document.getElementById('notificacionesActivadas').checked,
+                activadas: getTgl('tgl-notificacionesActivadas'),
                 sonido: currentConfig?.notificaciones?.sonido || true
             },
             email: currentConfig?.email || {
@@ -599,7 +637,7 @@ async function saveConfiguration(e) {
                 smtp: {}
             },
             excel: {
-                generar: document.getElementById('generarExcel').checked,
+                generar: getTgl('tgl-generarExcel'),
                 incluirMovimientos: currentConfig?.excel?.incluirMovimientos || true
             },
             programacion: currentConfig?.programacion || {
@@ -608,7 +646,7 @@ async function saveConfiguration(e) {
                 dias: []
             },
             seguridad: {
-                modoHeadless: document.getElementById('modoHeadless').checked
+                modoHeadless: getTgl('tgl-modoHeadless'),
             }
         };
 

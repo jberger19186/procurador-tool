@@ -1160,4 +1160,93 @@ body.window-positioned .sidebar { display: none; }
 .batch-limit-aviso { padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12px; line-height: 1.5; }
 .batch-limit-error   { background: var(--error-bg);   border: 1px solid rgba(220,38,38,0.2);   color: var(--error); }
 .batch-limit-warning { background: var(--warning-bg); border: 1px solid rgba(217,119,6,0.2);   color: #92400e; }
+
+/* ================================================================
+   CONFIG MODAL — diseño propuesta visual
+================================================================ */
+/* Header icon */
+.modal-header-icon {
+  width: 32px; height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-muted);
+  border: 1px solid rgba(217,119,6,0.2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: var(--accent);
+}
+.modal-cfg-title    { font-size: 14px; font-weight: 600; color: var(--text-1); }
+.modal-cfg-subtitle { font-size: 11.5px; color: var(--text-3); margin-top: 1px; }
+
+/* Tabs */
+.modal-cfg-tabs {
+  display: flex;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-cfg-tab {
+  padding: 8px 14px 10px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-3); cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.13s, border-color 0.13s;
+  user-select: none;
+}
+.modal-cfg-tab:hover { color: var(--text-2); }
+.modal-cfg-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* Form sections */
+.cfg-section { margin-bottom: 20px; }
+.cfg-section-title {
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-3); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.cfg-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+.cfg-form-row   { margin-bottom: 12px; }
+.cfg-form-label {
+  display: block; font-size: 12px; font-weight: 500;
+  color: var(--text-2); margin-bottom: 5px;
+}
+.cfg-form-input {
+  width: 100%; height: 34px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 11px;
+  color: var(--text-1); font-family: var(--font); font-size: 12.5px;
+  transition: 0.13s;
+}
+.cfg-form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-muted); }
+.cfg-form-hint { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+
+/* Toggle row */
+.cfg-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px; cursor: pointer; transition: 0.12s;
+}
+.cfg-toggle-row:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+.cfg-toggle-label { font-size: 12.5px; font-weight: 500; color: var(--text-1); }
+.cfg-toggle-desc  { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+
+/* Toggle switch */
+.cfg-toggle {
+  width: 34px; height: 18px; border-radius: 9px;
+  background: var(--border-strong); position: relative;
+  flex-shrink: 0; transition: background 0.2s; cursor: pointer;
+}
+.cfg-toggle::after {
+  content: ''; position: absolute;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; top: 2px; left: 2px;
+  transition: left 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.cfg-toggle.on { background: var(--accent); }
+.cfg-toggle.on::after { left: 18px; }
 .batch-limit-ok      { background: var(--success-bg); border: 1px solid rgba(5,150,105,0.2);   color: var(--success); }
