@@ -29,19 +29,28 @@ body {
     color: var(--text-primary);
     height: 100vh;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    align-items: stretch;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
-    /* El fondo es la zona de arrastre de la ventana frameless */
     -webkit-app-region: drag;
 }
 
-/* Botón cerrar flotante (esquina superior derecha) */
+/* Topbar de arrastre — ocupa el espacio superior de la ventana frameless */
+.login-titlebar {
+    position: relative;
+    width: 100%;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    flex-shrink: 0;
+    -webkit-app-region: drag;  /* zona de arrastre */
+}
+
+/* Botón cerrar — dentro del topbar, NO en el borde del OS */
 .login-close-btn {
-    position: fixed;
-    top: 8px;
-    right: 8px;
     width: 26px;
     height: 26px;
     border-radius: 6px;
@@ -53,23 +62,18 @@ body {
     align-items: center;
     justify-content: center;
     transition: background 0.12s, color 0.12s;
-    z-index: 1000;
     -webkit-app-region: no-drag;
 }
 .login-close-btn:hover { background: var(--error-bg); color: var(--error); }
 
 /* ============ CONTAINER ============ */
 .login-container {
-    width: 100%;
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
-    /* top: espacio para el botón X (8px offset + 26px btn + 10px margen = 44px)
-       bottom: mismo valor para simetría visual
-       sides: 16px */
-    padding: 44px 16px;
-    /* el form es no-drag; el fondo del container sigue siendo arrastrable */
+    padding: 0 16px 16px;
     -webkit-app-region: drag;
 }
 
