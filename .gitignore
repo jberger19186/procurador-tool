@@ -22,6 +22,8 @@ electron-app/keys/
 # ─── Builds y distribución ──────────────────────────────────
 dist/
 build/
+!electron-app/build/
+!electron-app/build/*.nsh
 out/
 release/
 *.exe
