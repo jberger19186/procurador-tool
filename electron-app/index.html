@@ -87,8 +87,14 @@
         <span class="status-text">Inactivo</span>
     </div>
 
-    <!-- Contador de ejecuciones -->
-    <span class="topbar-counter" id="headerProgress">0 ejec</span>
+    <!-- Contador / barra de progreso (estilo propuesta) -->
+    <div class="topbar-progress" id="topbarProgress">
+        <span class="topbar-progress-text" id="topbarProgressText">0 ejec</span>
+        <div class="topbar-progress-track" id="topbarProgressTrack" style="display:none">
+            <div class="topbar-progress-fill" id="topbarProgressFill"></div>
+        </div>
+        <span class="topbar-progress-pct" id="topbarProgressPct" style="display:none">0%</span>
+    </div>
 
     <!-- Controles de ventana (min / max / close) -->
     <div class="win-controls">
@@ -160,6 +166,10 @@
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h3.5l1.5-2H14v9H2V5z"/></svg>
             Abrir descargas
         </button>
+        <button class="sidebar-item" data-action="limpiar-temp">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M5 5V3h6v2"/><path d="M4 5l.8 8h6.4l.8-8"/><path d="M6.5 8v3M9.5 8v3"/></svg>
+            Limpiar temp
+        </button>
         <button class="sidebar-item" data-action="estadisticas">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12V8M7 12V5M11 12V3"/></svg>
             Estadísticas
@@ -177,10 +187,6 @@
         <button class="sidebar-item" data-action="extension">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
             Extensión PJN
-        </button>
-        <button class="sidebar-item" data-action="limpiar-temp">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M5 5V3h6v2"/><path d="M4 5l.8 8h6.4l.8-8"/><path d="M6.5 8v3M9.5 8v3"/></svg>
-            Limpiar temp
         </button>
 
         <!-- User chip -->
@@ -214,6 +220,12 @@
                 Detener
             </button>
 
+            <!-- Guardar consola -->
+            <button class="btn btn-ghost" id="btnDownloadConsole" title="Guardar consola como .txt">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><path d="M8 3v7M5 7l3 3 3-3"/><path d="M3 13h10"/></svg>
+                Guardar
+            </button>
+
             <!-- Limpiar consola -->
             <button class="btn btn-ghost" id="btnClearConsole" title="Limpiar consola">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><path d="M2 13h12M5.5 13V8.5l-3-4h11l-3 4V13M6.5 5.5l3 3"/></svg>
@@ -238,12 +250,6 @@
                     title="Posicionar ventana a la derecha" style="display:none">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><rect x="1" y="2" width="14" height="12" rx="1"/><line x1="8" y1="2" x2="8" y2="14"/></svg>
                 Posicionar
-            </button>
-
-            <!-- Guardar consola -->
-            <button class="btn btn-ghost" id="btnDownloadConsole" title="Guardar consola como .txt">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><path d="M8 3v7M5 7l3 3 3-3"/><path d="M3 13h10"/></svg>
-                Guardar
             </button>
 
             <!-- Expandir consola (oculto por defecto) -->

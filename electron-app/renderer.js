@@ -308,6 +308,35 @@ function setupSidebar() {
 
     // User chip → abrir modal de cuenta
     document.getElementById('userChip')?.addEventListener('click', openCuentaModal);
+
+    // ===== TAB BUTTONS → misma acción que sidebar =====
+    const tabMap = {
+        'tabProcurar':  'procurar-hoy',
+        'tabInforme':   'informe',
+        'tabMonitor':   'monitor',
+        'tabDescargas': 'descargas',
+    };
+    const allTabs = document.querySelectorAll('.tab-btn');
+    Object.entries(tabMap).forEach(([tabId, action]) => {
+        document.getElementById(tabId)?.addEventListener('click', () => {
+            // Activar tab visualmente
+            allTabs.forEach(t => t.classList.remove('active'));
+            document.getElementById(tabId)?.classList.add('active');
+
+            // Sincronizar sidebar: marcar el item correspondiente
+            allItems.forEach(i => i.classList.remove('active'));
+            document.querySelector(`.sidebar-item[data-action="${action}"]`)?.classList.add('active');
+
+            // Actualizar botón principal de subtoolbar
+            if (btnMain && mainLabels[action]) {
+                btnMain.textContent = mainLabels[action];
+                btnMain.dataset.fn  = action;
+            }
+
+            // Ejecutar la misma acción que el sidebar
+            actions[action]?.();
+        });
+    });
 }
 
 // ============ USER CHIP (SIDEBAR) ============
@@ -999,44 +1028,54 @@ async function updateHeaderInfo() {
 
 async function updateHeaderUsage() {
     try {
-        const headerProgress = document.getElementById('headerProgress');
-        if (!headerProgress) return;
+        const textEl  = document.getElementById('topbarProgressText');
+        const trackEl = document.getElementById('topbarProgressTrack');
+        const fillEl  = document.getElementById('topbarProgressFill');
+        const pctEl   = document.getElementById('topbarProgressPct');
+        if (!textEl) return;
 
-        // Usar datos granulares de cuenta para mostrar total real de todos los subsistemas
+        // Ocultar barra de progreso — modo "uso"
+        if (trackEl) trackEl.style.display = 'none';
+        if (pctEl)   pctEl.style.display   = 'none';
+
         const result = await window.electronAPI.getAccount();
         if (result && result.success && result.account?.usage) {
             const u = result.account.usage;
-            // Sumar usos reales de todos los subsistemas
             const totalUsed = (u.proc?.used ?? 0) + (u.batch?.used ?? 0)
                             + (u.informe?.used ?? 0) + (u.monitor_novedades?.used ?? 0)
                             + (u.monitor_partes?.used ?? 0);
-            // Sumar límites efectivos (null = ilimitado → usar 0 en suma de límites si todos son null)
             const limits = [u.proc?.limit, u.batch?.limit, u.informe?.limit,
                             u.monitor_novedades?.limit, u.monitor_partes?.limit];
             const hasAnyLimit = limits.some(l => l !== null && l !== undefined);
             const totalLimit  = hasAnyLimit ? limits.reduce((a, l) => a + (l ?? 0), 0) : null;
-            headerProgress.textContent = totalLimit !== null
-                ? `${totalUsed}/${totalLimit} ejec`
+            textEl.textContent = totalLimit !== null
+                ? `${totalUsed} / ${totalLimit} ejec`
                 : `${totalUsed} ejec`;
         } else {
-            // Fallback a verifySession si getAccount falla
             const session = await window.electronAPI.verifySession();
             if (session?.success && session?.subscription) {
                 const { usageCount, usageLimit } = session.subscription;
-                headerProgress.textContent = `${usageCount}/${usageLimit} ejec`;
+                textEl.textContent = `${usageCount} / ${usageLimit} ejec`;
             } else {
-                headerProgress.textContent = '- ejec';
+                textEl.textContent = '- ejec';
             }
         }
-    } catch (_) {
-        // Si falla silenciosamente, dejar el valor anterior
-    }
+    } catch (_) {}
 }
 
 function updateHeaderProgress(progress) {
-    const headerProgress = document.getElementById('headerProgress');
-    if (progress.current !== undefined && progress.total !== undefined) {
-        headerProgress.textContent = `${progress.current}/${progress.total} exp`;
+    const textEl  = document.getElementById('topbarProgressText');
+    const trackEl = document.getElementById('topbarProgressTrack');
+    const fillEl  = document.getElementById('topbarProgressFill');
+    const pctEl   = document.getElementById('topbarProgressPct');
+    if (!textEl) return;
+
+    if (progress.current !== undefined && progress.total !== undefined && progress.total > 0) {
+        const pct = Math.round((progress.current / progress.total) * 100);
+        textEl.textContent  = `${progress.current} / ${progress.total} expedientes`;
+        if (trackEl) { trackEl.style.display = ''; }
+        if (fillEl)  { fillEl.style.width = `${pct}%`; }
+        if (pctEl)   { pctEl.style.display = ''; pctEl.textContent = `${pct}%`; }
     }
 }
 

@@ -212,15 +212,43 @@ body {
 }
 @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
 
-.topbar-counter {
-  font-size: 11px;
-  color: var(--text-2);
-  font-family: var(--font-mono);
+/* ── Topbar progress (reemplaza topbar-counter) ── */
+.topbar-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 3px 8px;
   background: var(--bg-base);
   border: 1px solid var(--border);
   border-radius: 12px;
   -webkit-app-region: no-drag;
+}
+.topbar-progress-text {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.topbar-progress-track {
+  width: 80px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.topbar-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.topbar-progress-pct {
+  font-size: 11px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .topbar-actions {
