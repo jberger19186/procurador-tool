@@ -129,7 +129,7 @@
     "publish": {
       "provider": "github",
       "owner": "jberger19186",
-      "repo": "procurador-scw",
+      "repo": "procurador-tool",
       "releaseType": "release"
     }
   }
