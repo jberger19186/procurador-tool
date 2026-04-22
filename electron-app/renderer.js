@@ -1037,13 +1037,13 @@ async function updateHeaderUsage() {
         function setUsageBar(used, limit) {
             if (limit !== null && limit > 0) {
                 const pct = Math.min(100, Math.round((used / limit) * 100));
-                textEl.textContent = `${used} / ${limit} expedientes`;
+                textEl.textContent = `${used} / ${limit} ejecuciones`;
                 if (trackEl) { trackEl.style.display = ''; }
                 if (fillEl)  { fillEl.style.width = `${pct}%`; }
                 if (pctEl)   { pctEl.style.display = ''; pctEl.textContent = `${pct}%`; }
             } else {
                 // Sin límite: solo texto, sin barra
-                textEl.textContent = `${used} expedientes`;
+                textEl.textContent = `${used} ejecuciones`;
                 if (trackEl) trackEl.style.display = 'none';
                 if (pctEl)   pctEl.style.display   = 'none';
             }
@@ -1066,7 +1066,7 @@ async function updateHeaderUsage() {
                 const { usageCount, usageLimit } = session.subscription;
                 setUsageBar(usageCount, usageLimit ?? null);
             } else {
-                textEl.textContent = '- expedientes';
+                textEl.textContent = '- ejecuciones';
                 if (trackEl) trackEl.style.display = 'none';
                 if (pctEl)   pctEl.style.display   = 'none';
             }
