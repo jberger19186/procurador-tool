@@ -123,16 +123,16 @@ function createLoginWindow() {
         width: 500,
         height: 700,
         resizable: false,
+        movable: true,
         center: true,
         frame: false,
         backgroundColor: '#f7f7f5',
         webPreferences: {
-            preload: path.join(__dirname, 'preload.js'), // ✅ Asegúrate que la ruta sea correcta
+            preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
-            contextIsolation: true, // ✅ Debe estar en true
-            sandbox: true
+            contextIsolation: true,
+            sandbox: false  // false permite que el preload cargue correctamente desde asar.unpacked
         },
-        icon: path.join(__dirname, 'build', 'icon.ico'),
         show: false
     });
 
