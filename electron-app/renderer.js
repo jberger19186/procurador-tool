@@ -168,6 +168,38 @@ function initializeButtons() {
     bind('btnWinClose', () => window.electronAPI.closeWindow());
     bind('btnHamburger',() => window.electronAPI.showAppMenu());
 
+    // ── Sidebar toggle (colapsar / expandir) ──
+    const mainLayout = document.querySelector('.main-layout');
+    const sidebar    = document.querySelector('.sidebar');
+
+    // Restaurar estado guardado
+    if (localStorage.getItem('sidebar-collapsed') === 'true') {
+        mainLayout?.classList.add('sidebar-collapsed');
+    }
+
+    document.getElementById('btnSidebarToggle')?.addEventListener('click', () => {
+        const collapsed = mainLayout?.classList.toggle('sidebar-collapsed');
+        localStorage.setItem('sidebar-collapsed', collapsed);
+        sidebar?.classList.remove('sidebar-peek');
+    });
+
+    // Hover-peek: al pasar el cursor por el botón toggle con sidebar colapsado
+    let peekLeaveTimer = null;
+    document.getElementById('btnSidebarToggle')?.addEventListener('mouseenter', () => {
+        if (mainLayout?.classList.contains('sidebar-collapsed')) {
+            clearTimeout(peekLeaveTimer);
+            sidebar?.classList.add('sidebar-peek');
+        }
+    });
+    sidebar?.addEventListener('mouseleave', () => {
+        peekLeaveTimer = setTimeout(() => {
+            sidebar?.classList.remove('sidebar-peek');
+        }, 200);
+    });
+    sidebar?.addEventListener('mouseenter', () => {
+        clearTimeout(peekLeaveTimer);
+    });
+
     // Botón detener en consola (subtoolbar)
     bind('btnStopProcess', stopProcess);
 

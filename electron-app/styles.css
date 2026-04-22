@@ -409,6 +409,42 @@ body {
 /* Window-positioned: ocultar sidebar */
 body.window-positioned .sidebar { display: none; }
 
+/* ── Sidebar colapsado ── */
+.sidebar {
+  transition: width 0.22s ease, min-width 0.22s ease,
+              padding 0.22s ease, opacity 0.18s ease,
+              border-color 0.22s ease;
+}
+.main-layout.sidebar-collapsed .sidebar {
+  width: 0;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  border-right-color: transparent;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ── Sidebar peek (hover cuando está colapsado) ── */
+.main-layout.sidebar-collapsed .sidebar.sidebar-peek {
+  position: absolute;
+  left: 0;
+  /* top = altura del topbar */
+  top: 40px;
+  bottom: 0;
+  width: 212px !important;
+  min-width: 212px !important;
+  padding: 10px 8px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  overflow-y: auto !important;
+  z-index: 200;
+  border-right: 1px solid var(--border) !important;
+  box-shadow: 4px 0 20px rgba(0,0,0,0.10);
+  border-right-color: var(--border) !important;
+}
+
 /* ================================================================
    CONTENT AREA
 ================================================================ */
