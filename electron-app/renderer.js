@@ -76,6 +76,21 @@ document.addEventListener('DOMContentLoaded', () => {
     addLog('info', 'Sistema iniciado correctamente ✅');
 });
 
+// ============ ACCIONES DEL MENÚ NATIVO ============
+if (window.electronAPI?.onMenuAction) {
+    window.electronAPI.onMenuAction((action) => {
+        switch (action) {
+            case 'run-process':       runProcess();           break;
+            case 'open-downloads':    openDownloadsFolder();  break;
+            case 'download-console':  downloadConsole();      break;
+            case 'clear-console':     clearConsole();         break;
+            case 'position-left':     positionWindowLeft();   break;
+            case 'open-support':      openCuentaModal();      break;
+            case 'open-stats':        openModal('modalStats');break;
+        }
+    });
+}
+
 // ============ TOUR POST-WIZARD ============
 if (window.electronAPI?.onShowTour) {
     window.electronAPI.onShowTour(() => {
@@ -146,6 +161,12 @@ function initializeButtons() {
         const el = document.getElementById(id);
         if (el) el.addEventListener('click', fn);
     }
+
+    // Controles de ventana (frameless)
+    bind('btnWinMin',   () => window.electronAPI.minimizeWindow());
+    bind('btnWinMax',   () => window.electronAPI.maximizeWindow());
+    bind('btnWinClose', () => window.electronAPI.closeWindow());
+    bind('btnHamburger',() => window.electronAPI.showAppMenu());
 
     // Botón detener en consola (subtoolbar)
     bind('btnStopProcess', stopProcess);

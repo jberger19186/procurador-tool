@@ -39,15 +39,18 @@
 </div>
 
 <!-- ================================================================
-     TOPBAR
+     TOPBAR (frameless — -webkit-app-region: drag en CSS)
 ================================================================ -->
 <div class="topbar">
-    <!-- Dots macOS (decorativos) -->
-    <div class="window-controls">
-        <div class="wc-dot close"></div>
-        <div class="wc-dot min"></div>
-        <div class="wc-dot max"></div>
-    </div>
+
+    <!-- Hamburger — menú Archivo/Editar/Ver/Ventana/Ayuda -->
+    <button class="hamburger-btn" id="btnHamburger" title="Menú">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <rect x="1" y="3.5"  width="14" height="1.5" rx="0.75"/>
+            <rect x="1" y="7.25" width="14" height="1.5" rx="0.75"/>
+            <rect x="1" y="11"   width="14" height="1.5" rx="0.75"/>
+        </svg>
+    </button>
 
     <!-- Logo -->
     <div class="logo-area">
@@ -56,12 +59,24 @@
         <span class="logo-version" id="appVersionBadge">v2.0.0</span>
     </div>
 
-    <!-- Tabs de navegación (sincronizan con sidebar) -->
+    <!-- Tabs de navegación -->
     <nav class="tab-nav">
-        <button class="tab-btn active" id="tabProcurar">▶ Procurar</button>
-        <button class="tab-btn" id="tabInforme">📄 Informe</button>
-        <button class="tab-btn" id="tabMonitor">🔍 Monitor</button>
-        <button class="tab-btn" id="tabDescargas">📁 Descargas</button>
+        <button class="tab-btn active" id="tabProcurar">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+            Procurar
+        </button>
+        <button class="tab-btn" id="tabInforme">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h6l4 4v8H4V2z"/><path d="M10 2v4h4"/><path d="M6 8h5M6 11h3"/></svg>
+            Informe
+        </button>
+        <button class="tab-btn" id="tabMonitor">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5V5M8 11v2.5M2.5 8H5M11 8h2.5"/></svg>
+            Monitor
+        </button>
+        <button class="tab-btn" id="tabDescargas">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v7M5 7l3 3 3-3"/><path d="M3 13h10"/></svg>
+            Descargas
+        </button>
     </nav>
 
     <div class="topbar-spacer"></div>
@@ -75,11 +90,24 @@
     <!-- Contador de ejecuciones -->
     <span class="topbar-counter" id="headerProgress">0 ejec</span>
 
-    <!-- Iconos acción -->
-    <div class="topbar-actions">
-        <button class="icon-btn" id="btnOpenConfig" title="Configuración">⚙️</button>
-        <button class="icon-btn" id="btnOpenStats" title="Estadísticas">📈</button>
-        <button class="icon-btn" id="btnOpenCuenta" title="Mi Cuenta">👤</button>
+    <!-- Controles de ventana (min / max / close) -->
+    <div class="win-controls">
+        <button class="win-btn win-btn-min" id="btnWinMin" title="Minimizar">
+            <svg width="10" height="1" viewBox="0 0 10 1">
+                <line x1="0" y1="0.5" x2="10" y2="0.5" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+        </button>
+        <button class="win-btn win-btn-max" id="btnWinMax" title="Maximizar">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="0.75" y="0.75" width="8.5" height="8.5"/>
+            </svg>
+        </button>
+        <button class="win-btn win-btn-close" id="btnWinClose" title="Cerrar">
+            <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5">
+                <line x1="0.5" y1="0.5" x2="9.5" y2="9.5"/>
+                <line x1="9.5" y1="0.5" x2="0.5" y2="9.5"/>
+            </svg>
+        </button>
     </div>
 </div>
 
@@ -94,19 +122,24 @@
         <div class="sidebar-label">Acciones</div>
 
         <button class="sidebar-item active" data-action="procurar-hoy">
-            ▶ Procurar hoy
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><polygon points="6.5,5.5 12,8 6.5,10.5" fill="currentColor" stroke="none"/></svg>
+            Procurar hoy
         </button>
         <button class="sidebar-item" data-action="procurar-fecha">
-            📅 Por fecha
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V2M11 4V2M2 7h12"/></svg>
+            Por fecha
         </button>
         <button class="sidebar-item" data-action="procurar-lote">
-            📁 Por lote
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h7M2 8.5h5M2 12h7"/><circle cx="12" cy="10" r="2.5"/><path d="M12 8.5v3M10.5 10h3"/></svg>
+            Por lote
         </button>
         <button class="sidebar-item" data-action="informe">
-            📄 Informe
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h6l4 4v8H4V2z"/><path d="M10 2v4h4"/><path d="M6 8h5M6 11h3"/></svg>
+            Informe
         </button>
         <button class="sidebar-item" data-action="monitor">
-            🔍 Monitor
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/></svg>
+            Monitor
             <span id="badge-novedades" class="badge-novedad" style="display:none">0</span>
         </button>
 
@@ -116,16 +149,20 @@
         <div class="sidebar-label">Historial</div>
 
         <button class="sidebar-item" data-action="visor">
-            👁 Ver resultados
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>
+            Ver resultados
         </button>
         <button class="sidebar-item" data-action="excel">
-            📊 Ver Excel
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 6h12M2 10h12M7 2v12"/></svg>
+            Ver Excel
         </button>
         <button class="sidebar-item" data-action="descargas">
-            📁 Abrir descargas
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h3.5l1.5-2H14v9H2V5z"/></svg>
+            Abrir descargas
         </button>
         <button class="sidebar-item" data-action="estadisticas">
-            📈 Estadísticas
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12V8M7 12V5M11 12V3"/></svg>
+            Estadísticas
         </button>
 
         <div class="sidebar-divider"></div>
@@ -134,13 +171,16 @@
         <div class="sidebar-label">Sistema</div>
 
         <button class="sidebar-item" data-action="configuracion">
-            ⚙️ Configuración
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.5 3.5l1 1M11.5 11.5l1 1M12.5 3.5l-1 1M4.5 11.5l-1 1"/></svg>
+            Configuración
         </button>
         <button class="sidebar-item" data-action="extension">
-            🧩 Extensión PJN
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+            Extensión PJN
         </button>
         <button class="sidebar-item" data-action="limpiar-temp">
-            🗂️ Limpiar temp
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h10M5 5V3h6v2"/><path d="M4 5l.8 8h6.4l.8-8"/><path d="M6.5 8v3M9.5 8v3"/></svg>
+            Limpiar temp
         </button>
 
         <!-- User chip -->
@@ -164,17 +204,20 @@
 
             <!-- Botón principal dinámico -->
             <button class="btn btn-primary" id="btnMainAction" data-fn="procurar-hoy">
-                ▶ Procurar hoy
+                <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><polygon points="4,2 14,8 4,14"/></svg>
+                Procurar hoy
             </button>
 
             <!-- Detener -->
             <button class="btn btn-ghost" id="btnStopProcess" title="Detener proceso">
-                ⏹ Detener
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>
+                Detener
             </button>
 
             <!-- Limpiar consola -->
             <button class="btn btn-ghost" id="btnClearConsole" title="Limpiar consola">
-                🧹 Limpiar
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><path d="M2 13h12M5.5 13V8.5l-3-4h11l-3 4V13M6.5 5.5l3 3"/></svg>
+                Limpiar
             </button>
 
             <div class="subtoolbar-spacer"></div>
@@ -184,24 +227,30 @@
                    title="Mostrar/ocultar Chrome durante la automatización">
                 <input type="checkbox" id="browserToggle">
                 <span class="browser-toggle-slider"></span>
-                <span class="browser-toggle-label">👁 Navegador</span>
+                <span class="browser-toggle-label">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>
+                    Navegador
+                </span>
             </label>
 
             <!-- Posicionar ventana (oculto por defecto) -->
             <button class="btn btn-ghost" id="btnPositionLeft"
                     title="Posicionar ventana a la derecha" style="display:none">
-                ◧ Posicionar
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><rect x="1" y="2" width="14" height="12" rx="1"/><line x1="8" y1="2" x2="8" y2="14"/></svg>
+                Posicionar
             </button>
 
             <!-- Guardar consola -->
             <button class="btn btn-ghost" id="btnDownloadConsole" title="Guardar consola como .txt">
-                ⬇ Guardar
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><path d="M8 3v7M5 7l3 3 3-3"/><path d="M3 13h10"/></svg>
+                Guardar
             </button>
 
             <!-- Expandir consola (oculto por defecto) -->
             <button class="btn btn-ghost" id="btnExpandConsole"
                     title="Expandir consola" style="display:none">
-                ⬇ Contraer
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><path d="M4 6l4-4 4 4M4 10l4 4 4-4"/></svg>
+                Contraer
             </button>
         </div>
 

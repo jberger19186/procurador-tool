@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, ipcMain, clipboard, safeStorage } = require('electron');
+﻿const { app, BrowserWindow, Menu, ipcMain, clipboard, safeStorage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { fork } = require('child_process');
@@ -158,6 +158,7 @@ function createMainWindow() {
         height: 700,
         minWidth: 800,
         minHeight: 400,
+        frame: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -165,7 +166,7 @@ function createMainWindow() {
             sandbox: true
         },
         icon: path.join(__dirname, 'build', 'icon.ico'),
-        backgroundColor: '#111827',
+        backgroundColor: '#f7f7f5',
         show: false,
         center: true,
         resizable: true
@@ -1400,6 +1401,73 @@ ipcMain.handle('get-stats', async () => {
     } catch (error) {
         return { success: false, error: error.message };
     }
+});
+
+// ============ WINDOW CONTROLS (frame: false) ============
+ipcMain.handle('window-minimize', () => { mainWindow?.minimize(); });
+ipcMain.handle('window-maximize', () => {
+    if (!mainWindow) return;
+    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+});
+ipcMain.handle('window-close', () => { mainWindow?.close(); });
+
+ipcMain.handle('show-app-menu', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const template = [
+        {
+            label: 'Archivo',
+            submenu: [
+                { label: 'Nueva procuración',  click: () => win?.webContents.send('menu-action', 'run-process') },
+                { type: 'separator' },
+                { label: 'Abrir descargas',    click: () => win?.webContents.send('menu-action', 'open-downloads') },
+                { label: 'Exportar consola',   click: () => win?.webContents.send('menu-action', 'download-console') },
+                { type: 'separator' },
+                { label: 'Salir',              role: 'quit' }
+            ]
+        },
+        {
+            label: 'Editar',
+            submenu: [
+                { role: 'copy',      label: 'Copiar' },
+                { role: 'selectAll', label: 'Seleccionar todo' },
+                { type: 'separator' },
+                { label: 'Limpiar consola', click: () => win?.webContents.send('menu-action', 'clear-console') }
+            ]
+        },
+        {
+            label: 'Ver',
+            submenu: [
+                { role: 'reload',         label: 'Recargar' },
+                { role: 'toggleDevTools', label: 'Herramientas de desarrollo' },
+                { type: 'separator' },
+                { role: 'resetZoom',   label: 'Zoom normal' },
+                { role: 'zoomIn',      label: 'Acercar' },
+                { role: 'zoomOut',     label: 'Alejar' },
+                { type: 'separator' },
+                { role: 'togglefullscreen', label: 'Pantalla completa' }
+            ]
+        },
+        {
+            label: 'Ventana',
+            submenu: [
+                { label: 'Minimizar',           click: () => mainWindow?.minimize() },
+                { label: 'Maximizar/Restaurar', click: () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize() },
+                { type: 'separator' },
+                { label: 'Posicionar a la derecha', click: () => win?.webContents.send('menu-action', 'position-left') }
+            ]
+        },
+        {
+            label: 'Ayuda',
+            submenu: [
+                { label: 'Mi cuenta / Soporte', click: () => win?.webContents.send('menu-action', 'open-support') },
+                { label: 'Estadísticas',        click: () => win?.webContents.send('menu-action', 'open-stats') },
+                { type: 'separator' },
+                { label: 'Acerca de Procurador SCW', role: 'about' }
+            ]
+        }
+    ];
+    const menu = Menu.buildFromTemplate(template);
+    menu.popup({ window: win });
 });
 
 ipcMain.handle('resize-window', async (event, width, height) => {
