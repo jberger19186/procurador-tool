@@ -279,13 +279,32 @@ function setupSidebar() {
     const allItems = document.querySelectorAll('.sidebar-item[data-action]');
     const btnMain  = document.getElementById('btnMainAction');
 
+    // Mapa acción → tab correspondiente
+    const actionToTab = {
+        'procurar-hoy':   'tabProcurar',
+        'procurar-fecha': 'tabProcurar',
+        'procurar-lote':  'tabProcurar',
+        'informe':        'tabInforme',
+        'monitor':        'tabMonitor',
+        'descargas':      'tabDescargas',
+    };
+    const allTabs = document.querySelectorAll('.tab-btn');
+
+    function activateTab(tabId) {
+        allTabs.forEach(t => t.classList.remove('active'));
+        if (tabId) document.getElementById(tabId)?.classList.add('active');
+    }
+
     allItems.forEach(item => {
         item.addEventListener('click', () => {
             const action = item.dataset.action;
 
-            // Marcar activo
+            // Marcar activo en sidebar
             allItems.forEach(i => i.classList.remove('active'));
             item.classList.add('active');
+
+            // Sincronizar tab activo
+            activateTab(actionToTab[action] ?? null);
 
             // Actualizar botón principal de subtoolbar
             if (btnMain && mainLabels[action]) {
@@ -316,12 +335,10 @@ function setupSidebar() {
         'tabMonitor':   'monitor',
         'tabDescargas': 'descargas',
     };
-    const allTabs = document.querySelectorAll('.tab-btn');
     Object.entries(tabMap).forEach(([tabId, action]) => {
         document.getElementById(tabId)?.addEventListener('click', () => {
             // Activar tab visualmente
-            allTabs.forEach(t => t.classList.remove('active'));
-            document.getElementById(tabId)?.classList.add('active');
+            activateTab(tabId);
 
             // Sincronizar sidebar: marcar el item correspondiente
             allItems.forEach(i => i.classList.remove('active'));
