@@ -5,14 +5,19 @@ let consoleExpanded = false;
 let isWindowPositioned = false;
 
 // Helper: aplica/quita el modo ventana-posicionada
-// - Oculta status pill y contador (liberando espacio para los controles de ventana)
-// - Auto-colapsa el sidebar al posicionar; al restaurar deja el estado que tenía
+// - Auto-colapsa el sidebar INSTANTÁNEAMENTE antes de que la ventana se redimensione
+//   para que content-area ya tenga el ancho completo cuando el resize llega
+// - Al restaurar, recupera el estado previo del sidebar
 function setPositioned(on) {
-    const ml = document.querySelector('.main-layout');
+    const ml       = document.querySelector('.main-layout');
+    const sidebar  = document.querySelector('.sidebar');
     if (on) {
-        document.body.classList.add('window-positioned');
-        // Colapsar sidebar para que el toggle siga funcionando normalmente
+        // Colapsar sidebar sin animación (transición desactivada temporalmente)
+        if (sidebar) sidebar.style.transition = 'none';
         ml?.classList.add('sidebar-collapsed');
+        document.body.classList.add('window-positioned');
+        // Restaurar transición en el siguiente frame
+        requestAnimationFrame(() => { if (sidebar) sidebar.style.transition = ''; });
     } else {
         document.body.classList.remove('window-positioned');
         // Restaurar estado del sidebar desde localStorage
@@ -700,8 +705,8 @@ async function runProcess() {
         // Auto-posicionar solo cuando headless está OFF (con headless ON lo maneja el toggle)
         if (!currentConfig?.seguridad?.modoHeadless && !isWindowPositioned) {
             addLog('info', '📐 Posicionando ventana a la derecha...');
+            setPositioned(true);                              // colapsar sidebar ANTES del resize
             await window.electronAPI.positionLeft();
-            setPositioned(true);
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
         }
@@ -750,8 +755,8 @@ async function runProcessCustomDate() {
     try {
         if (!currentConfig?.seguridad?.modoHeadless && !isWindowPositioned) {
             addLog('info', '📐 Posicionando ventana a la derecha...');
-            await window.electronAPI.positionLeft();
             setPositioned(true);
+            await window.electronAPI.positionLeft();
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
         }
@@ -1475,8 +1480,8 @@ async function toggleBrowserVisibility(show) {
         if (show) {
             // Chrome visible → Electron a la derecha (mitad)
             if (!isWindowPositioned) {
-                await window.electronAPI.positionLeft();
                 setPositioned(true);
+                await window.electronAPI.positionLeft();
                 if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
             }
         } else {
@@ -2062,8 +2067,8 @@ async function positionWindowLeft() {
             btn.title = 'Posicionar ventana a la derecha';
         } else {
             // Posicionar
-            await window.electronAPI.positionLeft();
             setPositioned(true);
+            await window.electronAPI.positionLeft();
             addLog('info', '📐 Ventana posicionada a la derecha');
             showNotification('Ventana posicionada correctamente', 'success');
             btn.textContent = '◨ Restaurar';
@@ -2297,8 +2302,8 @@ async function runProcurarCustom(lines, fechaLimite) {
     try {
         if (!currentConfig?.seguridad?.modoHeadless && !isWindowPositioned) {
             addLog('info', '📐 Posicionando ventana a la derecha...');
-            await window.electronAPI.positionLeft();
             setPositioned(true);
+            await window.electronAPI.positionLeft();
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
         }
@@ -2917,8 +2922,8 @@ async function runMonitoreo(modo, partes) {
     try {
         if (!currentConfig?.seguridad?.modoHeadless && !isWindowPositioned) {
             addLog('info', 'Posicionando ventana a la derecha...');
-            await window.electronAPI.positionLeft();
             setPositioned(true);
+            await window.electronAPI.positionLeft();
             const btn = document.getElementById('btnPositionLeft');
             if (btn) { btn.textContent = 'Restaurar'; btn.title = 'Restaurar ventana al centro'; }
         }

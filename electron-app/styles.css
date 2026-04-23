@@ -407,10 +407,17 @@ body {
   color: var(--text-3);
 }
 
-/* Window-positioned: ocultar elementos no esenciales del topbar para que
-   los controles de ventana siempre queden visibles */
-body.window-positioned .status-pill   { display: none; }
-body.window-positioned .topbar-progress { display: none; }
+/* ── Barra de estado secundaria (debajo del topbar) ── */
+.app-statusbar {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
 
 /* ── Sidebar colapsado ── */
 .sidebar {

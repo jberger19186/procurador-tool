@@ -89,21 +89,6 @@
 
     <div class="topbar-spacer"></div>
 
-    <!-- Status -->
-    <div class="status-pill" id="statusIndicator">
-        <div class="status-dot"></div>
-        <span class="status-text">Inactivo</span>
-    </div>
-
-    <!-- Contador / barra de progreso (estilo propuesta) -->
-    <div class="topbar-progress" id="topbarProgress">
-        <span class="topbar-progress-text" id="topbarProgressText">0 ejec</span>
-        <div class="topbar-progress-track" id="topbarProgressTrack" style="display:none">
-            <div class="topbar-progress-fill" id="topbarProgressFill"></div>
-        </div>
-        <span class="topbar-progress-pct" id="topbarProgressPct" style="display:none">0%</span>
-    </div>
-
     <!-- Controles de ventana (min / max / close) -->
     <div class="win-controls">
         <button class="win-btn win-btn-min" id="btnWinMin" title="Minimizar">
@@ -122,6 +107,23 @@
                 <line x1="9.5" y1="0.5" x2="0.5" y2="9.5"/>
             </svg>
         </button>
+    </div>
+</div>
+
+<!-- ================================================================
+     STATUSBAR (siempre visible, debajo del topbar)
+================================================================ -->
+<div class="app-statusbar">
+    <div class="status-pill" id="statusIndicator">
+        <div class="status-dot"></div>
+        <span class="status-text">Inactivo</span>
+    </div>
+    <div class="topbar-progress" id="topbarProgress">
+        <span class="topbar-progress-text" id="topbarProgressText">0 ejec</span>
+        <div class="topbar-progress-track" id="topbarProgressTrack" style="display:none">
+            <div class="topbar-progress-fill" id="topbarProgressFill"></div>
+        </div>
+        <span class="topbar-progress-pct" id="topbarProgressPct" style="display:none">0%</span>
     </div>
 </div>
 
