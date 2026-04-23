@@ -1532,7 +1532,9 @@ ipcMain.handle('position-left', async () => {
             // frameless con thickFrame invisible queda con el contenido recortado
             // cuando el borde derecho coincide exactamente con el edge de pantalla.
             // 40px ≈ 1.5× ancho del botón cerrar → siempre visible.
-            const rightMargin = 40;
+            // 52px = 2× ancho del botón cerrar (26px) — la ventana no llega
+            // al borde derecho de pantalla y los win-controls quedan visibles.
+            const rightMargin = 52;
             mainWindow.setBounds({
                 x: x + halfWidth,
                 y,

@@ -1,6 +1,6 @@
 {
   "name": "procurador-electron",
-  "version": "2.2.8",
+  "version": "2.2.9",
   "description": "Sistema de Automatización de Consultas SCW PJN - Versión Protegida",
   "main": "main.js",
   "scripts": {

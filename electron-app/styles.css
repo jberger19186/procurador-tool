@@ -190,71 +190,6 @@ body {
 
 .topbar-spacer { flex: 1; }
 
-/* Status pill */
-.status-pill {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  background: var(--success-bg);
-  border: 1px solid rgba(5,150,105,0.2);
-  color: var(--success);
-  font-size: 11.5px;
-  font-weight: 500;
-  transition: all 0.2s;
-  -webkit-app-region: no-drag;
-}
-.status-pill.running {
-  background: var(--warning-bg);
-  border-color: rgba(217,119,6,0.25);
-  color: #92400e;
-}
-.status-pill .status-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: pulse 2s infinite;
-}
-@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
-
-/* ── Topbar progress (reemplaza topbar-counter) ── */
-.topbar-progress {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  background: var(--bg-base);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  -webkit-app-region: no-drag;
-}
-.topbar-progress-text {
-  font-size: 11px;
-  color: var(--text-2);
-  font-family: var(--font-mono);
-  white-space: nowrap;
-}
-.topbar-progress-track {
-  width: 80px;
-  height: 4px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.topbar-progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-.topbar-progress-pct {
-  font-size: 11px;
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .topbar-actions {
   display: flex; gap: 2px;
   -webkit-app-region: no-drag;
@@ -410,33 +345,6 @@ body {
   color: var(--text-3);
 }
 
-/* ── Slot de estado en topbar ── */
-.topbar-status-slot {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;        /* puede ceder si la ventana se hace angosta */
-  overflow: hidden;    /* no empuja a los win-controls */
-  -webkit-app-region: no-drag;
-}
-
-/* ── Barra de estado secundaria (solo cuando la ventana está posicionada) ── */
-.app-statusbar {
-  display: none;
-  height: 30px;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-body.window-positioned .app-statusbar {
-  display: flex;
-}
-body.window-positioned .topbar-status-slot {
-  display: none;
-}
 
 /* ── Sidebar colapsado ── */
 .sidebar {

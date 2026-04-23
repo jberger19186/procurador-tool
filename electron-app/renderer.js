@@ -9,32 +9,16 @@ let isWindowPositioned = false;
 //   para que content-area ya tenga el ancho completo cuando el resize llega
 // - Al restaurar, recupera el estado previo del sidebar
 function setPositioned(on) {
-    const ml        = document.querySelector('.main-layout');
-    const sidebar   = document.querySelector('.sidebar');
-    const pill      = document.getElementById('statusIndicator');
-    const progress  = document.getElementById('topbarProgress');
-    const slot      = document.getElementById('topbarStatusSlot');
-    const statusbar = document.getElementById('appStatusbar');
+    const ml      = document.querySelector('.main-layout');
+    const sidebar = document.querySelector('.sidebar');
     if (on) {
-        // Mover pildora y contador debajo de los tabs (app-statusbar)
-        if (statusbar && pill && progress) {
-            statusbar.appendChild(pill);
-            statusbar.appendChild(progress);
-        }
         // Colapsar sidebar sin animación (transición desactivada temporalmente)
         if (sidebar) sidebar.style.transition = 'none';
         ml?.classList.add('sidebar-collapsed');
         document.body.classList.add('window-positioned');
-        // Restaurar transición en el siguiente frame
         requestAnimationFrame(() => { if (sidebar) sidebar.style.transition = ''; });
     } else {
-        // Restaurar pildora y contador al slot del topbar
-        if (slot && pill && progress) {
-            slot.appendChild(pill);
-            slot.appendChild(progress);
-        }
         document.body.classList.remove('window-positioned');
-        // Restaurar estado del sidebar desde localStorage
         const wasCollapsed = localStorage.getItem('sidebar-collapsed') === '1';
         ml?.classList.toggle('sidebar-collapsed', wasCollapsed);
     }
@@ -1060,10 +1044,7 @@ function setupProcessListeners() {
     window.electronAPI.onProcessMessage((message) => {
         console.log('Process message:', message);
 
-        // Actualizar header info si hay progreso
-        if (message.progress) {
-            updateHeaderProgress(message.progress);
-        }
+        // (progreso de header eliminado)
 
         // Actualizar info de sesión si viene en el mensaje
         if (message.session) {
@@ -1148,8 +1129,6 @@ function setupProcessListeners() {
             showNotification('Proceso terminado con errores', 'error');
         }
 
-        // Actualizar contador de ejecuciones en el header (el backend ya lo incrementó)
-        updateHeaderUsage();
 
         // Verificar si se alcanzó el 80% de cuota después de la ejecución
         checkQuotaAlert();
@@ -1158,77 +1137,9 @@ function setupProcessListeners() {
 
 // ============ ACTUALIZAR HEADER ============
 async function updateHeaderInfo() {
-    // Actualizar info de sesión
     const headerSession = document.getElementById('headerSession');
     if (headerSession) {
         headerSession.textContent = 'Sesión: Activa';
-    }
-
-    // Obtener datos reales de uso desde el backend
-    await updateHeaderUsage();
-}
-
-async function updateHeaderUsage() {
-    try {
-        const textEl  = document.getElementById('topbarProgressText');
-        const trackEl = document.getElementById('topbarProgressTrack');
-        const fillEl  = document.getElementById('topbarProgressFill');
-        const pctEl   = document.getElementById('topbarProgressPct');
-        if (!textEl) return;
-
-        function setUsageBar(used, limit) {
-            if (limit !== null && limit > 0) {
-                const pct = Math.min(100, Math.round((used / limit) * 100));
-                textEl.textContent = `${used} / ${limit} ejecuciones`;
-                if (trackEl) { trackEl.style.display = ''; }
-                if (fillEl)  { fillEl.style.width = `${pct}%`; }
-                if (pctEl)   { pctEl.style.display = ''; pctEl.textContent = `${pct}%`; }
-            } else {
-                // Sin límite: solo texto, sin barra
-                textEl.textContent = `${used} ejecuciones`;
-                if (trackEl) trackEl.style.display = 'none';
-                if (pctEl)   pctEl.style.display   = 'none';
-            }
-        }
-
-        const result = await window.electronAPI.getAccount();
-        if (result && result.success && result.account?.usage) {
-            const u = result.account.usage;
-            const totalUsed = (u.proc?.used ?? 0) + (u.batch?.used ?? 0)
-                            + (u.informe?.used ?? 0) + (u.monitor_novedades?.used ?? 0)
-                            + (u.monitor_partes?.used ?? 0);
-            const limits = [u.proc?.limit, u.batch?.limit, u.informe?.limit,
-                            u.monitor_novedades?.limit, u.monitor_partes?.limit];
-            const hasAnyLimit = limits.some(l => l !== null && l !== undefined);
-            const totalLimit  = hasAnyLimit ? limits.reduce((a, l) => a + (l ?? 0), 0) : null;
-            setUsageBar(totalUsed, totalLimit);
-        } else {
-            const session = await window.electronAPI.verifySession();
-            if (session?.success && session?.subscription) {
-                const { usageCount, usageLimit } = session.subscription;
-                setUsageBar(usageCount, usageLimit ?? null);
-            } else {
-                textEl.textContent = '- ejecuciones';
-                if (trackEl) trackEl.style.display = 'none';
-                if (pctEl)   pctEl.style.display   = 'none';
-            }
-        }
-    } catch (_) {}
-}
-
-function updateHeaderProgress(progress) {
-    const textEl  = document.getElementById('topbarProgressText');
-    const trackEl = document.getElementById('topbarProgressTrack');
-    const fillEl  = document.getElementById('topbarProgressFill');
-    const pctEl   = document.getElementById('topbarProgressPct');
-    if (!textEl) return;
-
-    if (progress.current !== undefined && progress.total !== undefined && progress.total > 0) {
-        const pct = Math.round((progress.current / progress.total) * 100);
-        textEl.textContent  = `${progress.current} / ${progress.total} expedientes`;
-        if (trackEl) { trackEl.style.display = ''; }
-        if (fillEl)  { fillEl.style.width = `${pct}%`; }
-        if (pctEl)   { pctEl.style.display = ''; pctEl.textContent = `${pct}%`; }
     }
 }
 
@@ -1236,17 +1147,11 @@ function updateHeaderProgress(progress) {
 function setProcessRunning(running) {
     isProcessRunning = running;
 
-    const statusIndicator = document.getElementById('statusIndicator');
-
-    const toggleInput  = document.getElementById('browserToggle');
+    const toggleInput = document.getElementById('browserToggle');
 
     if (running) {
-        statusIndicator.classList.add('running');
-        statusIndicator.querySelector('.status-text').textContent = 'Ejecutando';
         if (toggleInput) toggleInput.checked = false;
     } else {
-        statusIndicator.classList.remove('running');
-        statusIndicator.querySelector('.status-text').textContent = 'Inactivo';
         updateStatusBar('Inactivo', '');
         // Si el toggle estaba ON al terminar, restaurar ventana Electron
         if (toggleInput?.checked) {
