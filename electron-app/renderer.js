@@ -279,12 +279,7 @@ function initializeButtons() {
     // Seguridad — botones dentro del modal de configuración
     bind('btnAbrirNavegador',    abrirNavegadorPJN);
     bind('btnAgregarPasswordSCW', agregarPasswordSCW);
-    // Extensión: abre Chrome Web Store directamente
-    bind('btnInstalarExtension', () => {
-        window.electronAPI.openExternalUrl(
-            'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme'
-        );
-    });
+    // btnInstalarExtension usa onclick inline en el HTML
 
     // Relanzar wizard de configuración inicial
     bind('btnRelanzarWizard', async () => {
@@ -2904,8 +2899,6 @@ function _aplicarEstadoToggleExt(habilitada) {
 async function iniciarToggleExtension() {
     const habilitada = await window.electronAPI.getExtensionEnabled();
     _aplicarEstadoToggleExt(habilitada);
-    if (habilitada) verificarVersionExtension();
-
     const chk = document.getElementById('toggleExtConfig');
     if (chk && !chk._extListenerAdded) {
         chk._extListenerAdded = true;
@@ -2913,30 +2906,7 @@ async function iniciarToggleExtension() {
             const val = chk.checked;
             _aplicarEstadoToggleExt(val);
             await window.electronAPI.setExtensionEnabled(val);
-            if (val) verificarVersionExtension();
         });
-    }
-}
-
-async function verificarVersionExtension() {
-    const statusEl = document.getElementById('extVersionStatus');
-    if (!statusEl) return;
-    statusEl.textContent = 'Verificando versión instalada...';
-    statusEl.style.color = 'var(--text-3)';
-    try {
-        const r = await window.electronAPI.checkExtensionVersion();
-        if (!r.localVersion) {
-            statusEl.innerHTML = 'Extensión no instalada — usá el botón para instalarla desde el store.';
-            statusEl.style.color = 'var(--text-3)';
-        } else if (r.needsUpdate) {
-            statusEl.innerHTML = `⚠️ Nueva versión disponible: <strong>v${r.serverVersion}</strong> (instalada: v${r.localVersion}). Reinstalá desde el store.`;
-            statusEl.style.color = 'var(--warning)';
-        } else {
-            statusEl.innerHTML = `✅ Extensión v${r.localVersion} instalada y actualizada.`;
-            statusEl.style.color = 'var(--success)';
-        }
-    } catch (_) {
-        statusEl.textContent = '';
     }
 }
 
