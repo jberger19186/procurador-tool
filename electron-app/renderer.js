@@ -279,26 +279,11 @@ function initializeButtons() {
     // Seguridad — botones dentro del modal de configuración
     bind('btnAbrirNavegador',    abrirNavegadorPJN);
     bind('btnAgregarPasswordSCW', agregarPasswordSCW);
-    bind('btnInstalarExtension', descargarExtension);
-    bind('btnGenerarPdfExt', () => generarPdfExtension());
-    bind('btnAbrirChromeExt', async () => {
-        await window.electronAPI.openChromeExtensions();
-        const msg = document.getElementById('msgAbrirChromeExt');
-        if (msg) msg.style.display = 'block';
-    });
-    document.getElementById('btnTooltipExtConfig')?.addEventListener('click', () => {
-        const t = document.getElementById('tooltipExtConfig');
-        if (t) t.style.display = t.style.display === 'none' ? 'block' : 'none';
-    });
-
-    // Copiar ruta al portapapeles al hacer clic en el box
-    document.getElementById('extPathBox')?.addEventListener('click', () => copiarRutaExtension());
-
-    // Copiar chrome://extensions al portapapeles
-    document.getElementById('extChromeExtBox')?.addEventListener('click', () => {
-        window.electronAPI.copyToClipboard('chrome://extensions');
-        const m = document.getElementById('extChromeExtCopyMsg');
-        if (m) { m.style.display = 'inline'; setTimeout(() => m.style.display = 'none', 2000); }
+    // Extensión: abre Chrome Web Store directamente
+    bind('btnInstalarExtension', () => {
+        window.electronAPI.openExternalUrl(
+            'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme'
+        );
     });
 
     // Relanzar wizard de configuración inicial
@@ -2935,116 +2920,24 @@ async function iniciarToggleExtension() {
 
 async function verificarVersionExtension() {
     const statusEl = document.getElementById('extVersionStatus');
-    const btnEl    = document.getElementById('btnInstalarExtension');
     if (!statusEl) return;
-    statusEl.textContent = 'Verificando versión...';
-    statusEl.style.color = '#94a3b8';
+    statusEl.textContent = 'Verificando versión instalada...';
+    statusEl.style.color = 'var(--text-3)';
     try {
         const r = await window.electronAPI.checkExtensionVersion();
         if (!r.localVersion) {
-            statusEl.innerHTML = '❌ Extensión no descargada';
-            statusEl.style.color = '#dc2626';
-            btnEl.textContent = '🧩 Descargar extensión';
+            statusEl.innerHTML = 'Extensión no instalada — usá el botón para instalarla desde el store.';
+            statusEl.style.color = 'var(--text-3)';
         } else if (r.needsUpdate) {
-            statusEl.innerHTML = `⚠️ Nueva versión disponible: <strong>v${r.serverVersion}</strong> (instalada: v${r.localVersion})`;
-            statusEl.style.color = '#d97706';
-            btnEl.textContent = '⬇️ Actualizar extensión';
+            statusEl.innerHTML = `⚠️ Nueva versión disponible: <strong>v${r.serverVersion}</strong> (instalada: v${r.localVersion}). Reinstalá desde el store.`;
+            statusEl.style.color = 'var(--warning)';
         } else {
-            statusEl.innerHTML = `✅ Extensión v${r.localVersion} — Instalada y actualizada`;
-            statusEl.style.color = '#16a34a';
-            btnEl.textContent = '🧩 Descargar extensión';
-        }
-        // Restaurar ruta si la extensión ya está instalada
-        if (r.localPath) {
-            const pathEl = document.getElementById('extPathText');
-            const result = document.getElementById('extDownloadResult');
-            if (pathEl) pathEl.textContent = r.localPath;
-            if (result) result.style.display = 'block';
+            statusEl.innerHTML = `✅ Extensión v${r.localVersion} instalada y actualizada.`;
+            statusEl.style.color = 'var(--success)';
         }
     } catch (_) {
-        statusEl.textContent = 'No se pudo verificar la versión';
-        statusEl.style.color = '#94a3b8';
+        statusEl.textContent = '';
     }
-}
-
-async function descargarExtension() {
-    const btn    = document.getElementById('btnInstalarExtension');
-    const result = document.getElementById('extDownloadResult');
-    const pathEl = document.getElementById('extPathText');
-    btn.disabled = true;
-    btn.textContent = '⏳ Descargando...';
-    document.getElementById('extDownloadResult').style.display = 'none';
-    try {
-        const r = await window.electronAPI.installExtension();
-        if (!r.success) {
-            btn.textContent = '🧩 Descargar extensión';
-            btn.disabled = false;
-            addLog('error', '❌ Error al descargar extensión: ' + (r.error || 'Error desconocido'));
-            return;
-        }
-        _extDownloadData = { path: r.path, version: r.version };
-        pathEl.textContent = r.path;
-        result.style.display = 'block';
-        // Auto-copiar al portapapeles
-        try { await navigator.clipboard.writeText(r.path); mostrarMsgCopia(); } catch (_) {}
-        btn.textContent = r.isNew ? '✅ Extensión descargada' : '✅ Ya actualizada';
-        // Mostrar nota de actualización si había update pendiente
-        if (r.isNew) {
-            addLog('info', `✅ Extensión v${r.version} descargada en ${r.path}`);
-        }
-        verificarVersionExtension();
-        setTimeout(() => {
-            btn.textContent = '🧩 Descargar extensión';
-            btn.disabled = false;
-        }, 10000);
-    } catch (err) {
-        btn.textContent = '🧩 Descargar extensión';
-        btn.disabled = false;
-        addLog('error', '❌ Error: ' + err.message);
-    }
-}
-
-function copiarRutaExtension() {
-    const text = document.getElementById('extPathText')?.textContent;
-    if (text) {
-        navigator.clipboard.writeText(text).then(() => mostrarMsgCopia()).catch(() => {});
-    }
-}
-
-function mostrarMsgCopia() {
-    const msg = document.getElementById('extCopyMsg');
-    if (!msg) return;
-    msg.style.display = 'block';
-    setTimeout(() => { msg.style.display = 'none'; }, 2500);
-}
-
-async function generarPdfExtension() {
-    if (!_extDownloadData) {
-        // Intentar leer de la versión local
-        const r = await window.electronAPI.checkExtensionVersion().catch(() => null);
-        if (r?.localVersion && r?.localPath) {
-            _extDownloadData = { path: r.localPath, version: r.localVersion };
-        } else {
-            addLog('warn', '⚠️ Primero descargá la extensión para generar el PDF');
-            return;
-        }
-    }
-    const btn = document.getElementById('btnGenerarPdfExt');
-    btn.disabled = true;
-    btn.textContent = '⏳ Generando PDF...';
-    try {
-        const r = await window.electronAPI.generateExtensionPdf(_extDownloadData);
-        if (r.success) {
-            btn.textContent = '✅ PDF generado — carpeta Descargas abierta';
-        } else {
-            btn.textContent = '📄 Descargar instrucciones en PDF';
-            addLog('error', '❌ Error generando PDF: ' + r.error);
-        }
-    } catch (err) {
-        btn.textContent = '📄 Descargar instrucciones en PDF';
-    }
-    btn.disabled = false;
-    setTimeout(() => { btn.textContent = '📄 Descargar instrucciones en PDF'; }, 5000);
 }
 
 // ============ HELPERS DE TEST (solo para DevTools) ============

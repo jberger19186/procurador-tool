@@ -521,12 +521,18 @@ function renderDownloads() {
             <div class="download-item-icon">🧩</div>
             <div class="download-item-info">
                 <div class="download-item-title">Extensión Chrome</div>
-                <div class="download-item-desc">ZIP para instalar manualmente en Chrome (modo desarrollador)</div>
+                <div class="download-item-desc">Disponible en la Chrome Web Store — instalación directa desde el navegador</div>
             </div>
             <div class="download-item-actions">
-                <button class="btn btn-primary btn-sm" onclick="downloadExtension()">⬇ Descargar</button>
-                <a class="btn btn-outline btn-sm" href="/descargar" target="_blank" rel="noopener">📋 Instrucciones</a>
+                <a class="btn btn-primary btn-sm"
+                   href="https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme"
+                   target="_blank" rel="noopener">🧩 Instalar desde Chrome Web Store</a>
             </div>
+        </div>
+        <div style="margin:4px 0 8px;padding:9px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;font-size:12px;color:#78350f;line-height:1.55">
+            <strong>⚠️ Chrome puede mostrar "Procede con cuidado":</strong>
+            es una advertencia estándar para extensiones del store oficial con pocos usuarios.
+            La extensión es segura — hacé clic en <strong>"Continuar a la instalación"</strong>.
         </div>`;
 
     const electronItem = hasElectron ? `
@@ -544,26 +550,6 @@ function renderDownloads() {
     container.innerHTML = `<div class="download-items">${extensionItem}${electronItem}</div>`;
 }
 
-async function downloadExtension() {
-    const btn = event.currentTarget;
-    btn.disabled = true;
-    btn.textContent = 'Descargando...';
-    try {
-        const res = await apiFetch('/api/extension/download');
-        if (!res || !res.ok) throw new Error('Error al descargar');
-        const blob = await res.blob();
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'procurador-extension.zip';
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    } catch (e) {
-        alert('Error al descargar la extensión. Intentá de nuevo.');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '⬇ Descargar';
-    }
-}
 
 async function downloadElectron() {
     const btn = event.currentTarget;

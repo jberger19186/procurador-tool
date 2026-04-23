@@ -4,76 +4,136 @@
  * Can also be triggered manually via window.startAppTour().
  */
 (function () {
-    const TOUR_KEY = 'psc_tour_shown';
+    const TOUR_KEY  = 'psc_tour_shown_v4';
+    const STORE_URL = 'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme';
 
+    // ─── Pasos del tour ───────────────────────────────────────────────────────
     const STEPS = [
         {
-            target: 'nav.topbar-tabs-inline',
-            title: 'Modos de operación',
-            text: 'Desde acá controlás todo: <strong>Procurar</strong> busca novedades en tus expedientes, <strong>Informe</strong> genera reportes en Excel/PDF y <strong>Monitor</strong> rastrea cambios automáticamente.',
+            target: null,   // sin spotlight → card centrada
+            title: '👋 Bienvenido a Procurador SCW',
+            text:  'Esta guía rápida te muestra las funciones principales. Podés navegar con <strong>← →</strong> del teclado o con los botones de abajo.',
         },
         {
-            target: '#btnRunProcess',
-            title: 'Ejecutar Procuración',
-            text: 'Presioná <strong>Procurar</strong> para iniciar la búsqueda de novedades. Usá la flecha ▾ para acceder a opciones como <em>Fecha Custom</em> o <em>Procurar Custom</em> con una lista de expedientes.',
+            target: '.tab-nav',
+            title: 'Navegación — tabs y menú lateral',
+            text:  'Los tabs <strong>Procurar / Informe / Monitor / Descargas</strong> en la barra superior cambian la acción activa. También podés usar el menú lateral izquierdo — ambos están sincronizados.',
+            setup: expandSidebar,
         },
         {
-            target: '#btnInforme',
-            title: 'Generar Informe',
-            text: 'Genera un informe detallado en <strong>Excel o PDF</strong> para uno o varios expedientes. Podés usar un archivo .txt con la lista de causas para el modo batch.',
+            target: '[data-action="procurar-hoy"]',
+            title: 'Procurar — novedades en tus expedientes',
+            text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes. Podés procurar:<br><br>'
+                 + '• <strong>Hoy</strong> — movimientos del día<br>'
+                 + '• <strong>Por fecha</strong> — a partir de una fecha límite<br>'
+                 + '• <strong>Por lote</strong> — con un archivo .txt de causas',
+            setup: expandSidebar,
         },
         {
-            target: '#btnMonitor',
-            title: 'Monitorear',
-            text: 'El monitor rastrea cambios en tus expedientes y te avisa con <strong>notificaciones de Windows</strong> cuando hay novedades. Ideal para mantenerlo corriendo en segundo plano.',
+            target: '[data-action="informe"]',
+            title: 'Informe — reporte de una causa',
+            text:  'Genera un <strong>informe detallado</strong> de uno o varios expedientes: movimientos actuales e históricos, intervinientes, vinculados y recursos. Soporta modo batch con lista .txt.',
+            setup: expandSidebar,
+        },
+        {
+            target: '[data-action="monitor"]',
+            title: 'Monitor — seguimiento automático',
+            text:  'Rastrea <strong>partes o expedientes específicos</strong> y te notifica cuando aparecen novedades. Ideal para mantenerlo en segundo plano mientras trabajás en otra cosa.',
+            setup: expandSidebar,
+        },
+        {
+            target: '#btnMainAction',
+            title: 'Botón de acción principal',
+            text:  'Muestra la <strong>acción seleccionada</strong> desde el menú. Al ejecutar, el botón queda visible en la barra de herramientas para que puedas <strong>repetir la misma acción</strong> sin volver al menú lateral.',
+        },
+        {
+            target: '.subtoolbar',
+            title: 'Controles de la consola',
+            text:  '• <strong>Detener</strong> — interrumpe el proceso en curso<br>'
+                 + '• <strong>Guardar</strong> — exporta el log de consola como .txt<br>'
+                 + '• <strong>Limpiar</strong> — borra el contenido visible de la consola<br>'
+                 + '• <strong>Navegador ●</strong> — muestra u oculta Chrome durante la automatización',
+        },
+        {
+            target: '[data-action="visor"]',
+            title: 'Historial — resultados y archivos',
+            text:  '• <strong>Ver resultados</strong> — abre el visor HTML con los últimos resultados<br>'
+                 + '• <strong>Ver Excel</strong> — abre la planilla generada<br>'
+                 + '• <strong>Abrir descargas</strong> — carpeta con PDFs y archivos descargados<br>'
+                 + '• <strong>Estadísticas</strong> — resumen de uso del período',
+            setup: expandSidebar,
+        },
+        {
+            target: '[data-action="configuracion"]',
+            title: 'Sistema — configuración y cuenta',
+            text:  '• <strong>Configuración</strong> — secciones a procurar, fecha límite, reportes y seguridad<br>'
+                 + '• <strong>Extensión PJN</strong> — gestiona la extensión de Chrome<br><br>'
+                 + 'El <strong>chip de usuario</strong> al pie del panel muestra tu plan activo, uso del período y soporte.',
+            setup: expandSidebar,
+        },
+        {
+            target: '[data-action="extension"]',
+            title: 'Extensión PJN para Chrome',
+            text:  'Conecta la app con el portal del PJN. Instalala en un clic desde la Chrome Web Store:<br><br>'
+                 + `<button onclick="window.electronAPI?.openExternalUrl('${STORE_URL}')"
+                        style="display:inline-flex;align-items:center;gap:6px;background:#e65c00;border:none;color:#fff;padding:8px 14px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">
+                        🧩 Instalar extensión
+                    </button><br>`
+                 + '<span style="font-size:11px;color:#94a3b8">Chrome puede mostrar <em>"Procede con cuidado"</em> — es normal en extensiones del store oficial con pocos usuarios. Hacé clic en <strong style="color:#e2e8f0">Continuar a la instalación</strong>.</span>',
+            setup: expandSidebar,
         },
     ];
 
-    let currentTourStep = 0;
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+    function expandSidebar() {
+        const ml = document.querySelector('.main-layout');
+        if (ml?.classList.contains('sidebar-collapsed')) {
+            ml.classList.remove('sidebar-collapsed');
+        }
+    }
+
+    // ─── Estado ───────────────────────────────────────────────────────────────
+    let currentStep = 0;
     let overlay, spotlight, card;
 
+    // ─── Init ─────────────────────────────────────────────────────────────────
     function init() {
         if (localStorage.getItem(TOUR_KEY)) return;
-        // Wait until the UI is fully visible
         setTimeout(startTour, 1800);
     }
 
     function startTour() {
-        currentTourStep = 0;
+        currentStep = 0;
+        destroyDOM();
         buildDOM();
         showStep(0);
         document.addEventListener('keydown', onKeyDown);
     }
 
-    window.startAppTour = function () {
-        currentTourStep = 0;
-        buildDOM();
-        showStep(0);
-        document.addEventListener('keydown', onKeyDown);
-    };
+    window.startAppTour = startTour;
+
+    // ─── DOM ──────────────────────────────────────────────────────────────────
+    function destroyDOM() {
+        document.getElementById('__tour_overlay')?.remove();
+        document.getElementById('__tour_spotlight')?.remove();
+        document.getElementById('__tour_card')?.remove();
+        document.removeEventListener('keydown', onKeyDown);
+    }
 
     function buildDOM() {
-        if (document.getElementById('__tour_overlay')) return;
-
-        // Dim overlay
+        // Overlay oscuro
         overlay = document.createElement('div');
         overlay.id = '__tour_overlay';
-        overlay.style.cssText = [
-            'position:fixed', 'inset:0', 'z-index:9990',
-            'background:rgba(0,0,0,0.65)',
-            'pointer-events:none',
-            'transition:opacity 0.3s',
-        ].join(';');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,0.62);pointer-events:none;';
         document.body.appendChild(overlay);
 
-        // Spotlight (cut-out effect via box-shadow)
+        // Spotlight con borde dorado
         spotlight = document.createElement('div');
         spotlight.id = '__tour_spotlight';
         spotlight.style.cssText = [
-            'position:fixed', 'z-index:9991',
-            'border-radius:6px',
-            'box-shadow:0 0 0 9999px rgba(0,0,0,0.65)',
-            'transition:all 0.35s cubic-bezier(0.4,0,0.2,1)',
+            'position:fixed', 'z-index:9991', 'border-radius:8px',
+            'box-shadow:0 0 0 9999px rgba(0,0,0,0.62),0 0 0 2px rgba(234,179,8,0.8)',
+            'transition:all 0.32s cubic-bezier(0.4,0,0.2,1)',
             'pointer-events:none',
         ].join(';');
         document.body.appendChild(spotlight);
@@ -83,101 +143,141 @@
         card.id = '__tour_card';
         card.style.cssText = [
             'position:fixed', 'z-index:9992',
-            'background:#1e293b',
-            'border:1px solid #334155',
+            'background:#0f172a',
+            'border:1px solid rgba(234,179,8,0.28)',
             'border-radius:12px',
-            'padding:18px 20px',
-            'width:300px',
-            'box-shadow:0 8px 32px rgba(0,0,0,0.5)',
-            'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif',
+            'padding:18px 20px 14px',
+            'width:318px',
+            'box-shadow:0 16px 48px rgba(0,0,0,0.7)',
+            'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
             'color:#e2e8f0',
-            'transition:all 0.3s',
+            'transition:left 0.3s cubic-bezier(0.4,0,0.2,1),top 0.3s cubic-bezier(0.4,0,0.2,1)',
         ].join(';');
         card.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                <span id="__tour_title" style="font-size:14px;font-weight:700;color:#f1f5f9"></span>
-                <button id="__tour_close" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;padding:0 0 0 12px;line-height:1">×</button>
-            </div>
-            <p id="__tour_text" style="font-size:12px;color:#94a3b8;line-height:1.6;margin:0 0 14px"></p>
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <span id="__tour_counter" style="font-size:11px;color:#475569"></span>
-                <div style="display:flex;gap:8px">
-                    <button id="__tour_skip" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:12px;padding:6px 10px">Omitir tour</button>
-                    <button id="__tour_next" style="background:#3b82f6;border:none;color:#fff;cursor:pointer;font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px">Siguiente →</button>
+            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;color:#eab308;text-transform:uppercase;margin-bottom:3px">
+                        <span id="__tour_counter"></span>
+                    </div>
+                    <div id="__tour_title" style="font-size:14px;font-weight:700;color:#f8fafc;line-height:1.3"></div>
                 </div>
+                <button id="__tour_close"
+                        style="background:none;border:none;color:#475569;cursor:pointer;font-size:20px;line-height:1;padding:0;flex-shrink:0;margin-top:1px"
+                        title="Cerrar tour">×</button>
             </div>
-        `;
+            <div id="__tour_text"
+                 style="font-size:12.5px;color:#94a3b8;line-height:1.7;margin:0 0 16px"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1e293b;padding-top:12px">
+                <button id="__tour_skip"
+                        style="background:none;border:none;color:#475569;cursor:pointer;font-size:12px;padding:5px 8px;border-radius:5px">
+                    Omitir
+                </button>
+                <div style="display:flex;gap:6px">
+                    <button id="__tour_prev"
+                            style="background:#1e293b;border:1px solid #334155;color:#94a3b8;cursor:pointer;font-size:12px;font-weight:500;padding:6px 12px;border-radius:7px">
+                        ← Atrás
+                    </button>
+                    <button id="__tour_next"
+                            style="background:#eab308;border:none;color:#0f172a;cursor:pointer;font-size:12px;font-weight:700;padding:6px 14px;border-radius:7px">
+                        Siguiente →
+                    </button>
+                </div>
+            </div>`;
         document.body.appendChild(card);
 
-        document.getElementById('__tour_close').onclick  = endTour;
-        document.getElementById('__tour_skip').onclick   = endTour;
-        document.getElementById('__tour_next').onclick   = nextStep;
+        card.querySelector('#__tour_close').onclick = endTour;
+        card.querySelector('#__tour_skip').onclick  = endTour;
+        card.querySelector('#__tour_next').onclick  = nextStep;
+        card.querySelector('#__tour_prev').onclick  = prevStep;
     }
 
+    // ─── Mostrar paso ─────────────────────────────────────────────────────────
     function showStep(idx) {
         const step = STEPS[idx];
+
+        if (step.setup) step.setup();
+
+        card.querySelector('#__tour_counter').textContent = `Paso ${idx + 1} de ${STEPS.length}`;
+        card.querySelector('#__tour_title').textContent   = step.title;
+        card.querySelector('#__tour_text').innerHTML      = step.text;
+
+        const nextBtn = card.querySelector('#__tour_next');
+        const prevBtn = card.querySelector('#__tour_prev');
+        nextBtn.textContent    = idx === STEPS.length - 1 ? '✓ Finalizar' : 'Siguiente →';
+        prevBtn.style.display  = idx === 0 ? 'none' : '';
+
+        if (!step.target) {
+            // Sin spotlight → centrar card, spotlight invisible
+            Object.assign(spotlight.style, { left: '0px', top: '0px', width: '0px', height: '0px' });
+            requestAnimationFrame(() => {
+                const cw = 318, ch = card.offsetHeight || 220;
+                Object.assign(card.style, {
+                    left: `${Math.round((window.innerWidth  - cw) / 2)}px`,
+                    top:  `${Math.round((window.innerHeight - ch) / 2)}px`,
+                });
+            });
+            return;
+        }
+
         const target = document.querySelector(step.target);
-
-        document.getElementById('__tour_title').textContent = step.title;
-        document.getElementById('__tour_text').innerHTML    = step.text;
-        document.getElementById('__tour_counter').textContent = `${idx + 1} de ${STEPS.length}`;
-
-        const nextBtn = document.getElementById('__tour_next');
-        nextBtn.textContent = idx === STEPS.length - 1 ? '✓ Finalizar' : 'Siguiente →';
-
         if (!target) { nextStep(); return; }
 
         const rect = target.getBoundingClientRect();
         const PAD  = 8;
 
-        // Position spotlight
         Object.assign(spotlight.style, {
-            left:   (rect.left   - PAD) + 'px',
-            top:    (rect.top    - PAD) + 'px',
-            width:  (rect.width  + PAD * 2) + 'px',
-            height: (rect.height + PAD * 2) + 'px',
+            left:   `${rect.left   - PAD}px`,
+            top:    `${rect.top    - PAD}px`,
+            width:  `${rect.width  + PAD * 2}px`,
+            height: `${rect.height + PAD * 2}px`,
         });
 
-        // Position card — always prefer below, fallback to above if no space
-        const CARD_W = 300;
-        const CARD_H = card.offsetHeight || 170;
-        const MARGIN = 14;
-        const spaceBelow = window.innerHeight - (rect.bottom + PAD + MARGIN);
-        const spaceAbove = rect.top - PAD - MARGIN;
+        // Posicionar card: preferir debajo, sino arriba, sino derecha
+        const CARD_W = 318;
+        const CARD_H = card.offsetHeight || 200;
+        const GAP    = 14;
+
+        const spaceBelow = window.innerHeight - rect.bottom - PAD - GAP;
+        const spaceAbove = rect.top - PAD - GAP;
 
         let cx = rect.left + rect.width / 2 - CARD_W / 2;
         let cy;
+
         if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
-            cy = rect.bottom + PAD + MARGIN;
+            cy = rect.bottom + PAD + GAP;
         } else {
-            cy = rect.top - PAD - MARGIN - CARD_H;
+            cy = rect.top - PAD - GAP - CARD_H;
         }
+
         cx = Math.max(8, Math.min(cx, window.innerWidth  - CARD_W - 8));
         cy = Math.max(8, Math.min(cy, window.innerHeight - CARD_H - 8));
 
-        Object.assign(card.style, { left: cx + 'px', top: cy + 'px' });
+        Object.assign(card.style, { left: `${cx}px`, top: `${cy}px` });
     }
 
+    // ─── Navegación ───────────────────────────────────────────────────────────
     function nextStep() {
-        currentTourStep++;
-        if (currentTourStep >= STEPS.length) { endTour(); return; }
-        showStep(currentTourStep);
+        currentStep++;
+        if (currentStep >= STEPS.length) { endTour(); return; }
+        showStep(currentStep);
+    }
+
+    function prevStep() {
+        if (currentStep > 0) { currentStep--; showStep(currentStep); }
     }
 
     function endTour() {
         localStorage.setItem(TOUR_KEY, '1');
-        if (overlay)    overlay.remove();
-        if (spotlight)  spotlight.remove();
-        if (card)       card.remove();
-        document.removeEventListener('keydown', onKeyDown);
+        destroyDOM();
     }
 
     function onKeyDown(e) {
-        if (e.key === 'Escape') endTour();
-        if (e.key === 'ArrowRight' || e.key === 'Enter') nextStep();
+        if (e.key === 'Escape')                           endTour();
+        if (e.key === 'ArrowRight' || e.key === 'Enter')  nextStep();
+        if (e.key === 'ArrowLeft')                        prevStep();
     }
 
-    // Auto-init when DOM is ready
+    // ─── Bootstrap ────────────────────────────────────────────────────────────
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

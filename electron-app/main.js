@@ -579,6 +579,16 @@ ipcMain.handle('open-chrome-extensions', () => {
     return { success: true };
 });
 
+// Abrir URL en el navegador del sistema
+ipcMain.handle('open-external-url', async (_event, url) => {
+    try {
+        await shell.openExternal(url);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
 // Generar PDF de instrucciones
 ipcMain.handle('generate-extension-pdf', async (_event, { path: extPath, version }) => {
     try {

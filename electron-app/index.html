@@ -474,48 +474,19 @@
 
                     <!-- Cuerpo extensión -->
                     <div id="extConfigBody">
-                        <div id="extVersionStatus" style="font-size:12px;color:var(--text-3);margin-bottom:8px">Verificando...</div>
-                        <div class="security-buttons">
-                            <button type="button" class="btn-security btn-security-accent" id="btnInstalarExtension">
-                                🧩 Descargar extensión
-                            </button>
-                        </div>
-                        <div id="extDownloadResult" style="display:none;margin-top:10px">
-                            <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">Dirección de extensiones en Chrome:</div>
-                            <div id="extChromeExtBox"
-                                 style="display:flex;align-items:center;gap:6px;background:#e0f0ff;border:2px solid #3b82f6;border-radius:6px;padding:6px 10px;cursor:pointer;margin-bottom:8px"
-                                 title="Clic para copiar">
-                                <code style="flex:1;font-size:11px;color:#1e3a5f;font-family:monospace;font-weight:600">chrome://extensions</code>
-                                <span style="font-size:15px;flex-shrink:0">📋</span>
-                            </div>
-                            <span id="extChromeExtCopyMsg" style="display:none;font-size:11px;color:var(--success);margin-bottom:4px">✅ Dirección copiada</span>
-                            <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">Ruta de instalación (copiada al portapapeles):</div>
-                            <div id="extPathBox"
-                                 style="display:flex;align-items:center;gap:6px;background:#e0f0ff;border:2px solid #3b82f6;border-radius:6px;padding:7px 10px;cursor:pointer"
-                                 title="Clic para copiar">
-                                <code id="extPathText" style="flex:1;font-size:11px;word-break:break-all;color:#1e3a5f"></code>
-                                <span style="font-size:15px;flex-shrink:0">📋</span>
-                            </div>
-                            <div id="extCopyMsg" style="font-size:11px;color:var(--success);display:none;margin-top:3px">✅ Ruta copiada al portapapeles</div>
-                            <div style="margin-top:10px;padding:10px 12px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;font-size:11.5px;line-height:1.7;color:var(--text-2)">
-                                <strong style="color:var(--text-1)">Pasos para instalar en Chrome:</strong><br>
-                                1. Abrí Chrome → <code>chrome://extensions</code><br>
-                                2. Activá el <strong>Modo desarrollador</strong> (arriba a la derecha)<br>
-                                3. Clic en <strong>"Cargar extensión sin empaquetar"</strong><br>
-                                4. En <strong>"Nombre de carpeta"</strong>, pegá la ruta y presioná <strong>Aceptar</strong>
-                            </div>
-                            <button type="button" id="btnGenerarPdfExt"
-                                    style="margin-top:8px;font-size:12px;padding:6px 12px;background:var(--bg-base);border:1px solid var(--border-strong);border-radius:5px;cursor:pointer;color:var(--text-2)">
-                                📄 Descargar instrucciones en PDF
-                            </button>
-                            <button type="button" id="btnAbrirChromeExt"
-                                    style="margin-top:6px;width:100%;font-size:12px;padding:6px 12px;background:var(--info);border:none;border-radius:5px;cursor:pointer;color:#fff;font-weight:600">
-                                🌐 Abrir Chrome
-                            </button>
-                            <div id="msgAbrirChromeExt"
-                                 style="display:none;margin-top:5px;font-size:11px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:6px 10px;color:#1e40af">
-                                ✅ Chrome abierto — <code style="background:#dbeafe;padding:1px 4px;border-radius:3px">chrome://extensions</code> copiado al portapapeles.
-                            </div>
+                        <div id="extVersionStatus" style="font-size:12px;color:var(--text-3);margin-bottom:12px">Verificando versión instalada...</div>
+
+                        <!-- Botón Chrome Web Store -->
+                        <button type="button" id="btnInstalarExtension"
+                                style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;color:#fff;font-size:13px;font-weight:600;margin-bottom:12px">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
+                            Instalar desde Chrome Web Store
+                        </button>
+
+                        <!-- Nota sobre el warning -->
+                        <div style="padding:10px 12px;background:var(--warning-bg);border:1px solid rgba(217,119,6,0.25);border-radius:7px;font-size:11.5px;line-height:1.65;color:var(--text-2)">
+                            <strong style="color:var(--text-1)">⚠️ Chrome puede mostrar "Procede con cuidado"</strong><br>
+                            Es normal — Chrome Enhanced Safe Browsing muestra esa advertencia en extensiones del store oficial que aún tienen pocos usuarios. La extensión es segura. Simplemente hacé clic en <strong>"Continuar a la instalación"</strong>.
                         </div>
                     </div>
                 </div>
