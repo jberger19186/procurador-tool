@@ -29,6 +29,7 @@ async function main() {
         const browser = await puppeteer.launch({
             headless: false,
             executablePath: chromePath,
+            ignoreDefaultArgs: ['--enable-automation'],
             args: [
                 `--user-data-dir=${profilePath}`,
                 '--window-position=-32000,-32000', // off-screen — invisible al usuario
@@ -39,11 +40,21 @@ async function main() {
                 '--no-default-browser-check',      // evita diálogo "hacer Chrome predeterminado"
                 '--disable-default-apps',          // evita instalación de apps por defecto
                 '--disable-session-crashed-bubble',// evita diálogo de restaurar sesión
-                '--disable-infobars',              // oculta barras de información
+                '--disable-blink-features=AutomationControlled',
             ],
             defaultViewport: null,
             timeout: 60000,                        // 60s en lugar de 30s por las dudas
         });
+
+        // Forzar ventana off-screen via CDP (el flag solo no es confiable con perfil vacío)
+        try {
+            const pages = await browser.pages();
+            const p = pages[0] || await browser.newPage();
+            const session = await p.target().createCDPSession();
+            const { windowId } = await session.send('Browser.getWindowForTarget');
+            await session.send('Browser.setWindowBounds', { windowId, bounds: { left: -32000, top: -32000, width: 1, height: 1 } });
+            await session.detach();
+        } catch (_) {}
 
         process.send({ type: 'prewarm_ready', wsEndpoint: browser.wsEndpoint() });
 

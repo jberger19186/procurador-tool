@@ -1063,6 +1063,7 @@ ipcMain.handle('run-process', async (event, options = {}) => {
             };
         }
 
+        await closeChromeProfile();
         console.log('🚀 Ejecutando proceso automático...');
         let result;
         try {
@@ -1151,6 +1152,7 @@ ipcMain.handle('run-process-custom-date', async (event, fecha) => {
             fs.writeFileSync(configPath, originalConfig);
             return { success: false, error: lockResult.error, code: lockResult.code };
         }
+        await closeChromeProfile();
         let result;
         try {
             result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: leerExtraEnvHeadless() });
@@ -1228,6 +1230,7 @@ ipcMain.handle('run-process-custom', async (event, { lines, fechaLimite }) => {
             mainWindow.webContents.send('batch-progress', { done: true });
             return { success: false, error: lockResult.error, code: lockResult.code };
         }
+        await closeChromeProfile();
         let result;
         try {
             result = await authManager.executeRemoteScriptAsLocal(
@@ -1289,6 +1292,7 @@ ipcMain.handle('list-expedientes', async (event, fechaLimite) => {
         }
 
         const scriptName = 'listarSCWPJN.js';
+        await closeChromeProfile();
         const result = await authManager.executeRemoteScriptAsLocal(scriptName, [fechaLimite]);
 
         mainWindow.webContents.send('process-finished', {
@@ -1701,6 +1705,7 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
                 return { success: false, error: 'Debe indicar un expediente o archivo batch.' };
             }
             mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Generando informe: ${expediente}` });
+            await closeChromeProfile();
             const result = await authManager.executeRemoteScriptAsLocal(
                 'informequickscwpjn.js',
                 [expediente, cuit],
@@ -1749,6 +1754,7 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
 
         // Mostrar barra indeterminada al inicio mientras procesa el primer ítem
         mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Iniciando batch (${validLines.length} expedientes)...` });
+        await closeChromeProfile();
 
         for (let i = 0; i < validLines.length; i++) {
             const expStr = validLines[i].expediente;
@@ -2075,6 +2081,7 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
         const configMonitoreo = JSON.stringify({ modo, partes, token, apiBase });
 
         mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Monitoreando ${partes.length} parte${partes.length !== 1 ? 's' : ''}...` });
+        await closeChromeProfile();
         const result = await authManager.executeRemoteScriptAsLocal(
             'procesarMonitoreo.js',
             [],

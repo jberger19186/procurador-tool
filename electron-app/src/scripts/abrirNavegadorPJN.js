@@ -193,6 +193,7 @@ async function main() {
     const browser = await puppeteer.launch({
         headless: false,
         executablePath: chromePath,
+        ignoreDefaultArgs: ['--enable-automation'],
         args: [
             `--user-data-dir=${profilePath}`,
             '--no-sandbox',
@@ -201,6 +202,7 @@ async function main() {
             '--disable-default-apps',
             '--disable-session-crashed-bubble',
             '--ignore-certificate-errors',
+            '--disable-blink-features=AutomationControlled',
         ],
         defaultViewport: null,
         timeout: 60000,

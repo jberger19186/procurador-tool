@@ -230,6 +230,7 @@ async function main() {
     const browser = await puppeteer.launch({
         headless: false,
         executablePath: chromePath,
+        ignoreDefaultArgs: ['--enable-automation'],
         args: [
             `--user-data-dir=${profilePath}`,
             '--no-sandbox',
@@ -238,6 +239,7 @@ async function main() {
             '--disable-default-apps',
             '--disable-session-crashed-bubble',
             '--ignore-certificate-errors',
+            '--disable-blink-features=AutomationControlled',
         ],
         defaultViewport: null,
         timeout: 60000,
@@ -260,9 +262,15 @@ async function main() {
     console.log('🖱️  Haciendo clic en "Agregar"...');
     const MSG_CIERRE = 'Completá la contraseña y presioná Guardar — luego cerrá esta ventana para continuar en Procurador SCW';
 
-    const clickedAdd = await clickEnShadowDOM(page, '#addPasswordButton');
+    // Múltiples selectores para el botón Agregar (distintas versiones de Chrome)
+    const addSelectors = ['#addPasswordButton', 'cr-icon-button[iron-icon="cr:add"]', 'cr-button#addPasswordButton'];
+    let clickedAdd = false;
+    for (const sel of addSelectors) {
+        clickedAdd = await clickEnShadowDOM(page, sel);
+        if (clickedAdd) { console.log(`✅ Botón Agregar encontrado con selector: ${sel}`); break; }
+    }
     if (!clickedAdd) {
-        console.warn('⚠️  No se encontró el botón Agregar.');
+        console.warn('⚠️  No se encontró el botón Agregar. Abriendo gestor para acción manual...');
         await ocultarOverlay(page);
         await mostrarBannerCierre(page, MSG_CIERRE);
         browser.disconnect();
@@ -275,7 +283,13 @@ async function main() {
     console.log(`📝 Completando sitio: ${sitio}`);
     await actualizarOverlay(page, `Completando sitio: ${sitio}...`);
 
-    const focusedSite = await focusEnShadowDOM(page, 'input[aria-label="Sitio"]');
+    // Chrome 130+ usa "Sitio web", versiones anteriores usaban "Sitio"
+    const siteSelectors = ['input[aria-label="Sitio web"]', 'input[aria-label="Sitio"]', 'input[aria-label="Site"]', 'input[aria-label="Website"]'];
+    let focusedSite = false;
+    for (const sel of siteSelectors) {
+        focusedSite = await focusEnShadowDOM(page, sel);
+        if (focusedSite) { console.log(`✅ Campo Sitio encontrado: ${sel}`); break; }
+    }
     if (focusedSite) {
         await page.keyboard.down('Control');
         await page.keyboard.press('a');
@@ -293,11 +307,18 @@ async function main() {
         await page.keyboard.press('Tab');
         await sleep(300);
 
+        // Chrome 130+ puede llamarlo "Nombre de usuario" o "Username"
+        const userSelectors = ['input[aria-label="Nombre de usuario"]', 'input[aria-label="Username"]', 'input[aria-label="Usuario"]'];
         const focusedUser = await page.evaluate(() => {
-            return document.activeElement?.getAttribute('aria-label') === 'Nombre de usuario';
+            const labels = ['Nombre de usuario', 'Username', 'Usuario'];
+            return labels.includes(document.activeElement?.getAttribute('aria-label') || '');
         });
         if (!focusedUser) {
-            await focusEnShadowDOM(page, 'input[aria-label="Nombre de usuario"]');
+            let focused = false;
+            for (const sel of userSelectors) {
+                focused = await focusEnShadowDOM(page, sel);
+                if (focused) { console.log(`✅ Campo Usuario encontrado: ${sel}`); break; }
+            }
         }
         await page.keyboard.down('Control');
         await page.keyboard.press('a');
