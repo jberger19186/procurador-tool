@@ -29,12 +29,23 @@
     </div>
 </div>
 
-<!-- ===== BANNER ACTUALIZACIÓN ===== -->
-<div id="update-banner">
-    <span id="update-banner-text">🔄 Nueva versión disponible</span>
-    <div style="display:flex;gap:8px;flex-shrink:0">
-        <button id="update-install-btn">Instalar y reiniciar</button>
-        <button id="update-later-btn">Más tarde</button>
+<!-- ===== MODAL ACTUALIZACIÓN ===== -->
+<div id="update-modal" style="display:none;position:fixed;inset:0;z-index:99995;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;">
+    <div style="background:#0f172a;border:1px solid rgba(59,130,246,0.35);border-radius:14px;padding:26px 24px 20px;width:380px;max-width:90vw;box-shadow:0 24px 60px rgba(0,0,0,0.8);font-family:var(--font,sans-serif);">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+            <div style="width:44px;height:44px;background:#1e3a5f;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🔄</div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:15px;font-weight:700;color:#f8fafc;">Nueva versión disponible</div>
+                <div id="update-banner-text" style="font-size:12px;color:#64748b;margin-top:2px;">Descargada y lista para instalar</div>
+            </div>
+        </div>
+        <p style="font-size:13px;color:#94a3b8;line-height:1.65;margin:0 0 20px;">
+            La actualización ya fue descargada. Podés instalarla ahora — la app se reiniciará automáticamente — o más tarde; se aplicará la próxima vez que cierres la aplicación.
+        </p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button id="update-later-btn" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font,sans-serif);">Más tarde</button>
+            <button id="update-install-btn" style="background:#3b82f6;border:none;color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font,sans-serif);">🔄 Instalar y reiniciar</button>
+        </div>
     </div>
 </div>
 
@@ -475,9 +486,8 @@
                     <!-- Cuerpo extensión -->
                     <div id="extConfigBody">
 
-                        <!-- Botón Chrome Web Store — onclick directo para evitar problemas de binding -->
+                        <!-- Botón Chrome Web Store — evento delegado en renderer.js (CSP bloquea onclick inline) -->
                         <button type="button" id="btnInstalarExtension"
-                                onclick="window.electronAPI.openExternalUrl('https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme')"
                                 style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;color:#fff;font-size:13px;font-weight:600;margin-bottom:12px">
                             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M8 5v6"/></svg>
                             Instalar desde Chrome Web Store

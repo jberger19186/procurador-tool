@@ -61,23 +61,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!val) setStepDone(3);
         });
 
-    document.getElementById('btnDescargarExtOnboarding')
-        ?.addEventListener('click', doDescargarExtension);
-
-    document.getElementById('s3ExtPathBox')
-        ?.addEventListener('click', () => copiarRutaOBonboarding());
-
-    document.getElementById('btnPdfExtOnboarding')
-        ?.addEventListener('click', () => generarPdfOnboarding());
-    document.getElementById('btnAbrirChromeExtOB')
-        ?.addEventListener('click', async () => {
-            await onboardingAPI.openChromeExtensions();
-            document.getElementById('msgAbrirChromeOB').style.display = 'block';
+    // Botón instalar extensión → Chrome Web Store
+    document.getElementById('btnInstalarExtOB')
+        ?.addEventListener('click', () => {
+            onboardingAPI.openExternalUrl(
+                'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme'
+            );
+            // Marcar step 3 como completado cuando el usuario hace clic en instalar
+            setStepDone(3);
         });
-    document.getElementById('btnTooltipExtOB')?.addEventListener('click', () => {
-        const t = document.getElementById('tooltipExtOB');
-        if (t) t.style.display = t.style.display === 'none' ? 'block' : 'none';
-    });
     document.getElementById('btnRecreatePerfil')
         ?.addEventListener('click', doRecreateProfile);
     document.getElementById('btnAgregarPwd')
@@ -418,8 +410,6 @@ async function doRecreateProfile() {
 
 // ── Extensión Chrome (step 3 — post perfil) ─────────────────────────────────
 
-let _obExtData = null; // { path, version }
-
 function _aplicarToggleOB(habilitada) {
     const chk   = document.getElementById('toggleExtOnboarding');
     const track = document.getElementById('toggleExtTrack');
@@ -428,72 +418,14 @@ function _aplicarToggleOB(habilitada) {
     const body  = document.getElementById('s3ExtBody');
     if (!chk) return;
     chk.checked            = habilitada;
-    track.style.background = habilitada ? '#3b82f6' : '#475569';
+    track.style.background = habilitada ? '#3b82f6' : '#cbd5e1';
     thumb.style.left       = habilitada ? '21px' : '3px';
-    label.textContent      = habilitada ? 'Habilitada — se descargará ahora' : 'Deshabilitada — no se descargará';
+    label.textContent      = habilitada
+        ? 'Habilitada — instalá desde Chrome Web Store'
+        : 'Deshabilitada — podés instalarla más tarde';
     body.style.display     = habilitada ? '' : 'none';
     // Si se deshabilita, el paso puede continuar igual
     if (!habilitada) document.getElementById('btnNext').disabled = false;
-}
-
-async function doDescargarExtension() {
-    const btn     = document.getElementById('btnDescargarExtOnboarding');
-    const result  = document.getElementById('s3ExtResult');
-    const pathEl  = document.getElementById('s3ExtPathText');
-    btn.disabled  = true;
-    btn.textContent = '⏳ Descargando...';
-    result.style.display = 'none';
-    try {
-        const r = await onboardingAPI.installExtension();
-        if (!r.success) {
-            btn.textContent = '⬇️ Descargar extensión';
-            btn.disabled = false;
-            return;
-        }
-        _obExtData = { path: r.path, version: r.version };
-        pathEl.textContent = r.path;
-        result.style.display = 'block';
-        // Auto-copiar
-        try { await navigator.clipboard.writeText(r.path); mostrarCopiaOB(); } catch (_) {}
-        btn.textContent = '✅ Extensión descargada';
-        // Marcar step como completo — se puede avanzar aunque no haya instalado aún
-        setStepDone(3);
-        setTimeout(() => {
-            document.getElementById('s3ExtResult').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 200);
-    } catch (_) {
-        btn.textContent = '⬇️ Descargar extensión';
-        btn.disabled = false;
-    }
-}
-
-function copiarRutaOBonboarding() {
-    const text = document.getElementById('s3ExtPathText')?.textContent;
-    if (text) {
-        navigator.clipboard.writeText(text).then(() => mostrarCopiaOB()).catch(() => {});
-    }
-}
-
-function mostrarCopiaOB() {
-    const msg = document.getElementById('s3ExtCopyMsg');
-    if (!msg) return;
-    msg.style.display = 'block';
-    setTimeout(() => { msg.style.display = 'none'; }, 2500);
-}
-
-async function generarPdfOnboarding() {
-    if (!_obExtData) return;
-    const btn = document.getElementById('btnPdfExtOnboarding');
-    btn.disabled = true;
-    btn.textContent = '⏳ Generando PDF...';
-    try {
-        const r = await onboardingAPI.generateExtensionPdf(_obExtData);
-        btn.textContent = r.success ? '✅ PDF generado — revisá Descargas' : '📄 Descargar instrucciones en PDF';
-    } catch (_) {
-        btn.textContent = '📄 Descargar instrucciones en PDF';
-    }
-    btn.disabled = false;
-    setTimeout(() => { btn.textContent = '📄 Descargar instrucciones en PDF'; }, 5000);
 }
 
 // ── Step 4: PJN password ───────────────────────────────────────────────────

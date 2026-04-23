@@ -154,25 +154,25 @@ function setupUpdateListeners() {
 }
 
 function showUpdateBanner(version) {
-    const banner = document.getElementById('update-banner');
-    const text   = document.getElementById('update-banner-text');
-    if (!banner || !text) return;
+    const modal = document.getElementById('update-modal');
+    const text  = document.getElementById('update-banner-text');
+    if (!modal || !text) return;
 
-    text.textContent = `🔄 Nueva versión v${version} descargada. ¿Instalamos ahora?`;
-    banner.style.display = 'flex';
+    text.textContent = `v${version} descargada y lista para instalar`;
+    modal.style.display = 'flex';
 
     // Instalar ahora: cierra la app, instala y reabre
-    document.getElementById('update-install-btn').onclick = async () => {
+    document.getElementById('update-install-btn').addEventListener('click', async () => {
         addLog('info', '🔄 Instalando actualización y reiniciando la aplicación...');
+        modal.style.display = 'none';
         await window.electronAPI.installUpdate();
-    };
+    }, { once: true });
 
     // Más tarde: se instala automáticamente la próxima vez que el usuario cierre la app
-    document.getElementById('update-later-btn').onclick = () => {
-        banner.style.display = 'none';
+    document.getElementById('update-later-btn').addEventListener('click', () => {
+        modal.style.display = 'none';
         addLog('info', 'ℹ️ La actualización se instalará automáticamente al cerrar la app.');
-    };
-
+    }, { once: true });
 }
 
 // ============ INICIALIZAR BOTONES ============
@@ -279,7 +279,12 @@ function initializeButtons() {
     // Seguridad — botones dentro del modal de configuración
     bind('btnAbrirNavegador',    abrirNavegadorPJN);
     bind('btnAgregarPasswordSCW', agregarPasswordSCW);
-    // btnInstalarExtension usa onclick inline en el HTML
+    // Extensión — Chrome Web Store (onclick inline bloqueado por CSP; se usa addEventListener)
+    bind('btnInstalarExtension', () => {
+        window.electronAPI.openExternalUrl(
+            'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme'
+        );
+    });
 
     // Relanzar wizard de configuración inicial
     bind('btnRelanzarWizard', async () => {
@@ -1437,6 +1442,7 @@ function showNotification(message, type = 'info') {
 /**
  * Muestra una alerta prominente cuando el script necesita que el usuario
  * ingrese la contraseña manualmente en la ventana de Chrome.
+ * Usa un modal centrado (no una barra fija) para mejor visibilidad y accesibilidad.
  */
 function showLoginManualAlert(cuit, message) {
     // Log en consola de la app
@@ -1446,34 +1452,55 @@ function showLoginManualAlert(cuit, message) {
     const prev = document.getElementById('__psc_manual_alert');
     if (prev) prev.remove();
 
-    const alert = document.createElement('div');
-    alert.id = '__psc_manual_alert';
-    alert.style.cssText = [
-        'position:fixed', 'top:0', 'left:0', 'right:0',
-        'z-index:99999', 'background:#78350f',
-        'border-bottom:3px solid #f59e0b',
-        'padding:14px 20px', 'color:#fef3c7',
-        'font-size:13px', 'line-height:1.6',
-        'display:flex', 'align-items:center', 'gap:12px',
-        'box-shadow:0 2px 12px rgba(0,0,0,0.4)'
+    const overlay = document.createElement('div');
+    overlay.id = '__psc_manual_alert';
+    overlay.style.cssText = [
+        'position:fixed', 'inset:0',
+        'z-index:99999',
+        'background:rgba(0,0,0,0.6)',
+        'display:flex', 'align-items:center', 'justify-content:center',
     ].join(';');
-    alert.innerHTML = `
-        <span style="font-size:22px">🔐</span>
-        <div style="flex:1">
-            <strong>Acción requerida — CUIT ${cuit}</strong><br>
-            ${message}
+
+    overlay.innerHTML = `
+        <div style="
+            background:#0f172a;
+            border:1px solid rgba(245,158,11,0.4);
+            border-radius:14px;
+            padding:26px 24px 20px;
+            width:400px;
+            max-width:90vw;
+            box-shadow:0 24px 60px rgba(0,0,0,0.8);
+            font-family:var(--font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
+        ">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+                <div style="width:44px;height:44px;background:#422006;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🔐</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:15px;font-weight:700;color:#fef3c7;">Acción requerida</div>
+                    <div style="font-size:12px;color:#92400e;margin-top:2px;">CUIT ${escapeHtml(String(cuit))}</div>
+                </div>
+            </div>
+            <p style="font-size:13px;color:#fcd34d;line-height:1.65;margin:0 0 20px;">
+                ${escapeHtml(message)}
+            </p>
+            <div style="display:flex;justify-content:flex-end;">
+                <button id="__psc_manual_alert_btn"
+                        style="background:#f59e0b;border:none;color:#0f172a;padding:9px 20px;
+                               border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;
+                               font-family:var(--font,sans-serif);">
+                    Entendido
+                </button>
+            </div>
         </div>
-        <button id="__psc_manual_alert_btn"
-                style="background:transparent;border:1px solid #f59e0b;color:#fef3c7;
-                       padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;
-                       flex-shrink:0">
-            Entendido
-        </button>
     `;
-    document.body.prepend(alert);
-    // Usar addEventListener (el onclick inline no funciona en el contexto seguro de Electron)
+
+    document.body.appendChild(overlay);
     document.getElementById('__psc_manual_alert_btn')
-        .addEventListener('click', () => alert.remove());
+        .addEventListener('click', () => overlay.remove());
+
+    // También cerrar al hacer click en el fondo oscuro
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
 }
 
 // ============ UTILIDADES ============

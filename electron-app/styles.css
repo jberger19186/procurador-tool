@@ -722,21 +722,9 @@ body {
   gap: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
-#update-banner {
-  display: none;
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 9999;
-  background: #1e40af;
-  color: #fff;
-  padding: 9px 20px;
-  font-size: 13px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-}
-#quota-banner button, #promo-banner button, #update-banner button {
+/* update-banner fue reemplazado por #update-modal (modal centrado) */
+#update-modal { display: none; }
+#quota-banner button, #promo-banner button {
   background: rgba(255,255,255,0.15);
   border: 1px solid rgba(255,255,255,0.4);
   color: #fff; cursor: pointer;
@@ -744,14 +732,8 @@ body {
   font-size: 12px; font-family: var(--font);
   transition: 0.13s;
 }
-#quota-banner button:hover, #promo-banner button:hover, #update-banner button:hover {
+#quota-banner button:hover, #promo-banner button:hover {
   background: rgba(255,255,255,0.25);
-}
-#update-install-btn {
-  background: #fff !important;
-  color: #1e40af !important;
-  font-weight: 600;
-  border: none !important;
 }
 
 /* ================================================================

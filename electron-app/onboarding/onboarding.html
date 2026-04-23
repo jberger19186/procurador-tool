@@ -65,7 +65,7 @@
         </div>
         <div style="display:flex;align-items:center;gap:8px">
             <input type="checkbox" id="loginRemember" style="width:15px;height:15px;margin:0;cursor:pointer;accent-color:#3b82f6;flex-shrink:0">
-            <label for="loginRemember" style="font-size:12px;color:#64748b;cursor:pointer;margin:0;font-weight:400">Recordar usuario y contraseña</label>
+            <label for="loginRemember" style="font-size:12px;color:#475569;cursor:pointer;margin:0;font-weight:400">Recordar usuario y contraseña</label>
         </div>
         <div class="ob-error" id="s2Error"></div>
     </div>
@@ -94,7 +94,7 @@
                 ↺ Recrear
             </button>
         </div>
-        <div class="ob-info-box" id="s3ChromeNotFound" style="display:none">
+        <div class="ob-info-box warn" id="s3ChromeNotFound" style="display:none">
             ⚠️ <strong>Google Chrome no está instalado.</strong><br>
             Esta aplicación requiere Google Chrome para funcionar. Descargalo desde
             <strong>google.com/chrome</strong> e instalalo antes de continuar.
@@ -118,73 +118,38 @@
 
         <!-- Sección de extensión (aparece después de confirmar que Chrome se cerró) -->
         <div id="s3ExtSection" style="display:none; margin-top:16px;">
-            <div style="font-weight:600; font-size:14px; color:#e2e8f0; margin-bottom:8px; display:flex; align-items:center; gap:7px;">
-                🧩 Extensión PJN para Chrome
-                <span id="btnTooltipExtOB" style="display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:#3b82f6;color:#fff;font-size:10px;font-weight:700;cursor:pointer;flex-shrink:0;line-height:1;">?</span>
-            </div>
-            <div id="tooltipExtOB" style="display:none;background:#1e3a5f;border:1px solid #3b82f6;border-radius:7px;padding:10px 13px;font-size:12px;color:#bfdbfe;margin-bottom:10px;line-height:1.5;">
-                Extensión para tu Chrome personal que conecta la app con el portal PJN.<br><br>
-                <strong style="color:#e2e8f0;">Importante — el portapapeles almacenará información de manera automática de la siguiente manera:</strong>
-                <ul style="margin:5px 0 5px 16px;padding:0;">
-                    <li>Al <strong style="color:#e2e8f0;">descargar</strong> la extensión, se copia automáticamente la ruta de la carpeta de instalación donde se encuentra la misma, la cual podrás utilizarla de conformidad a las instrucciones que verás más abajo.</li>
-                    <li style="margin-top:4px;">Si usás el botón <strong style="color:#e2e8f0;">"Abrir Chrome"</strong>, el portapapeles se <strong style="color:#e2e8f0;">reemplaza</strong> con <code style="background:#0f172a;padding:1px 4px;border-radius:3px;">chrome://extensions</code>. La ruta ya no estará copiada, así que usala antes o consultala en el recuadro azul.</li>
-                </ul>
-                En Chrome: activá el <strong style="color:#e2e8f0;">Modo desarrollador</strong> → "Cargar sin empaquetar" → pegá la ruta de la carpeta.
-            </div>
-            <p style="font-size:13px; color:#94a3b8; margin-bottom:10px;">
-                Descargá la extensión para tu Chrome personal. Seguí las instrucciones para instalarla.
-            </p>
-            <!-- Toggle habilitar extensión -->
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 14px;">
-                <label class="ob-toggle-wrap" style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;">
-                    <div style="position:relative;width:40px;height:22px;flex-shrink:0;">
-                        <input type="checkbox" id="toggleExtOnboarding" style="opacity:0;width:0;height:0;position:absolute;">
-                        <span id="toggleExtTrack" style="position:absolute;inset:0;background:#475569;border-radius:11px;transition:background 0.2s;"></span>
-                        <span id="toggleExtThumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:left 0.2s;"></span>
+            <div class="ob-ext-section">
+                <div class="ob-ext-section-title">
+                    🧩 Extensión PJN para Chrome
+                </div>
+                <div class="ob-ext-section-desc">
+                    Conecta la aplicación con el portal del PJN para automatizar consultas.
+                    Podés instalarla ahora o más tarde desde <strong>Configuración → Extensión PJN</strong>.
+                </div>
+                <!-- Toggle habilitar extensión -->
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:9px;padding:11px 14px;">
+                    <label class="ob-toggle-wrap" style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;">
+                        <div style="position:relative;width:40px;height:22px;flex-shrink:0;">
+                            <input type="checkbox" id="toggleExtOnboarding" style="opacity:0;width:0;height:0;position:absolute;">
+                            <span id="toggleExtTrack" style="position:absolute;inset:0;background:#cbd5e1;border-radius:11px;transition:background 0.2s;"></span>
+                            <span id="toggleExtThumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></span>
+                        </div>
+                        <div>
+                            <div style="font-size:13px;font-weight:600;color:#0f172a;">Instalar extensión PJN</div>
+                            <div style="font-size:11px;color:#64748b;" id="toggleExtLabelOB">Deshabilitada — podés instalarla más tarde</div>
+                        </div>
+                    </label>
+                </div>
+                <!-- Contenido cuando está habilitada -->
+                <div id="s3ExtBody" style="display:none;">
+                    <button class="ob-btn ob-btn-primary ob-btn-full" id="btnInstalarExtOB">
+                        🧩 Instalar desde Chrome Web Store
+                    </button>
+                    <div class="ob-info-box warn" style="margin-top:10px;">
+                        ⚠️ Chrome puede mostrar <strong>"Procede con cuidado"</strong> al instalar la extensión — es normal en extensiones con pocos usuarios. Hacé clic en <strong>Continuar a la instalación</strong> para completar el proceso.
                     </div>
-                    <div>
-                        <div style="font-size:13px;font-weight:600;color:#e2e8f0;">Usar extensión PJN</div>
-                        <div style="font-size:11px;color:#64748b;" id="toggleExtLabelOB">Deshabilitada — no se descargará</div>
-                    </div>
-                </label>
-            </div>
-            <!-- Contenido que se muestra solo si está habilitada -->
-            <div id="s3ExtBody">
-            <button class="ob-btn ob-btn-primary ob-btn-full" id="btnDescargarExtOnboarding">
-                ⬇️ Descargar extensión
-            </button>
-            <!-- Resultado post-descarga -->
-            <div id="s3ExtResult" style="display:none; margin-top:12px;">
-                <div style="font-size:12px; color:#94a3b8; margin-bottom:4px;">Dirección de extensiones en Chrome:</div>
-                <div id="s3ChromeExtBox" style="display:flex;align-items:center;gap:6px;background:#1e3a5f;border:2px solid #3b82f6;border-radius:7px;padding:8px 12px;cursor:pointer;margin-bottom:10px;" title="Clic para copiar" onclick="navigator.clipboard.writeText('chrome://extensions').then(()=>{let m=document.getElementById('s3ChromeExtCopyMsg');m.style.display='inline';setTimeout(()=>m.style.display='none',2000);})">
-                    <code style="flex:1;font-size:11px;color:#93c5fd;font-family:monospace;font-weight:600;">chrome://extensions</code>
-                    <span style="font-size:16px;flex-shrink:0;">📋</span>
-                </div>
-                <span id="s3ChromeExtCopyMsg" style="display:none;font-size:11px;color:#4ade80;margin-bottom:4px;">✅ Dirección copiada</span>
-                <div style="font-size:12px; color:#94a3b8; margin-bottom:4px;">Ruta de instalación (copiada al portapapeles):</div>
-                <div id="s3ExtPathBox" style="display:flex;align-items:center;gap:6px;background:#1e3a5f;border:2px solid #3b82f6;border-radius:7px;padding:8px 12px;cursor:pointer;margin-bottom:6px;" title="Clic para copiar">
-                    <code id="s3ExtPathText" style="flex:1;font-size:11px;word-break:break-all;color:#93c5fd;font-family:monospace;font-weight:600;"></code>
-                    <span style="font-size:16px;flex-shrink:0;">📋</span>
-                </div>
-                <div id="s3ExtCopyMsg" style="font-size:11px;color:#4ade80;display:none;margin-bottom:6px;">✅ Ruta copiada al portapapeles</div>
-                <div style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.8;color:#cbd5e1;margin-bottom:8px;">
-                    <strong style="color:#93c5fd;">Pasos para instalar en Chrome:</strong><br>
-                    1. Abrí Chrome y escribí <code style="background:#0f172a;padding:1px 5px;border-radius:3px;color:#7dd3fc;">chrome://extensions</code><br>
-                    2. Activá el <strong>Modo desarrollador</strong> (arriba a la derecha)<br>
-                    3. Clic en <strong>"Cargar extensión sin empaquetar"</strong><br>
-                    4. En el campo <strong>"Nombre de carpeta"</strong>, pegá la ruta y presioná <strong>Aceptar</strong>
-                </div>
-                <button class="ob-btn ob-btn-secondary" id="btnPdfExtOnboarding" style="width:100%;font-size:13px;">
-                    📄 Descargar instrucciones en PDF
-                </button>
-                <button class="ob-btn ob-btn-primary" id="btnAbrirChromeExtOB" style="width:100%;font-size:13px;margin-top:6px;">
-                    🌐 Abrir Chrome
-                </button>
-                <div id="msgAbrirChromeOB" style="display:none;margin-top:6px;font-size:11px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:6px;padding:7px 10px;color:#93c5fd;">
-                    ✅ Chrome abierto — <code style="background:#0f172a;padding:1px 4px;border-radius:3px;">chrome://extensions</code> copiado al portapapeles. Pegalo en la barra de direcciones.
                 </div>
             </div>
-            </div><!-- /s3ExtBody -->
         </div>
     </div>
 

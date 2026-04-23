@@ -2,6 +2,9 @@
  * tour.js — Interactive tour overlay for Procurador SCW
  * Injected into index.html. Auto-triggers on first use (localStorage flag).
  * Can also be triggered manually via window.startAppTour().
+ *
+ * Supports multi-element spotlight via `targets: []` array —
+ * the spotlight bounding box covers all matched elements.
  */
 (function () {
     const TOUR_KEY  = 'psc_tour_shown_v4';
@@ -21,7 +24,12 @@
             setup: expandSidebar,
         },
         {
-            target: '[data-action="procurar-hoy"]',
+            // Spotlight cubre los tres botones de Procurar
+            targets: [
+                '[data-action="procurar-hoy"]',
+                '[data-action="procurar-fecha"]',
+                '[data-action="procurar-lote"]',
+            ],
             title: 'Procurar — novedades en tus expedientes',
             text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes. Podés procurar:<br><br>'
                  + '• <strong>Hoy</strong> — movimientos del día<br>'
@@ -55,11 +63,24 @@
                  + '• <strong>Navegador ●</strong> — muestra u oculta Chrome durante la automatización',
         },
         {
-            target: '[data-action="visor"]',
+            target: '#browserToggle',
+            title: 'Toggle de navegador',
+            text:  'Controlá si Chrome es <strong>visible o invisible</strong> durante la automatización. Ocultarlo acelera la ejecución; mostrarlo te permite ver qué hace la app en tiempo real.',
+        },
+        {
+            // Spotlight cubre los cinco botones del bloque Historial
+            targets: [
+                '[data-action="visor"]',
+                '[data-action="excel"]',
+                '[data-action="descargas"]',
+                '[data-action="limpiar-temp"]',
+                '[data-action="estadisticas"]',
+            ],
             title: 'Historial — resultados y archivos',
             text:  '• <strong>Ver resultados</strong> — abre el visor HTML con los últimos resultados<br>'
                  + '• <strong>Ver Excel</strong> — abre la planilla generada<br>'
                  + '• <strong>Abrir descargas</strong> — carpeta con PDFs y archivos descargados<br>'
+                 + '• <strong>Limpiar archivos temp</strong> — libera espacio en disco<br>'
                  + '• <strong>Estadísticas</strong> — resumen de uso del período',
             setup: expandSidebar,
         },
@@ -90,6 +111,35 @@
         if (ml?.classList.contains('sidebar-collapsed')) {
             ml.classList.remove('sidebar-collapsed');
         }
+    }
+
+    /**
+     * Calcula el bounding box que envuelve todos los elementos de la lista de selectores.
+     * Retorna null si ninguno fue encontrado.
+     */
+    function getBoundingBox(selectors) {
+        let minLeft   = Infinity,  minTop    = Infinity;
+        let maxRight  = -Infinity, maxBottom = -Infinity;
+        let found     = false;
+
+        selectors.forEach(sel => {
+            const el = document.querySelector(sel);
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            minLeft   = Math.min(minLeft,   r.left);
+            minTop    = Math.min(minTop,     r.top);
+            maxRight  = Math.max(maxRight,  r.right);
+            maxBottom = Math.max(maxBottom, r.bottom);
+            found = true;
+        });
+
+        if (!found) return null;
+        return {
+            left:   minLeft,
+            top:    minTop,
+            width:  maxRight  - minLeft,
+            height: maxBottom - minTop,
+        };
     }
 
     // ─── Estado ───────────────────────────────────────────────────────────────
@@ -206,8 +256,24 @@
         nextBtn.textContent    = idx === STEPS.length - 1 ? '✓ Finalizar' : 'Siguiente →';
         prevBtn.style.display  = idx === 0 ? 'none' : '';
 
-        if (!step.target) {
-            // Sin spotlight → centrar card, spotlight invisible
+        // ── Resolver bounding box ──
+        let rect = null;
+
+        if (step.targets) {
+            // Multi-element spotlight
+            rect = getBoundingBox(step.targets);
+        } else if (step.target) {
+            const el = document.querySelector(step.target);
+            if (el) rect = el.getBoundingClientRect();
+        }
+
+        if (!rect) {
+            if (step.targets || step.target) {
+                // Selector no encontrado → saltear paso
+                nextStep();
+                return;
+            }
+            // Sin target → centrar card, spotlight invisible
             Object.assign(spotlight.style, { left: '0px', top: '0px', width: '0px', height: '0px' });
             requestAnimationFrame(() => {
                 const cw = 318, ch = card.offsetHeight || 220;
@@ -219,11 +285,7 @@
             return;
         }
 
-        const target = document.querySelector(step.target);
-        if (!target) { nextStep(); return; }
-
-        const rect = target.getBoundingClientRect();
-        const PAD  = 8;
+        const PAD = 8;
 
         Object.assign(spotlight.style, {
             left:   `${rect.left   - PAD}px`,
@@ -237,14 +299,14 @@
         const CARD_H = card.offsetHeight || 200;
         const GAP    = 14;
 
-        const spaceBelow = window.innerHeight - rect.bottom - PAD - GAP;
+        const spaceBelow = window.innerHeight - rect.top - rect.height - PAD - GAP;
         const spaceAbove = rect.top - PAD - GAP;
 
         let cx = rect.left + rect.width / 2 - CARD_W / 2;
         let cy;
 
         if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
-            cy = rect.bottom + PAD + GAP;
+            cy = rect.top + rect.height + PAD + GAP;
         } else {
             cy = rect.top - PAD - GAP - CARD_H;
         }
