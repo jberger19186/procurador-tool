@@ -107,6 +107,7 @@ body {
   align-items: center;
   gap: 4px;
   margin-left: 4px;
+  flex-shrink: 0;          /* nunca colapsar los controles de ventana */
   -webkit-app-region: no-drag;
 }
 .win-btn {
@@ -406,8 +407,10 @@ body {
   color: var(--text-3);
 }
 
-/* Window-positioned: ocultar sidebar */
-body.window-positioned .sidebar { display: none; }
+/* Window-positioned: ocultar elementos no esenciales del topbar para que
+   los controles de ventana siempre queden visibles */
+body.window-positioned .status-pill   { display: none; }
+body.window-positioned .topbar-progress { display: none; }
 
 /* ── Sidebar colapsado ── */
 .sidebar {
@@ -520,6 +523,7 @@ body.window-positioned .sidebar { display: none; }
   color: var(--text-2);
   padding: 3px 8px;
   border-radius: var(--radius-sm);
+  flex-shrink: 0;
   border: 1px solid var(--border-strong);
   background: transparent;
   transition: 0.12s;
