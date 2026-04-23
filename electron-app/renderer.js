@@ -1092,8 +1092,8 @@ function setupProcessListeners() {
                 }
             } else if (!isInforme) {
                 // Abrir visor de procuración (solo para Ejecutar/Procurar, nunca para Informe)
-                const abrirVisorCheck = document.getElementById('abrirVisor');
-                if (abrirVisorCheck && abrirVisorCheck.checked) {
+                const abrirVisorActivo = document.getElementById('tgl-abrirVisor')?.querySelector('.cfg-toggle')?.classList.contains('on');
+                if (abrirVisorActivo) {
                     setTimeout(async () => {
                         try {
                             const visorResult = await window.electronAPI.getVisorPath();

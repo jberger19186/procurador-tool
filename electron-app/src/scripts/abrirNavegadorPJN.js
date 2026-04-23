@@ -200,7 +200,6 @@ async function main() {
             '--no-default-browser-check',
             '--disable-default-apps',
             '--disable-session-crashed-bubble',
-            '--ignore-certificate-errors',
             '--disable-blink-features=AutomationControlled',
         ],
         defaultViewport: null,

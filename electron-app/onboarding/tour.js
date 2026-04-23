@@ -333,8 +333,8 @@
             if (step.preferRight && spaceRight >= CARD_W + 8) {
                 // Card a la derecha del spotlight (sidebar items)
                 cx = rect.right + PAD + GAP;
-                // Para rects muy altos (multi-target), centrar en viewport
-                cy = rect.height > CARD_H * 2
+                // Multi-target: centrar en viewport; target único: centrar en el elemento
+                cy = step.targets
                     ? (window.innerHeight - CARD_H) / 2
                     : rect.top + rect.height / 2 - CARD_H / 2;
             } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
