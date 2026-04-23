@@ -279,9 +279,9 @@ function initializeButtons() {
     // Seguridad — botones dentro del modal de configuración
     bind('btnAbrirNavegador',    abrirNavegadorPJN);
     bind('btnAgregarPasswordSCW', agregarPasswordSCW);
-    // Extensión — Chrome Web Store (onclick inline bloqueado por CSP; se usa addEventListener)
+    // Extensión — abre Chrome directamente en la Chrome Web Store (no usa navegador por defecto)
     bind('btnInstalarExtension', () => {
-        window.electronAPI.openExternalUrl(
+        window.electronAPI.openUrlInChrome(
             'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme'
         );
     });

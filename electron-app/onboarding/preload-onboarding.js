@@ -22,4 +22,5 @@ contextBridge.exposeInMainWorld('onboardingAPI', {
     complete:           (opts) => ipcRenderer.invoke('onboarding-complete', opts),
     relaunch:           () => ipcRenderer.invoke('relaunch-onboarding'),
     openExternalUrl:    (url)  => ipcRenderer.invoke('open-external-url', url),
+    openUrlInChrome:    (url)  => ipcRenderer.invoke('open-url-in-chrome', url),
 });

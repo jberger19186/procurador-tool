@@ -3,28 +3,38 @@
  * Injected into index.html. Auto-triggers on first use (localStorage flag).
  * Can also be triggered manually via window.startAppTour().
  *
- * Supports multi-element spotlight via `targets: []` array —
- * the spotlight bounding box covers all matched elements.
+ * Supports:
+ *  - Multi-element spotlight via `targets: []` array (union bounding box).
+ *  - `preferRight: true` para posicionar el card a la derecha del spotlight
+ *    (ideal para elementos del sidebar izquierdo).
  */
 (function () {
     const TOUR_KEY  = 'psc_tour_shown_v4';
     const STORE_URL = 'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme';
 
-    // ─── Pasos del tour ───────────────────────────────────────────────────────
+    // ─── Pasos del tour (13 pasos) ────────────────────────────────────────────
     const STEPS = [
+        // ── 1 ──────────────────────────────────────────────────────────────
         {
-            target: null,   // sin spotlight → card centrada
+            target: null,
             title: '👋 Bienvenido a Procurador SCW',
             text:  'Esta guía rápida te muestra las funciones principales. Podés navegar con <strong>← →</strong> del teclado o con los botones de abajo.',
         },
+        // ── 2 ──────────────────────────────────────────────────────────────
         {
             target: '.tab-nav',
-            title: 'Navegación — tabs y menú lateral',
-            text:  'Los tabs <strong>Procurar / Informe / Monitor / Descargas</strong> en la barra superior cambian la acción activa. También podés usar el menú lateral izquierdo — ambos están sincronizados.',
+            title: 'Navegación — tabs principales',
+            text:  'Los tabs <strong>Procurar / Informe / Monitor / Descargas</strong> en la barra superior cambian la acción activa. También podés usar el menú lateral — ambos están sincronizados.',
             setup: expandSidebar,
         },
+        // ── 3 (NUEVO) ───────────────────────────────────────────────────────
         {
-            // Spotlight cubre los tres botones de Procurar
+            target: '#btnSidebarToggle',
+            title: 'Panel lateral — expandir y colapsar',
+            text:  'Este botón oculta o muestra el panel de navegación lateral. Al colapsarlo ganás espacio en la consola; pasando el cursor por encima se muestra temporalmente (<em>hover-peek</em>).',
+        },
+        // ── 4 ──────────────────────────────────────────────────────────────
+        {
             targets: [
                 '[data-action="procurar-hoy"]',
                 '[data-action="procurar-fecha"]',
@@ -36,39 +46,47 @@
                  + '• <strong>Por fecha</strong> — a partir de una fecha límite<br>'
                  + '• <strong>Por lote</strong> — con un archivo .txt de causas',
             setup: expandSidebar,
+            preferRight: true,
         },
+        // ── 5 ──────────────────────────────────────────────────────────────
         {
             target: '[data-action="informe"]',
             title: 'Informe — reporte de una causa',
             text:  'Genera un <strong>informe detallado</strong> de uno o varios expedientes: movimientos actuales e históricos, intervinientes, vinculados y recursos. Soporta modo batch con lista .txt.',
             setup: expandSidebar,
+            preferRight: true,
         },
+        // ── 6 ──────────────────────────────────────────────────────────────
         {
             target: '[data-action="monitor"]',
             title: 'Monitor — seguimiento automático',
             text:  'Rastrea <strong>partes o expedientes específicos</strong> y te notifica cuando aparecen novedades. Ideal para mantenerlo en segundo plano mientras trabajás en otra cosa.',
             setup: expandSidebar,
+            preferRight: true,
         },
+        // ── 7 ──────────────────────────────────────────────────────────────
         {
             target: '#btnMainAction',
             title: 'Botón de acción principal',
             text:  'Muestra la <strong>acción seleccionada</strong> desde el menú. Al ejecutar, el botón queda visible en la barra de herramientas para que puedas <strong>repetir la misma acción</strong> sin volver al menú lateral.',
         },
+        // ── 8 ──────────────────────────────────────────────────────────────
         {
             target: '.subtoolbar',
             title: 'Controles de la consola',
             text:  '• <strong>Detener</strong> — interrumpe el proceso en curso<br>'
                  + '• <strong>Guardar</strong> — exporta el log de consola como .txt<br>'
-                 + '• <strong>Limpiar</strong> — borra el contenido visible de la consola<br>'
-                 + '• <strong>Navegador ●</strong> — muestra u oculta Chrome durante la automatización',
+                 + '• <strong>Limpiar</strong> — borra el contenido visible de la consola',
         },
+        // ── 9 ──────────────────────────────────────────────────────────────
         {
-            target: '#browserToggle',
+            // Usar el label wrapper visible; #browserToggle es el checkbox oculto
+            target: '#browserToggleWrap',
             title: 'Toggle de navegador',
             text:  'Controlá si Chrome es <strong>visible o invisible</strong> durante la automatización. Ocultarlo acelera la ejecución; mostrarlo te permite ver qué hace la app en tiempo real.',
         },
+        // ── 10 ─────────────────────────────────────────────────────────────
         {
-            // Spotlight cubre los cinco botones del bloque Historial
             targets: [
                 '[data-action="visor"]',
                 '[data-action="excel"]',
@@ -83,25 +101,39 @@
                  + '• <strong>Limpiar archivos temp</strong> — libera espacio en disco<br>'
                  + '• <strong>Estadísticas</strong> — resumen de uso del período',
             setup: expandSidebar,
+            preferRight: true,
         },
+        // ── 11 ─────────────────────────────────────────────────────────────
         {
             target: '[data-action="configuracion"]',
-            title: 'Sistema — configuración y cuenta',
-            text:  '• <strong>Configuración</strong> — secciones a procurar, fecha límite, reportes y seguridad<br>'
-                 + '• <strong>Extensión PJN</strong> — gestiona la extensión de Chrome<br><br>'
-                 + 'El <strong>chip de usuario</strong> al pie del panel muestra tu plan activo, uso del período y soporte.',
+            title: 'Configuración',
+            text:  '• <strong>Secciones a procurar</strong> — elegí qué partes del expediente consultar<br>'
+                 + '• <strong>Fecha límite</strong> — hasta dónde retroceder al procurar<br>'
+                 + '• <strong>Reportes y seguridad</strong> — opciones de exportación y credenciales<br>'
+                 + '• <strong>Extensión PJN</strong> — gestión de la extensión de Chrome',
             setup: expandSidebar,
+            preferRight: true,
         },
+        // ── 12 ─────────────────────────────────────────────────────────────
         {
             target: '[data-action="extension"]',
             title: 'Extensión PJN para Chrome',
             text:  'Conecta la app con el portal del PJN. Instalala en un clic desde la Chrome Web Store:<br><br>'
-                 + `<button onclick="window.electronAPI?.openExternalUrl('${STORE_URL}')"
-                        style="display:inline-flex;align-items:center;gap:6px;background:#e65c00;border:none;color:#fff;padding:8px 14px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">
+                 + `<button onclick="window.electronAPI?.openUrlInChrome('${STORE_URL}')"
+                        style="display:inline-flex;align-items:center;gap:6px;background:#e65c00;border:none;color:#fff;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">
                         🧩 Instalar extensión
                     </button><br>`
                  + '<span style="font-size:11px;color:#94a3b8">Chrome puede mostrar <em>"Procede con cuidado"</em> — es normal en extensiones del store oficial con pocos usuarios. Hacé clic en <strong style="color:#e2e8f0">Continuar a la instalación</strong>.</span>',
             setup: expandSidebar,
+            preferRight: true,
+        },
+        // ── 13 (NUEVO) ──────────────────────────────────────────────────────
+        {
+            target: '#userChip',
+            title: 'Tu cuenta — plan y soporte',
+            text:  'El <strong>chip de usuario</strong> al pie del panel muestra tu cuenta activa, el plan contratado, el uso del período y acceso directo a soporte técnico.',
+            setup: expandSidebar,
+            preferRight: true,
         },
     ];
 
@@ -118,9 +150,9 @@
      * Retorna null si ninguno fue encontrado.
      */
     function getBoundingBox(selectors) {
-        let minLeft   = Infinity,  minTop    = Infinity;
-        let maxRight  = -Infinity, maxBottom = -Infinity;
-        let found     = false;
+        let minLeft = Infinity, minTop = Infinity;
+        let maxRight = -Infinity, maxBottom = -Infinity;
+        let found = false;
 
         selectors.forEach(sel => {
             const el = document.querySelector(sel);
@@ -171,13 +203,11 @@
     }
 
     function buildDOM() {
-        // Overlay oscuro
         overlay = document.createElement('div');
         overlay.id = '__tour_overlay';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,0.62);pointer-events:none;';
         document.body.appendChild(overlay);
 
-        // Spotlight con borde dorado
         spotlight = document.createElement('div');
         spotlight.id = '__tour_spotlight';
         spotlight.style.cssText = [
@@ -188,7 +218,6 @@
         ].join(';');
         document.body.appendChild(spotlight);
 
-        // Card
         card = document.createElement('div');
         card.id = '__tour_card';
         card.style.cssText = [
@@ -253,14 +282,13 @@
 
         const nextBtn = card.querySelector('#__tour_next');
         const prevBtn = card.querySelector('#__tour_prev');
-        nextBtn.textContent    = idx === STEPS.length - 1 ? '✓ Finalizar' : 'Siguiente →';
-        prevBtn.style.display  = idx === 0 ? 'none' : '';
+        nextBtn.textContent   = idx === STEPS.length - 1 ? '✓ Finalizar' : 'Siguiente →';
+        prevBtn.style.display = idx === 0 ? 'none' : '';
 
-        // ── Resolver bounding box ──
+        // ── Resolver bounding box ──────────────────────────────────────────
         let rect = null;
 
         if (step.targets) {
-            // Multi-element spotlight
             rect = getBoundingBox(step.targets);
         } else if (step.target) {
             const el = document.querySelector(step.target);
@@ -268,12 +296,8 @@
         }
 
         if (!rect) {
-            if (step.targets || step.target) {
-                // Selector no encontrado → saltear paso
-                nextStep();
-                return;
-            }
-            // Sin target → centrar card, spotlight invisible
+            if (step.targets || step.target) { nextStep(); return; }
+            // Sin target → card centrada, spotlight invisible
             Object.assign(spotlight.style, { left: '0px', top: '0px', width: '0px', height: '0px' });
             requestAnimationFrame(() => {
                 const cw = 318, ch = card.offsetHeight || 220;
@@ -294,27 +318,37 @@
             height: `${rect.height + PAD * 2}px`,
         });
 
-        // Posicionar card: preferir debajo, sino arriba, sino derecha
-        const CARD_W = 318;
-        const CARD_H = card.offsetHeight || 200;
-        const GAP    = 14;
+        // ── Posicionar card ────────────────────────────────────────────────
+        requestAnimationFrame(() => {
+            const CARD_W = 318;
+            const CARD_H = card.offsetHeight || 220;
+            const GAP    = 14;
 
-        const spaceBelow = window.innerHeight - rect.top - rect.height - PAD - GAP;
-        const spaceAbove = rect.top - PAD - GAP;
+            const spaceBelow = window.innerHeight - rect.top - rect.height - PAD - GAP;
+            const spaceAbove = rect.top           - PAD - GAP;
+            const spaceRight = window.innerWidth  - rect.right - PAD - GAP;
 
-        let cx = rect.left + rect.width / 2 - CARD_W / 2;
-        let cy;
+            let cx, cy;
 
-        if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
-            cy = rect.top + rect.height + PAD + GAP;
-        } else {
-            cy = rect.top - PAD - GAP - CARD_H;
-        }
+            if (step.preferRight && spaceRight >= CARD_W + 8) {
+                // Card a la derecha del spotlight (sidebar items)
+                cx = rect.right + PAD + GAP;
+                cy = rect.top + rect.height / 2 - CARD_H / 2;
+            } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
+                // Debajo
+                cx = rect.left + rect.width / 2 - CARD_W / 2;
+                cy = rect.top + rect.height + PAD + GAP;
+            } else {
+                // Arriba
+                cx = rect.left + rect.width / 2 - CARD_W / 2;
+                cy = rect.top - PAD - GAP - CARD_H;
+            }
 
-        cx = Math.max(8, Math.min(cx, window.innerWidth  - CARD_W - 8));
-        cy = Math.max(8, Math.min(cy, window.innerHeight - CARD_H - 8));
+            cx = Math.max(8, Math.min(cx, window.innerWidth  - CARD_W - 8));
+            cy = Math.max(8, Math.min(cy, window.innerHeight - CARD_H - 8));
 
-        Object.assign(card.style, { left: `${cx}px`, top: `${cy}px` });
+            Object.assign(card.style, { left: `${cx}px`, top: `${cy}px` });
+        });
     }
 
     // ─── Navegación ───────────────────────────────────────────────────────────

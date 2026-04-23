@@ -579,6 +579,28 @@ ipcMain.handle('open-chrome-extensions', () => {
     return { success: true };
 });
 
+// Abrir URL directamente en Chrome (perfil personal del usuario, sin perfil dedicado)
+// Usado para instalar la extensión PJN desde la Chrome Web Store
+ipcMain.handle('open-url-in-chrome', (_event, url) => {
+    const rutas = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe')
+    ];
+    let chromePath = null;
+    for (const r of rutas) {
+        if (fs.existsSync(r)) { chromePath = r; break; }
+    }
+    if (!chromePath) {
+        // Fallback: abrir con el navegador del sistema si Chrome no se encuentra
+        shell.openExternal(url).catch(() => {});
+        return { success: true, fallback: true };
+    }
+    const { spawn } = require('child_process');
+    spawn(chromePath, [url], { detached: true, stdio: 'ignore' }).unref();
+    return { success: true };
+});
+
 // Abrir URL en el navegador del sistema
 ipcMain.handle('open-external-url', async (_event, url) => {
     try {

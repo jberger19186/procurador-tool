@@ -61,10 +61,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!val) setStepDone(3);
         });
 
-    // Botón instalar extensión → Chrome Web Store
+    // Botón instalar extensión → abre Chrome directamente en la Chrome Web Store
     document.getElementById('btnInstalarExtOB')
         ?.addEventListener('click', () => {
-            onboardingAPI.openExternalUrl(
+            onboardingAPI.openUrlInChrome(
                 'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme'
             );
             // Marcar step 3 como completado cuando el usuario hace clic en instalar
