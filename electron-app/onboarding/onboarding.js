@@ -228,9 +228,23 @@ function setS1Error(msg) {
 // ── Step 2: Remembered credentials ────────────────────────────────────────
 async function loadRememberedCredentials() {
     try {
-        const raw = await window.onboardingAPI.safeStorageGet('psc_remember');
-        if (!raw) return;
-        const data = JSON.parse(raw);
+        // psc_accounts: formato multi-cuenta compatible con el login de la app principal
+        const raw = await window.onboardingAPI.safeStorageGet('psc_accounts');
+        if (raw) {
+            const accounts = JSON.parse(raw);
+            if (Array.isArray(accounts) && accounts.length > 0) {
+                document.getElementById('loginEmail').value    = accounts[0].email;
+                document.getElementById('loginPassword').value = accounts[0].password;
+                document.getElementById('loginRemember').checked = true;
+                return;
+            }
+        }
+    } catch (_) {}
+    // Fallback: formato anterior psc_remember
+    try {
+        const old = await window.onboardingAPI.safeStorageGet('psc_remember');
+        if (!old) return;
+        const data = JSON.parse(old);
         if (data.email)    document.getElementById('loginEmail').value = data.email;
         if (data.password) document.getElementById('loginPassword').value = data.password;
         document.getElementById('loginRemember').checked = true;
@@ -240,11 +254,23 @@ async function loadRememberedCredentials() {
 }
 
 async function saveOrClearRemembered(email, password, remember) {
-    if (remember) {
-        await window.onboardingAPI.safeStorageSet('psc_remember', JSON.stringify({ email, password }));
-    } else {
-        await window.onboardingAPI.safeStorageDelete('psc_remember');
-    }
+    // Guardar/eliminar en psc_accounts (compatible con la app principal)
+    try {
+        let accounts = [];
+        const raw = await window.onboardingAPI.safeStorageGet('psc_accounts');
+        if (raw) accounts = JSON.parse(raw) || [];
+        if (remember) {
+            const idx = accounts.findIndex(a => a.email === email);
+            if (idx >= 0) { accounts[idx].password = password; }
+            else { accounts.push({ email, password }); }
+            await window.onboardingAPI.safeStorageSet('psc_accounts', JSON.stringify(accounts));
+        } else {
+            await window.onboardingAPI.safeStorageSet(
+                'psc_accounts',
+                JSON.stringify(accounts.filter(a => a.email !== email))
+            );
+        }
+    } catch (_) {}
 }
 
 function showS2Success(email) {

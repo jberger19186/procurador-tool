@@ -34,7 +34,6 @@ async function main() {
                 `--user-data-dir=${profilePath}`,
                 '--window-position=-32000,-32000', // off-screen — invisible al usuario
                 '--window-size=1,1',               // ventana mínima
-                '--no-sandbox',
                 '--ignore-certificate-errors',
                 '--no-first-run',                  // evita diálogos de bienvenida
                 '--no-default-browser-check',      // evita diálogo "hacer Chrome predeterminado"

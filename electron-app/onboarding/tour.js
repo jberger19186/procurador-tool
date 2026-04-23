@@ -333,7 +333,10 @@
             if (step.preferRight && spaceRight >= CARD_W + 8) {
                 // Card a la derecha del spotlight (sidebar items)
                 cx = rect.right + PAD + GAP;
-                cy = rect.top + rect.height / 2 - CARD_H / 2;
+                // Para rects muy altos (multi-target), centrar en viewport
+                cy = rect.height > CARD_H * 2
+                    ? (window.innerHeight - CARD_H) / 2
+                    : rect.top + rect.height / 2 - CARD_H / 2;
             } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
                 // Debajo
                 cx = rect.left + rect.width / 2 - CARD_W / 2;

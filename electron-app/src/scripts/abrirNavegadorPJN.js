@@ -196,7 +196,6 @@ async function main() {
         ignoreDefaultArgs: ['--enable-automation'],
         args: [
             `--user-data-dir=${profilePath}`,
-            '--no-sandbox',
             '--no-first-run',
             '--no-default-browser-check',
             '--disable-default-apps',
