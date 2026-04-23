@@ -718,9 +718,23 @@ ipcMain.handle('onboarding-complete', async (event, opts = {}) => {
         shouldShowTour = !!opts.showTour;
         shouldSkipTour = !opts.showTour;
         if (opts.loggedIn) {
-            createMainWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.show();
+                mainWindow.focus();
+                if (opts.showTour) {
+                    setTimeout(() => mainWindow.webContents.send('show-tour'), 2000);
+                    shouldShowTour = false;
+                }
+            } else {
+                createMainWindow();
+            }
         } else {
-            createLoginWindow();
+            if (loginWindow && !loginWindow.isDestroyed()) {
+                loginWindow.show();
+                loginWindow.focus();
+            } else {
+                createLoginWindow();
+            }
         }
         if (onboardingWindow && !onboardingWindow.isDestroyed()) {
             onboardingWindow.close();
