@@ -144,6 +144,7 @@ body {
   font-size: 13px;
   color: var(--text-1);
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 .logo-version {
   font-size: 10px;
@@ -407,16 +408,31 @@ body {
   color: var(--text-3);
 }
 
-/* ── Barra de estado secundaria (debajo del topbar) ── */
-.app-statusbar {
-  height: 30px;
+/* ── Slot de estado en topbar ── */
+.topbar-status-slot {
   display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+/* ── Barra de estado secundaria (solo cuando la ventana está posicionada) ── */
+.app-statusbar {
+  display: none;
+  height: 30px;
   align-items: center;
   gap: 12px;
   padding: 0 14px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+body.window-positioned .app-statusbar {
+  display: flex;
+}
+body.window-positioned .topbar-status-slot {
+  display: none;
 }
 
 /* ── Sidebar colapsado ── */

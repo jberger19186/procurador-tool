@@ -1509,7 +1509,7 @@ ipcMain.handle('restore-window', async () => {
                 y: y + Math.floor((height - h) / 2),
                 width: w,
                 height: h
-            }, true);
+            });
         }
         return { success: true };
     } catch (error) {
@@ -1524,9 +1524,14 @@ ipcMain.handle('position-left', async () => {
             // Usar el display donde está la ventana (soporta multi-monitor)
             const display = screen.getDisplayNearestPoint(mainWindow.getBounds());
             const { x, y, width, height } = display.workArea;
+            // Si la ventana estaba maximizada, desmaximizarla antes de setBounds
+            // (evita que Windows recorte o reposicione de forma inconsistente)
+            if (mainWindow.isMaximized()) mainWindow.unmaximize();
             const halfWidth = Math.floor(width / 2);
             // setBounds atómico — igual que Windows Snap (mitad derecha)
-            mainWindow.setBounds({ x: x + halfWidth, y, width: halfWidth, height }, true);
+            // Sin `animate: true` — en Windows puede provocar que los controles
+            // queden fuera del área visible durante la animación.
+            mainWindow.setBounds({ x: x + halfWidth, y, width: halfWidth, height });
         }
         return { success: true };
     } catch (error) {

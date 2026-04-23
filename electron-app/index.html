@@ -89,6 +89,21 @@
 
     <div class="topbar-spacer"></div>
 
+    <!-- Slot para pildora de estado + contador (se mueve a app-statusbar al posicionar ventana) -->
+    <div class="topbar-status-slot" id="topbarStatusSlot">
+        <div class="status-pill" id="statusIndicator">
+            <div class="status-dot"></div>
+            <span class="status-text">Inactivo</span>
+        </div>
+        <div class="topbar-progress" id="topbarProgress">
+            <span class="topbar-progress-text" id="topbarProgressText">0 ejec</span>
+            <div class="topbar-progress-track" id="topbarProgressTrack" style="display:none">
+                <div class="topbar-progress-fill" id="topbarProgressFill"></div>
+            </div>
+            <span class="topbar-progress-pct" id="topbarProgressPct" style="display:none">0%</span>
+        </div>
+    </div>
+
     <!-- Controles de ventana (min / max / close) -->
     <div class="win-controls">
         <button class="win-btn win-btn-min" id="btnWinMin" title="Minimizar">
@@ -111,21 +126,10 @@
 </div>
 
 <!-- ================================================================
-     STATUSBAR (siempre visible, debajo del topbar)
+     STATUSBAR (solo visible cuando la ventana está posicionada)
+     Destino de #statusIndicator y #topbarProgress via JS
 ================================================================ -->
-<div class="app-statusbar">
-    <div class="status-pill" id="statusIndicator">
-        <div class="status-dot"></div>
-        <span class="status-text">Inactivo</span>
-    </div>
-    <div class="topbar-progress" id="topbarProgress">
-        <span class="topbar-progress-text" id="topbarProgressText">0 ejec</span>
-        <div class="topbar-progress-track" id="topbarProgressTrack" style="display:none">
-            <div class="topbar-progress-fill" id="topbarProgressFill"></div>
-        </div>
-        <span class="topbar-progress-pct" id="topbarProgressPct" style="display:none">0%</span>
-    </div>
-</div>
+<div class="app-statusbar" id="appStatusbar"></div>
 
 <!-- ================================================================
      MAIN LAYOUT

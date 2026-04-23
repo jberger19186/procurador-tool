@@ -9,9 +9,18 @@ let isWindowPositioned = false;
 //   para que content-area ya tenga el ancho completo cuando el resize llega
 // - Al restaurar, recupera el estado previo del sidebar
 function setPositioned(on) {
-    const ml       = document.querySelector('.main-layout');
-    const sidebar  = document.querySelector('.sidebar');
+    const ml        = document.querySelector('.main-layout');
+    const sidebar   = document.querySelector('.sidebar');
+    const pill      = document.getElementById('statusIndicator');
+    const progress  = document.getElementById('topbarProgress');
+    const slot      = document.getElementById('topbarStatusSlot');
+    const statusbar = document.getElementById('appStatusbar');
     if (on) {
+        // Mover pildora y contador debajo de los tabs (app-statusbar)
+        if (statusbar && pill && progress) {
+            statusbar.appendChild(pill);
+            statusbar.appendChild(progress);
+        }
         // Colapsar sidebar sin animación (transición desactivada temporalmente)
         if (sidebar) sidebar.style.transition = 'none';
         ml?.classList.add('sidebar-collapsed');
@@ -19,6 +28,11 @@ function setPositioned(on) {
         // Restaurar transición en el siguiente frame
         requestAnimationFrame(() => { if (sidebar) sidebar.style.transition = ''; });
     } else {
+        // Restaurar pildora y contador al slot del topbar
+        if (slot && pill && progress) {
+            slot.appendChild(pill);
+            slot.appendChild(progress);
+        }
         document.body.classList.remove('window-positioned');
         // Restaurar estado del sidebar desde localStorage
         const wasCollapsed = localStorage.getItem('sidebar-collapsed') === '1';
