@@ -1499,8 +1499,17 @@ ipcMain.handle('resize-window', async (event, width, height) => {
 ipcMain.handle('restore-window', async () => {
     try {
         if (mainWindow) {
-            mainWindow.setSize(1200, 700);
-            mainWindow.center();
+            const { screen } = require('electron');
+            const display = screen.getDisplayNearestPoint(mainWindow.getBounds());
+            const { x, y, width, height } = display.workArea;
+            const w = Math.min(1200, width);
+            const h = Math.min(700, height);
+            mainWindow.setBounds({
+                x: x + Math.floor((width - w) / 2),
+                y: y + Math.floor((height - h) / 2),
+                width: w,
+                height: h
+            }, true);
         }
         return { success: true };
     } catch (error) {
@@ -1512,13 +1521,12 @@ ipcMain.handle('position-left', async () => {
     try {
         if (mainWindow) {
             const { screen } = require('electron');
-            const primaryDisplay = screen.getPrimaryDisplay();
-            const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-
-            const halfWidth = Math.floor(screenWidth / 2);
-
-            mainWindow.setSize(halfWidth, screenHeight);
-            mainWindow.setPosition(halfWidth, 0);
+            // Usar el display donde está la ventana (soporta multi-monitor)
+            const display = screen.getDisplayNearestPoint(mainWindow.getBounds());
+            const { x, y, width, height } = display.workArea;
+            const halfWidth = Math.floor(width / 2);
+            // setBounds atómico — igual que Windows Snap (mitad derecha)
+            mainWindow.setBounds({ x: x + halfWidth, y, width: halfWidth, height }, true);
         }
         return { success: true };
     } catch (error) {
