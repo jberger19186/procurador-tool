@@ -1525,13 +1525,20 @@ ipcMain.handle('position-left', async () => {
             const display = screen.getDisplayNearestPoint(mainWindow.getBounds());
             const { x, y, width, height } = display.workArea;
             // Si la ventana estaba maximizada, desmaximizarla antes de setBounds
-            // (evita que Windows recorte o reposicione de forma inconsistente)
             if (mainWindow.isMaximized()) mainWindow.unmaximize();
             const halfWidth = Math.floor(width / 2);
-            // setBounds atómico — igual que Windows Snap (mitad derecha)
-            // Sin `animate: true` — en Windows puede provocar que los controles
-            // queden fuera del área visible durante la animación.
-            mainWindow.setBounds({ x: x + halfWidth, y, width: halfWidth, height });
+            // rightMargin: espacio desde el borde derecho de pantalla hasta el
+            // borde derecho de la ventana. Necesario porque en Windows una ventana
+            // frameless con thickFrame invisible queda con el contenido recortado
+            // cuando el borde derecho coincide exactamente con el edge de pantalla.
+            // 40px ≈ 1.5× ancho del botón cerrar → siempre visible.
+            const rightMargin = 40;
+            mainWindow.setBounds({
+                x: x + halfWidth,
+                y,
+                width: halfWidth - rightMargin,
+                height
+            });
         }
         return { success: true };
     } catch (error) {

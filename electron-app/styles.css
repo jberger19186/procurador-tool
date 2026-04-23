@@ -160,6 +160,8 @@ body {
 .tab-nav {
   display: flex;
   gap: 2px;
+  min-width: 0;        /* permite que el flex item se comprima */
+  overflow: hidden;    /* clipa los tabs en vez de empujar al resto */
   -webkit-app-region: no-drag;
 }
 .tab-btn {
@@ -413,7 +415,8 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-shrink: 0;
+  min-width: 0;        /* puede ceder si la ventana se hace angosta */
+  overflow: hidden;    /* no empuja a los win-controls */
   -webkit-app-region: no-drag;
 }
 
