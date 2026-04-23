@@ -1013,26 +1013,47 @@ body.window-positioned .sidebar { display: none; }
   display: grid; grid-template-columns: repeat(3,1fr);
   gap: 10px; margin-bottom: 14px;
 }
+.stats-grid-2 { grid-template-columns: repeat(2,1fr); }
+
+/* Card horizontal: icono izq + datos der */
 .stat-card {
   background: var(--bg-base);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 14px; text-align: center;
+  padding: 12px 14px;
+  display: flex; align-items: flex-start; gap: 10px;
   transition: 0.13s;
 }
-.stat-card:hover { border-color: var(--border-strong); }
-.stat-icon   { font-size: 18px; margin-bottom: 4px; }
-.stat-number { font-size: 22px; font-weight: 700; color: var(--text-1); }
-.stat-label  { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.stat-card:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+
+/* Icono con fondo coloreado */
+.stat-icon {
+  width: 34px; height: 34px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.stat-icon-accent  { background: var(--accent-muted);  color: var(--accent); }
+.stat-icon-success { background: var(--success-bg);     color: var(--success); }
+.stat-icon-info    { background: var(--info-bg);        color: var(--info); }
+.stat-icon-neutral { background: var(--bg-active);      color: var(--text-2); }
+
+.stat-val       { font-size: 22px; font-weight: 700; color: var(--text-1); letter-spacing: -0.02em; line-height: 1.1; }
+.stat-val-sm    { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.stat-label     { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.stat-delta     { font-size: 10.5px; color: var(--success); margin-top: 2px; font-weight: 500; }
+.stat-delta.neg { color: var(--error); }
+
 .btn-refresh-stats {
-  display: block; width: 100%; padding: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; padding: 8px;
   border-radius: var(--radius-sm);
   background: var(--bg-base); color: var(--text-2);
   border: 1px solid var(--border-strong);
   font-size: 12.5px; font-family: var(--font);
   cursor: pointer; transition: 0.13s;
+  margin-top: 14px;
 }
-.btn-refresh-stats:hover { background: var(--bg-hover); color: var(--text-1); }
+.btn-refresh-stats:hover { background: var(--bg-hover); color: var(--text-1); border-color: var(--border-strong); }
 
 /* ================================================================
    MI CUENTA MODAL

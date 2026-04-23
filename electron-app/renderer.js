@@ -252,6 +252,9 @@ function initializeButtons() {
     bind('btnCancelConfig2', () => closeModal('modalConfig'));
     bind('btnCancelConfig3', () => closeModal('modalConfig'));
 
+    // Estadísticas — botón cerrar
+    bind('btnCloseStats', () => closeModal('modalStats'));
+
     // Seguridad — botones dentro del modal de configuración
     bind('btnAbrirNavegador',    abrirNavegadorPJN);
     bind('btnAgregarPasswordSCW', agregarPasswordSCW);
@@ -921,11 +924,19 @@ async function loadStatistics() {
         if (result.success) {
             const stats = result.stats;
 
-            document.getElementById('statProcuracion').textContent = stats.procuracion ?? 0;
-            document.getElementById('statInformes').textContent    = stats.informes    ?? 0;
-            document.getElementById('statMonitoreo').textContent   = stats.monitoreo   ?? 0;
-            document.getElementById('statTasaExito').textContent   = `${stats.tasaExito}%`;
+            // Valores principales
+            document.getElementById('statProcuracion').textContent = (stats.procuracion ?? 0).toLocaleString('es-AR');
+            document.getElementById('statInformes').textContent    = (stats.informes    ?? 0).toLocaleString('es-AR');
+            document.getElementById('statMonitoreo').textContent   = (stats.monitoreo   ?? 0).toLocaleString('es-AR');
+            document.getElementById('statTasaExito').textContent   = stats.tasaExito != null ? `${stats.tasaExito}%` : '—';
 
+            // Deltas (opcionales según API)
+            setStatDelta('statProcuracionDelta', stats.deltaProcuracion);
+            setStatDelta('statInformesDelta',    stats.deltaInformes);
+            setStatDelta('statMonitoreoDelta',   stats.deltaMonitoreo);
+            setStatDelta('statTasaExitoDelta',   stats.deltaTasaExito);
+
+            // Última ejecución
             if (stats.ultimoProcesoTimestamp) {
                 const fecha = new Date(stats.ultimoProcesoTimestamp);
                 document.getElementById('statUltimoProceso').textContent =
@@ -934,7 +945,7 @@ async function loadStatistics() {
                         hour: '2-digit', minute: '2-digit'
                     });
             } else {
-                document.getElementById('statUltimoProceso').textContent = '-';
+                document.getElementById('statUltimoProceso').textContent = '—';
             }
 
             addLog('info', '📊 Estadísticas actualizadas');
@@ -942,6 +953,15 @@ async function loadStatistics() {
     } catch (error) {
         addLog('error', `❌ Error al cargar estadísticas: ${error.message}`);
     }
+}
+
+function setStatDelta(elId, value) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (value == null) { el.textContent = '—'; el.className = 'stat-delta'; return; }
+    const isNeg = value < 0;
+    el.textContent = (isNeg ? '↓ ' : '↑ ') + Math.abs(value) + (typeof value === 'string' ? '' : '');
+    el.className   = 'stat-delta' + (isNeg ? ' neg' : '');
 }
 
 function hideProgressBar(reason) {
