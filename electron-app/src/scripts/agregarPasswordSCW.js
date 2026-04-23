@@ -237,7 +237,6 @@ async function main() {
             '--no-default-browser-check',
             '--disable-default-apps',
             '--disable-session-crashed-bubble',
-            '--disable-blink-features=AutomationControlled',
         ],
         defaultViewport: null,
         timeout: 60000,

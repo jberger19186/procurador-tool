@@ -330,13 +330,14 @@
 
             let cx, cy;
 
-            if (step.preferRight && spaceRight >= CARD_W + 8) {
-                // Card a la derecha del spotlight (sidebar items)
+            if (step.targets && step.preferRight) {
+                // Multi-target sidebar: siempre a la derecha, centrado en viewport
                 cx = rect.right + PAD + GAP;
-                // Multi-target: centrar en viewport; target único: centrar en el elemento
-                cy = step.targets
-                    ? (window.innerHeight - CARD_H) / 2
-                    : rect.top + rect.height / 2 - CARD_H / 2;
+                cy = (window.innerHeight - CARD_H) / 2;
+            } else if (step.preferRight && spaceRight >= CARD_W + 8) {
+                // Target único con preferRight
+                cx = rect.right + PAD + GAP;
+                cy = rect.top + rect.height / 2 - CARD_H / 2;
             } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
                 // Debajo
                 cx = rect.left + rect.width / 2 - CARD_W / 2;

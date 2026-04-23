@@ -38,7 +38,6 @@ async function main() {
                 '--no-default-browser-check',      // evita diálogo "hacer Chrome predeterminado"
                 '--disable-default-apps',          // evita instalación de apps por defecto
                 '--disable-session-crashed-bubble',// evita diálogo de restaurar sesión
-                '--disable-blink-features=AutomationControlled',
             ],
             defaultViewport: null,
             timeout: 60000,                        // 60s en lugar de 30s por las dudas
