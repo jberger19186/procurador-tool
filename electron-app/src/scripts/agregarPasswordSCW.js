@@ -261,6 +261,8 @@ async function main() {
     console.log('🖱️  Haciendo clic en "Agregar"...');
     const MSG_CIERRE = 'Completá la contraseña y presioná Guardar — luego cerrá esta ventana para continuar en Procurador SCW';
 
+    await actualizarOverlay(page, 'Abriendo formulario — completando sitio y usuario...');
+
     // Múltiples selectores para el botón Agregar (distintas versiones de Chrome)
     const addSelectors = ['#addPasswordButton', 'cr-icon-button[iron-icon="cr:add"]', 'cr-button#addPasswordButton'];
     let clickedAdd = false;
