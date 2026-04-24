@@ -200,26 +200,30 @@ async function main() {
             '--no-default-browser-check',
             '--disable-default-apps',
             '--disable-session-crashed-bubble',
+            PORTAL_URL,  // abrir directamente al portal — evita flash de about:blank
         ],
         defaultViewport: null,
         timeout: 60000,
     });
 
+    // Chrome ya abrió en PORTAL_URL; obtener la página activa
     const pages = await browser.pages();
     const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
     await centrarVentana(page);
 
-    // Dar tiempo a Chrome para inicializarse (evita about:blank en primer arranque)
-    await sleep(800);
+    // Esperar a que la navegación inicial complete
+    console.log(`🌐 Esperando carga de ${PORTAL_URL}...`);
+    try {
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+    } catch (_) {
+        // Si ya cargó (no hubo navegación pendiente), ignorar el timeout
+    }
 
-    console.log(`🌐 Navegando a ${PORTAL_URL}...`);
-    await page.goto(PORTAL_URL, { waitUntil: 'networkidle2', timeout: 60000 });
-
-    // Fallback: si Chrome sigue en about:blank, reintentar
+    // Fallback: si por alguna razón Chrome quedó en about:blank, navegar explícitamente
     if (page.url() === 'about:blank' || page.url() === '') {
-        console.log('⚠️ Chrome quedó en about:blank — reintentando navegación...');
-        await sleep(1500);
+        console.log('⚠️ Chrome quedó en about:blank — navegando explícitamente...');
+        await sleep(800);
         await page.goto(PORTAL_URL, { waitUntil: 'networkidle2', timeout: 60000 });
     }
 
