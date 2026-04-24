@@ -355,7 +355,7 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ### FASE 1 — APLICACIÓN (en curso)
 **Objetivo:** producto terminado y pulido para el usuario final.
 
-#### 1.0 Estabilización, UX y estilos del onboarding ✅ COMPLETADO (v2.4.x → v2.4.11)
+#### 1.0 Estabilización, UX y estilos del onboarding ✅ COMPLETADO (v2.4.x → v2.4.14)
 Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - ✅ Eliminados banners Chrome: `--no-sandbox`, `--ignore-certificate-errors`, `--disable-blink-features=AutomationControlled`
 - ✅ Tour paso 10: card se posiciona correctamente a la derecha de los botones spotlight (getBoundingBox + `right` property + 350ms delay para transición CSS)
