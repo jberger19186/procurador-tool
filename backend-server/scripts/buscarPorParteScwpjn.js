@@ -136,25 +136,24 @@ async function buscarPorParte(page, jurisdiccionCodigo, nombreParte) {
     while (true) {
         // Verificar cambio de página (anti-duplicados)
         if (pagina > 1) {
+            const MAX_ESPERA_PAGINA   = 5;   // reintentos
+            const ESPERA_PAGINA_MS    = 5000; // ms entre reintento
             let primerExpActual = await leerPrimerExpediente(page);
             if (primerExpActual && primerExpActual === primerExpAnterior) {
-                // Espera 1: la página puede tardar en actualizar su contenido
-                console.warn(`   ⏳ Página aún no cambió (primer exp: "${primerExpActual}") — esperando 3s (1/2)...`);
-                await new Promise(r => setTimeout(r, 3000));
-                primerExpActual = await leerPrimerExpediente(page);
-
-                if (primerExpActual && primerExpActual === primerExpAnterior) {
-                    // Espera 2: segunda oportunidad antes de reiniciar el navegador
-                    console.warn(`   ⏳ Página todavía no cambió — esperando 3s más (2/2)...`);
-                    await new Promise(r => setTimeout(r, 3000));
+                let cambioPagina = false;
+                for (let intento = 1; intento <= MAX_ESPERA_PAGINA; intento++) {
+                    console.warn(`   ⏳ Página aún no cambió (primer exp: "${primerExpActual}") — esperando ${ESPERA_PAGINA_MS / 1000}s (${intento}/${MAX_ESPERA_PAGINA})...`);
+                    await new Promise(r => setTimeout(r, ESPERA_PAGINA_MS));
                     primerExpActual = await leerPrimerExpediente(page);
-
-                    if (primerExpActual && primerExpActual === primerExpAnterior) {
-                        // Tras 6s de espera la página sigue igual → reiniciar navegador
-                        const err = new Error(`La página no cambió al navegar (primer exp: "${primerExpActual}") — posible error de navegación.`);
-                        err.partialExpedientes = expedientes;
-                        throw err;
+                    if (!primerExpActual || primerExpActual !== primerExpAnterior) {
+                        cambioPagina = true;
+                        break;
                     }
+                }
+                if (!cambioPagina) {
+                    const err = new Error(`La página no cambió al navegar tras ${MAX_ESPERA_PAGINA} reintentos (primer exp: "${primerExpActual}") — posible error de navegación.`);
+                    err.partialExpedientes = expedientes;
+                    throw err;
                 }
                 console.log(`   ✅ Página cargó tras espera extra.`);
             }
