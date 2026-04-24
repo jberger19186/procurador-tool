@@ -277,6 +277,10 @@ async function main() {
     }
     await sleep(1000);
 
+    // El clic en "Agregar" puede disparar una navegación SPA en Chrome que borra
+    // los elementos inyectados — re-inyectar el overlay si ya no está en el DOM
+    await mostrarOverlay(page, 'Completando datos del formulario...');
+
     // ── 2. Campo Sitio ──────────────────────────────────────────────────────
     const sitio = 'sso.pjn.gov.ar';
     console.log(`📝 Completando sitio: ${sitio}`);
