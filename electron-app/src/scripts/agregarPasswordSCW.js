@@ -249,6 +249,13 @@ async function main() {
 
     console.log('🔑 Navegando al gestor de contraseñas...');
     await page.goto('chrome://password-manager/passwords', { waitUntil: 'domcontentloaded' });
+
+    // Si Chrome quedó en about:blank (primer arranque con perfil nuevo), reintentar
+    if (page.url() === 'about:blank' || page.url() === '') {
+        console.log('⚠️ Chrome quedó en about:blank — reintentando navegación...');
+        await sleep(1500);
+        await page.goto('chrome://password-manager/passwords', { waitUntil: 'domcontentloaded' });
+    }
     await sleep(2500);
 
     // Mostrar overlay: el usuario no debe tocar nada mientras se prepara el formulario

@@ -169,6 +169,7 @@
         return {
             left:   minLeft,
             top:    minTop,
+            right:  maxRight,
             width:  maxRight  - minLeft,
             height: maxBottom - minTop,
         };

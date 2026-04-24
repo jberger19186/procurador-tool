@@ -213,6 +213,13 @@ async function main() {
     console.log(`🌐 Navegando a ${PORTAL_URL}...`);
     await page.goto(PORTAL_URL, { waitUntil: 'networkidle2', timeout: 60000 });
 
+    // Si Chrome abrió en about:blank (perfil nuevo o primer arranque), reintentar navegación
+    if (page.url() === 'about:blank' || page.url() === '') {
+        console.log('⚠️ Chrome quedó en about:blank — reintentando navegación...');
+        await sleep(1500);
+        await page.goto(PORTAL_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+    }
+
     // Detectar estado: formulario de login o sesión activa
     const tieneLogin = await Promise.race([
         page.waitForSelector('#username', { timeout: 15000 }).then(() => true),
