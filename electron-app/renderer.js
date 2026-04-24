@@ -1481,7 +1481,7 @@ function showLoginManualAlert(cuit, message) {
                 </div>
             </div>
             <p style="font-size:12.5px;color:#94a3b8;line-height:1.7;margin:0 0 16px;white-space:pre-line;">
-                ${message.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}
+                ${message.replace(/\n/g,'<br>')}
             </p>
             <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1e293b;padding-top:12px;">
                 <span style="font-size:12px;color:#475569;">Chrome está esperando</span>
