@@ -388,12 +388,15 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - **Regla:** solo reorganización de código, sin cambiar funcionalidad ni estilos
 - No es urgente mientras no haya problemas de mantenimiento
 
-#### 1.2 Migración extensión → Chrome Web Store
-- **Eliminar** distribución CRX desde el backend (`/extension/updates.xml`, `/extension/download`, `/extension/latest.crx`)
-- **Actualizar onboarding** con enlace directo a Chrome Web Store
-- **Agregar alerta en Electron** cuando hay nueva versión de la extensión en la store
-- **Agregar aviso** sobre warning de Chrome al instalar (ver texto arriba)
-- Flujos de la extensión configurables por plan (según acceso del usuario)
+#### 1.2 Migración extensión → Chrome Web Store ✅ COMPLETADO
+- Extensión publicada y aprobada en Chrome Web Store (v1.3.2)
+- Onboarding actualizado con enlace directo a la store
+- Aviso sobre warning de Chrome al instalar incluido en onboarding
+- Distribución CRX vieja del backend pendiente de limpiar (baja urgencia)
+
+#### 1.3b Rediseño visual de los visores HTML — PENDIENTE ← PRÓXIMA PRIORIDAD
+Los visores son ventanas HTML que muestran resultados de expedientes/informes.
+Necesitan aplicar el sistema de diseño de la app (amber, Inter, Crimson Pro, fondo `#f7f7f5`).
 
 #### 1.3 Code Signing — DIFERIDO (implementar en Fase 2-5)
 Evaluar Microsoft Azure Trusted Signing para firmar el instalador `.exe` de Electron.
