@@ -237,6 +237,7 @@ async function main() {
             '--no-default-browser-check',
             '--disable-default-apps',
             '--disable-session-crashed-bubble',
+            'chrome://password-manager/passwords',  // abrir directamente — evita about:blank
         ],
         defaultViewport: null,
         timeout: 60000,
@@ -247,19 +248,15 @@ async function main() {
 
     await centrarVentana(page);
 
-    // Dar tiempo a Chrome para inicializarse (evita about:blank en primer arranque)
-    await sleep(800);
-
-    console.log('🔑 Navegando al gestor de contraseñas...');
-    await page.goto('chrome://password-manager/passwords', { waitUntil: 'domcontentloaded' });
-
-    // Fallback: si Chrome sigue en about:blank, reintentar
-    if (page.url() === 'about:blank' || page.url() === '') {
-        console.log('⚠️ Chrome quedó en about:blank — reintentando navegación...');
-        await sleep(1500);
-        await page.goto('chrome://password-manager/passwords', { waitUntil: 'domcontentloaded' });
-    }
+    // Chrome abrió directamente en el gestor; esperar a que cargue el Shadow DOM
     await sleep(2500);
+
+    // Fallback: si Chrome no cargó el gestor (ej. perfil nuevo), navegar explícitamente
+    if (!page.url().startsWith('chrome://password-manager')) {
+        console.log('⚠️ No se cargó el gestor — navegando explícitamente...');
+        await page.goto('chrome://password-manager/passwords', { waitUntil: 'domcontentloaded' });
+        await sleep(2500);
+    }
 
     // Mostrar overlay: el usuario no debe tocar nada mientras se prepara el formulario
     await mostrarOverlay(page, 'Abriendo formulario de nueva contraseña...');
