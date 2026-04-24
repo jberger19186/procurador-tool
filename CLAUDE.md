@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-24 (v2.4.11)
+> Última actualización: 2026-04-24 (v2.4.13)
 
 ---
 
@@ -334,13 +334,15 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - ✅ Visor automático: corregido selector de toggle (`tgl-abrirVisor` + `.cfg-toggle.on`)
 - ✅ `closeChromeProfile()`: mata Chrome por PID, espera 2s, elimina lock files (SingletonLock/Cookie/Socket) para evitar crash recovery
 - ✅ `abrirNavegadorPJN.js`: Chrome abre directamente en `portalpjn.pjn.gov.ar` (URL como arg de launch); `page.goto()` espera la cadena completa de redirects SSO; completa CUIT y busca credenciales
-- ✅ `agregarPasswordSCW.js`: Chrome abre directamente en `chrome://password-manager/passwords` (URL como arg de launch); elimina about:blank
+- ✅ `agregarPasswordSCW.js`: usa `page.goto('chrome://password-manager/passwords')` directamente después de lanzar Chrome (arg de launch no funcionaba — Chrome abría Google primero); overlay mostrado inmediatamente tras goto, antes del sleep
 - ✅ `preCalentarChrome.js`: corregido profilePath (`APPDATA` → `LOCALAPPDATA\ProcuradorSCW\ChromeProfile`) — script orphaned, no se llama desde main.js
 - ✅ **Estilos onboarding unificados con la app** (v2.4.11, rama `visual-onboarding-fixes`):
   - `onboarding.css`: logo/botones/inputs/info-box migrados de azul/violeta → amber (`#d97706`), fondo `#f7f7f5`
   - Botones: tamaño igual al tour card (`padding:6px 14px; font-size:12px; border-radius:7px`)
   - Modal "Nueva versión" (`index.html`): rediseñado igual que tour card (amber border, icono `#422006`, botón `#eab308`)
-  - Modal "Acción requerida" (`renderer.js`): misma estructura tour card + fix HTML visible como texto (`\n→<br>`, escape seguro)
+  - Modal "Acción requerida" (`renderer.js`): misma estructura tour card + texto fijo hardcodeado ("Chrome está esperando que ingreses tu contraseña del PJN...") — ya no depende del mensaje del script encriptado
+- ✅ **v2.4.13** (sesión 2026-04-24):
+  - `agregarPasswordSCW.js`: `page.goto()` reemplaza arg de launch; overlay mostrado inmediatamente tras cargar la página (rama `fix/agregar-password-overlay`)
 
 #### 1.1 Rediseño UI de la App Electron ← PRÓXIMA PRIORIDAD
 - Refactorizar `renderer.js` (131 KB monolítico) en módulos ES6 separados por sección
@@ -432,7 +434,7 @@ Evaluar Microsoft Azure Trusted Signing para firmar el instalador `.exe` de Elec
 | Renderer.js monolítico → refactorizar incremental | No introducir bundler complejo; mantener vanilla JS con módulos ES6 |
 | Landing servida por Nginx estático | Sin carga al servidor Node.js |
 | SSL en api: certbot / SSL en landing: Cloudflare | Separación de responsabilidades, Cloudflare como CDN y WAF |
-| URL como arg en Puppeteer launch | `abrirNavegadorPJN.js` y `agregarPasswordSCW.js` pasan la URL destino como arg de Chrome para evitar el flash de about:blank; page.goto() se sigue llamando para esperar networkidle2 |
+| URL como arg en Puppeteer launch | Solo `abrirNavegadorPJN.js` usa URL como arg (sitios web externos). `agregarPasswordSCW.js` usa directamente `page.goto('chrome://')` porque Chrome ignora las `chrome://` URLs pasadas como arg de launch (termina en Google/nueva pestaña) |
 | `closeChromeProfile()` elimina lock files | `taskkill /F` deja SingletonLock/Cookie/Socket huérfanos; eliminarlos evita que Chrome entre en crash-recovery al próximo arranque |
 | `ignoreDefaultArgs: ['--enable-automation']` | Sin este flag Chrome muestra barra "controlado por software automatizado"; sin --no-sandbox ni --ignore-certificate-errors para evitar banners de seguridad |
 
