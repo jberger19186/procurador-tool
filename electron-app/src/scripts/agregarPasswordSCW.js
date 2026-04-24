@@ -247,10 +247,13 @@ async function main() {
 
     await centrarVentana(page);
 
+    // Dar tiempo a Chrome para inicializarse (evita about:blank en primer arranque)
+    await sleep(800);
+
     console.log('🔑 Navegando al gestor de contraseñas...');
     await page.goto('chrome://password-manager/passwords', { waitUntil: 'domcontentloaded' });
 
-    // Si Chrome quedó en about:blank (primer arranque con perfil nuevo), reintentar
+    // Fallback: si Chrome sigue en about:blank, reintentar
     if (page.url() === 'about:blank' || page.url() === '') {
         console.log('⚠️ Chrome quedó en about:blank — reintentando navegación...');
         await sleep(1500);

@@ -210,10 +210,13 @@ async function main() {
 
     await centrarVentana(page);
 
+    // Dar tiempo a Chrome para inicializarse (evita about:blank en primer arranque)
+    await sleep(800);
+
     console.log(`🌐 Navegando a ${PORTAL_URL}...`);
     await page.goto(PORTAL_URL, { waitUntil: 'networkidle2', timeout: 60000 });
 
-    // Si Chrome abrió en about:blank (perfil nuevo o primer arranque), reintentar navegación
+    // Fallback: si Chrome sigue en about:blank, reintentar
     if (page.url() === 'about:blank' || page.url() === '') {
         console.log('⚠️ Chrome quedó en about:blank — reintentando navegación...');
         await sleep(1500);

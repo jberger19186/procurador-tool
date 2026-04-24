@@ -24,7 +24,7 @@ function detectarChrome() {
 async function main() {
     try {
         const chromePath = detectarChrome();
-        const profilePath = process.env.APPDATA;
+        const profilePath = require('path').join(process.env.LOCALAPPDATA || '', 'ProcuradorSCW', 'ChromeProfile');
 
         const browser = await puppeteer.launch({
             headless: false,

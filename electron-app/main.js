@@ -306,6 +306,8 @@ ipcMain.handle('onboarding-check-profile', () => {
  */
 async function closeChromeProfile() {
     const { execSync } = require('child_process');
+    const profilePath = path.join(process.env.LOCALAPPDATA || '', 'ProcuradorSCW', 'ChromeProfile');
+
     try {
         const result = execSync(
             "wmic process where \"name='chrome.exe' and commandline like '%ProcuradorSCW%'\" get processid",
@@ -316,10 +318,21 @@ async function closeChromeProfile() {
             try { execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' }); } catch (_) {}
         }
         if (pids.length > 0) {
-            await new Promise(r => setTimeout(r, 1500)); // esperar a que Chrome libere el perfil
+            await new Promise(r => setTimeout(r, 2000)); // esperar a que Chrome libere el perfil
         }
     } catch (_) {
         // Chrome con perfil ProcuradorSCW no está corriendo — normal
+    }
+
+    // Eliminar lock files para que Chrome no entre en modo crash-recovery al próximo arranque.
+    // taskkill /F no da tiempo a Chrome de cerrar limpiamente, y los locks quedan huérfanos.
+    const lockFiles = [
+        path.join(profilePath, 'SingletonLock'),
+        path.join(profilePath, 'SingletonCookie'),
+        path.join(profilePath, 'SingletonSocket'),
+    ];
+    for (const lf of lockFiles) {
+        try { if (fs.existsSync(lf)) fs.unlinkSync(lf); } catch (_) {}
     }
 }
 
