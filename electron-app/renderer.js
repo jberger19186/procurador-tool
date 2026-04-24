@@ -1464,28 +1464,30 @@ function showLoginManualAlert(cuit, message) {
     overlay.innerHTML = `
         <div style="
             background:#0f172a;
-            border:1px solid rgba(245,158,11,0.4);
-            border-radius:14px;
-            padding:26px 24px 20px;
-            width:400px;
+            border:1px solid rgba(234,179,8,0.28);
+            border-radius:12px;
+            padding:18px 20px 14px;
+            width:318px;
             max-width:90vw;
-            box-shadow:0 24px 60px rgba(0,0,0,0.8);
+            box-shadow:0 16px 48px rgba(0,0,0,0.7);
             font-family:var(--font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
         ">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
                 <div style="width:44px;height:44px;background:#422006;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🔐</div>
                 <div style="flex:1;min-width:0;">
-                    <div style="font-size:15px;font-weight:700;color:#fef3c7;">Acción requerida</div>
-                    <div style="font-size:12px;color:#92400e;margin-top:2px;">CUIT ${escapeHtml(String(cuit))}</div>
+                    <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;color:#eab308;text-transform:uppercase;margin-bottom:3px;">ACCIÓN REQUERIDA</div>
+                    <div style="font-size:14px;font-weight:700;color:#f8fafc;">Contraseña manual</div>
+                    <div style="font-size:12px;color:#94a3b8;margin-top:2px;">CUIT ${escapeHtml(String(cuit))}</div>
                 </div>
             </div>
-            <p style="font-size:13px;color:#fcd34d;line-height:1.65;margin:0 0 20px;">
-                ${escapeHtml(message)}
+            <p style="font-size:12.5px;color:#94a3b8;line-height:1.7;margin:0 0 16px;white-space:pre-line;">
+                ${message.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}
             </p>
-            <div style="display:flex;justify-content:flex-end;">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1e293b;padding-top:12px;">
+                <span style="font-size:12px;color:#475569;">Chrome está esperando</span>
                 <button id="__psc_manual_alert_btn"
-                        style="background:#f59e0b;border:none;color:#0f172a;padding:9px 20px;
-                               border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;
+                        style="background:#eab308;border:none;color:#0f172a;padding:6px 14px;
+                               border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;
                                font-family:var(--font,sans-serif);">
                     Entendido
                 </button>
