@@ -1061,6 +1061,22 @@ function setupProcessListeners() {
         if (rutaExcel) addLog('info', `📊 Excel generado: ${rutaExcel}`);
         if (rutaHTML)  addLog('info', `🌐 Visor HTML generado: ${rutaHTML}`);
         showNotification(`Reportes batch generados: ${exitosos}/${total} expedientes`, 'success');
+
+        // Abrir visor HTML si la opción está activada
+        if (rutaHTML) {
+            const abrirVisorActivo = document.getElementById('tgl-abrirVisor')
+                ?.querySelector('.cfg-toggle')?.classList.contains('on');
+            if (abrirVisorActivo) {
+                setTimeout(async () => {
+                    try {
+                        await window.electronAPI.openFile(rutaHTML);
+                        addLog('info', '🌐 Visor de informe abierto automáticamente');
+                    } catch (e) {
+                        addLog('warning', `⚠️ Error al abrir visor de informe: ${e.message}`);
+                    }
+                }, 1000);
+            }
+        }
     });
 
     window.electronAPI.onProcessFinished((result) => {

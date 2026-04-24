@@ -359,10 +359,10 @@
         expedientesFiltrados = datosCompletos.expedientes;
       } else {
         expedientesFiltrados = datosCompletos.expedientes.filter(exp =>
-          exp.expediente.toLowerCase().includes(busqueda) ||
-          exp.caratula.toLowerCase().includes(busqueda)   ||
-          exp.situacion.toLowerCase().includes(busqueda)  ||
-          exp.dependencia.toLowerCase().includes(busqueda)
+          (exp.expediente  || '').toLowerCase().includes(busqueda) ||
+          (exp.caratula    || '').toLowerCase().includes(busqueda) ||
+          (exp.situacion   || '').toLowerCase().includes(busqueda) ||
+          (exp.dependencia || '').toLowerCase().includes(busqueda)
         );
       }
       mostrarTabla(expedientesFiltrados);
@@ -388,14 +388,19 @@
       expedientes.forEach((exp, index) => {
         const ok = exp.estado === 'exitoso';
         const movCount = exp.movimientos ? exp.movimientos.length : 0;
-        const caratulaCorta = exp.caratula.length > 45 ? exp.caratula.substring(0,45) + '…' : exp.caratula;
-        const depCorta = exp.dependencia.length > 28 ? exp.dependencia.substring(0,28) + '…' : exp.dependencia;
+        const caratula    = exp.caratula    || '';
+        const dependencia = exp.dependencia || '';
+        const situacion   = exp.situacion   || '';
+        const expediente  = exp.expediente  || '';
+        const ultimaAct   = exp.ultimaAct   || '—';
+        const caratulaCorta = caratula.length > 45    ? caratula.substring(0,45)    + '…' : caratula;
+        const depCorta      = dependencia.length > 28 ? dependencia.substring(0,28) + '…' : dependencia;
         html += `<tr>
-          <td class="mono">${exp.expediente}</td>
-          <td title="${exp.caratula}" style="color:var(--text-1);font-weight:500">${caratulaCorta}</td>
-          <td title="${exp.dependencia}">${depCorta}</td>
-          <td>${exp.situacion}</td>
-          <td style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);white-space:nowrap">${exp.ultimaAct}</td>
+          <td class="mono">${expediente}</td>
+          <td title="${caratula}" style="color:var(--text-1);font-weight:500">${caratulaCorta}</td>
+          <td title="${dependencia}">${depCorta}</td>
+          <td>${situacion}</td>
+          <td style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);white-space:nowrap">${ultimaAct}</td>
           <td><span class="status-badge ${ok ? 'badge-ok' : 'badge-err'}"><span class="badge-dot"></span>${ok ? 'Exitoso' : 'Error'}</span></td>
           <td><span class="${movCount > 0 ? 'movs-count' : 'movs-count zero'}">${movCount}</span></td>
           <td><button class="btn-ver" onclick="abrirModal(${index})">Ver →</button></td>
@@ -409,10 +414,14 @@
     function abrirModal(index) {
       expedienteActualIndex = index;
       const exp = expedientesFiltrados[index];
-      document.getElementById('modal-exp-badge').textContent  = exp.expediente;
-      document.getElementById('modal-expediente').textContent = exp.caratula;
+      const caratula    = exp.caratula    || '';
+      const dependencia = exp.dependencia || '';
+      const situacion   = exp.situacion   || '';
+      const ultimaAct   = exp.ultimaAct   || '—';
+      document.getElementById('modal-exp-badge').textContent  = exp.expediente || '';
+      document.getElementById('modal-expediente').textContent = caratula;
       document.getElementById('modal-info').innerHTML =
-        exp.dependencia + ' &nbsp;·&nbsp; ' + exp.situacion + ' &nbsp;·&nbsp; Últ. act.: ' + exp.ultimaAct;
+        dependencia + ' &nbsp;·&nbsp; ' + situacion + ' &nbsp;·&nbsp; Últ. act.: ' + ultimaAct;
 
       let bodyHTML = '';
       if (exp.estado === 'exitoso' && exp.movimientos && exp.movimientos.length > 0) {
