@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-24 (v2.4.13)
+> Última actualización: 2026-04-24 (v2.4.14)
 
 ---
 
@@ -276,15 +276,45 @@ Aviso a mostrar al usuario en onboarding:
    └── Sin eliminarlos Chrome arranca en crash-recovery (about:blank o diálogo restaurar)
 ```
 
-### Launch de Chrome via Puppeteer — regla de oro
-```javascript
-// ✅ CORRECTO: pasar URL como arg de launch + llamar page.goto()
-puppeteer.launch({ args: [..., 'https://url.destino'] })
-// Luego: await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 })
-// → Chrome abre sin about:blank flash; goto() espera redirects completos (incluyendo SSO)
+### ⚠️ Problema recurrente: `about:blank` — historia y solución definitiva
 
-// ❌ INCORRECTO: waitForNavigation() DESPUÉS de que Chrome ya cargó la URL
-// → waitForNavigation() espera una navegación que ya ocurrió → timeout de 30s
+Este bug rompió la app múltiples veces. Documentado para no volver a introducirlo.
+
+**Síntoma:** Chrome abre en `about:blank` (o en la página de Google) en lugar de ir directo al destino. La automatización falla porque los selectores no encuentran nada.
+
+**Causas que se identificaron:**
+
+1. **`waitForNavigation()` después de que Chrome ya navegó** → espera una navegación que nunca llega → timeout de 30s → falla.
+2. **`chrome://` URLs pasadas como arg de launch** → Chrome las ignora silenciosamente en algunos perfiles y abre Google o nueva pestaña.
+3. **Lock files huérfanos** (`SingletonLock`, `SingletonCookie`, `SingletonSocket`) → `taskkill /F` mata Chrome pero no limpia estos archivos → al próximo arranque Chrome entra en crash-recovery y muestra `about:blank` o el diálogo "restaurar sesión".
+
+**Solución definitiva por script:**
+
+```javascript
+// ✅ abrirNavegadorPJN.js — sitios web externos (https://)
+// Pasar la URL como arg de launch evita el flash de about:blank inicial
+// page.goto() luego espera los redirects completos de SSO (networkidle2)
+puppeteer.launch({ args: [..., 'https://portalpjn.pjn.gov.ar'] })
+await page.goto('https://portalpjn.pjn.gov.ar', { waitUntil: 'networkidle2', timeout: 60000 });
+
+// ✅ agregarPasswordSCW.js — URLs chrome:// internas
+// NO pasar chrome:// como arg de launch (Chrome lo ignora → abre Google)
+// Usar directamente page.goto() después de que Chrome arranque
+puppeteer.launch({ args: [...] })  // sin URL en args
+await page.goto('chrome://password-manager/passwords', { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+// ❌ NUNCA hacer esto:
+await browser.pages()           // obtener page
+await waitForNavigation()       // esperar navegación → YA OCURRIÓ → timeout
+```
+
+**`closeChromeProfile()` — limpieza obligatoria de lock files:**
+```
+1. wmic → PIDs de chrome.exe con '%ProcuradorSCW%' en commandline
+2. taskkill /F /PID <cada pid>
+3. await sleep(2000)   ← Chrome necesita tiempo para morir
+4. fs.unlinkSync: SingletonLock, SingletonCookie, SingletonSocket
+   └── Sin este paso → próximo arranque entra en crash-recovery → about:blank
 ```
 
 ### Flags de Chrome a NO usar (generan banners en el navegador)
@@ -341,8 +371,11 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
   - Botones: tamaño igual al tour card (`padding:6px 14px; font-size:12px; border-radius:7px`)
   - Modal "Nueva versión" (`index.html`): rediseñado igual que tour card (amber border, icono `#422006`, botón `#eab308`)
   - Modal "Acción requerida" (`renderer.js`): misma estructura tour card + texto fijo hardcodeado ("Chrome está esperando que ingreses tu contraseña del PJN...") — ya no depende del mensaje del script encriptado
-- ✅ **v2.4.13** (sesión 2026-04-24):
-  - `agregarPasswordSCW.js`: `page.goto()` reemplaza arg de launch; overlay mostrado inmediatamente tras cargar la página (rama `fix/agregar-password-overlay`)
+- ✅ **v2.4.13 → v2.4.14** (sesión 2026-04-24, rama `fix/agregar-password-overlay`):
+  - `agregarPasswordSCW.js`: eliminada la `chrome://` URL del arg de launch (Chrome la ignoraba y abría Google); reemplazada por `page.goto()` directo tras el arranque
+  - Overlay mostrado inmediatamente después de `page.goto()`, antes del sleep — queda visible durante todo el llenado del formulario
+  - Re-inyección del overlay tras clic en "Agregar" (la navegación SPA de Chrome lo borraba)
+  - Nota: el dialog nativo "Agregar contraseña" usa el top-layer del browser — ningún overlay web puede renderizarse encima; es una limitación de Chrome, no un bug
 
 #### 1.1 Rediseño UI de la App Electron ← PRÓXIMA PRIORIDAD
 - Refactorizar `renderer.js` (131 KB monolítico) en módulos ES6 separados por sección
