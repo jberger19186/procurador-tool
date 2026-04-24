@@ -519,9 +519,16 @@ body {
   line-height: 1.85;
   background: var(--bg-base);
 }
-.console-output::-webkit-scrollbar { width: 5px; }
+.console-output::-webkit-scrollbar { width: 5px; height: 5px; }
 .console-output::-webkit-scrollbar-track { background: transparent; }
 .console-output::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+.console-output::-webkit-scrollbar-corner { background: transparent; }
+
+/* Scrollbar delgada reutilizable — mismo estilo que console-output */
+.thin-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
+.thin-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+.thin-scroll::-webkit-scrollbar-corner { background: transparent; }
 
 /* Console lines */
 .console-line {

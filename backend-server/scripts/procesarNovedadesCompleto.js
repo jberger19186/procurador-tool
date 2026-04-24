@@ -283,7 +283,7 @@ async function procesarNovedadesCompleto(config) {
         // ============ FASE 3: CONSULTAR MOVIMIENTOS ============
         console.log("🔍 FASE 2: Consultando movimientos de expedientes...\n");
         const tiempoConsultaInicio = Date.now();
-        const MAX_REINTENTOS_POR_EXPEDIENTE = 3;
+        const MAX_REINTENTOS_POR_EXPEDIENTE = 5;
 
         for (let i = 0; i < expedientesUnicos.length; i++) {
             const exp = expedientesUnicos[i];
@@ -330,7 +330,7 @@ async function procesarNovedadesCompleto(config) {
                     }
 
                     await testM2.nuevaConsultaPublica(page, jurisdiccion, numero, anio);
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await new Promise(resolve => setTimeout(resolve, 5000));
 
                     const opciones = {
                         mode: 'custom',

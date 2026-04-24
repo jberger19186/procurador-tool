@@ -155,6 +155,41 @@ router.post('/partes', async (req, res) => {
     }
 
     try {
+        const nombreNorm  = nombre_parte.trim().toUpperCase();
+        const siglaUpper  = jurisdiccion_sigla.toUpperCase();
+
+        // Verificar si ya existe una parte ACTIVA con el mismo nombre+jurisdicción
+        const activaResult = await db.query(
+            `SELECT id FROM monitor_partes
+             WHERE user_id = $1 AND nombre_parte = $2 AND jurisdiccion_codigo = $3 AND activo = true`,
+            [userId, nombreNorm, jurisdiccion_codigo]
+        );
+        if (activaResult.rows.length > 0) {
+            return res.status(409).json({ error: 'Ya existe una parte activa con ese nombre en esa jurisdicción' });
+        }
+
+        // Verificar si existe una parte INACTIVA (eliminada previamente) — reactivarla
+        const inactivaResult = await db.query(
+            `SELECT id FROM monitor_partes
+             WHERE user_id = $1 AND nombre_parte = $2 AND jurisdiccion_codigo = $3 AND activo = false`,
+            [userId, nombreNorm, jurisdiccion_codigo]
+        );
+
+        if (inactivaResult.rows.length > 0) {
+            // Reactivar: limpiar expedientes viejos y resetear la parte
+            const parteId = inactivaResult.rows[0].id;
+            await db.query(`DELETE FROM monitor_expedientes WHERE parte_id = $1`, [parteId]);
+            const reactivada = await db.query(
+                `UPDATE monitor_partes
+                 SET activo = true, tiene_linea_base = false, fecha_creacion = NOW(), jurisdiccion_sigla = $1
+                 WHERE id = $2
+                 RETURNING id, nombre_parte, jurisdiccion_codigo, jurisdiccion_sigla, tiene_linea_base, fecha_creacion`,
+                [siglaUpper, parteId]
+            );
+            console.log(`♻️ Monitor: parte reactivada — usuario ${userId}: ${siglaUpper} · ${nombreNorm}`);
+            return res.status(201).json({ success: true, parte: reactivada.rows[0] });
+        }
+
         // Verificar límite del plan (desde BD)
         const limite = await getLimitesFromDB(db, userId);
         const plan   = limite.plan;
@@ -175,16 +210,13 @@ router.post('/partes', async (req, res) => {
             `INSERT INTO monitor_partes (user_id, nombre_parte, jurisdiccion_codigo, jurisdiccion_sigla)
              VALUES ($1, $2, $3, $4)
              RETURNING id, nombre_parte, jurisdiccion_codigo, jurisdiccion_sigla, tiene_linea_base, fecha_creacion`,
-            [userId, nombre_parte.trim().toUpperCase(), jurisdiccion_codigo, jurisdiccion_sigla.toUpperCase()]
+            [userId, nombreNorm, jurisdiccion_codigo, siglaUpper]
         );
 
-        console.log(`📌 Monitor: parte agregada — usuario ${userId}: ${jurisdiccion_sigla} · ${nombre_parte}`);
+        console.log(`📌 Monitor: parte agregada — usuario ${userId}: ${siglaUpper} · ${nombreNorm}`);
         res.status(201).json({ success: true, parte: result.rows[0] });
 
     } catch (error) {
-        if (error.code === '23505') {
-            return res.status(409).json({ error: 'Ya existe una parte con ese nombre en esa jurisdicción' });
-        }
         console.error('Error en POST /monitor/partes:', error);
         res.status(500).json({ error: 'Error del servidor' });
     }

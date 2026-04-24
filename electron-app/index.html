@@ -854,7 +854,7 @@
                     <label for="monitor-check-all" style="font-size:13px;cursor:pointer;user-select:none">Seleccionar todas</label>
                     <span class="tooltip-icon" data-tip="Marca o desmarca todas las partes. Solo las seleccionadas se incluyen en la consulta.">?</span>
                 </div>
-                <div id="monitor-partes-lista" style="max-height:260px;overflow-y:auto">
+                <div id="monitor-partes-lista" class="thin-scroll" style="max-height:260px;overflow-y:auto">
                     <div style="color:var(--text-3);font-size:13px;text-align:center;padding:20px">Cargando partes...</div>
                 </div>
                 <!-- Formulario agregar/editar -->
@@ -927,7 +927,7 @@
                     <span id="monitor-exp-titulo" style="font-size:13px;color:var(--text-3);flex:1"></span>
                 </div>
                 <div id="monitor-exp-loading" style="color:var(--text-3);font-size:13px;text-align:center;padding:20px">Cargando expedientes...</div>
-                <div id="monitor-exp-tabla-wrap" style="display:none;overflow-x:auto;max-height:340px;overflow-y:auto">
+                <div id="monitor-exp-tabla-wrap" class="thin-scroll" style="display:none;overflow-x:auto;max-height:340px;overflow-y:auto">
                     <table style="width:100%;border-collapse:collapse;font-size:12px">
                         <thead>
                             <tr style="background:var(--bg-base);font-weight:600;color:var(--text-2);position:sticky;top:0">
@@ -961,7 +961,7 @@
                     <span class="tooltip-icon" data-tip="Elimina todas las novedades pendientes sin incorporarlas.">?</span>
                 </div>
                 <div id="monitor-nov-loading" style="color:var(--text-3);font-size:13px;text-align:center;padding:20px">Cargando...</div>
-                <div id="monitor-nov-lista" style="display:none;max-height:300px;overflow-y:auto"></div>
+                <div id="monitor-nov-lista" class="thin-scroll" style="display:none;max-height:300px;overflow-y:auto"></div>
                 <div id="monitor-nov-empty" style="display:none;color:var(--text-3);font-size:13px;text-align:center;padding:20px">✅ Sin novedades pendientes.</div>
             </div>
         </div>
