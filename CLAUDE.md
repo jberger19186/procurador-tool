@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-24
+> Última actualización: 2026-04-24 (v2.4.11)
 
 ---
 
@@ -325,7 +325,7 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ### FASE 1 — APLICACIÓN (en curso)
 **Objetivo:** producto terminado y pulido para el usuario final.
 
-#### 1.0 Estabilización y UX del onboarding ✅ COMPLETADO (v2.4.x)
+#### 1.0 Estabilización, UX y estilos del onboarding ✅ COMPLETADO (v2.4.x → v2.4.11)
 Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - ✅ Eliminados banners Chrome: `--no-sandbox`, `--ignore-certificate-errors`, `--disable-blink-features=AutomationControlled`
 - ✅ Tour paso 10: card se posiciona correctamente a la derecha de los botones spotlight (getBoundingBox + `right` property + 350ms delay para transición CSS)
@@ -336,6 +336,11 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - ✅ `abrirNavegadorPJN.js`: Chrome abre directamente en `portalpjn.pjn.gov.ar` (URL como arg de launch); `page.goto()` espera la cadena completa de redirects SSO; completa CUIT y busca credenciales
 - ✅ `agregarPasswordSCW.js`: Chrome abre directamente en `chrome://password-manager/passwords` (URL como arg de launch); elimina about:blank
 - ✅ `preCalentarChrome.js`: corregido profilePath (`APPDATA` → `LOCALAPPDATA\ProcuradorSCW\ChromeProfile`) — script orphaned, no se llama desde main.js
+- ✅ **Estilos onboarding unificados con la app** (v2.4.11, rama `visual-onboarding-fixes`):
+  - `onboarding.css`: logo/botones/inputs/info-box migrados de azul/violeta → amber (`#d97706`), fondo `#f7f7f5`
+  - Botones: tamaño igual al tour card (`padding:6px 14px; font-size:12px; border-radius:7px`)
+  - Modal "Nueva versión" (`index.html`): rediseñado igual que tour card (amber border, icono `#422006`, botón `#eab308`)
+  - Modal "Acción requerida" (`renderer.js`): misma estructura tour card + fix HTML visible como texto (`\n→<br>`, escape seguro)
 
 #### 1.1 Rediseño UI de la App Electron ← PRÓXIMA PRIORIDAD
 - Refactorizar `renderer.js` (131 KB monolítico) en módulos ES6 separados por sección
