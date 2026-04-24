@@ -377,12 +377,16 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
   - Re-inyección del overlay tras clic en "Agregar" (la navegación SPA de Chrome lo borraba)
   - Nota: el dialog nativo "Agregar contraseña" usa el top-layer del browser — ningún overlay web puede renderizarse encima; es una limitación de Chrome, no un bug
 
-#### 1.1 Rediseño UI de la App Electron ← PRÓXIMA PRIORIDAD
-- Refactorizar `renderer.js` (131 KB monolítico) en módulos ES6 separados por sección
-- Aplicar el sistema de diseño definido (amber, Inter, Crimson Pro)
-- Referencia: sesión "Design professional UI for Electron app"
-- **Regla:** preservar toda la funcionalidad existente, solo cambiar presentación
+#### 1.1 Sistema de diseño de la App Electron ✅ COMPLETADO
+- Estilos amber (`#d97706`), Inter, Crimson Pro aplicados consistentemente en toda la app
+- Onboarding, modales, tour cards y configuración ya son visualmente coherentes
+- No se requieren cambios adicionales de presentación
+
+#### 1.1b Refactor técnico `renderer.js` — PENDIENTE (baja urgencia)
+- `renderer.js` es monolítico (131 KB) — dividir en módulos ES6 por sección
 - Secciones: login · dashboard · modales de ejecución · logs · tickets · configuración
+- **Regla:** solo reorganización de código, sin cambiar funcionalidad ni estilos
+- No es urgente mientras no haya problemas de mantenimiento
 
 #### 1.2 Migración extensión → Chrome Web Store
 - **Eliminar** distribución CRX desde el backend (`/extension/updates.xml`, `/extension/download`, `/extension/latest.crx`)
