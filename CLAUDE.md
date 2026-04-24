@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-24 (v2.4.14)
+> Última actualización: 2026-04-24 (v2.4.14) — visores completados
 
 ---
 
@@ -394,9 +394,10 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - Aviso sobre warning de Chrome al instalar incluido en onboarding
 - Distribución CRX vieja del backend pendiente de limpiar (baja urgencia)
 
-#### 1.3b Rediseño visual de los visores HTML — PENDIENTE ← PRÓXIMA PRIORIDAD
-Los visores son ventanas HTML que muestran resultados de expedientes/informes.
-Necesitan aplicar el sistema de diseño de la app (amber, Inter, Crimson Pro, fondo `#f7f7f5`).
+#### 1.3b Rediseño visual de los visores HTML ✅ COMPLETADO (sesión 2026-04-24)
+- `visorModal_template.html` (procuración): rediseñado — tabla plana con modal de movimientos, amber/Inter
+- `informe/visor_informes_template.html`: rediseñado — header sticky, stats row, tabla de expedientes
+- Monitor de partes (`generarVisorMonitoreo` en `main.js`): rediseñado — cards por parte con accordion, sistema de diseño unificado
 
 #### 1.3 Code Signing — DIFERIDO (implementar en Fase 2-5)
 Evaluar Microsoft Azure Trusted Signing para firmar el instalador `.exe` de Electron.
