@@ -1967,10 +1967,19 @@ function generarVisorMonitoreo(modo, resultados) {
     const okCount   = resultados.filter(r => r.ok).length;
 
     const statsHTML = `
-    <div class="stats-container">
-        <div class="stat-card"><div class="label">Partes procesadas</div><div class="value">${resultados.length}</div></div>
-        <div class="stat-card success"><div class="label">Exitosas</div><div class="value">${okCount}</div></div>
-        <div class="stat-card"><div class="label">${modo === 'inicial' ? 'Expedientes en base' : 'Novedades detectadas'}</div><div class="value">${totalExps}</div></div>
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:var(--accent-muted)">👥</div>
+            <div><div class="stat-val" style="color:var(--accent-dark)">${resultados.length}</div><div class="stat-label">Partes procesadas</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:var(--success-bg)">✅</div>
+            <div><div class="stat-val" style="color:var(--success)">${okCount}</div><div class="stat-label">Exitosas</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:${modo === 'novedades' ? 'var(--warning-bg)' : 'var(--info-bg)'}">📋</div>
+            <div><div class="stat-val" style="color:${modo === 'novedades' ? 'var(--warning)' : 'var(--accent-dark)'}">${totalExps}</div><div class="stat-label">${modo === 'inicial' ? 'Expedientes en base' : 'Novedades detectadas'}</div></div>
+        </div>
     </div>`;
 
     function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -2032,52 +2041,67 @@ function generarVisorMonitoreo(modo, resultados) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${titulo}</title>
 <style>
-    *  { margin:0; padding:0; box-sizing:border-box; }
+    * { box-sizing:border-box; margin:0; padding:0; }
     :root {
-        --primary: #2196F3; --success: #4CAF50; --error: #F44336;
-        --background: #f5f5f5; --card-bg: #ffffff;
-        --text-primary: #212121; --text-secondary: #757575; --border: #e0e0e0;
+        --bg-base:#f7f7f5; --bg-surface:#ffffff; --bg-elevated:#fafaf9; --bg-hover:#f0f0ee;
+        --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.13);
+        --accent:#d97706; --accent-dark:#b45309; --accent-muted:rgba(217,119,6,0.10); --accent-glow:rgba(217,119,6,0.18);
+        --text-1:#1a1a1a; --text-2:#5c5c5c; --text-3:#a8a8a8;
+        --success:#059669; --success-bg:rgba(5,150,105,0.09);
+        --error:#dc2626; --error-bg:rgba(220,38,38,0.09);
+        --warning:#d97706; --warning-bg:rgba(217,119,6,0.09);
+        --font:"Inter","Segoe UI",system-ui,sans-serif; --font-mono:"Cascadia Code","Consolas",monospace;
+        --radius-sm:6px; --radius:10px; --radius-lg:14px;
     }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--background); color: var(--text-primary); line-height: 1.6; padding: 20px; }
-    .header { background: var(--card-bg); padding: 24px 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,.1); margin-bottom: 24px; }
-    .header h1 { color: var(--primary); font-size: 24px; margin-bottom: 6px; }
-    .header .subtitle { color: var(--text-secondary); font-size: 13px; }
-    .stats-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: var(--card-bg); padding: 18px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,.1); text-align: center; border-top: 4px solid var(--primary); }
-    .stat-card.success { border-top-color: var(--success); }
-    .stat-card .label { color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-    .stat-card .value { font-size: 32px; font-weight: bold; }
-    .expediente-card { background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,.1); margin-bottom: 16px; overflow: hidden; }
-    .card-header { padding: 14px 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fafafa; cursor: pointer; user-select: none; transition: background .15s; }
-    .card-header:hover { background: #e8f4fd; }
-    .card-header.open { border-bottom: 1px solid var(--border); background: #e3f2fd; }
-    .toggle-arrow { font-size: 11px; color: #1565c0; width: 14px; flex-shrink: 0; transition: transform .2s; }
-    .toggle-arrow.open { transform: rotate(90deg); }
-    .jurisdiccion-tag { background: #e3f2fd; color: #1565c0; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
-    .nombre-parte { font-size: 14px; font-weight: 600; color: var(--text-primary); flex: 1; }
-    .status-badge { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 12px; }
-    .status-ok   { background: #e8f5e9; color: #2e7d32; }
-    .status-err  { background: #ffebee; color: #c62828; }
-    .status-nueva { background: #fff3e0; color: #e65100; }
-    .table-container { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { background: #2196F3; color: #fff; padding: 9px 12px; text-align: left; white-space: nowrap; font-weight: 500; }
-    td { padding: 7px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
-    tr:hover td { background: #e3f2fd; }
-    .exp-num { font-weight: 600; color: #1565c0; white-space: nowrap; }
-    .caratula { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .situacion-badge { font-size: 11px; background: #f5f5f5; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
-    .fecha-col { white-space: nowrap; color: var(--text-secondary); font-size: 12px; }
-    .empty-row { text-align: center; color: var(--text-secondary); padding: 20px; font-style: italic; }
+    body { font-family:var(--font); background:var(--bg-base); color:var(--text-1); font-size:13px; min-height:100vh; -webkit-font-smoothing:antialiased; }
+    .ob-header { background:var(--bg-surface); border-bottom:1px solid var(--border); padding:12px 22px; display:flex; align-items:center; gap:14px; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+    .logo-mark { width:30px; height:30px; background:linear-gradient(135deg,var(--accent),#f59e0b); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; box-shadow:0 2px 8px var(--accent-glow); }
+    .header-title { font-size:14px; font-weight:700; color:var(--text-1); letter-spacing:-0.01em; }
+    .header-meta  { font-size:11px; color:var(--text-3); margin-top:1px; }
+    .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:14px 22px; background:var(--bg-surface); border-bottom:1px solid var(--border); }
+    .stat-card { background:var(--bg-base); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; display:flex; align-items:center; gap:12px; transition:0.13s; }
+    .stat-card:hover { border-color:var(--border-strong); }
+    .stat-icon { width:36px; height:36px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+    .stat-val   { font-size:22px; font-weight:700; letter-spacing:-0.03em; line-height:1; }
+    .stat-label { font-size:11px; color:var(--text-3); margin-top:3px; font-weight:500; }
+    .cards-wrapper { padding:16px 22px; display:flex; flex-direction:column; gap:10px; }
+    .expediente-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; transition:box-shadow 0.15s; }
+    .expediente-card:hover { box-shadow:0 2px 10px rgba(0,0,0,0.07); }
+    .card-header { padding:12px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; cursor:pointer; user-select:none; transition:background 0.13s; }
+    .card-header:hover { background:var(--bg-hover); }
+    .card-header.open { border-bottom:1px solid var(--border); background:var(--bg-elevated); }
+    .toggle-arrow { font-size:10px; color:var(--text-3); width:14px; flex-shrink:0; transition:transform 0.2s; }
+    .toggle-arrow.open { transform:rotate(90deg); }
+    .jurisdiccion-tag { background:var(--accent-muted); color:var(--accent-dark); font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:4px; font-family:var(--font-mono); }
+    .nombre-parte { font-size:13px; font-weight:600; color:var(--text-1); flex:1; }
+    .status-badge { font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; display:inline-flex; align-items:center; gap:4px; }
+    .badge-dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
+    .status-ok    { background:var(--success-bg); color:var(--success); }
+    .status-err   { background:var(--error-bg);   color:var(--error); }
+    .status-nueva { background:var(--warning-bg); color:var(--warning); }
+    .table-container { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:12.5px; }
+    th { background:var(--bg-base); color:var(--text-3); padding:8px 12px; text-align:left; white-space:nowrap; font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); }
+    td { padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; color:var(--text-2); }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr:hover td { background:var(--bg-hover); }
+    .exp-num { font-weight:600; color:var(--accent-dark); white-space:nowrap; font-family:var(--font-mono); font-size:12px; }
+    .caratula { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-1); font-weight:500; }
+    .situacion-badge { font-size:11px; background:var(--bg-elevated); border:1px solid var(--border); padding:1px 7px; border-radius:4px; white-space:nowrap; }
+    .fecha-col { white-space:nowrap; color:var(--text-3); font-size:11.5px; font-family:var(--font-mono); }
+    .empty-row { text-align:center; color:var(--text-3); padding:20px; font-style:italic; }
 </style>
 </head>
 <body>
-    <div class="header">
-        <h1>${titulo}</h1>
-        <div class="subtitle">Generado el ${fecha} &mdash; ${resultados.length} parte(s) procesada(s)</div>
+    <div class="ob-header">
+        <div class="logo-mark">⚖️</div>
+        <div>
+            <div class="header-title">${titulo}</div>
+            <div class="header-meta">Generado el ${fecha} &mdash; ${resultados.length} parte(s) procesada(s)</div>
+        </div>
     </div>
     ${statsHTML}
-    ${seccionesHTML}
+    <div class="cards-wrapper">${seccionesHTML}</div>
 <script>
     function toggleCard(idx) {
         var tabla  = document.getElementById('tabla-'  + idx);
