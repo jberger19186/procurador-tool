@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visor de Novedades — Procurador SCW</title>
+<style>
+  :root {
+    --bg-base:#f7f7f5; --bg-surface:#ffffff; --bg-elevated:#fafaf9; --bg-hover:#f0f0ee;
+    --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.13);
+    --accent:#d97706; --accent-dark:#b45309; --accent-muted:rgba(217,119,6,0.10); --accent-glow:rgba(217,119,6,0.18);
+    --text-1:#1a1a1a; --text-2:#5c5c5c; --text-3:#a8a8a8;
+    --success:#059669; --success-bg:rgba(5,150,105,0.09);
+    --error:#dc2626; --error-bg:rgba(220,38,38,0.09);
+    --info:#2563eb; --info-bg:rgba(37,99,235,0.09);
+    --font:"Inter","Segoe UI",system-ui,sans-serif; --font-mono:"Cascadia Code","Consolas",monospace;
+    --radius-sm:6px; --radius:10px; --radius-lg:14px; --shadow-lg:0 8px 28px rgba(0,0,0,0.11);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); background:var(--bg-base); color:var(--text-1); font-size:13px; min-height:100vh; -webkit-font-smoothing:antialiased; }
+  .ob-header { background:var(--bg-surface); border-bottom:1px solid var(--border); padding:12px 22px; display:flex; align-items:center; gap:14px; position:sticky; top:0; z-index:10; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+  .logo-mark { width:30px; height:30px; background:linear-gradient(135deg,var(--accent),#f59e0b); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; box-shadow:0 2px 8px var(--accent-glow); }
+  .header-title { font-size:14px; font-weight:700; color:var(--text-1); letter-spacing:-0.01em; }
+  .header-meta  { font-size:11px; color:var(--text-3); margin-top:1px; }
+  .header-spacer { flex: 1; }
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:14px 22px; background:var(--bg-surface); border-bottom:1px solid var(--border); }
+  .stat-card { background:var(--bg-base); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; display:flex; align-items:center; gap:12px; transition:0.13s; }
+  .stat-card:hover { border-color:var(--border-strong); }
+  .stat-icon { width:36px; height:36px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .stat-val { font-size:22px; font-weight:700; letter-spacing:-0.03em; line-height:1; }
+  .stat-label { font-size:11px; color:var(--text-3); margin-top:3px; font-weight:500; }
+  .table-toolbar { display:flex; align-items:center; gap:8px; padding:10px 22px; background:var(--bg-surface); border-bottom:1px solid var(--border); }
+  .search-box { display:flex; align-items:center; gap:7px; background:var(--bg-base); border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 11px; height:30px; width:340px; transition:0.13s; }
+  .search-box:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-muted); background:#fff; }
+  .search-box input { background:transparent; border:none; color:var(--text-1); font-family:var(--font); font-size:12.5px; flex:1; outline:none; }
+  .search-box input::placeholder { color:var(--text-3); }
+  .toolbar-spacer { flex:1; }
+  .result-count { font-size:11.5px; color:var(--text-3); }
+  .table-wrapper { padding:0 22px 24px; overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; margin-top:14px; }
+  thead th { text-align:left; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--text-3); padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; background:var(--bg-base); position:sticky; top:55px; z-index:2; }
+  tbody tr { border-bottom:1px solid var(--border); transition:background 0.1s; }
+  tbody tr:hover { background:var(--bg-hover); }
+  tbody tr:last-child { border-bottom:none; }
+  td { padding:9px 12px; font-size:12.5px; color:var(--text-2); vertical-align:top; }
+  td.mono { font-family:var(--font-mono); font-size:12px; color:var(--accent-dark); font-weight:600; white-space:nowrap; }
+  .status-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+  .badge-ok  { background:var(--success-bg); color:var(--success); }
+  .badge-err { background:var(--error-bg); color:var(--error); }
+  .badge-dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
+  .movs-count { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:18px; border-radius:10px; background:var(--accent-muted); color:var(--accent-dark); font-size:11px; font-weight:700; padding:0 6px; }
+  .movs-count.zero { background:var(--bg-elevated); color:var(--text-3); border:1px solid var(--border); }
+  .btn-ver { height:26px; padding:0 11px; border-radius:var(--radius-sm); border:1px solid var(--border-strong); font-size:11px; font-family:var(--font); font-weight:500; cursor:pointer; background:transparent; color:var(--text-2); transition:all 0.12s; white-space:nowrap; }
+  .btn-ver:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .no-data { text-align:center; padding:60px; color:var(--text-3); font-size:13px; }
+  .modal { display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.28); backdrop-filter:blur(4px); }
+  .modal.active { display:flex; justify-content:center; align-items:center; animation:fadeIn .2s; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .modal-content { background:var(--bg-surface); border:1px solid var(--border-strong); width:90%; max-width:1020px; max-height:90vh; border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow-lg); display:flex; flex-direction:column; animation:modalIn 0.2s cubic-bezier(0.16,1,0.3,1); }
+  @keyframes modalIn { from{opacity:0;transform:scale(0.97) translateY(6px)} to{opacity:1;transform:none} }
+  .modal-topline { height:3px; background:linear-gradient(90deg,transparent,var(--accent),#f59e0b,transparent); }
+  .modal-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; gap:12px; }
+  .modal-header-info { flex:1; }
+  .modal-exp-badge { display:inline-block; padding:2px 8px; border-radius:5px; margin-bottom:6px; font-size:11px; font-weight:700; font-family:var(--font-mono); background:var(--accent-muted); color:var(--accent-dark); }
+  .modal-title { font-size:15px; font-weight:700; color:var(--text-1); line-height:1.3; }
+  .modal-meta  { font-size:11.5px; color:var(--text-3); margin-top:4px; }
+  .modal-close { flex-shrink:0; width:28px; height:28px; border-radius:6px; border:none; background:transparent; color:var(--text-3); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:0.12s; }
+  .modal-close:hover { background:var(--error-bg); color:var(--error); }
+  .modal-body { padding:20px; overflow-y:auto; flex:1; }
+  .mov-section-title { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--text-3); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .mov-section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+  .tabla-movimientos { width:100%; border-collapse:collapse; }
+  .tabla-movimientos th { background:var(--bg-base); padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-3); }
+  .tabla-movimientos td { padding:9px 12px; border-bottom:1px solid var(--border); font-size:12.5px; vertical-align:top; }
+  .tabla-movimientos tr:hover td { background:var(--bg-hover); }
+  .tipo-badge { display:inline-block; background:var(--accent-muted); color:var(--accent-dark); padding:2px 8px; border-radius:4px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; }
+  .link-scw { color:var(--accent); text-decoration:none; font-weight:500; font-size:12px; }
+  .link-scw:hover { text-decoration:underline; }
+  .error-box { background:var(--error-bg); color:var(--error); padding:16px; border-radius:var(--radius); border-left:3px solid var(--error); font-size:12.5px; }
+  .error-box strong { display:block; margin-bottom:6px; font-size:13px; }
+  .modal-footer { padding:12px 20px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--bg-elevated); }
+  .modal-nav { display:flex; gap:5px; }
+  .btn-nav { height:28px; padding:0 13px; border-radius:var(--radius-sm); border:1px solid var(--border-strong); background:transparent; color:var(--text-2); font-size:12px; font-family:var(--font); cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:0.12s; }
+  .btn-nav:hover:not(:disabled) { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn-nav:disabled { opacity:0.35; cursor:not-allowed; }
+  .modal-contador { font-size:11.5px; color:var(--text-3); }
+</style>
+</head>
+<body>
+<div id="resumen"></div>
+<div id="filtros"></div>
+<div id="tabla-container"></div>
+<div id="modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-topline"></div>
+    <div class="modal-header">
+      <div class="modal-header-info">
+        <div class="modal-exp-badge" id="modal-exp-badge"></div>
+        <div class="modal-title" id="modal-expediente"></div>
+        <div class="modal-meta" id="modal-info"></div>
+      </div>
+      <button class="modal-close" onclick="cerrarModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <div class="modal-nav">
+        <button class="btn-nav" id="btn-anterior" onclick="navegarExpediente(-1)">← Anterior</button>
+        <button class="btn-nav" id="btn-siguiente" onclick="navegarExpediente(1)">Siguiente →</button>
+      </div>
+      <span class="modal-contador" id="modal-contador"></span>
+    </div>
+  </div>
+</div>
+<script>
+let datosCompletos=null,expedientesFiltrados=[],expedienteActualIndex=0;
+function cargarDatosEmbebidos(d){datosCompletos=d;expedientesFiltrados=d.expedientes;mostrarDatos(d);}
+function mostrarDatos(d){mostrarResumen(d);mostrarFiltros();mostrarTabla(expedientesFiltrados);}
+function mostrarResumen(d){
+  const f=new Date(d.fechaEjecucion).toLocaleString('es-AR');
+  const meta=['Ejecutado: '+f,d.identificador?'ID: '+d.identificador:'',d.fechaLimite?'Límite: '+d.fechaLimite:''].filter(Boolean).join(' · ');
+  document.getElementById('resumen').innerHTML=`
+    <div class="ob-header"><div class="logo-mark">⚖️</div><div><div class="header-title">Visor de Novedades</div><div class="header-meta">${meta}</div></div><div class="header-spacer"></div></div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-icon" style="background:var(--accent-muted)">📋</div><div><div class="stat-val" style="color:var(--accent-dark)">${d.resumen.totalListados}</div><div class="stat-label">Total listados</div></div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:var(--success-bg)">✅</div><div><div class="stat-val" style="color:var(--success)">${d.resumen.exitosos}</div><div class="stat-label">Exitosos</div></div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:var(--error-bg)">⚠️</div><div><div class="stat-val" style="color:var(--error)">${d.resumen.fallidos}</div><div class="stat-label">Fallidos</div></div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:var(--info-bg)">⏱</div><div><div class="stat-val" style="color:var(--info)">${d.resumen.tiempoTotal}s</div><div class="stat-label">Tiempo total</div></div></div>
+    </div>`;}
+function mostrarFiltros(){document.getElementById('filtros').innerHTML=`<div class="table-toolbar"><div class="search-box"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l3 3"/></svg><input type="text" id="busqueda" placeholder="Buscar expediente, carátula, situación..." oninput="filtrarExpedientes()"></div><div class="toolbar-spacer"></div><span class="result-count" id="result-count"></span></div>`;}
+function filtrarExpedientes(){const b=document.getElementById('busqueda').value.toLowerCase();expedientesFiltrados=b?datosCompletos.expedientes.filter(e=>e.expediente.toLowerCase().includes(b)||e.caratula.toLowerCase().includes(b)||e.situacion.toLowerCase().includes(b)||e.dependencia.toLowerCase().includes(b)):datosCompletos.expedientes;mostrarTabla(expedientesFiltrados);}
+function mostrarTabla(exps){
+  const c=document.getElementById('tabla-container');
+  const rc=document.getElementById('result-count');
+  if(rc)rc.textContent=exps.length+' resultado'+(exps.length!==1?'s':'');
+  if(!exps.length){c.innerHTML='<div class="no-data">No se encontraron expedientes</div>';return;}
+  let h=`<div class="table-wrapper"><table><thead><tr><th>Expediente</th><th>Carátula</th><th>Dependencia</th><th>Situación</th><th>Últ. Act.</th><th>Estado</th><th>Movs.</th><th></th></tr></thead><tbody>`;
+  exps.forEach((e,i)=>{
+    const ok=e.estado==='exitoso',mc=e.movimientos?e.movimientos.length:0;
+    const cc=e.caratula.length>45?e.caratula.substring(0,45)+'…':e.caratula;
+    const dc=e.dependencia.length>28?e.dependencia.substring(0,28)+'…':e.dependencia;
+    h+=`<tr><td class="mono">${e.expediente}</td><td title="${e.caratula}" style="color:var(--text-1);font-weight:500">${cc}</td><td title="${e.dependencia}">${dc}</td><td>${e.situacion}</td><td style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);white-space:nowrap">${e.ultimaAct}</td><td><span class="status-badge ${ok?'badge-ok':'badge-err'}"><span class="badge-dot"></span>${ok?'Exitoso':'Error'}</span></td><td><span class="${mc>0?'movs-count':'movs-count zero'}">${mc}</span></td><td><button class="btn-ver" onclick="abrirModal(${i})">Ver →</button></td></tr>`;
+  });
+  c.innerHTML=h+'</tbody></table></div>';}
+function abrirModal(i){
+  expedienteActualIndex=i;const e=expedientesFiltrados[i];
+  document.getElementById('modal-exp-badge').textContent=e.expediente;
+  document.getElementById('modal-expediente').textContent=e.caratula;
+  document.getElementById('modal-info').innerHTML=e.dependencia+' · '+e.situacion+' · Últ. act.: '+e.ultimaAct;
+  let b='';
+  if(e.estado==='exitoso'&&e.movimientos&&e.movimientos.length>0){
+    b=`<div class="mov-section-title">Movimientos (${e.movimientos.length})</div><table class="tabla-movimientos"><thead><tr><th style="width:10%">Fecha</th><th style="width:16%">Tipo</th><th>Detalle</th><th style="width:12%">Acción</th></tr></thead><tbody>`;
+    e.movimientos.forEach(m=>{b+=`<tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3);white-space:nowrap">${m.fecha}</td><td><span class="tipo-badge">${m.tipo}</span></td><td>${m.detalle}</td><td>${m.viewHref?`<a href="${m.viewHref}" target="_blank" class="link-scw">Ver en SCW →</a>`:'—'}</td></tr>`;});
+    b+='</tbody></table>';
+  }else if(e.estado==='fallido'){b=`<div class="error-box"><strong>⚠️ Error al procesar</strong>${e.error||'Error desconocido'}</div>`;}
+  else{b='<div class="no-data">Sin movimientos</div>';}
+  document.getElementById('modal-body').innerHTML=b;
+  document.getElementById('modal-contador').textContent=`${i+1} de ${expedientesFiltrados.length}`;
+  document.getElementById('btn-anterior').disabled=(i===0);
+  document.getElementById('btn-siguiente').disabled=(i===expedientesFiltrados.length-1);
+  document.getElementById('modal').classList.add('active');}
+function cerrarModal(){document.getElementById('modal').classList.remove('active');}
+function navegarExpediente(d){const n=expedienteActualIndex+d;if(n>=0&&n<expedientesFiltrados.length)abrirModal(n);}
+document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)cerrarModal();});
+document.addEventListener('keydown',function(e){if(document.getElementById('modal').classList.contains('active')){if(e.key==='Escape')cerrarModal();else if(e.key==='ArrowLeft')navegarExpediente(-1);else if(e.key==='ArrowRight')navegarExpediente(1);}});
+
+// DATOS DE DEMO
+cargarDatosEmbebidos({
+  fechaEjecucion: '2026-04-24T14:32:00',
+  identificador: 'CUIT 27-32069435-9',
+  fechaLimite: '24/04/2026',
+  resumen: { totalListados: 12, exitosos: 10, fallidos: 2, tiempoTotal: 47 },
+  expedientes: [
+    { expediente:'11-12345-2024', caratula:'García, María c/ López, Roberto s/ Daños y Perjuicios', dependencia:'Juzgado Civil Nro. 12 CABA', situacion:'En trámite', ultimaAct:'17/04/2026', estado:'exitoso', movimientos:[
+      {fecha:'17/04/2026', tipo:'NOTIF', detalle:'Cédula de notificación librada — Acuse de recibo', viewHref:'#'},
+      {fecha:'15/04/2026', tipo:'PROV', detalle:'Providencia — Se tiene presente. Pase a despacho.', viewHref:'#'},
+      {fecha:'12/04/2026', tipo:'ESCR', detalle:'Escrito presentado — Contestación de demanda con ofrecimiento de prueba', viewHref:null},
+    ]},
+    { expediente:'22-98765-2023', caratula:'Martínez c/ Empresa SRL s/ Despido', dependencia:'Juzgado Laboral Nro. 3 CABA', situacion:'En trámite', ultimaAct:'16/04/2026', estado:'exitoso', movimientos:[
+      {fecha:'16/04/2026', tipo:'SENT', detalle:'Sentencia definitiva — Hace lugar parcialmente a la demanda', viewHref:'#'},
+    ]},
+    { expediente:'33-11111-2024', caratula:'Rodríguez s/ Quiebra Pequeña Empresa', dependencia:'Juzgado Comercial Nro. 8 CABA', situacion:'Activo', ultimaAct:'14/04/2026', estado:'exitoso', movimientos:[
+      {fecha:'14/04/2026', tipo:'PROV', detalle:'Se ordena verificación de créditos', viewHref:'#'},
+      {fecha:'10/04/2026', tipo:'ESCR', detalle:'Presentación de acreedores verificantes', viewHref:null},
+    ]},
+    { expediente:'44-55555-2022', caratula:'López c/ GCBA s/ Amparo por Acceso a la Salud', dependencia:'Juzgado Contencioso Nro. 15', situacion:'Activo', ultimaAct:'—', estado:'exitoso', movimientos:[]},
+    { expediente:'55-22222-2024', caratula:'Fernández c/ Obra Social s/ Cobertura Médica', dependencia:'Juzgado Civil Nro. 22 CABA', situacion:'En trámite', ultimaAct:'15/04/2026', estado:'exitoso', movimientos:[
+      {fecha:'15/04/2026', tipo:'NOTA', detalle:'Nota de secretaría — Se requiere documentación adicional', viewHref:null},
+    ]},
+    { expediente:'66-33333-2023', caratula:'Suárez c/ Banco Nación s/ Cobro de Pesos', dependencia:'Juzgado Comercial Nro. 5', situacion:'Paralizado', ultimaAct:'—', estado:'fallido', error:'Timeout al consultar el portal SCW. El servidor no respondió en el tiempo esperado.'},
+    { expediente:'77-44444-2024', caratula:'Herrera c/ Municipalidad de Tigre s/ Daños', dependencia:'Juzgado Civil Nro. 18 CABA', situacion:'En trámite', ultimaAct:'14/04/2026', estado:'exitoso', movimientos:[
+      {fecha:'14/04/2026', tipo:'PROV', detalle:'Se corre traslado a la demandada por 30 días', viewHref:'#'},
+      {fecha:'08/04/2026', tipo:'ESCR', detalle:'Demanda presentada con ofrecimiento de prueba pericial', viewHref:null},
+      {fecha:'01/04/2026', tipo:'NOTA', detalle:'Mesa de entradas — Sorteo de juzgado interviniente', viewHref:null},
+    ]},
+    { expediente:'88-66666-2021', caratula:'González s/ Sucesión Ab Intestato', dependencia:'Juzgado Civil Nro. 7 CABA', situacion:'Activo', ultimaAct:'13/04/2026', estado:'exitoso', movimientos:[
+      {fecha:'13/04/2026', tipo:'PROV', detalle:'Se aprueba hijuela de distribución', viewHref:'#'},
+    ]},
+    { expediente:'99-77777-2024', caratula:'Díaz c/ Construcciones SA s/ Accidente Laboral', dependencia:'Juzgado Laboral Nro. 11', situacion:'En trámite', ultimaAct:'—', estado:'exitoso', movimientos:[]},
+    { expediente:'10-88888-2023', caratula:'Pérez c/ AFIP s/ Impugnación de Multa', dependencia:'Juzgado Contencioso Nro. 2', situacion:'En trámite', ultimaAct:'12/04/2026', estado:'exitoso', movimientos:[
+      {fecha:'12/04/2026', tipo:'SENT', detalle:'Sentencia — Se hace lugar al recurso, se deja sin efecto la multa', viewHref:'#'},
+    ]},
+    { expediente:'11-99999-2024', caratula:'Torres c/ Aseguradora Sur s/ Siniestro Automotor', dependencia:'Juzgado Civil Nro. 9 CABA', situacion:'En trámite', ultimaAct:'11/04/2026', estado:'exitoso', movimientos:[
+      {fecha:'11/04/2026', tipo:'PROV', detalle:'Se cita a audiencia de conciliación para el día 30/04/2026', viewHref:null},
+    ]},
+    { expediente:'12-10101-2024', caratula:'Romero s/ Divorcio Contencioso', dependencia:'Juzgado Civil Nro. 4 CABA', situacion:'Activo', ultimaAct:'—', estado:'fallido', error:'El expediente no fue encontrado en el portal. Puede haber sido archivado o el número es incorrecto.'},
+  ]
+});
+</script>
+</body>
+</html>
