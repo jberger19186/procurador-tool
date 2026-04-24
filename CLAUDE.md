@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-21
+> Última actualización: 2026-04-24
 
 ---
 
@@ -261,6 +261,52 @@ Aviso a mostrar al usuario en onboarding:
 
 ---
 
+## Chrome profile — notas técnicas críticas
+
+**Ruta del perfil:** `%LOCALAPPDATA%\ProcuradorSCW\ChromeProfile`
+**Contraseñas guardadas:** `...\Default\Login Data` (SQLite, cifrado con DPAPI)
+
+### Flujo de cierre limpio (`closeChromeProfile`)
+```
+1. wmic → obtener PIDs de chrome.exe con '%ProcuradorSCW%' en commandline
+2. taskkill /F /PID <cada pid>
+3. await sleep(2000)   ← dar tiempo a Chrome de morir completamente
+4. Eliminar: SingletonLock, SingletonCookie, SingletonSocket
+   └── taskkill /F deja estos archivos huérfanos
+   └── Sin eliminarlos Chrome arranca en crash-recovery (about:blank o diálogo restaurar)
+```
+
+### Launch de Chrome via Puppeteer — regla de oro
+```javascript
+// ✅ CORRECTO: pasar URL como arg de launch + llamar page.goto()
+puppeteer.launch({ args: [..., 'https://url.destino'] })
+// Luego: await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 })
+// → Chrome abre sin about:blank flash; goto() espera redirects completos (incluyendo SSO)
+
+// ❌ INCORRECTO: waitForNavigation() DESPUÉS de que Chrome ya cargó la URL
+// → waitForNavigation() espera una navegación que ya ocurrió → timeout de 30s
+```
+
+### Flags de Chrome a NO usar (generan banners en el navegador)
+```
+--no-sandbox                              ← banner de seguridad naranja
+--ignore-certificate-errors               ← banner de seguridad
+--disable-blink-features=AutomationControlled  ← detectable, innecesario
+```
+Sí usar: `ignoreDefaultArgs: ['--enable-automation']` (quita la barra de "controlado por software")
+
+### Diagnóstico rápido: credenciales guardadas
+```powershell
+# Verificar si hay contraseñas guardadas para pjn.gov.ar
+$f = "$env:LOCALAPPDATA\ProcuradorSCW\ChromeProfile\Default\Login Data"
+$b = [IO.File]::ReadAllBytes($f)
+[Text.Encoding]::UTF8.GetString($b) -match "pjn"
+# → True: hay credenciales   False: Login Data vacío → debe correr "Agregar contraseña SCW"
+```
+Si el resultado es `False`, la automatización **no puede autofill** y el usuario debe guardar la contraseña desde Configuración → Seguridad → "Agregar contraseña SCW".
+
+---
+
 ## ⛔ Zonas protegidas — NO modificar sin coordinación
 
 | Zona | Por qué no tocar |
@@ -279,7 +325,19 @@ Aviso a mostrar al usuario en onboarding:
 ### FASE 1 — APLICACIÓN (en curso)
 **Objetivo:** producto terminado y pulido para el usuario final.
 
-#### 1.1 Rediseño UI de la App Electron ← PRIORIDAD ACTUAL
+#### 1.0 Estabilización y UX del onboarding ✅ COMPLETADO (v2.4.x)
+Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
+- ✅ Eliminados banners Chrome: `--no-sandbox`, `--ignore-certificate-errors`, `--disable-blink-features=AutomationControlled`
+- ✅ Tour paso 10: card se posiciona correctamente a la derecha de los botones spotlight (getBoundingBox + `right` property + 350ms delay para transición CSS)
+- ✅ Onboarding completo: ventana principal ya no se duplica al finalizar wizard
+- ✅ Credenciales en onboarding: lee `psc_accounts` (formato multi-cuenta) en lugar de `psc_remember` obsoleto
+- ✅ Visor automático: corregido selector de toggle (`tgl-abrirVisor` + `.cfg-toggle.on`)
+- ✅ `closeChromeProfile()`: mata Chrome por PID, espera 2s, elimina lock files (SingletonLock/Cookie/Socket) para evitar crash recovery
+- ✅ `abrirNavegadorPJN.js`: Chrome abre directamente en `portalpjn.pjn.gov.ar` (URL como arg de launch); `page.goto()` espera la cadena completa de redirects SSO; completa CUIT y busca credenciales
+- ✅ `agregarPasswordSCW.js`: Chrome abre directamente en `chrome://password-manager/passwords` (URL como arg de launch); elimina about:blank
+- ✅ `preCalentarChrome.js`: corregido profilePath (`APPDATA` → `LOCALAPPDATA\ProcuradorSCW\ChromeProfile`) — script orphaned, no se llama desde main.js
+
+#### 1.1 Rediseño UI de la App Electron ← PRÓXIMA PRIORIDAD
 - Refactorizar `renderer.js` (131 KB monolítico) en módulos ES6 separados por sección
 - Aplicar el sistema de diseño definido (amber, Inter, Crimson Pro)
 - Referencia: sesión "Design professional UI for Electron app"
@@ -369,6 +427,9 @@ Evaluar Microsoft Azure Trusted Signing para firmar el instalador `.exe` de Elec
 | Renderer.js monolítico → refactorizar incremental | No introducir bundler complejo; mantener vanilla JS con módulos ES6 |
 | Landing servida por Nginx estático | Sin carga al servidor Node.js |
 | SSL en api: certbot / SSL en landing: Cloudflare | Separación de responsabilidades, Cloudflare como CDN y WAF |
+| URL como arg en Puppeteer launch | `abrirNavegadorPJN.js` y `agregarPasswordSCW.js` pasan la URL destino como arg de Chrome para evitar el flash de about:blank; page.goto() se sigue llamando para esperar networkidle2 |
+| `closeChromeProfile()` elimina lock files | `taskkill /F` deja SingletonLock/Cookie/Socket huérfanos; eliminarlos evita que Chrome entre en crash-recovery al próximo arranque |
+| `ignoreDefaultArgs: ['--enable-automation']` | Sin este flag Chrome muestra barra "controlado por software automatizado"; sin --no-sandbox ni --ignore-certificate-errors para evitar banners de seguridad |
 
 ---
 
