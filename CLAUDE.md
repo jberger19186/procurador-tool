@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-25 (v2.4.15)
+> Última actualización: 2026-04-25 (v2.4.16)
 
 ---
 
@@ -487,14 +487,14 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ---
 
 ## 📋 Resumen de pendientes por fase
-> Última actualización: 2026-04-25. Referencia rápida para retomar trabajo en cualquier sesión.
+> Última actualización: 2026-04-25 (v2.4.16). Referencia rápida para retomar trabajo en cualquier sesión.
 
 ### FASE 1 — APLICACIÓN
-| # | Item | Prioridad |
+| # | Item | Estado |
 |---|---|---|
-| 1.1b | Refactor `renderer.js` monolítico (131 KB) → módulos ES6 por sección | Baja |
-| 1.4 | Unificar "Procurar hoy" + "Por fecha" → campo de fecha discreto en sidebar | Media |
-| 1.5 | Agregar "Ver tour" + "Asistente IA" en sección Sistema del sidebar | Media |
+| 1.1b | Refactor `renderer.js` monolítico (131 KB) → módulos ES6 por sección | Pendiente (baja urgencia) |
+| ~~1.4~~ | ~~Unificar "Procurar hoy" + "Por fecha" → campo de fecha discreto en sidebar~~ | ✅ v2.4.16 |
+| ~~1.5~~ | ~~Agregar "Ver tour" + "Asistente IA" en sección Sistema del sidebar~~ | ✅ v2.4.16 |
 | 1.3 | Code Signing del installer `.exe` (Azure Trusted Signing) | Diferido |
 | — | Limpiar rutas CRX legacy del backend (`/extension/updates.xml`, `/extension/latest.crx`) | Baja |
 
@@ -590,61 +590,33 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - `informe/visor_informes_template.html`: rediseñado — header sticky, stats row, tabla de expedientes
 - Monitor de partes (`generarVisorMonitoreo` en `main.js`): rediseñado — cards por parte con accordion, sistema de diseño unificado
 
-#### 1.4 Unificación "Procurar hoy" + "Por fecha" — PENDIENTE
+#### 1.4 Unificación "Procurar hoy" + "Por fecha" — ✅ COMPLETADO (v2.4.16)
 
-**Objetivo:** eliminar el botón "Por fecha" del sidebar y unificar en un único flujo de procuración, controlado por un campo de fecha discreto justo debajo del botón principal.
-
-**Propuesta de UX:**
-
-```
-[ ▶ Procurar ]           ← botón principal, igual que hoy
-  Fecha límite: [____]   ← input tipo date, pequeño, debajo del botón
-                           pre-cargado con el valor de config (fechaLimite)
-                           si está vacío → procura todos los movimientos
-                           si tiene fecha → procura desde esa fecha en adelante
-```
-
-- El campo de fecha lee `config.procuracion.fechaLimite` al cargar
-- Al modificarlo, guarda el nuevo valor en la configuración (mismo mecanismo que la pantalla de Configuración → Procuración)
-- El botón "Procurar" siempre usa la fecha del campo (si está vacío, sin límite)
-- El botón "Por fecha" del sidebar desaparece
-- Tooltip en el campo: *"Solo se procuran expedientes con movimientos posteriores a esta fecha. Dejalo vacío para procurar todos."*
-
-**Impacto en el tour:**
-- Paso del tour que explicaba "Por fecha" → reemplazar por explicación del campo de fecha debajo del botón Procurar
-- El tour card apunta al campo de fecha en lugar del botón "Por fecha"
-
-**Archivos a modificar:** `index.html` (sidebar + campo), `renderer.js` (leer/guardar fecha, lógica de ejecución), `onboarding/tour.js` (actualizar paso correspondiente)
+- Botón "Por fecha" eliminado del sidebar
+- Campo `Fecha límite` (DD/MM/YYYY) agregado debajo del botón Procurar
+- Sin fecha → procura hoy; con fecha → procura desde esa fecha (`runProcessCustomDate`)
+- Sincronización bidireccional con el campo "Fecha límite" del modal de Configuración
+- Guarda en `config.general.fechaLimite` automáticamente al cambiar
+- Nueva función `runProcessFromSidebarFecha()` en `renderer.js`
+- Tour actualizado: paso 4 resalta Procurar + campo + Por lote con spotlight conjunto
 
 ---
 
-#### 1.5 Tour accesible + Asistente IA en sección Sistema — PENDIENTE
+#### 1.5 Tour accesible + Asistente IA en sección Sistema — ✅ COMPLETADO (v2.4.16)
 
-**Objetivo:** agregar dos accesos rápidos en la sección "Sistema" del sidebar para que el usuario pueda relanzar el tour en cualquier momento y acceder al asistente de IA.
-
-**Propuesta sidebar — sección Sistema (orden sugerido):**
-
+Sección Sistema del sidebar:
 ```
 ⚙  Configuración
 🧩  Extensión PJN
-────────────────
-🎯  Ver tour              ← NUEVO — relanza el tour desde el paso 1
-🤖  Asistente IA          ← NUEVO — abre modal con chatbot
+❓  Ver tour              → llama window.startAppTour()
+🤖  Asistente IA          → abre #modalAsistente (FAQ accordion)
 ```
 
-**Ver tour:**
-- Llama a la función `startTour()` que ya existe en `onboarding/tour.js`
-- No requiere cambios en backend, solo un listener en el sidebar
+**Ver tour** (`#btnSidebarTour`): llama directamente `window.startAppTour()`. No interfiere con el sistema de active state del sidebar (usa `id` en lugar de `data-action`).
 
-**Asistente IA:**
-- Nombre en el botón: **"Asistente IA"** (consistente con el portal de usuarios)
-- Abre un modal centrado (`modal-large`) con un `<iframe>` apuntando a:
-  `https://api.procuradortool.com/usuarios/` (sección del chatbot ya existente)
-- Alternativamente: llamar directo al endpoint del chatbot vía API y renderizar la conversación en el modal con diseño propio (amber/Inter) — más prolijo pero requiere más trabajo
-- El modal tiene header "🤖 Asistente IA", botón cerrar, y el iframe ocupa el 100% del cuerpo
-- Requiere que el usuario esté autenticado (el iframe hereda las cookies de sesión del portal)
+**Asistente IA** (`#btnSidebarAsistente`): abre `#modalAsistente` con 7 FAQs en accordion expandible (¿por qué no arranca?, fecha límite, demoras, secciones, Excel, extensión Chrome, seguridad de credenciales). Al pie: botón "Abrir ticket de soporte" → abre Mi Cuenta en pestaña Soporte via `openCuentaModalSoporte()`.
 
-**Archivos a modificar:** `index.html` (dos botones nuevos en sidebar), `renderer.js` (listeners + lógica de iframe modal), posiblemente `styles.css` (estilo del modal de iframe)
+**Tour** actualizado: nuevo paso 13 resalta ambos botones; paso 10 y paso 4 ahora centran el card respecto al bounding box de los elementos (no al viewport).
 
 ---
 
