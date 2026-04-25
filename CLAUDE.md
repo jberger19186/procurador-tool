@@ -247,6 +247,107 @@ Aplicado tanto en la app Electron como en la landing page:
 
 ## Extensión Chrome — notas técnicas críticas
 
+### 📦 Sistema de distribución ANTERIOR (pre Chrome Web Store) — CÓDIGO MUERTO, NO ELIMINAR
+
+> Este sistema fue reemplazado por la Chrome Web Store (v1.3.2+).
+> El código sigue en producción sin eliminar porque podría necesitarse si la extensión
+> fuera removida de la store, o si se quisiera volver a distribución privada.
+
+#### Cómo funcionaba — dos capas paralelas
+
+**Capa 1 — CRX con auto-update (Chrome Policy)**
+
+Chrome tiene un mecanismo nativo de auto-update para extensiones fuera de la store.
+Se configuraba apuntando Chrome a una URL de actualización (`update_url`) en el manifest:
+
+```json
+// extension-app/manifest.json (versión de desarrollo, solo para distribución CRX)
+"update_url": "https://api.procuradortool.com/extension/updates.xml"
+```
+
+El flujo:
+```
+Chrome (cada ~5hs) → GET /extension/updates.xml
+  ← XML con versión actual + URL del CRX
+  → si versión > local: GET /extension/latest.crx
+  → Chrome instala/actualiza automáticamente
+```
+
+Archivos en el servidor:
+```
+backend-server/public/extension/
+  ├── meta.json          ← { "id": "ID_DE_LA_EXTENSION", "version": "1.x.x", "crxFile": "extension-1.x.x.crx" }
+  └── extension-1.x.x.crx  ← el CRX empaquetado con la clave privada de Chrome
+```
+
+Rutas en `server.js` (aún activas, código muerto):
+- `GET /extension/updates.xml` — genera el XML de update para Chrome
+- `GET /extension/latest.crx` — sirve el archivo `.crx`
+
+**Capa 2 — ZIP descargado desde el onboarding de Electron**
+
+Alternativa al CRX: la app Electron descargaba la extensión como ZIP desde el backend,
+la extraía en disco, y el usuario la cargaba manualmente en Chrome como "extensión sin empaquetar".
+
+Flujo en `main.js` (`downloadExtension`):
+```
+1. GET /api/extension/version  → obtener versión del servidor
+2. Comparar con versión local en %LOCALAPPDATA%\ProcuradorSCW\extension_meta.json
+3. Si hay versión nueva: GET /api/extension/download → ZIP con scripts ofuscados
+4. Extraer ZIP en %LOCALAPPDATA%\ProcuradorSCW\extension\ (carpeta fija)
+5. Guardar metadatos locales (version, path, downloadedAt)
+```
+
+El usuario luego iba a `chrome://extensions` → "Modo desarrollador" ON → "Cargar sin empaquetar" → seleccionaba esa carpeta.
+
+Protecciones del ZIP (en `routes/extension.js`):
+- **Ofuscación JS** con `javascript-obfuscator` (seed determinístico por versión → mismo hash siempre)
+- **SHA-256** de cada script (verificados por `background.js` al arrancar)
+- **ID-binding**: guardas inyectadas en cada content script
+- **JWT**: todos los endpoints requieren autenticación
+
+Scripts ofuscados: `cs-scw.js`, `cs-notif.js`, `cs-escritos2.js`, `cs-deox.js`, `cs-selection.js`
+Archivos sin ofuscar: `manifest.json`, `popup.html`, `popup.js`, `config.js`, `auth.js`, `background.js`
+
+Rutas backend activas (código muerto):
+- `GET /api/extension/version` — versión actual (requiere JWT)
+- `GET /api/extension/download` — ZIP ofuscado (requiere JWT)
+- `GET /api/extension/electron-download?token=xxx` — descarga directa por token temporal (para Electron)
+
+#### Cómo se configuraba en el onboarding (configuración inicial)
+
+En el wizard de onboarding, había un paso de instalación de extensión que:
+1. Llamaba al IPC `install-extension` → ejecutaba `downloadExtension(token)`
+2. Mostraba la ruta de la carpeta extraída
+3. Le pedía al usuario abrir `chrome://extensions`, activar modo desarrollador y cargar la carpeta
+
+Código relevante: `main.js` handlers `install-extension` y `check-extension-version`
+
+#### Cómo se configuraba en la configuración de la app
+
+En la sección Configuración → Extensión de la app Electron:
+- Botón "Actualizar extensión": llamaba `install-extension` → descargaba nueva versión
+- Botón "Verificar versión": llamaba `check-extension-version` → comparaba local vs servidor
+- Si había nueva versión: mostraba alerta con instrucciones para recargar en Chrome
+
+#### Para reactivar el sistema viejo
+
+Si hubiera que volver a este sistema:
+1. **Generar CRX**: desde `chrome://extensions` en modo developer → "Pack extension" con la clave privada
+2. **Subir al servidor**:
+   ```bash
+   scp -i "C:/Users/JONATHAN/.ssh/do_procurador" extension-1.x.x.crx root@142.93.64.94:/var/www/procurador/backend-server/public/extension/
+   # Actualizar meta.json en el servidor con nueva versión y nombre de archivo
+   ```
+3. **Agregar `update_url` al manifest** de la extensión (la versión de dev, no la de la store)
+4. **Configurar Chrome** para aceptar extensiones de URLs externas (requiere Group Policy en Windows o flag de Chrome)
+
+> ⚠️ Nota: desde Chrome 33+, las extensiones CRX externas a la store **solo se pueden instalar
+> con Group Policy** en Windows o editando políticas en macOS/Linux. Los usuarios normales
+> no pueden instalar CRX de terceros sin esa configuración — por eso se migró a la store.
+
+---
+
 ### Versión actual en store: 1.3.2
 ### Cuenta del store: jberger19186@gmail.com / Publisher: Jonathan Berger
 
