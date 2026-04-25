@@ -84,12 +84,47 @@ scp -i C:/Users/JONATHAN/.ssh/do_procurador <archivo_local> root@142.93.64.94:<r
 - **`api.procuradortool.com`** → `/etc/nginx/sites-available/procurador` → proxy a Express en `https://localhost:3443` — SSL con certbot (vence 2026-06-29)
 - **`procuradortool.com`** → `/etc/nginx/sites-available/procuradortool` → sirve landing estática — SSL vía Cloudflare
 
+### Release de la app Electron
+
+```powershell
+# Desde PowerShell, en la carpeta electron-app:
+# 1. Bumpar version en package.json (ej: 2.4.14 → 2.4.15)
+# 2. Ejecutar:
+$env:GH_TOKEN="<token_github>"; Set-Location "C:\Users\JONATHAN\source\repos\ProcuradorTool\electron-app"; npm run release
+```
+
+- El token de GitHub está en Windows Credential Manager. Si hay que regenerarlo: https://github.com/settings/tokens (permisos: `repo` + `workflow`)
+- El release se publica automáticamente en: https://github.com/jberger19186/procurador-tool/releases
+- Los usuarios con la app instalada reciben la actualización vía `electron-updater`
+
 ### Deploy landing page
 ```bash
 scp -i "C:/Users/JONATHAN/.ssh/do_procurador" \
   "C:/Users/JONATHAN/source/repos/ProcuradorTool/backend-server/public/landing/index.html" \
   root@142.93.64.94:/var/www/procurador/backend-server/public/landing/index.html
 ```
+
+### Actualizar scripts de automatización (re-encriptar y subir)
+
+Cuando se modifica un archivo en `backend-server/scripts/` (ej: `buscarPorParteScwpjn.js`):
+
+```bash
+# 1. Subir el archivo modificado al servidor
+scp -i "C:/Users/JONATHAN/.ssh/do_procurador" \
+  "C:/Users/JONATHAN/source/repos/ProcuradorTool/backend-server/scripts/<nombre>.js" \
+  root@142.93.64.94:/var/www/procurador/backend-server/scripts/<nombre>.js
+
+# 2. Re-encriptar (lee los .js de /scripts/, los cifra con AES-256 + RSA y los guarda en la BD)
+ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
+  "cd /var/www/procurador/backend-server && node reencrypt_scripts.js"
+
+# 3. Reiniciar API
+ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
+  "pm2 restart procurador-api"
+```
+
+> **Nota:** los scripts corren en el cliente (Electron), pero se descargan cifrados desde el servidor.
+> El archivo fuente local (en `backend-server/scripts/`) es solo referencia — lo que importa es lo que queda en la BD después del reencrypt.
 
 ### Backup de base de datos
 ```bash
