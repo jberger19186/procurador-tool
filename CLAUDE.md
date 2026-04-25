@@ -643,8 +643,14 @@ Evaluar Microsoft Azure Trusted Signing para firmar el instalador `.exe` de Elec
 
 ### FASE 4 — SOPORTE (pendiente)
 - Comunicación masiva con usuarios
-- Chat de soporte con IA / sistema de tickets con IA
-- Documentación de ayuda para usuarios finales
+- **Pulir sistema de tickets de soporte** — mejorar la experiencia de atención:
+  - Panel de admin para gestionar tickets de forma más eficiente (filtros, estados, prioridades)
+  - Respuestas predefinidas / plantillas para casos frecuentes
+  - Notificaciones al usuario cuando se responde un ticket (email)
+  - SLA básico: indicar tiempo estimado de respuesta al abrir un ticket
+  - Integración del Asistente IA en el flujo de tickets (sugerencia automática de respuesta para el admin)
+- Chat de soporte con IA / sistema de tickets con IA (Asistente IA — ver ítem 1.5)
+- Documentación de ayuda para usuarios finales (base de conocimiento vinculada al Asistente IA)
 
 ---
 
