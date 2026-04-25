@@ -12,7 +12,7 @@
     const TOUR_KEY  = 'psc_tour_shown_v4';
     const STORE_URL = 'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme';
 
-    // ─── Pasos del tour (13 pasos) ────────────────────────────────────────────
+    // ─── Pasos del tour (14 pasos) ────────────────────────────────────────────
     const STEPS = [
         // ── 1 ──────────────────────────────────────────────────────────────
         {
@@ -35,16 +35,12 @@
         },
         // ── 4 ──────────────────────────────────────────────────────────────
         {
-            targets: [
-                '[data-action="procurar-hoy"]',
-                '#sidebarFechaLimite',
-                '[data-action="procurar-lote"]',
-            ],
+            target: '[data-action="procurar-hoy"]',
             title: 'Procurar — novedades en tus expedientes',
             text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes.<br><br>'
                  + '• <strong>Sin fecha</strong> — trae solo movimientos del día<br>'
-                 + '• <strong>Con fecha límite</strong> — completá el campo de fecha para procurar desde ese día hasta hoy<br>'
-                 + '• <strong>Por lote</strong> — con un archivo .txt de causas',
+                 + '• <strong>Con fecha límite</strong> — completá el campo debajo del botón para procurar desde ese día hasta hoy<br>'
+                 + '• <strong>Por lote</strong> — procesá un archivo .txt de causas',
             setup: expandSidebar,
             preferRight: true,
         },
@@ -127,7 +123,19 @@
             setup: expandSidebar,
             preferRight: true,
         },
-        // ── 13 (NUEVO) ──────────────────────────────────────────────────────
+        // ── 13 ─────────────────────────────────────────────────────────────
+        {
+            targets: [
+                '#btnSidebarTour',
+                '#btnSidebarAsistente',
+            ],
+            title: 'Tour y Asistente IA',
+            text:  '• <strong>Ver tour</strong> — relanzá esta guía en cualquier momento para repasar las funciones<br><br>'
+                 + '• <strong>Asistente IA</strong> — preguntas frecuentes sobre el uso de la app y acceso rápido al soporte técnico',
+            setup: expandSidebar,
+            preferRight: true,
+        },
+        // ── 14 ─────────────────────────────────────────────────────────────
         {
             target: '#userChip',
             title: 'Tu cuenta — plan y soporte',
