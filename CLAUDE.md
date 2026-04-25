@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-24 (v2.4.14) — visores completados
+> Última actualización: 2026-04-25 (v2.4.15)
 
 ---
 

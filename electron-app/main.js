@@ -2170,6 +2170,9 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
 
         mainWindow.webContents.send('batch-progress', { done: true });
         updateRunStats('monitoreo', result.success);
+        // Restaurar foco al Electron window antes de notificar al renderer
+        // para que el teclado funcione correctamente al reabrir el modal
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
         mainWindow.webContents.send('process-finished', {
             code: result.success ? 0 : 1,
             success: result.success,

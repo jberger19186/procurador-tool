@@ -136,8 +136,8 @@ async function buscarPorParte(page, jurisdiccionCodigo, nombreParte) {
     while (true) {
         // Verificar cambio de página (anti-duplicados)
         if (pagina > 1) {
-            const MAX_ESPERA_PAGINA   = 5;   // reintentos
-            const ESPERA_PAGINA_MS    = 5000; // ms entre reintento
+            const MAX_ESPERA_PAGINA   = 10;    // reintentos
+            const ESPERA_PAGINA_MS    = 10000; // ms entre reintento
             let primerExpActual = await leerPrimerExpediente(page);
             if (primerExpActual && primerExpActual === primerExpAnterior) {
                 let cambioPagina = false;

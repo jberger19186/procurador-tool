@@ -1100,6 +1100,8 @@ function setupProcessListeners() {
             loadStatistics();
 
             if (isMonitor) {
+                // Restaurar foco a la ventana para que el teclado funcione en el modal
+                window.focus();
                 // Reabrir modal con estado actualizado
                 const esInicial = result.monitorModo === 'inicial';
                 openMonitorModal(esInicial);  // pasa flag para auto-abrir expedientes si es inicial
@@ -2325,14 +2327,15 @@ function setupMonitorModal() {
     // Botón agregar parte
     document.getElementById('btnMonitorAgregarParte').addEventListener('click', () => {
         _monitorEditandoId = null;
-        resetMonitorForm('Agregar parte');
+        resetMonitorForm('➕ Agregar parte');
         document.getElementById('monitor-form-parte').style.display = '';
         document.getElementById('btnMonitorAgregarParte').style.display = 'none';
-        // Scroll automático para mostrar los botones Cancelar/Guardar
         setTimeout(() => {
-            const form = document.getElementById('monitor-form-parte');
-            form.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }, 50);
+            const modalBody = document.querySelector('#modalMonitor .modal-body');
+            if (modalBody) modalBody.scrollTop = 0;
+            const inputNombre = document.getElementById('monitor-form-nombre');
+            if (inputNombre) { inputNombre.disabled = false; inputNombre.focus(); }
+        }, 80);
     });
 
     // Cancelar formulario
@@ -2393,7 +2396,7 @@ function setupMonitorModal() {
 function openMonitorModal(autoAbrirExpedientes) {
     // Resetear al tab de partes
     switchMonitorTab('monitor-partes');
-    // Ocultar formulario
+    // Ocultar formulario al reabrir
     document.getElementById('monitor-form-parte').style.display = 'none';
     document.getElementById('btnMonitorAgregarParte').style.display = '';
     openModal('modalMonitor');
@@ -2591,13 +2594,19 @@ function editarParteMonitor(id) {
     if (!parte) return;
 
     _monitorEditandoId = id;
-    document.getElementById('monitor-form-title').textContent = 'Editar parte';
+    document.getElementById('monitor-form-title').textContent = '✏️ Editar parte';
     document.getElementById('monitor-form-jurisdiccion').value = parte.jurisdiccion_codigo;
     document.getElementById('monitor-form-nombre').value = parte.nombre_parte;
     document.getElementById('monitor-form-parte-id').value = id;
     document.getElementById('monitor-form-error').style.display = 'none';
     document.getElementById('monitor-form-parte').style.display = '';
     document.getElementById('btnMonitorAgregarParte').style.display = 'none';
+    setTimeout(() => {
+        const modalBody = document.querySelector('#modalMonitor .modal-body');
+        if (modalBody) modalBody.scrollTop = 0;
+        const inputNombre = document.getElementById('monitor-form-nombre');
+        if (inputNombre) { inputNombre.disabled = false; inputNombre.focus(); }
+    }, 80);
 }
 
 async function guardarParte() {
@@ -2657,7 +2666,11 @@ async function guardarParte() {
 
 async function eliminarParteMonitor(id) {
     const parte = _monitorPartes.find(p => p.id === id);
-    if (!confirm('Eliminar la parte "' + (parte ? parte.nombre_parte : id) + '"? Esta acci\u00f3n eliminar\u00e1 tambi\u00e9n sus expedientes.')) return;
+    const confirmado = await window.electronAPI.showConfirmDialog(
+        'Eliminar parte',
+        'Eliminar la parte "' + (parte ? parte.nombre_parte : id) + '"?\nEsta acci\u00f3n eliminar\u00e1 tambi\u00e9n sus expedientes.'
+    );
+    if (!confirmado) return;
 
     try {
         const res = await window.electronAPI.monitorEliminarParte(id);

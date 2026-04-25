@@ -121,7 +121,6 @@
     color: var(--text-3); padding: 8px 12px;
     border-bottom: 1px solid var(--border);
     white-space: nowrap; background: var(--bg-base);
-    position: sticky; top: 55px; z-index: 2;
   }
   tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
   tbody tr:hover { background: var(--bg-hover); }
@@ -214,6 +213,7 @@
     text-align: left; border-bottom: 1px solid var(--border);
     font-size: 10.5px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.06em; color: var(--text-3);
+    position: sticky; top: 0; z-index: 1;
   }
   .tabla-movimientos td { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; vertical-align: top; }
   .tabla-movimientos tr:hover td { background: var(--bg-hover); }
@@ -346,11 +346,13 @@
         <div class="table-toolbar">
           <div class="search-box">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l3 3"/></svg>
-            <input type="text" id="busqueda" placeholder="Buscar expediente, carátula, situación, dependencia..." oninput="filtrarExpedientes()">
+            <input type="text" id="busqueda" placeholder="Buscar expediente, carátula, situación, dependencia...">
           </div>
           <div class="toolbar-spacer"></div>
           <span class="result-count" id="result-count"></span>
         </div>`;
+      // Adjuntar listener después de inyectar el HTML (más robusto que oninput inline)
+      document.getElementById('busqueda').addEventListener('input', filtrarExpedientes);
     }
 
     function filtrarExpedientes() {
