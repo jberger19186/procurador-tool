@@ -486,6 +486,61 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 
 ---
 
+## 📋 Resumen de pendientes por fase
+> Última actualización: 2026-04-25. Referencia rápida para retomar trabajo en cualquier sesión.
+
+### FASE 1 — APLICACIÓN
+| # | Item | Prioridad |
+|---|---|---|
+| 1.1b | Refactor `renderer.js` monolítico (131 KB) → módulos ES6 por sección | Baja |
+| 1.4 | Unificar "Procurar hoy" + "Por fecha" → campo de fecha discreto en sidebar | Media |
+| 1.5 | Agregar "Ver tour" + "Asistente IA" en sección Sistema del sidebar | Media |
+| 1.3 | Code Signing del installer `.exe` (Azure Trusted Signing) | Diferido |
+| — | Limpiar rutas CRX legacy del backend (`/extension/updates.xml`, `/extension/latest.crx`) | Baja |
+
+### FASE 2 — BACKEND
+| Item | Prioridad |
+|---|---|
+| Backups programados de PostgreSQL + procedimiento de restauración | Alta |
+| Smoke tests / canary tests para endpoints críticos | Media |
+| Hardening: mover claves RSA y AES a variables de entorno | Alta |
+| Documentación técnica completa del backend | Media |
+| Análisis de seguridad profundo (app + backend) | Media |
+
+### FASE 3 — COMERCIAL
+| Item | Prioridad |
+|---|---|
+| Landing page pulida (`procuradortool.com`) | Alta |
+| Términos y Condiciones + Política de Privacidad | Alta |
+| Registro público con verificación de email | Alta |
+| Flujo de activación manual por admin + alertas de promo en Electron | Alta |
+
+### FASE 4 — SOPORTE
+| Item | Prioridad |
+|---|---|
+| Pulir sistema de tickets: panel admin, plantillas, notificaciones, SLA | Media |
+| Asistente IA integrado en flujo de tickets | Media |
+| Documentación de ayuda para usuarios finales | Media |
+| Comunicación masiva con usuarios | Media |
+
+### FASE 5 — COBRANZA
+| Item | Prioridad |
+|---|---|
+| Integración MercadoPago / Stripe (suscripciones recurrentes) | Alta |
+| Facturación AFIP | Media |
+| Campos en DB: `external_subscription_id`, `payment_provider`, `next_billing_date` | Alta |
+
+### FASE 6 — ENTORNO DE PRUEBAS Y RELEASE SEGURO
+| Item | Prioridad |
+|---|---|
+| Servidor staging (puerto separado, BD staging, subdominio) | Media |
+| Builds de prueba locales sin publicar a GitHub | Media |
+| Smoke tests automatizados pre-deploy | Media |
+| Proceso de release documentado y verificado | Media |
+| Mecanismo de rollback definido | Media |
+
+---
+
 ## Plan de comercialización — 5 fases
 
 ### FASE 1 — APLICACIÓN (en curso)
