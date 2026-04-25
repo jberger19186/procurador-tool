@@ -492,7 +492,6 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ### FASE 1 — APLICACIÓN
 | # | Item | Estado |
 |---|---|---|
-| 1.1b | Refactor `renderer.js` monolítico (131 KB) → módulos ES6 por sección | Pendiente (baja urgencia) |
 | ~~1.4~~ | ~~Unificar "Procurar hoy" + "Por fecha" → campo de fecha discreto en sidebar~~ | ✅ v2.4.16 |
 | ~~1.5~~ | ~~Agregar "Ver tour" + "Asistente IA" en sección Sistema del sidebar~~ | ✅ v2.4.16 |
 | 1.3 | Code Signing del installer `.exe` (Azure Trusted Signing) | Diferido |
@@ -508,12 +507,17 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 | Análisis de seguridad profundo (app + backend) | Media |
 
 ### FASE 3 — COMERCIAL
-| Item | Prioridad |
+| Item | Estado |
 |---|---|
-| Landing page pulida (`procuradortool.com`) | Alta |
-| Términos y Condiciones + Política de Privacidad | Alta |
-| Registro público con verificación de email | Alta |
-| Flujo de activación manual por admin + alertas de promo en Electron | Alta |
+| Landing page pulida (`procuradortool.com`) | Pendiente |
+| Términos y Condiciones + Política de Privacidad | Pendiente |
+| ~~Registro público + verificación de email~~ | ✅ Implementado (ver gaps abajo) |
+| ~~Flujo de activación manual por admin + alertas de promo en Electron~~ | ✅ Implementado |
+| **Registro — Gap 1:** endpoint público `/auth/resend-verification` (usuario pide reenvío si expiró token 24h) | Alta |
+| **Registro — Gap 2:** verificar que `public/register/index.html` y `register.css` estén commiteados en git | Alta |
+| **Registro — Gap 3:** renombrar `registration_status = 'pending_payment'` → `'pending_activation'` antes de integrar pagos | Media |
+| **Registro — Gap 4:** permitir `extension-login` para usuarios `suspended` con `usage_limit > 0` (trial con extensión) | Media |
+| **Registro — Gap 5:** mostrar mensaje claro en `/register` cuando `ALLOW_PUBLIC_REGISTER = false` | Baja |
 
 ### FASE 4 — SOPORTE
 | Item | Prioridad |
