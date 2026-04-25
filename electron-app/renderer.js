@@ -295,6 +295,20 @@ function initializeButtons() {
     // Estadísticas
     bind('btnRefreshStats', loadStatistics);
 
+    // Sidebar — Ver tour
+    bind('btnSidebarTour', () => {
+        if (typeof window.startAppTour === 'function') window.startAppTour();
+    });
+
+    // Sidebar — Asistente IA
+    bind('btnSidebarAsistente', openAsistenteModal);
+
+    // Asistente — Abrir ticket de soporte
+    bind('btnAsistenteSoporte', () => {
+        closeModal('modalAsistente');
+        openCuentaModalSoporte();
+    });
+
     // Modal fecha personalizada
     bind('btnConfirmCustomDate', runProcessCustomDate);
     bind('btnCancelCustomDate',  () => closeModal('modalCustomDate'));
@@ -1644,6 +1658,72 @@ function openCuentaModal() {
     document.getElementById('cuenta-soporte').style.display = 'none';
     openModal('modalCuenta');
     loadAccountData();
+}
+
+function openCuentaModalSoporte() {
+    const modalCuenta = document.getElementById('modalCuenta');
+    modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
+    modalCuenta.querySelector('.cuenta-tab[data-tab="soporte"]').classList.add('active');
+    document.getElementById('cuenta-plan').style.display    = 'none';
+    document.getElementById('cuenta-soporte').style.display = '';
+    openModal('modalCuenta');
+    loadAccountData();
+}
+
+// ── Asistente IA ────────────────────────────────────────────────────────────
+const FAQ_ITEMS = [
+    {
+        q: '¿Por qué no arranca el proceso?',
+        a: 'Verificá que Chrome esté completamente cerrado antes de iniciar. Si usás el modo headless (invisible), asegurate de que tus credenciales del PJN estén guardadas en el gestor de contraseñas de Chrome.',
+    },
+    {
+        q: '¿Cómo proceso expedientes desde una fecha específica?',
+        a: 'Usá el campo <strong>Fecha límite</strong> en la barra lateral (debajo del botón Procurar). Ingresá una fecha en formato DD/MM/YYYY. Si lo dejás vacío, el proceso trae solo movimientos del día.',
+    },
+    {
+        q: '¿Por qué el proceso tarda tanto?',
+        a: 'El sistema realiza hasta 10 reintentos automáticos si el PJN responde lento. Si tenés muchos expedientes o el portal está con alta demanda, el proceso puede extenderse. Es normal.',
+    },
+    {
+        q: '¿Qué secciones debo activar en Configuración?',
+        a: 'Depende de cómo estás matriculado: <strong>Letrado</strong> para causas propias, <strong>Parte</strong> si actuás como parte, <strong>Autorizado</strong> para expedientes en los que fuiste autorizado, <strong>Favoritos</strong> para los marcados en el PJN.',
+    },
+    {
+        q: '¿Cómo exporto los resultados a Excel?',
+        a: 'En <strong>Configuración → Reportes</strong>, activá "Generar Excel". El archivo se guarda automáticamente en tu carpeta de descargas después de cada proceso.',
+    },
+    {
+        q: '¿Por qué Chrome muestra un aviso al instalar la extensión?',
+        a: 'Es un aviso de precaución estándar de Chrome para extensiones relativamente nuevas y no indica ningún riesgo. Hacé click en <strong>"Continuar a la instalación"</strong> para instalarla sin inconvenientes.',
+    },
+    {
+        q: '¿Mis credenciales del PJN son seguras?',
+        a: 'Sí. Las credenciales <strong>nunca pasan por los servidores de Procurador</strong>. El sistema usa directamente el gestor de contraseñas de Chrome, igual que si ingresaras al PJN manualmente.',
+    },
+];
+
+function openAsistenteModal() {
+    const list = document.getElementById('faqList');
+    if (list && list.children.length === 0) {
+        FAQ_ITEMS.forEach(({ q, a }) => {
+            const item = document.createElement('div');
+            item.className = 'faq-item';
+            item.innerHTML = `
+                <button class="faq-question">
+                    ${q}
+                    <span class="faq-chevron">▼</span>
+                </button>
+                <div class="faq-answer" style="display:none"><p>${a}</p></div>`;
+            item.querySelector('.faq-question').addEventListener('click', () => {
+                const ans = item.querySelector('.faq-answer');
+                const isOpen = item.classList.contains('open');
+                item.classList.toggle('open', !isOpen);
+                ans.style.display = isOpen ? 'none' : '';
+            });
+            list.appendChild(item);
+        });
+    }
+    openModal('modalAsistente');
 }
 
 async function loadAccountData() {

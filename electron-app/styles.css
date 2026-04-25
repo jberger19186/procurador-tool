@@ -337,6 +337,43 @@ body {
   font-style: italic;
 }
 
+/* ── FAQ accordion (modal Asistente) ── */
+.faq-item {
+  border-bottom: 1px solid var(--border);
+}
+.faq-question {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 20px;
+  background: none;
+  border: none;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+.faq-question:hover { background: var(--bg-hover); }
+.faq-question .faq-chevron {
+  font-size: 10px;
+  color: var(--text-3);
+  flex-shrink: 0;
+  transition: transform 0.18s;
+}
+.faq-item.open .faq-chevron { transform: rotate(180deg); }
+.faq-answer {
+  padding: 0 20px 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.faq-answer p { margin: 0; }
+
 .sidebar-bottom {
   margin-top: auto;
   border-top: 1px solid var(--border);
