@@ -35,7 +35,11 @@
         },
         // ── 4 ──────────────────────────────────────────────────────────────
         {
-            target: '[data-action="procurar-hoy"]',
+            targets: [
+                '[data-action="procurar-hoy"]',
+                '#sidebarFechaLimite',
+                '[data-action="procurar-lote"]',
+            ],
             title: 'Procurar — novedades en tus expedientes',
             text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes.<br><br>'
                  + '• <strong>Sin fecha</strong> — trae solo movimientos del día<br>'
@@ -307,9 +311,9 @@
         let cx, cy;
 
         if (step.targets && step.preferRight) {
-            // Multi-target sidebar: siempre a la derecha, centrado en viewport
+            // Multi-target sidebar: a la derecha, centrado respecto al bounding box
             cx = rect.right + PAD + GAP;
-            cy = (window.innerHeight - CARD_H) / 2;
+            cy = rect.top + rect.height / 2 - CARD_H / 2;
         } else if (step.preferRight && spaceRight >= CARD_W + 8) {
             // Target único con preferRight
             cx = rect.right + PAD + GAP;
