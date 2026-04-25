@@ -535,6 +535,64 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - `informe/visor_informes_template.html`: rediseñado — header sticky, stats row, tabla de expedientes
 - Monitor de partes (`generarVisorMonitoreo` en `main.js`): rediseñado — cards por parte con accordion, sistema de diseño unificado
 
+#### 1.4 Unificación "Procurar hoy" + "Por fecha" — PENDIENTE
+
+**Objetivo:** eliminar el botón "Por fecha" del sidebar y unificar en un único flujo de procuración, controlado por un campo de fecha discreto justo debajo del botón principal.
+
+**Propuesta de UX:**
+
+```
+[ ▶ Procurar ]           ← botón principal, igual que hoy
+  Fecha límite: [____]   ← input tipo date, pequeño, debajo del botón
+                           pre-cargado con el valor de config (fechaLimite)
+                           si está vacío → procura todos los movimientos
+                           si tiene fecha → procura desde esa fecha en adelante
+```
+
+- El campo de fecha lee `config.procuracion.fechaLimite` al cargar
+- Al modificarlo, guarda el nuevo valor en la configuración (mismo mecanismo que la pantalla de Configuración → Procuración)
+- El botón "Procurar" siempre usa la fecha del campo (si está vacío, sin límite)
+- El botón "Por fecha" del sidebar desaparece
+- Tooltip en el campo: *"Solo se procuran expedientes con movimientos posteriores a esta fecha. Dejalo vacío para procurar todos."*
+
+**Impacto en el tour:**
+- Paso del tour que explicaba "Por fecha" → reemplazar por explicación del campo de fecha debajo del botón Procurar
+- El tour card apunta al campo de fecha en lugar del botón "Por fecha"
+
+**Archivos a modificar:** `index.html` (sidebar + campo), `renderer.js` (leer/guardar fecha, lógica de ejecución), `onboarding/tour.js` (actualizar paso correspondiente)
+
+---
+
+#### 1.5 Tour accesible + Asistente IA en sección Sistema — PENDIENTE
+
+**Objetivo:** agregar dos accesos rápidos en la sección "Sistema" del sidebar para que el usuario pueda relanzar el tour en cualquier momento y acceder al asistente de IA.
+
+**Propuesta sidebar — sección Sistema (orden sugerido):**
+
+```
+⚙  Configuración
+🧩  Extensión PJN
+────────────────
+🎯  Ver tour              ← NUEVO — relanza el tour desde el paso 1
+🤖  Asistente IA          ← NUEVO — abre modal con chatbot
+```
+
+**Ver tour:**
+- Llama a la función `startTour()` que ya existe en `onboarding/tour.js`
+- No requiere cambios en backend, solo un listener en el sidebar
+
+**Asistente IA:**
+- Nombre en el botón: **"Asistente IA"** (consistente con el portal de usuarios)
+- Abre un modal centrado (`modal-large`) con un `<iframe>` apuntando a:
+  `https://api.procuradortool.com/usuarios/` (sección del chatbot ya existente)
+- Alternativamente: llamar directo al endpoint del chatbot vía API y renderizar la conversación en el modal con diseño propio (amber/Inter) — más prolijo pero requiere más trabajo
+- El modal tiene header "🤖 Asistente IA", botón cerrar, y el iframe ocupa el 100% del cuerpo
+- Requiere que el usuario esté autenticado (el iframe hereda las cookies de sesión del portal)
+
+**Archivos a modificar:** `index.html` (dos botones nuevos en sidebar), `renderer.js` (listeners + lógica de iframe modal), posiblemente `styles.css` (estilo del modal de iframe)
+
+---
+
 #### 1.3 Code Signing — DIFERIDO (implementar en Fase 2-5)
 Evaluar Microsoft Azure Trusted Signing para firmar el instalador `.exe` de Electron.
 
@@ -595,6 +653,64 @@ Evaluar Microsoft Azure Trusted Signing para firmar el instalador `.exe` de Elec
 - Facturación AFIP
 - Soporte post-compra
 - Agregar a `subscriptions`: `external_subscription_id`, `payment_provider`, `next_billing_date`
+
+---
+
+### FASE 6 — ENTORNO DE PRUEBAS Y ACTUALIZACIÓN SEGURA (pendiente)
+
+**Objetivo:** tener un mecanismo controlado para desarrollar, probar y desplegar mejoras sin arriesgar la aplicación en producción.
+
+#### 6.1 Entorno staging
+
+- Servidor o proceso separado en el mismo VPS (puerto distinto, ej: `3444`)
+- Base de datos de staging: `procurador_db_staging` con datos de prueba (nunca datos reales)
+- Subdominio: `staging.api.procuradortool.com` (Nginx proxy al puerto de staging)
+- PM2 proceso separado: `procurador-api-staging`
+- La app Electron en modo staging apunta a staging en lugar de producción (configurable por variable de entorno al compilar)
+
+#### 6.2 Cuentas y datos de prueba
+
+- Usuario admin de prueba con plan ENTERPRISE en staging
+- Set de expedientes de prueba conocidos (del PJN, que no cambien)
+- Scripts de seed para recrear el estado de prueba rápidamente
+
+#### 6.3 Builds de prueba (sin publicar a GitHub Releases)
+
+```powershell
+# Build local sin publicar — genera el installer en /dist pero NO sube a GitHub
+$env:GH_TOKEN="..."; Set-Location "electron-app"; npm run build
+# (build = electron-builder --win sin --publish)
+```
+
+- El installer de prueba se instala localmente y apunta a staging
+- Permite probar el flujo completo (login, procuración, scripts cifrados) antes de publicar
+
+#### 6.4 Smoke tests automatizados
+
+- Tests básicos de endpoints críticos del backend (canary tests):
+  - `POST /auth/login` → devuelve JWT
+  - `GET /client/scripts/available` → lista scripts
+  - `GET /client/scripts/download/:name` → descifra y verifica firma correctamente
+  - `POST /license/execution/start` → adquiere lock
+- Ejecutables antes de cada deploy: `node test/smoke.js`
+- Bloquear el deploy si algún test falla
+
+#### 6.5 Proceso de release seguro
+
+```
+1. Desarrollar en rama feature/fix
+2. Probar en staging (build local + servidor staging)
+3. Smoke tests ✅
+4. Merge a main
+5. Bump version + npm run release → GitHub Releases
+6. Verificar auto-update en una instalación de prueba antes de comunicar a usuarios
+```
+
+#### 6.6 Rollback
+
+- GitHub Releases conserva versiones anteriores → los usuarios pueden bajar manualmente si hay problema grave
+- El servidor puede revertirse con: `git checkout <hash-anterior> && pm2 restart procurador-api`
+- Los scripts en BD tienen `version` — si hay rollback de código, reencriptar con la versión anterior
 
 ---
 
