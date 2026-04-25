@@ -298,6 +298,82 @@ body {
   background: var(--border);
   margin: 5px 4px;
 }
+
+/* ── Campo fecha límite en sidebar ── */
+.sidebar-fecha-wrap {
+  padding: 1px 8px 6px;
+}
+.sidebar-fecha-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+  margin-bottom: 3px;
+  padding-left: 1px;
+  user-select: none;
+}
+.sidebar-fecha-input {
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, color 0.15s;
+}
+.sidebar-fecha-input:focus {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+.sidebar-fecha-input::placeholder {
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-style: italic;
+}
+
+/* ── FAQ accordion (modal Asistente) ── */
+.faq-item {
+  border-bottom: 1px solid var(--border);
+}
+.faq-question {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 20px;
+  background: none;
+  border: none;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+.faq-question:hover { background: var(--bg-hover); }
+.faq-question .faq-chevron {
+  font-size: 10px;
+  color: var(--text-3);
+  flex-shrink: 0;
+  transition: transform 0.18s;
+}
+.faq-item.open .faq-chevron { transform: rotate(180deg); }
+.faq-answer {
+  padding: 0 20px 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.faq-answer p { margin: 0; }
+
 .sidebar-bottom {
   margin-top: auto;
   border-top: 1px solid var(--border);

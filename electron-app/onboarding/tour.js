@@ -12,7 +12,7 @@
     const TOUR_KEY  = 'psc_tour_shown_v4';
     const STORE_URL = 'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme';
 
-    // ─── Pasos del tour (13 pasos) ────────────────────────────────────────────
+    // ─── Pasos del tour (14 pasos) ────────────────────────────────────────────
     const STEPS = [
         // ── 1 ──────────────────────────────────────────────────────────────
         {
@@ -37,14 +37,14 @@
         {
             targets: [
                 '[data-action="procurar-hoy"]',
-                '[data-action="procurar-fecha"]',
+                '#sidebarFechaLimite',
                 '[data-action="procurar-lote"]',
             ],
             title: 'Procurar — novedades en tus expedientes',
-            text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes. Podés procurar:<br><br>'
-                 + '• <strong>Hoy</strong> — movimientos del día<br>'
-                 + '• <strong>Por fecha</strong> — a partir de una fecha límite<br>'
-                 + '• <strong>Por lote</strong> — con un archivo .txt de causas',
+            text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes.<br><br>'
+                 + '• <strong>Sin fecha</strong> — trae solo movimientos del día<br>'
+                 + '• <strong>Con fecha límite</strong> — completá el campo debajo del botón para procurar desde ese día hasta hoy<br>'
+                 + '• <strong>Por lote</strong> — procesá un archivo .txt de causas',
             setup: expandSidebar,
             preferRight: true,
         },
@@ -108,7 +108,7 @@
             target: '[data-action="configuracion"]',
             title: 'Configuración',
             text:  '• <strong>Secciones a procurar</strong> — elegí qué partes del expediente consultar<br>'
-                 + '• <strong>Fecha límite</strong> — hasta dónde retroceder al procurar<br>'
+                 + '• <strong>Fecha límite</strong> — también configurable desde el campo en la barra lateral<br>'
                  + '• <strong>Reportes y seguridad</strong> — opciones de exportación y credenciales<br>'
                  + '• <strong>Extensión PJN</strong> — gestión de la extensión de Chrome',
             setup: expandSidebar,
@@ -127,7 +127,19 @@
             setup: expandSidebar,
             preferRight: true,
         },
-        // ── 13 (NUEVO) ──────────────────────────────────────────────────────
+        // ── 13 ─────────────────────────────────────────────────────────────
+        {
+            targets: [
+                '#btnSidebarTour',
+                '#btnSidebarAsistente',
+            ],
+            title: 'Tour y Asistente IA',
+            text:  '• <strong>Ver tour</strong> — relanzá esta guía en cualquier momento para repasar las funciones<br><br>'
+                 + '• <strong>Asistente IA</strong> — preguntas frecuentes sobre el uso de la app y acceso rápido al soporte técnico',
+            setup: expandSidebar,
+            preferRight: true,
+        },
+        // ── 14 ─────────────────────────────────────────────────────────────
         {
             target: '#userChip',
             title: 'Tu cuenta — plan y soporte',
@@ -299,9 +311,9 @@
         let cx, cy;
 
         if (step.targets && step.preferRight) {
-            // Multi-target sidebar: siempre a la derecha, centrado en viewport
+            // Multi-target sidebar: a la derecha, centrado respecto al bounding box
             cx = rect.right + PAD + GAP;
-            cy = (window.innerHeight - CARD_H) / 2;
+            cy = rect.top + rect.height / 2 - CARD_H / 2;
         } else if (step.preferRight && spaceRight >= CARD_W + 8) {
             // Target único con preferRight
             cx = rect.right + PAD + GAP;
