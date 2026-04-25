@@ -37,13 +37,13 @@
         {
             targets: [
                 '[data-action="procurar-hoy"]',
-                '[data-action="procurar-fecha"]',
+                '#sidebarFechaLimite',
                 '[data-action="procurar-lote"]',
             ],
             title: 'Procurar — novedades en tus expedientes',
-            text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes. Podés procurar:<br><br>'
-                 + '• <strong>Hoy</strong> — movimientos del día<br>'
-                 + '• <strong>Por fecha</strong> — a partir de una fecha límite<br>'
+            text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes.<br><br>'
+                 + '• <strong>Sin fecha</strong> — trae solo movimientos del día<br>'
+                 + '• <strong>Con fecha límite</strong> — completá el campo de fecha para procurar desde ese día hasta hoy<br>'
                  + '• <strong>Por lote</strong> — con un archivo .txt de causas',
             setup: expandSidebar,
             preferRight: true,
@@ -108,7 +108,7 @@
             target: '[data-action="configuracion"]',
             title: 'Configuración',
             text:  '• <strong>Secciones a procurar</strong> — elegí qué partes del expediente consultar<br>'
-                 + '• <strong>Fecha límite</strong> — hasta dónde retroceder al procurar<br>'
+                 + '• <strong>Fecha límite</strong> — también configurable desde el campo en la barra lateral<br>'
                  + '• <strong>Reportes y seguridad</strong> — opciones de exportación y credenciales<br>'
                  + '• <strong>Extensión PJN</strong> — gestión de la extensión de Chrome',
             setup: expandSidebar,

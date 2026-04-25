@@ -136,12 +136,12 @@
 
         <button class="sidebar-item active" data-action="procurar-hoy">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><polygon points="6.5,5.5 12,8 6.5,10.5" fill="currentColor" stroke="none"/></svg>
-            Procurar hoy
+            Procurar
         </button>
-        <button class="sidebar-item" data-action="procurar-fecha">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="10" rx="1"/><path d="M5 4V2M11 4V2M2 7h12"/></svg>
-            Por fecha
-        </button>
+        <div class="sidebar-fecha-wrap">
+            <label class="sidebar-fecha-label">Fecha límite</label>
+            <input type="text" id="sidebarFechaLimite" class="sidebar-fecha-input" placeholder="DD/MM/YYYY — hoy">
+        </div>
         <button class="sidebar-item" data-action="procurar-lote">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5h7M2 8.5h5M2 12h7"/><circle cx="12" cy="10" r="2.5"/><path d="M12 8.5v3M10.5 10h3"/></svg>
             Por lote
@@ -218,7 +218,7 @@
             <!-- Botón principal dinámico -->
             <button class="btn btn-primary" id="btnMainAction" data-fn="procurar-hoy">
                 <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><polygon points="4,2 14,8 4,14"/></svg>
-                Procurar hoy
+                Procurar
             </button>
 
             <!-- Detener -->

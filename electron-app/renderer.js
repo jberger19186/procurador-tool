@@ -319,8 +319,11 @@ function switchCfgTab(name) {
 function setupSidebar() {
     // Mapa data-action → función
     const actions = {
-        'procurar-hoy':   () => runProcess(),
-        'procurar-fecha': () => showCustomDateModal(),
+        'procurar-hoy':   () => {
+            const fecha = document.getElementById('sidebarFechaLimite')?.value?.trim() || '';
+            if (fecha) runProcessFromSidebarFecha(fecha);
+            else       runProcess();
+        },
         'procurar-lote':  () => showProcurarCustomModal(),
         'informe':        () => openInformeModal(),
         'monitor':        () => openMonitorModal(),
@@ -335,8 +338,7 @@ function setupSidebar() {
 
     // Etiquetas del botón principal de la subtoolbar
     const mainLabels = {
-        'procurar-hoy':   '▶ Procurar hoy',
-        'procurar-fecha': '📅 Procurar fecha',
+        'procurar-hoy':   '▶ Procurar',
         'procurar-lote':  '📁 Procurar lote',
         'informe':        '📄 Generar informe',
         'monitor':        '🔍 Abrir monitor',
@@ -355,7 +357,6 @@ function setupSidebar() {
     // Mapa acción → tab correspondiente
     const actionToTab = {
         'procurar-hoy':   'tabProcurar',
-        'procurar-fecha': 'tabProcurar',
         'procurar-lote':  'tabProcurar',
         'informe':        'tabInforme',
         'monitor':        'tabMonitor',
@@ -400,6 +401,18 @@ function setupSidebar() {
 
     // User chip → abrir modal de cuenta
     document.getElementById('userChip')?.addEventListener('click', openCuentaModal);
+
+    // Campo fecha límite en sidebar → guardar en config al cambiar
+    document.getElementById('sidebarFechaLimite')?.addEventListener('change', async function () {
+        const fecha = this.value.trim();
+        if (!currentConfig) return;
+        currentConfig.general.fechaLimite = fecha;
+        // Sincronizar con el campo del modal de configuración
+        const cfgField = document.getElementById('fechaLimite');
+        if (cfgField) cfgField.value = fecha;
+        // Persistir inmediatamente
+        try { await window.electronAPI.saveConfig(currentConfig); } catch (_) { /* silencioso */ }
+    });
 
     // ===== TAB BUTTONS → misma acción que sidebar =====
     const tabMap = {
@@ -588,6 +601,9 @@ async function loadConfiguration() {
 
 function populateConfigForm(config) {
     document.getElementById('fechaLimite').value = config.general.fechaLimite || '';
+    // Sincronizar campo de fecha en la sidebar
+    const sidebarFecha = document.getElementById('sidebarFechaLimite');
+    if (sidebarFecha) sidebarFecha.value = config.general.fechaLimite || '';
     // identificador es readonly y se carga desde la sesión (ver loadConfiguration)
     // maxMovimientos y buscarEnTodos ya no tienen campo en el formulario; se preservan desde config
 
@@ -664,6 +680,9 @@ async function saveConfiguration(e) {
 
         if (result.success) {
             currentConfig = config;
+            // Sincronizar campo de fecha en sidebar
+            const sidebarFecha = document.getElementById('sidebarFechaLimite');
+            if (sidebarFecha) sidebarFecha.value = config.general.fechaLimite || '';
             addLog('success', '✅ Configuración guardada correctamente');
             showNotification('Configuración guardada', 'success');
             closeModal('modalConfig');
@@ -745,6 +764,47 @@ async function runProcessCustomDate() {
         }
 
         addLog('info', `📅 Iniciando proceso con fecha personalizada: ${fecha}...`);
+        addLog('info', '⏳ Preparando navegador Chrome... esto puede demorar unos segundos');
+        showChromeLoadingIndicator();
+        setProcessRunning(true);
+
+        const result = await window.electronAPI.runProcessCustomDate(fecha);
+
+        if (!result.success) {
+            addLog('error', `❌ Error: ${result.error}`);
+            setProcessRunning(false);
+            showNotification('Error al iniciar proceso', 'error');
+        }
+    } catch (error) {
+        addLog('error', `❌ Error inesperado: ${error.message}`);
+        setProcessRunning(false);
+        showNotification('Error inesperado', 'error');
+    }
+}
+
+// Procurar desde la fecha límite ingresada en la sidebar (sin abrir modal)
+async function runProcessFromSidebarFecha(fecha) {
+    const regex = /^\d{2}\/\d{2}\/\d{4}$/;
+    if (!regex.test(fecha)) {
+        showNotification('Formato de fecha inválido (use DD/MM/YYYY)', 'error');
+        return;
+    }
+
+    if (isProcessRunning) {
+        showNotification('Ya hay un proceso en ejecución', 'warning');
+        return;
+    }
+
+    try {
+        if (!currentConfig?.seguridad?.modoHeadless && !isWindowPositioned) {
+            addLog('info', '📐 Posicionando ventana a la derecha...');
+            setPositioned(true);
+            await window.electronAPI.positionLeft();
+            const btn = document.getElementById('btnPositionLeft');
+            if (btn) { btn.textContent = '◨ Restaurar'; btn.title = 'Restaurar ventana al centro'; }
+        }
+
+        addLog('info', `📅 Procurando desde fecha: ${fecha}...`);
         addLog('info', '⏳ Preparando navegador Chrome... esto puede demorar unos segundos');
         showChromeLoadingIndicator();
         setProcessRunning(true);
