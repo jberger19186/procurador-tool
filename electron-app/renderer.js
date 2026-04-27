@@ -1842,7 +1842,7 @@ function _chatUpdatePosition() {
     // Distancia desde el tope del statusbar hasta el fondo del viewport
     const distFromBottom = window.innerHeight - rect.top;
     // Pequeño respiro sobre la línea del statusbar
-    widget.style.bottom = (distFromBottom + 8) + 'px';
+    widget.style.bottom = (distFromBottom + 12) + 'px';
 }
 
 function setupChatWidget() {
