@@ -433,7 +433,7 @@ async function renderUserDetail(userId) {
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Estado de registro</label>
                         <select id="reg-status" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg-secondary)">
                             <option value="pending_email"   ${u.registration_status === 'pending_email'   ? 'selected' : ''}>Email sin verificar</option>
-                            <option value="pending_payment" ${u.registration_status === 'pending_payment' ? 'selected' : ''}>Pendiente de pago</option>
+                            <option value="pending_activation" ${u.registration_status === 'pending_activation' ? 'selected' : ''}>Pendiente de pago</option>
                             <option value="active"          ${u.registration_status === 'active'          ? 'selected' : ''}>Activo</option>
                             <option value="trial"           ${u.registration_status === 'trial'           ? 'selected' : ''}>Trial</option>
                         </select>
@@ -1108,11 +1108,27 @@ async function renderPendingUsers() {
 
         const statusBadge = s => s === 'pending_email'
             ? '<span class="badge badge-gray">Email sin verificar</span>'
-            : '<span class="badge badge-warning">Pendiente de pago</span>';
+            : '<span class="badge badge-warning">Pendiente de activación</span>';
+
+        // Cargar estado del registro para el toggle
+        let registerOpen = true;
+        try {
+            const sr = await apiFetch('/admin/settings');
+            registerOpen = sr.settings?.allow_public_register !== 'false';
+        } catch { /* usa default */ }
 
         document.getElementById('content').innerHTML = `
         <div class="page-header">
             <div><h2>Usuarios pendientes de activación</h2><p>${users.length} usuario${users.length !== 1 ? 's' : ''} en espera</p></div>
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+                <span style="font-size:13px;font-weight:500">Registro público</span>
+                <button id="btn-toggle-register"
+                    onclick="togglePublicRegister()"
+                    style="padding:5px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;
+                           background:${registerOpen ? '#059669' : '#dc2626'};color:#fff">
+                    ${registerOpen ? '✅ Habilitado' : '⛔ Deshabilitado'}
+                </button>
+            </div>
         </div>
         <div id="pending-alert"></div>
         ${users.length === 0
@@ -1139,7 +1155,7 @@ async function renderPendingUsers() {
                         <td>${statusBadge(u.registration_status)}</td>
                         <td style="font-size:12px">${new Date(u.created_at).toLocaleDateString('es-AR')}</td>
                         <td>
-                            ${u.registration_status === 'pending_payment'
+                            ${u.registration_status === 'pending_activation'
                                 ? `<button class="btn btn-sm btn-primary" onclick="activateUser(${u.id}, '${escHtml(u.email)}')">Activar</button>`
                                 : '<span style="font-size:12px;color:var(--text-muted)">Esperando email</span>'}
                         </td>
@@ -1163,6 +1179,24 @@ window.verifyEmailManual = async function(userId) {
         setTimeout(() => navigate('user-detail', userId), 1200);
     } catch (e) {
         showAlert(alertEl, e.message, 'error');
+    }
+};
+
+window.togglePublicRegister = async function() {
+    const btn = document.getElementById('btn-toggle-register');
+    if (!btn) return;
+    const isOpen = btn.textContent.includes('Habilitado');
+    const newValue = !isOpen;
+    if (!confirm(`¿${newValue ? 'Habilitar' : 'Deshabilitar'} el registro público de nuevos usuarios?`)) return;
+    btn.disabled = true;
+    try {
+        await apiFetch('/admin/settings', 'PUT', { key: 'allow_public_register', value: String(newValue) });
+        btn.style.background = newValue ? '#059669' : '#dc2626';
+        btn.textContent = newValue ? '✅ Habilitado' : '⛔ Deshabilitado';
+    } catch (e) {
+        alert('Error al actualizar la configuración: ' + e.message);
+    } finally {
+        btn.disabled = false;
     }
 };
 

@@ -203,7 +203,7 @@ router.get('/users/pending', authenticateAdmin, async (req, res) => {
             FROM users u
             LEFT JOIN subscriptions s ON u.id = s.user_id
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE u.registration_status IN ('pending_email','pending_payment')
+            WHERE u.registration_status IN ('pending_email','pending_activation')
             ORDER BY u.created_at DESC
         `);
         res.json({ success: true, users: result.rows });
@@ -321,7 +321,7 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
     const { nombre, apellido, cuit, domicilio, registration_status } = req.body;
     const db = req.app.get('db');
 
-    const validStatuses = ['pending_email', 'pending_payment', 'active', 'trial'];
+    const validStatuses = ['pending_email', 'pending_activation', 'active', 'trial'];
     if (registration_status && !validStatuses.includes(registration_status)) {
         return res.status(400).json({ error: 'Estado de registro inválido' });
     }
@@ -360,7 +360,7 @@ router.post('/users/:userId/verify-email', authenticateAdmin, async (req, res) =
             UPDATE users
             SET email_verified       = true,
                 registration_status  = CASE
-                    WHEN registration_status = 'pending_email' THEN 'pending_payment'
+                    WHEN registration_status = 'pending_email' THEN 'pending_activation'
                     ELSE registration_status
                 END,
                 email_verify_token   = NULL,
@@ -1319,6 +1319,44 @@ router.get('/monitor/stats', authenticateAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error('Error en GET /admin/monitor/stats:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── GET /admin/settings ─────────────────────────────────────────────────────
+// Leer configuración de la app (Gap 5)
+router.get('/settings', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const result = await db.query(`SELECT key, value FROM app_settings ORDER BY key`);
+        const settings = {};
+        result.rows.forEach(r => { settings[r.key] = r.value; });
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Error en GET /admin/settings:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── PUT /admin/settings ─────────────────────────────────────────────────────
+// Actualizar una clave de configuración (Gap 5)
+router.put('/settings', authenticateAdmin, async (req, res) => {
+    const { key, value } = req.body;
+    const db = req.app.get('db');
+    const allowedKeys = ['allow_public_register'];
+    if (!key || !allowedKeys.includes(key)) {
+        return res.status(400).json({ error: 'Clave de configuración no válida' });
+    }
+    try {
+        await db.query(`
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+        `, [key, String(value)]);
+        require('../utils/logger').info(`⚙️ Setting actualizado: ${key} = ${value} (por admin ${req.user.id})`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error en PUT /admin/settings:', error);
         res.status(500).json({ error: 'Error del servidor' });
     }
 });

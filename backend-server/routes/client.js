@@ -406,7 +406,8 @@ router.get('/account', authenticateToken, async (req, res) => {
 
     try {
         const result = await db.query(`
-            SELECT u.email, u.cuit, u.machine_id, u.last_login,
+            SELECT u.email, u.nombre, u.apellido, u.cuit, u.machine_id, u.last_login,
+                   u.email_verified, u.registration_status,
                    s.plan, s.status, s.expires_at, s.usage_count, s.usage_limit,
                    s.period_start,
                    s.proc_usage, s.batch_usage, s.informe_usage, s.monitor_novedades_usage,
@@ -471,7 +472,11 @@ router.get('/account', authenticateToken, async (req, res) => {
             success: true,
             account: {
                 email: u.email,
+                nombre: u.nombre || null,
+                apellido: u.apellido || null,
                 cuit: u.cuit || null,
+                emailVerified: u.email_verified || false,
+                registrationStatus: u.registration_status || null,
                 machineBound: !!u.machine_id,
                 lastLogin: u.last_login,
                 plan: {

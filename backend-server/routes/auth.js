@@ -86,10 +86,30 @@ router.get('/plan-availability', async (req, res) => {
     }
 });
 
+// ─── GET /auth/register-status ───────────────────────────────────────────────
+// Público — indica si el registro está abierto (Gap 5)
+router.get('/register-status', async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const r = await db.query(`SELECT value FROM app_settings WHERE key = 'allow_public_register'`);
+        const open = r.rows.length > 0 ? r.rows[0].value === 'true' : process.env.ALLOW_PUBLIC_REGISTER === 'true';
+        res.json({ open });
+    } catch {
+        const open = process.env.ALLOW_PUBLIC_REGISTER === 'true';
+        res.json({ open });
+    }
+});
+
 // ─── POST /auth/register ──────────────────────────────────────────────────────
 router.post('/register', registerLimiter, async (req, res) => {
-    if (process.env.ALLOW_PUBLIC_REGISTER !== 'true') {
-        return res.status(403).json({ error: 'Registro no habilitado' });
+    // Leer configuración desde DB (con fallback a env var) — Gap 5
+    let registroHabilitado = process.env.ALLOW_PUBLIC_REGISTER === 'true';
+    try {
+        const r = await db.query(`SELECT value FROM app_settings WHERE key = 'allow_public_register'`);
+        if (r.rows.length > 0) registroHabilitado = r.rows[0].value === 'true';
+    } catch { /* usa fallback */ }
+    if (!registroHabilitado) {
+        return res.status(403).json({ error: 'El registro de nuevos usuarios está temporalmente cerrado.' });
     }
 
     const {
@@ -248,7 +268,7 @@ router.get('/verify-email', async (req, res) => {
         await db.query(`
             UPDATE users
             SET email_verified = true,
-                registration_status = 'pending_payment',
+                registration_status = 'pending_activation',
                 email_verify_token = NULL,
                 email_verify_expires = NULL
             WHERE id = $1
@@ -315,6 +335,45 @@ a{color:#1e40af;text-decoration:none}</style></head>
 <p style="margin-top:24px"><a href="/">Volver al inicio</a></p>
 </div></body></html>`;
 }
+
+// ─── POST /auth/resend-verification ──────────────────────────────────────────
+// Público — reenvía el email de verificación (Gap 2)
+router.post('/resend-verification', async (req, res) => {
+    const { email } = req.body || {};
+    const db = req.app.get('db');
+
+    if (!email) return res.status(400).json({ error: 'Email requerido' });
+
+    try {
+        const result = await db.query(
+            `SELECT id, nombre FROM users WHERE email = $1 AND email_verified = false`,
+            [email.trim().toLowerCase()]
+        );
+
+        // Respuesta genérica para no revelar si el email existe
+        if (result.rows.length === 0) {
+            return res.json({ success: true, message: 'Si el email está registrado y pendiente de verificación, recibirás el enlace en breve.' });
+        }
+
+        const user = result.rows[0];
+        const token   = crypto.randomBytes(32).toString('hex');
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        await db.query(
+            `UPDATE users SET email_verify_token=$1, email_verify_expires=$2 WHERE id=$3`,
+            [token, expires, user.id]
+        );
+
+        mailer.sendEmailVerification(email, user.nombre, token).catch(() => {});
+        logger.info(`📧 Reenvío de verificación solicitado: ${email}`);
+
+        res.json({ success: true, message: 'Email de verificación reenviado. Revisá tu casilla en los próximos minutos.' });
+
+    } catch (error) {
+        logger.error('Error en resend-verification:', error.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
 
 // Login admin (dashboard web — sin machineId ni suscripción requerida)
 router.post('/admin-login', loginLimiter, async (req, res) => {
@@ -392,6 +451,14 @@ router.post('/login', loginLimiter, async (req, res) => {
         const validPassword = await bcrypt.compare(password, user.password_hash);
         if (!validPassword) {
             return res.status(401).json({ error: 'Credenciales inválidas' });
+        }
+
+        // Gap 1 — Bloquear acceso hasta verificar email
+        if (!user.email_verified) {
+            return res.status(403).json({
+                error: 'Debés verificar tu email antes de ingresar. Revisá tu casilla o solicitá un nuevo enlace desde el portal de usuarios.',
+                code: 'EMAIL_NOT_VERIFIED'
+            });
         }
 
         // Verificar suscripción (también permite suspended con usage_limit > 0 = trial)
@@ -494,13 +561,15 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }
 
-        // Verificar suscripción activa y obtener flujos habilitados del plan
+        // Gap 4 — Permitir trial (suspended + usage_limit > 0) además de active
         const subResult = await db.query(`
-            SELECT s.plan, s.status, s.expires_at,
+            SELECT s.plan, s.status, s.expires_at, s.usage_limit, s.usage_count,
                    COALESCE(p.extension_flows, '[]'::jsonb) AS extension_flows
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
+            WHERE s.user_id = $1
+              AND (s.status = 'active' OR (s.status = 'suspended' AND s.usage_limit > 0))
+              AND s.expires_at > NOW()
         `, [user.id]);
 
         if (subResult.rows.length === 0) {
@@ -526,11 +595,13 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
         res.json({
             success: true,
             token,
-            user: { id: user.id, email: user.email },
+            user: { id: user.id, email: user.email, emailVerified: user.email_verified },
             extension: {
                 enabledFlows: sub.extension_flows,
                 plan: sub.plan,
-                expiresAt: sub.expires_at
+                status: sub.status,
+                expiresAt: sub.expires_at,
+                isTrial: sub.status === 'suspended'
             }
         });
 

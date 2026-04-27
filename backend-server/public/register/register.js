@@ -223,4 +223,26 @@ function showFormError(msg) {
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
-loadPlans();
+(async function init() {
+    try {
+        const res  = await fetch('/auth/register-status');
+        const data = await res.json();
+        if (!data.open) {
+            document.getElementById('view-form').style.display = 'none';
+            const closed = document.createElement('div');
+            closed.style.cssText = 'text-align:center;padding:40px 20px';
+            closed.innerHTML = `
+                <div style="font-size:48px;margin-bottom:16px">🔒</div>
+                <h2 style="color:#1a1a1a;font-family:inherit;margin-bottom:12px">Registro temporalmente cerrado</h2>
+                <p style="color:#5c5c5c;font-size:14px;line-height:1.7">
+                    El registro de nuevos usuarios está pausado en este momento.<br>
+                    Si tenés un código de acceso o querés más información, contactanos en<br>
+                    <a href="mailto:soporte@procuradortool.com" style="color:#d97706">soporte@procuradortool.com</a>.
+                </p>`;
+            const card = document.querySelector('.register-card') || document.body;
+            card.appendChild(closed);
+            return;
+        }
+    } catch { /* si falla la consulta, muestra el formulario igual */ }
+    loadPlans();
+})();
