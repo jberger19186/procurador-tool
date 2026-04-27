@@ -374,6 +374,33 @@ body {
 }
 .faq-answer p { margin: 0; }
 
+/* FAQ search */
+.faq-search-wrap {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.faq-search-icon { color: var(--text-3); flex-shrink: 0; }
+.faq-search-input {
+  flex: 1; height: 30px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: var(--text-1); font-family: var(--font); font-size: 12.5px;
+  transition: border-color 0.13s, box-shadow 0.13s;
+}
+.faq-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+.faq-no-results {
+  padding: 24px 16px; text-align: center;
+  color: var(--text-3); font-size: 12.5px;
+}
+
 .sidebar-bottom {
   margin-top: auto;
   border-top: 1px solid var(--border);

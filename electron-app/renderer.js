@@ -307,6 +307,9 @@ function initializeButtons() {
     // Asistente — Abrir chat
     bind('btnAsistenteSoporte', openChatWidget);
 
+    // FAQ — filtrado en vivo
+    document.getElementById('faqSearch')?.addEventListener('input', e => _faqFilter(e.target.value));
+
     // Modal fecha personalizada
     bind('btnConfirmCustomDate', runProcessCustomDate);
     bind('btnCancelCustomDate',  () => closeModal('modalCustomDate'));
@@ -1706,6 +1709,8 @@ function openAsistenteModal() {
         FAQ_ITEMS.forEach(({ q, a }) => {
             const item = document.createElement('div');
             item.className = 'faq-item';
+            item.dataset.q = q.toLowerCase();
+            item.dataset.a = a.toLowerCase();
             item.innerHTML = `
                 <button class="faq-question">
                     ${q}
@@ -1721,7 +1726,44 @@ function openAsistenteModal() {
             list.appendChild(item);
         });
     }
+
+    // Reset búsqueda al abrir
+    const search = document.getElementById('faqSearch');
+    if (search) {
+        search.value = '';
+        _faqFilter('');
+    }
+
     openModal('modalAsistente');
+    search?.focus();
+}
+
+function _faqFilter(query) {
+    const list   = document.getElementById('faqList');
+    if (!list) return;
+    const items  = list.querySelectorAll('.faq-item');
+    const term   = query.trim().toLowerCase();
+    let visible  = 0;
+
+    items.forEach(item => {
+        const match = !term || item.dataset.q.includes(term) || item.dataset.a.includes(term);
+        item.style.display = match ? '' : 'none';
+        if (match) visible++;
+    });
+
+    // Mensaje "sin resultados"
+    let noRes = list.querySelector('.faq-no-results');
+    if (visible === 0) {
+        if (!noRes) {
+            noRes = document.createElement('p');
+            noRes.className = 'faq-no-results';
+            list.appendChild(noRes);
+        }
+        noRes.textContent = `Sin resultados para "${query}"`;
+        noRes.style.display = '';
+    } else if (noRes) {
+        noRes.style.display = 'none';
+    }
 }
 
 // ── Floating Chat Widget ─────────────────────────────────────────────────────

@@ -612,9 +612,10 @@
             <button class="modal-close">&times;</button>
         </div>
         <div class="modal-body" style="padding:0;display:flex;flex-direction:column">
-            <p style="padding:12px 20px 10px;font-size:13px;color:var(--text-2);border-bottom:1px solid var(--border);margin:0">
-                Preguntas frecuentes sobre el uso de la app.
-            </p>
+            <div class="faq-search-wrap">
+                <svg class="faq-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="faqSearch" class="faq-search-input" placeholder="Buscar pregunta...">
+            </div>
             <div class="faq-list" id="faqList" style="overflow-y:auto;flex:1">
                 <!-- generado por JS -->
             </div>
