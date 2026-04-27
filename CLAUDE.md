@@ -486,70 +486,57 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 
 ---
 
-## 📋 Resumen de pendientes por fase
-> Última actualización: 2026-04-27 (v2.4.17 — post gaps registro). Referencia rápida para retomar trabajo en cualquier sesión.
+## 📋 Pendientes por fase
+> Última actualización: 2026-04-27 (v2.4.17). Solo ítems pendientes — los completados se omiten.
 
 ### FASE 1 — APLICACIÓN
-| # | Item | Estado |
+| # | Item | Prioridad |
 |---|---|---|
-| ~~1.1~~ | ~~Sistema de diseño App Electron (amber, Inter, Crimson Pro)~~ | ✅ |
-| ~~1.1b~~ | ~~Refactor `renderer.js` → queda como está (monolítico, funciona bien)~~ | ✅ |
-| ~~1.2~~ | ~~Migración extensión → Chrome Web Store~~ | ✅ v1.3.2 |
-| ~~1.4~~ | ~~Unificar "Procurar hoy" + "Por fecha" → campo de fecha discreto en sidebar~~ | ✅ v2.4.16 |
-| ~~1.5~~ | ~~Agregar "Ver tour" + "Asistente IA" en sección Sistema del sidebar~~ | ✅ v2.4.16 |
-| ~~1.6~~ | ~~Chat widget flotante en Asistente IA + búsqueda en vivo en FAQ~~ | ✅ v2.4.17 |
-| 1.3 | Code Signing del installer `.exe` (Azure Trusted Signing) | **Pendiente** |
-| 1.7 | Electron: manejo del error `EMAIL_NOT_VERIFIED` en UI de login (mensaje + link al portal) | Pendiente |
+| 1.3 | Code Signing del installer `.exe` — Microsoft Azure Trusted Signing (elimina warning SmartScreen) | Media |
+| 1.7 | Electron: mostrar mensaje específico cuando el login retorna `EMAIL_NOT_VERIFIED` + link al portal | Media |
 | — | Limpiar rutas CRX legacy del backend (`/extension/updates.xml`, `/extension/latest.crx`) | Baja |
 
 ### FASE 2 — BACKEND
 | Item | Prioridad |
 |---|---|
-| Backups programados de PostgreSQL + procedimiento de restauración | Alta |
+| Backups programados de PostgreSQL + procedimiento de restauración documentado | Alta |
+| Hardening: mover claves RSA y AES a variables de entorno (sacar de `keys/`) | Alta |
+| Análisis de seguridad profundo (app Electron + backend) | Media |
 | Smoke tests / canary tests para endpoints críticos | Media |
-| Hardening: mover claves RSA y AES a variables de entorno | Alta |
-| Documentación técnica completa del backend | Media |
-| Análisis de seguridad profundo (app + backend) | Media |
+| Documentación técnica completa del backend (endpoints, esquema DB, flujos) | Media |
 
 ### FASE 3 — COMERCIAL
-| Item | Estado |
+| Item | Prioridad |
 |---|---|
-| Landing page pulida (`procuradortool.com`) | Pendiente |
-| Términos y Condiciones + Política de Privacidad | Pendiente |
-| Onboarding post-registro: email de bienvenida + instrucciones de activación | Pendiente |
-| Definir precios finales BASIC · PRO · ENTERPRISE | Pendiente |
-| ~~Registro público + verificación de email~~ | ✅ |
-| ~~Flujo de activación manual por admin~~ | ✅ |
-| ~~Gap 1: gate email verificado en login Electron~~ | ✅ v2.4.17 |
-| ~~Gap 2: banner reenvío verificación en portal /usuarios/~~ | ✅ v2.4.17 |
-| ~~Gap 3: `pending_payment` → `pending_activation`~~ | ✅ v2.4.17 |
-| ~~Gap 4: extension-login permite trial (`suspended + usage_limit > 0`)~~ | ✅ v2.4.17 |
-| ~~Gap 5: toggle registro público en admin dashboard (tabla `app_settings`)~~ | ✅ v2.4.17 |
+| Landing page: revisar y completar sección Planes con precios actualizados | Alta |
+| Términos y Condiciones de Uso + Política de Privacidad | Alta |
+| Definir precios finales BASIC · PRO · ENTERPRISE | Media |
+| Email de bienvenida post-registro con instrucciones de activación | Media |
 
 ### FASE 4 — SOPORTE
 | Item | Prioridad |
 |---|---|
-| **Conectar IA real al chat widget del asistente** (actualmente respuesta placeholder) | Alta |
-| Pulir sistema de tickets: panel admin, plantillas, notificaciones, SLA | Media |
-| Asistente IA integrado en flujo de tickets | Media |
-| Documentación de ayuda para usuarios finales | Media |
-| Comunicación masiva con usuarios | Media |
+| Conectar IA real al chat widget del asistente (actualmente respuesta placeholder) | Alta |
+| Pulir sistema de tickets: panel admin, plantillas de respuesta, notificaciones, SLA | Media |
+| Asistente IA integrado en flujo de tickets (sugerencias automáticas) | Media |
+| Documentación de ayuda para usuarios finales (base de conocimiento) | Media |
+| Comunicación masiva con usuarios (emails, anuncios) | Baja |
 
 ### FASE 5 — COBRANZA
 | Item | Prioridad |
 |---|---|
-| Integración MercadoPago / Stripe (suscripciones recurrentes) | Alta |
-| Facturación AFIP | Media |
+| Integración MercadoPago / Stripe — suscripciones recurrentes | Alta |
 | Campos en DB: `external_subscription_id`, `payment_provider`, `next_billing_date` | Alta |
+| Facturación AFIP | Media |
+| Soporte post-compra (flujo de renovación, cancelación, reembolso) | Media |
 
-### FASE 6 — ENTORNO DE PRUEBAS Y RELEASE SEGURO
+### FASE 6 — ENTORNO DE PRUEBAS
 | Item | Prioridad |
 |---|---|
-| Servidor staging (puerto separado, BD staging, subdominio) | Media |
-| Builds de prueba locales sin publicar a GitHub | Media |
+| Servidor staging (puerto separado, BD staging, subdominio `staging.api.procuradortool.com`) | Media |
 | Smoke tests automatizados pre-deploy | Media |
-| Proceso de release documentado y verificado | Media |
-| Mecanismo de rollback definido | Media |
+| Proceso de release documentado paso a paso | Media |
+| Mecanismo de rollback definido y probado | Media |
 
 ---
 
