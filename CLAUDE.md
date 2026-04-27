@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-25 (v2.4.16)
+> Última actualización: 2026-04-27 (v2.4.17)
 
 ---
 
@@ -487,13 +487,14 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ---
 
 ## 📋 Resumen de pendientes por fase
-> Última actualización: 2026-04-25 (v2.4.16). Referencia rápida para retomar trabajo en cualquier sesión.
+> Última actualización: 2026-04-27 (v2.4.17). Referencia rápida para retomar trabajo en cualquier sesión.
 
 ### FASE 1 — APLICACIÓN
 | # | Item | Estado |
 |---|---|---|
 | ~~1.4~~ | ~~Unificar "Procurar hoy" + "Por fecha" → campo de fecha discreto en sidebar~~ | ✅ v2.4.16 |
 | ~~1.5~~ | ~~Agregar "Ver tour" + "Asistente IA" en sección Sistema del sidebar~~ | ✅ v2.4.16 |
+| ~~1.6~~ | ~~Chat widget flotante en Asistente IA + búsqueda en vivo en FAQ~~ | ✅ v2.4.17 |
 | 1.3 | Code Signing del installer `.exe` (Azure Trusted Signing) | Diferido |
 | — | Limpiar rutas CRX legacy del backend (`/extension/updates.xml`, `/extension/latest.crx`) | Baja |
 
@@ -618,9 +619,30 @@ Sección Sistema del sidebar:
 
 **Ver tour** (`#btnSidebarTour`): llama directamente `window.startAppTour()`. No interfiere con el sistema de active state del sidebar (usa `id` en lugar de `data-action`).
 
-**Asistente IA** (`#btnSidebarAsistente`): abre `#modalAsistente` con 7 FAQs en accordion expandible (¿por qué no arranca?, fecha límite, demoras, secciones, Excel, extensión Chrome, seguridad de credenciales). Al pie: botón "Abrir ticket de soporte" → abre Mi Cuenta en pestaña Soporte via `openCuentaModalSoporte()`.
+**Asistente IA** (`#btnSidebarAsistente`): abre `#modalAsistente` con 7 FAQs en accordion expandible + campo de búsqueda en vivo. Al pie: botón "Abrir chat" → abre el chat widget flotante.
 
 **Tour** actualizado: nuevo paso 13 resalta ambos botones; paso 10 y paso 4 ahora centran el card respecto al bounding box de los elementos (no al viewport).
+
+---
+
+#### 1.6 Chat widget flotante + búsqueda FAQ — ✅ COMPLETADO (v2.4.17)
+
+**Chat widget** (`#chatWidget`, body-level, `position:fixed` bottom-right):
+- Dos estados: burbuja minimizada (🤖 naranja, 52px) y ventana expandida (340×440px)
+- Header amber con botones: 🎫 escala a tickets · — minimiza · ✕ cierra completamente
+- Burbujas diferenciadas: usuario (derecha, amber) · bot (izquierda, gris con borde)
+- Indicador de typing animado (3 dots bounce) antes de la respuesta del bot
+- Respuesta placeholder hasta configurar IA real
+- Posicionamiento dinámico vía `getBoundingClientRect(#consoleStatusbar)` — garantiza igual gap visual que `right: 24px`
+- Rama: `feature/asistente-chat` mergeada a `main`
+
+**Búsqueda en vivo en FAQ** (`#faqSearch`):
+- Input con lupa encima del listado
+- Filtra por título Y contenido de respuesta en tiempo real
+- Muestra "Sin resultados para X" si no hay coincidencias
+- Se resetea y enfoca automáticamente al abrir el modal
+
+**Pendiente:** conectar IA real al endpoint del chat (Fase 4).
 
 ---
 
