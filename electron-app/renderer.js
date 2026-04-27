@@ -94,6 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateUserChip();   // Poblar user chip del sidebar
     checkQuotaAlert();  // Mostrar banner si cuota >= 80%
     window.electronAPI.getPromoStatus().then(ps => { if (ps) checkPromoAlert(ps); }).catch(() => {});
+    setupChatWidget();
     addLog('info', 'Sistema iniciado correctamente ✅');
 });
 
@@ -303,11 +304,8 @@ function initializeButtons() {
     // Sidebar — Asistente IA
     bind('btnSidebarAsistente', openAsistenteModal);
 
-    // Asistente — Abrir ticket de soporte
-    bind('btnAsistenteSoporte', () => {
-        closeModal('modalAsistente');
-        openCuentaModalSoporte();
-    });
+    // Asistente — Abrir chat
+    bind('btnAsistenteSoporte', openChatWidget);
 
     // Modal fecha personalizada
     bind('btnConfirmCustomDate', runProcessCustomDate);
@@ -1724,6 +1722,145 @@ function openAsistenteModal() {
         });
     }
     openModal('modalAsistente');
+}
+
+// ── Floating Chat Widget ─────────────────────────────────────────────────────
+let _chatInitialized = false;
+
+function _chatEscapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function _chatScrollToBottom() {
+    const msgs = document.getElementById('chatMessages');
+    if (msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+function _chatAddBotMessage(html) {
+    const msgs = document.getElementById('chatMessages');
+    if (!msgs) return;
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg--bot';
+    div.innerHTML = `
+        <div class="chat-msg-avatar">🤖</div>
+        <div class="chat-msg-bubble">${html}</div>`;
+    msgs.appendChild(div);
+    _chatScrollToBottom();
+}
+
+function _chatAddUserMessage(text) {
+    const msgs = document.getElementById('chatMessages');
+    if (!msgs) return;
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg--user';
+    div.innerHTML = `<div class="chat-msg-bubble">${_chatEscapeHtml(text)}</div>`;
+    msgs.appendChild(div);
+    _chatScrollToBottom();
+}
+
+function _chatShowTyping() {
+    const msgs = document.getElementById('chatMessages');
+    if (!msgs) return null;
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg--bot';
+    div.id = 'chatTypingIndicator';
+    div.innerHTML = `
+        <div class="chat-msg-avatar">🤖</div>
+        <div class="chat-msg-bubble" style="padding:10px 14px">
+            <div class="chat-typing">
+                <div class="chat-typing-dot"></div>
+                <div class="chat-typing-dot"></div>
+                <div class="chat-typing-dot"></div>
+            </div>
+        </div>`;
+    msgs.appendChild(div);
+    _chatScrollToBottom();
+    return div;
+}
+
+async function _chatSendMessage() {
+    const input   = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('chatSendBtn');
+    const text    = input?.value?.trim();
+    if (!text) return;
+
+    input.value = '';
+    if (sendBtn) sendBtn.disabled = true;
+
+    _chatAddUserMessage(text);
+
+    const typing = _chatShowTyping();
+    await new Promise(r => setTimeout(r, 1400));
+    if (typing) typing.remove();
+
+    _chatAddBotMessage(
+        'El asistente IA no está configurado aún. ' +
+        'Mientras tanto, revisá las <strong>preguntas frecuentes</strong> o ' +
+        'abrí un <strong>ticket de soporte</strong> con el botón 🎫 de arriba.'
+    );
+
+    if (sendBtn) sendBtn.disabled = false;
+    input?.focus();
+}
+
+function openChatWidget() {
+    closeModal('modalAsistente');
+
+    const widget = document.getElementById('chatWidget');
+    const win    = document.getElementById('chatWindow');
+    const bubble = document.getElementById('chatBubbleBtn');
+    if (!widget || !win || !bubble) return;
+
+    widget.classList.remove('chat-widget--hidden');
+    win.style.display    = 'flex';
+    bubble.style.display = 'none';
+
+    if (!_chatInitialized) {
+        _chatInitialized = true;
+        _chatAddBotMessage('¡Hola! Soy el asistente de Procurador SCW 👋<br>Escribime tu consulta y te ayudo. Si no puedo resolverla, podés abrir un ticket con el botón 🎫.');
+    }
+
+    document.getElementById('chatInput')?.focus();
+}
+
+function _chatMinimize() {
+    const win    = document.getElementById('chatWindow');
+    const bubble = document.getElementById('chatBubbleBtn');
+    if (!win || !bubble) return;
+    win.style.display    = 'none';
+    bubble.style.display = 'flex';
+}
+
+function setupChatWidget() {
+    const sendBtn = document.getElementById('chatSendBtn');
+    const bubble  = document.getElementById('chatBubbleBtn');
+    const minBtn  = document.getElementById('chatMinimizeBtn');
+    const tkBtn   = document.getElementById('chatTicketBtn');
+    const input   = document.getElementById('chatInput');
+
+    if (sendBtn) sendBtn.addEventListener('click', _chatSendMessage);
+    if (bubble)  bubble.addEventListener('click', () => {
+        const win = document.getElementById('chatWindow');
+        if (win) win.style.display = 'flex';
+        bubble.style.display = 'none';
+        document.getElementById('chatInput')?.focus();
+    });
+    if (minBtn)  minBtn.addEventListener('click', _chatMinimize);
+    if (tkBtn)   tkBtn.addEventListener('click', () => {
+        _chatMinimize();
+        openCuentaModalSoporte();
+    });
+    if (input) {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                _chatSendMessage();
+            }
+        });
+    }
 }
 
 async function loadAccountData() {

@@ -620,7 +620,7 @@
             </div>
             <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0">
                 <button class="btn btn-secondary" id="btnAsistenteSoporte" style="width:100%;justify-content:center">
-                    🎫 ¿Seguís con dudas? Abrir ticket de soporte
+                    💬 ¿Seguís con dudas? Abrir chat
                 </button>
             </div>
         </div>
@@ -1017,6 +1017,40 @@
 </div>
 
 
+
+<!-- ===== FLOATING CHAT WIDGET ===== -->
+<div id="chatWidget" class="chat-widget chat-widget--hidden">
+
+    <!-- Minimized bubble -->
+    <button class="chat-bubble-btn" id="chatBubbleBtn" style="display:none" title="Abrir asistente">
+        🤖
+    </button>
+
+    <!-- Expanded window -->
+    <div class="chat-window" id="chatWindow" style="display:none">
+        <div class="chat-header">
+            <div class="chat-header-info">
+                <span class="chat-header-icon">🤖</span>
+                <div>
+                    <div class="chat-header-title">Asistente</div>
+                    <div class="chat-header-status">Procurador SCW</div>
+                </div>
+            </div>
+            <div class="chat-header-actions">
+                <button class="chat-header-btn" id="chatTicketBtn" title="Abrir ticket de soporte">🎫</button>
+                <button class="chat-header-btn" id="chatMinimizeBtn" title="Minimizar">—</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" class="chat-input" placeholder="Escribí tu consulta..." autocomplete="off">
+            <button class="chat-send-btn" id="chatSendBtn" title="Enviar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+        </div>
+    </div>
+
+</div>
 
 <script src="renderer.js"></script>
 <script src="onboarding/tour.js"></script>
