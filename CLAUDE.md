@@ -487,15 +487,19 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ---
 
 ## 📋 Resumen de pendientes por fase
-> Última actualización: 2026-04-27 (v2.4.17). Referencia rápida para retomar trabajo en cualquier sesión.
+> Última actualización: 2026-04-27 (v2.4.17 — post gaps registro). Referencia rápida para retomar trabajo en cualquier sesión.
 
 ### FASE 1 — APLICACIÓN
 | # | Item | Estado |
 |---|---|---|
+| ~~1.1~~ | ~~Sistema de diseño App Electron (amber, Inter, Crimson Pro)~~ | ✅ |
+| ~~1.1b~~ | ~~Refactor `renderer.js` → queda como está (monolítico, funciona bien)~~ | ✅ |
+| ~~1.2~~ | ~~Migración extensión → Chrome Web Store~~ | ✅ v1.3.2 |
 | ~~1.4~~ | ~~Unificar "Procurar hoy" + "Por fecha" → campo de fecha discreto en sidebar~~ | ✅ v2.4.16 |
 | ~~1.5~~ | ~~Agregar "Ver tour" + "Asistente IA" en sección Sistema del sidebar~~ | ✅ v2.4.16 |
 | ~~1.6~~ | ~~Chat widget flotante en Asistente IA + búsqueda en vivo en FAQ~~ | ✅ v2.4.17 |
-| 1.3 | Code Signing del installer `.exe` (Azure Trusted Signing) | Diferido |
+| 1.3 | Code Signing del installer `.exe` (Azure Trusted Signing) | **Pendiente** |
+| 1.7 | Electron: manejo del error `EMAIL_NOT_VERIFIED` en UI de login (mensaje + link al portal) | Pendiente |
 | — | Limpiar rutas CRX legacy del backend (`/extension/updates.xml`, `/extension/latest.crx`) | Baja |
 
 ### FASE 2 — BACKEND
@@ -512,17 +516,20 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 |---|---|
 | Landing page pulida (`procuradortool.com`) | Pendiente |
 | Términos y Condiciones + Política de Privacidad | Pendiente |
-| ~~Registro público + verificación de email~~ | ✅ Implementado (ver gaps abajo) |
-| ~~Flujo de activación manual por admin + alertas de promo en Electron~~ | ✅ Implementado |
-| **Registro — Gap 1:** endpoint público `/auth/resend-verification` (usuario pide reenvío si expiró token 24h) | Alta |
-| **Registro — Gap 2:** verificar que `public/register/index.html` y `register.css` estén commiteados en git | Alta |
-| **Registro — Gap 3:** renombrar `registration_status = 'pending_payment'` → `'pending_activation'` antes de integrar pagos | Media |
-| **Registro — Gap 4:** permitir `extension-login` para usuarios `suspended` con `usage_limit > 0` (trial con extensión) | Media |
-| **Registro — Gap 5:** mostrar mensaje claro en `/register` cuando `ALLOW_PUBLIC_REGISTER = false` | Baja |
+| Onboarding post-registro: email de bienvenida + instrucciones de activación | Pendiente |
+| Definir precios finales BASIC · PRO · ENTERPRISE | Pendiente |
+| ~~Registro público + verificación de email~~ | ✅ |
+| ~~Flujo de activación manual por admin~~ | ✅ |
+| ~~Gap 1: gate email verificado en login Electron~~ | ✅ v2.4.17 |
+| ~~Gap 2: banner reenvío verificación en portal /usuarios/~~ | ✅ v2.4.17 |
+| ~~Gap 3: `pending_payment` → `pending_activation`~~ | ✅ v2.4.17 |
+| ~~Gap 4: extension-login permite trial (`suspended + usage_limit > 0`)~~ | ✅ v2.4.17 |
+| ~~Gap 5: toggle registro público en admin dashboard (tabla `app_settings`)~~ | ✅ v2.4.17 |
 
 ### FASE 4 — SOPORTE
 | Item | Prioridad |
 |---|---|
+| **Conectar IA real al chat widget del asistente** (actualmente respuesta placeholder) | Alta |
 | Pulir sistema de tickets: panel admin, plantillas, notificaciones, SLA | Media |
 | Asistente IA integrado en flujo de tickets | Media |
 | Documentación de ayuda para usuarios finales | Media |
@@ -578,11 +585,10 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - Onboarding, modales, tour cards y configuración ya son visualmente coherentes
 - No se requieren cambios adicionales de presentación
 
-#### 1.1b Refactor técnico `renderer.js` — PENDIENTE (baja urgencia)
-- `renderer.js` es monolítico (131 KB) — dividir en módulos ES6 por sección
-- Secciones: login · dashboard · modales de ejecución · logs · tickets · configuración
-- **Regla:** solo reorganización de código, sin cambiar funcionalidad ni estilos
-- No es urgente mientras no haya problemas de mantenimiento
+#### 1.1b Refactor técnico `renderer.js` ✅ COMPLETADO (decisión 2026-04-27)
+- `renderer.js` permanece monolítico — funciona correctamente y no hay problemas de mantenimiento actuales
+- Se decidió no dividir en módulos por ahora: el costo de refactor supera el beneficio en esta etapa
+- Revisitar solo si el archivo crece significativamente o aparecen conflictos reales
 
 #### 1.2 Migración extensión → Chrome Web Store ✅ COMPLETADO
 - Extensión publicada y aprobada en Chrome Web Store (v1.3.2)
@@ -642,12 +648,16 @@ Sección Sistema del sidebar:
 - Muestra "Sin resultados para X" si no hay coincidencias
 - Se resetea y enfoca automáticamente al abrir el modal
 
-**Pendiente:** conectar IA real al endpoint del chat (Fase 4).
+**Pendiente (Fase 4):** conectar IA real al endpoint del chat.
 
 ---
 
-#### 1.3 Code Signing — DIFERIDO (implementar en Fase 2-5)
-Evaluar Microsoft Azure Trusted Signing para firmar el instalador `.exe` de Electron.
+#### 1.3 Code Signing — PENDIENTE
+- Firmar el instalador `.exe` de Electron con **Microsoft Azure Trusted Signing**
+- Objetivo: eliminar el warning "Editor desconocido" de Windows SmartScreen al instalar la app
+- Sin firma: SmartScreen bloquea o advierte la instalación en Windows; con firma: instalación fluida
+- Requiere cuenta Azure + certificado EV o Azure Trusted Signing (más accesible y económico)
+- Docs: https://learn.microsoft.com/en-us/azure/trusted-signing/
 
 ---
 
