@@ -209,7 +209,65 @@ async function initDashboard() {
     document.getElementById('app').classList.add('visible');
 
     await loadAccount();
+
+    // Gap 1+2 — Mostrar banner si email no verificado
+    if (state.account && !state.account.emailVerified) {
+        showEmailVerificationBanner();
+    }
+
     navigateTo('plan');
+}
+
+function showEmailVerificationBanner() {
+    let banner = document.getElementById('email-verify-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'email-verify-banner';
+        banner.style.cssText = `
+            background:#fffbeb;border-bottom:1px solid #fde68a;padding:10px 20px;
+            display:flex;align-items:center;justify-content:space-between;
+            flex-wrap:wrap;gap:8px;font-size:13px;color:#78350f;
+        `;
+        banner.innerHTML = `
+            <span>⚠️ <strong>Tu email no está verificado.</strong> Revisá tu casilla o solicitá un nuevo enlace para acceder a las descargas.</span>
+            <button id="btn-resend-verify" style="background:#d97706;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">
+                Reenviar email de verificación
+            </button>
+        `;
+        const topbar = document.getElementById('topbar') || document.querySelector('.topbar');
+        if (topbar && topbar.parentNode) {
+            topbar.parentNode.insertBefore(banner, topbar.nextSibling);
+        } else {
+            document.getElementById('app').prepend(banner);
+        }
+        document.getElementById('btn-resend-verify').addEventListener('click', resendVerification);
+    }
+    banner.style.display = 'flex';
+}
+
+async function resendVerification() {
+    const btn = document.getElementById('btn-resend-verify');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    try {
+        const res = await fetch('/auth/resend-verification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: state.account?.email }),
+        });
+        const data = await res.json();
+        btn.textContent = '✅ Email enviado';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = 'Reenviar email de verificación';
+        }, 5000);
+        if (data.message) alert(data.message);
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Reenviar email de verificación';
+        alert('Error de conexión. Intentá de nuevo.');
+    }
 }
 
 async function loadAccount() {
@@ -511,10 +569,24 @@ function renderPlan() {
 function renderDownloads() {
     const acc = state.account;
     if (!acc) return;
+    const container = document.getElementById('downloads-body');
+
+    // Gap 1 — Ocultar descargas hasta verificar email
+    if (!acc.emailVerified) {
+        container.innerHTML = `
+            <div style="padding:20px;text-align:center;color:#78350f;background:#fffbeb;border-radius:8px;border:1px solid #fde68a">
+                <div style="font-size:28px;margin-bottom:8px">📧</div>
+                <strong>Verificá tu email para acceder a las descargas</strong>
+                <p style="margin:8px 0 0;font-size:13px;color:#92400e">
+                    La extensión Chrome y la app Electron estarán disponibles una vez que confirmes tu dirección de email.
+                </p>
+            </div>`;
+        return;
+    }
+
     const planType = (acc.planType || '').toLowerCase();
     const planName = (acc.plan?.displayName || acc.plan?.name || '').toLowerCase();
     const hasElectron = planType.includes('electron') || planName.includes('electron');
-    const container = document.getElementById('downloads-body');
 
     const extensionItem = `
         <div class="download-item">

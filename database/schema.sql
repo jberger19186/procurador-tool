@@ -628,11 +628,24 @@ CREATE TABLE public.users (
     password_reset_token character varying(128),
     password_reset_expires timestamp without time zone,
     CONSTRAINT check_role_valid CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'admin'::character varying])::text[]))),
-    CONSTRAINT users_registration_status_check CHECK (((registration_status)::text = ANY ((ARRAY['pending_email'::character varying, 'pending_payment'::character varying, 'active'::character varying, 'trial'::character varying])::text[])))
+    CONSTRAINT users_registration_status_check CHECK (((registration_status)::text = ANY ((ARRAY['pending_email'::character varying, 'pending_activation'::character varying, 'active'::character varying, 'trial'::character varying])::text[])))
 );
 
 
 ALTER TABLE public.users OWNER TO procurador_user;
+
+--
+-- Name: app_settings; Type: TABLE; Schema: public; Owner: procurador_user
+--
+
+CREATE TABLE IF NOT EXISTS public.app_settings (
+    key         character varying(100) NOT NULL,
+    value       text                   NOT NULL,
+    updated_at  timestamp with time zone NOT NULL DEFAULT NOW(),
+    CONSTRAINT app_settings_pkey PRIMARY KEY (key)
+);
+
+ALTER TABLE public.app_settings OWNER TO procurador_user;
 
 --
 -- Name: TABLE users; Type: COMMENT; Schema: public; Owner: procurador_user
