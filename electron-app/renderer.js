@@ -1834,6 +1834,17 @@ function _chatMinimize() {
     bubble.style.display = 'flex';
 }
 
+function _chatUpdatePosition() {
+    const statusbar = document.getElementById('consoleStatusbar');
+    const widget    = document.getElementById('chatWidget');
+    if (!statusbar || !widget) return;
+    const rect = statusbar.getBoundingClientRect();
+    // Distancia desde el tope del statusbar hasta el fondo del viewport
+    const distFromBottom = window.innerHeight - rect.top;
+    // Misma distancia que right: 24px, pero medida desde la línea del statusbar
+    widget.style.bottom = (distFromBottom + 24) + 'px';
+}
+
 function setupChatWidget() {
     const sendBtn  = document.getElementById('chatSendBtn');
     const bubble   = document.getElementById('chatBubbleBtn');
@@ -1866,6 +1877,10 @@ function setupChatWidget() {
             }
         });
     }
+
+    // Posicionamiento inicial y en resize
+    _chatUpdatePosition();
+    window.addEventListener('resize', _chatUpdatePosition);
 }
 
 async function loadAccountData() {
