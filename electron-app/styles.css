@@ -1278,7 +1278,7 @@ body {
 /* ─── Floating Chat Widget ────────────────────────────────────────────────── */
 .chat-widget {
     position: fixed;
-    bottom: 24px;
+    bottom: 46px;   /* 22px statusbar + 24px gap = mismo espacio que el borde derecho */
     right: 24px;
     z-index: 9990;
     display: flex;

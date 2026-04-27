@@ -1835,11 +1835,12 @@ function _chatMinimize() {
 }
 
 function setupChatWidget() {
-    const sendBtn = document.getElementById('chatSendBtn');
-    const bubble  = document.getElementById('chatBubbleBtn');
-    const minBtn  = document.getElementById('chatMinimizeBtn');
-    const tkBtn   = document.getElementById('chatTicketBtn');
-    const input   = document.getElementById('chatInput');
+    const sendBtn  = document.getElementById('chatSendBtn');
+    const bubble   = document.getElementById('chatBubbleBtn');
+    const minBtn   = document.getElementById('chatMinimizeBtn');
+    const closeBtn = document.getElementById('chatCloseBtn');
+    const tkBtn    = document.getElementById('chatTicketBtn');
+    const input    = document.getElementById('chatInput');
 
     if (sendBtn) sendBtn.addEventListener('click', _chatSendMessage);
     if (bubble)  bubble.addEventListener('click', () => {
@@ -1848,7 +1849,11 @@ function setupChatWidget() {
         bubble.style.display = 'none';
         document.getElementById('chatInput')?.focus();
     });
-    if (minBtn)  minBtn.addEventListener('click', _chatMinimize);
+    if (minBtn)   minBtn.addEventListener('click', _chatMinimize);
+    if (closeBtn) closeBtn.addEventListener('click', () => {
+        const widget = document.getElementById('chatWidget');
+        if (widget) widget.classList.add('chat-widget--hidden');
+    });
     if (tkBtn)   tkBtn.addEventListener('click', () => {
         _chatMinimize();
         openCuentaModalSoporte();
