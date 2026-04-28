@@ -506,6 +506,7 @@ async function renderUserDetail(userId) {
                     <div>
                         <label style="font-size:12px;display:block;margin-bottom:4px">Subsistema</label>
                         <select id="adj-subsystem" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                            <option value="global">── Global (uso_count) ──</option>
                             <option value="proc">Procuración</option>
                             <option value="batch">Procurar Batch</option>
                             <option value="informe">Informes</option>
@@ -1620,8 +1621,12 @@ window.applyUsageAdjustment = async function(userId) {
         const result = await apiFetch(`/admin/subscriptions/${userId}/adjust`, 'POST', {
             subsystem, amount, reason: reason || null, ticket_id: ticketId ? parseInt(ticketId) : null
         });
-        showAlert(document.getElementById('ud-alert'), `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} de ${subsystem}. Nuevo bonus: ${result.newBonus}`, 'success');
+        const msg = subsystem === 'global'
+            ? `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} al uso global. Nuevo valor: ${result.newUsageCount}`
+            : `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} de ${subsystem}. Nuevo bonus: ${result.newBonus}`;
+        showAlert(document.getElementById('ud-alert'), msg, 'success');
         loadAdjustmentHistory(userId);
+        setTimeout(() => navigate('user-detail', userId), 1500);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
 
@@ -1640,7 +1645,7 @@ async function loadAdjustmentHistory(userId) {
             return;
         }
 
-        const subsysLabel = { proc: 'Procuración', informe: 'Informes', monitor_novedades: 'Mon. Novedades', monitor_partes: 'Mon. Partes' };
+        const subsysLabel = { global: 'Global', proc: 'Procuración', batch: 'Batch', informe: 'Informes', monitor_novedades: 'Mon. Novedades', monitor_partes: 'Mon. Partes' };
         histEl.innerHTML = `
         <div class="table-wrapper" style="max-height:200px;overflow-y:auto">
             <table style="font-size:12px">

@@ -1176,7 +1176,7 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
     const { userId } = req.params;
     const { subsystem, amount, reason, ticket_id } = req.body;
 
-    const validSubsystems = ['proc', 'batch', 'informe', 'monitor_novedades', 'monitor_partes'];
+    const validSubsystems = ['global', 'proc', 'batch', 'informe', 'monitor_novedades', 'monitor_partes'];
     if (!validSubsystems.includes(subsystem)) {
         return res.status(400).json({ error: `Subsistema inválido. Válidos: ${validSubsystems.join(', ')}` });
     }
@@ -1197,7 +1197,36 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
         const userCheck = await db.query(`SELECT email FROM users WHERE id = $1`, [userId]);
         if (userCheck.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-        // Aplicar bonificación en subscriptions
+        const action = parseInt(amount) > 0 ? `+${amount}` : `${amount}`;
+
+        // ── Caso especial: ajuste del contador global usage_count ──────────────
+        if (subsystem === 'global') {
+            const updateResult = await db.query(`
+                UPDATE subscriptions
+                SET usage_count = GREATEST(0, usage_count + $1)
+                WHERE user_id = $2
+                RETURNING usage_count
+            `, [parseInt(amount), userId]);
+
+            if (updateResult.rows.length === 0) {
+                return res.status(404).json({ error: 'El usuario no tiene suscripción' });
+            }
+
+            await db.query(`
+                INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason, ticket_id)
+                VALUES ($1, $2, 'global', $3, $4, $5)
+            `, [userId, req.user.id, parseInt(amount), reason || null, ticket_id || null]);
+
+            require('../utils/logger').info(`Ajuste ${action} uso global para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
+
+            return res.json({
+                success: true,
+                message: `Ajuste aplicado: ${action} al uso global`,
+                newUsageCount: updateResult.rows[0].usage_count
+            });
+        }
+
+        // ── Ajuste por subsistema: modifica columna bonus ──────────────────────
         const updateResult = await db.query(`
             UPDATE subscriptions
             SET ${bonusCol} = GREATEST(0, ${bonusCol} + $1)
@@ -1215,8 +1244,7 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
             VALUES ($1, $2, $3, $4, $5, $6)
         `, [userId, req.user.id, subsystem, parseInt(amount), reason || null, ticket_id || null]);
 
-        const action = parseInt(amount) > 0 ? `+${amount}` : `${amount}`;
-        console.log(`Ajuste ${action} usos de "${subsystem}" para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
+        require('../utils/logger').info(`Ajuste ${action} usos de "${subsystem}" para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
 
         res.json({
             success: true,
