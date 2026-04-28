@@ -376,7 +376,16 @@ async function renderUserDetail(userId) {
                 <div class="card-body">
                     <div class="detail-grid">
                         <div class="detail-item"><label>Plan</label><span>${u.plan ? `<span class="badge badge-blue">${u.plan_display_name || u.plan}</span>` : '—'}</span></div>
-                        <div class="detail-item"><label>Estado</label><span>${statusBadge(u.status)}</span></div>
+                        <div class="detail-item"><label>Estado</label>
+                            <div style="display:flex;flex-direction:column;gap:4px">
+                                <span>${statusBadge(u.status)}</span>
+                                ${u.registration_status === 'pending_email'
+                                    ? '<span style="font-size:11px;color:#b45309;font-weight:600">📧 Pendiente de verificación de email</span>'
+                                    : u.registration_status === 'pending_activation'
+                                    ? '<span style="font-size:11px;color:#d97706;font-weight:600">⏳ Pendiente de activación</span>'
+                                    : ''}
+                            </div>
+                        </div>
                         <div class="detail-item"><label>Uso global <span style="font-weight:400;color:var(--text-muted)">(extensión)</span></label><span>${u.usage_count ?? 0} / ${u.usage_limit ?? 0}</span></div>
                         <div class="detail-item"><label>Expira</label><span>${u.expires_at ? fmtDate(u.expires_at) : '—'}</span></div>
                     </div>
@@ -479,8 +488,11 @@ async function renderUserDetail(userId) {
                         Email verificado: ${u.email_verified ? '✅ Sí' : '❌ No'} &nbsp;·&nbsp; T&C aceptado: ${u.toc_accepted_at ? fmtDate(u.toc_accepted_at) : '—'}
                     </span>
                     ${!u.email_verified ? `
-                    <button class="btn btn-sm btn-success" onclick="verifyEmailManual(${u.id})" style="font-size:12px;padding:4px 10px">✅ Marcar email verificado</button>
+                    <button class="btn btn-sm btn-success" onclick="verifyEmailManual(${u.id})" style="font-size:12px;padding:4px 10px">✅ Verificar email</button>
                     <button class="btn btn-sm btn-secondary" onclick="resendVerification(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">✉️ Reenviar verificación</button>
+                    <button class="btn btn-sm btn-primary" onclick="verifyAndActivateUser(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">⚡ Verificar y activar</button>
+                    ` : u.registration_status === 'pending_activation' ? `
+                    <button class="btn btn-sm btn-primary" onclick="activateUserFromDetail(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">⚡ Activar cuenta</button>
                     ` : ''}
                 </div>
             </div>
@@ -1300,6 +1312,33 @@ window.activateUser = async function(userId, email) {
     } catch (e) {
         const alertEl = document.getElementById('pending-alert');
         if (alertEl) showAlert(alertEl, e.message, 'error');
+    }
+};
+
+// Activar desde la ficha de usuario (no desde la lista de pendientes)
+window.activateUserFromDetail = async function(userId, email) {
+    if (!confirm(`¿Activar la cuenta de ${email}?\n\nSe le asignarán 30 días con los límites de su plan actual.`)) return;
+    const alertEl = document.getElementById('ud-alert');
+    try {
+        await apiFetch(`/admin/users/${userId}/activate`, 'POST', { expires_days: 30 });
+        showAlert(alertEl, `✅ Cuenta de ${email} activada correctamente.`, 'success');
+        setTimeout(() => navigate('user-detail', userId), 1200);
+    } catch (e) {
+        showAlert(alertEl, e.message, 'error');
+    }
+};
+
+// Verificar email + activar en un solo paso desde la ficha
+window.verifyAndActivateUser = async function(userId, email) {
+    if (!confirm(`¿Verificar el email y activar la cuenta de ${email} en un solo paso?\n\nSe le asignarán 30 días con los límites de su plan.`)) return;
+    const alertEl = document.getElementById('ud-alert');
+    try {
+        await apiFetch(`/admin/users/${userId}/verify-email`, 'POST', {});
+        await apiFetch(`/admin/users/${userId}/activate`, 'POST', { expires_days: 30 });
+        showAlert(alertEl, `✅ Email verificado y cuenta activada para ${email}.`, 'success');
+        setTimeout(() => navigate('user-detail', userId), 1200);
+    } catch (e) {
+        showAlert(alertEl, e.message, 'error');
     }
 };
 
