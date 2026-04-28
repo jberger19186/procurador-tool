@@ -1224,13 +1224,13 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
             return res.json({ success: true, message: `${subsystem} establecido como ilimitado`, unlimited: true });
         }
 
-        // ── Caso especial: ajuste del contador global usage_count ──────────────
+        // ── Caso especial: ajuste del límite global usage_limit ───────────────
         if (subsystem === 'global') {
             const updateResult = await db.query(`
                 UPDATE subscriptions
-                SET usage_count = GREATEST(0, usage_count + $1)
+                SET usage_limit = GREATEST(0, usage_limit + $1)
                 WHERE user_id = $2
-                RETURNING usage_count
+                RETURNING usage_limit
             `, [parseInt(amount), userId]);
 
             if (updateResult.rows.length === 0) {
@@ -1242,12 +1242,12 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
                 VALUES ($1, $2, 'global', $3, $4, $5)
             `, [userId, req.user.id, parseInt(amount), reason || null, ticket_id || null]);
 
-            require('../utils/logger').info(`Ajuste ${action} uso global para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
+            require('../utils/logger').info(`Ajuste ${action} límite global para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
 
             return res.json({
                 success: true,
-                message: `Ajuste aplicado: ${action} al uso global`,
-                newUsageCount: updateResult.rows[0].usage_count
+                message: `Ajuste aplicado: ${action} al límite global`,
+                newUsageLimit: updateResult.rows[0].usage_limit
             });
         }
 

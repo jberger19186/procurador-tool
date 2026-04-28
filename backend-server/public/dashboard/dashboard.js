@@ -506,7 +506,7 @@ async function renderUserDetail(userId) {
                     <div>
                         <label style="font-size:12px;display:block;margin-bottom:4px">Subsistema</label>
                         <select id="adj-subsystem" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-                            <option value="global">── Global (uso_count) ──</option>
+                            <option value="global">── Global (límite total) ──</option>
                             <option value="proc">Procuración</option>
                             <option value="batch">Procurar Batch</option>
                             <option value="informe">Informes</option>
@@ -1628,9 +1628,9 @@ window.applyUsageAdjustment = async function(userId, unlimited = false) {
             subsystem, amount, unlimited, reason: reason || null, ticket_id: ticketId ? parseInt(ticketId) : null
         });
         const msg = unlimited
-            ? `🔓 ${subsystem === 'global' ? 'Uso global' : subsystem} establecido como ilimitado`
+            ? `🔓 ${subsystem === 'global' ? 'Límite global' : subsystem} establecido como ilimitado`
             : subsystem === 'global'
-            ? `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} al uso global. Nuevo valor: ${result.newUsageCount}`
+            ? `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} al límite global. Nuevo límite: ${result.newUsageLimit}`
             : `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} de ${subsystem}. Nuevo bonus: ${result.newBonus}`;
         showAlert(document.getElementById('ud-alert'), msg, 'success');
         loadAdjustmentHistory(userId);
