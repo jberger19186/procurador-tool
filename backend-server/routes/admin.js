@@ -485,6 +485,34 @@ router.put('/users/:userId/cuit', authenticateAdmin, async (req, res) => {
     }
 });
 
+// ─── Eliminar usuario ─────────────────────────────────────────────────────────
+router.delete('/users/:userId', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    try {
+        // Verificar que el usuario existe y no es admin
+        const check = await db.query('SELECT id, email, role FROM users WHERE id = $1', [userId]);
+        if (check.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+        const target = check.rows[0];
+        if (target.role === 'admin') return res.status(403).json({ error: 'No se puede eliminar un usuario administrador' });
+
+        await db.query('BEGIN');
+        // Limpiar tablas sin CASCADE
+        await db.query('DELETE FROM ticket_comments WHERE author_id = $1', [userId]);
+        await db.query('DELETE FROM monitor_consultas_log WHERE user_id = $1', [userId]);
+        // El resto (subscriptions, usage_logs, support_tickets, monitor_partes, etc.) se eliminan en cascada
+        await db.query('DELETE FROM users WHERE id = $1', [userId]);
+        await db.query('COMMIT');
+
+        require('../utils/logger').info(`🗑️ Usuario eliminado: ${target.email} (id=${userId}) por admin ${req.user.id}`);
+        res.json({ success: true, message: `Usuario ${target.email} eliminado correctamente` });
+    } catch (error) {
+        await db.query('ROLLBACK').catch(() => {});
+        console.error('Error eliminando usuario:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 // ==================== SUSCRIPCIONES ====================
 
 // Crear/actualizar suscripción

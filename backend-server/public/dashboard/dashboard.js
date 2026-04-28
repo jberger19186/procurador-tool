@@ -358,6 +358,10 @@ async function renderUserDetail(userId) {
                         </button>
                         <button class="btn btn-sm btn-warning" onclick="sendPasswordReset(${u.id},'${escHtml(u.email)}')">🔑 Blanquear contraseña</button>
                     </div>
+                    ${u.role !== 'admin' ? `
+                    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+                        <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id},'${escHtml(u.email)}')">🗑️ Eliminar cuenta</button>
+                    </div>` : ''}
                     <div style="margin-top:12px">
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Asignar CUIT</label>
                         <div style="display:flex;gap:6px">
@@ -1206,6 +1210,18 @@ window.resendVerification = async function(userId, email) {
     try {
         const data = await apiFetch(`/admin/users/${userId}/resend-verification`, 'POST', {});
         showAlert(alertEl, `✉️ ${data.message}`, 'success');
+    } catch (e) {
+        showAlert(alertEl, e.message, 'error');
+    }
+};
+
+window.deleteUser = async function(id, email) {
+    if (!confirm(`⚠️ ELIMINAR CUENTA\n\n¿Estás seguro que querés eliminar al usuario:\n${email}\n\nEsta acción eliminará permanentemente su cuenta, suscripción, historial de uso y tickets. No se puede deshacer.`)) return;
+    if (!confirm(`Segunda confirmación:\n¿Eliminar definitivamente a ${email}?`)) return;
+    const alertEl = document.getElementById('ud-alert');
+    try {
+        await apiFetch(`/admin/users/${id}`, 'DELETE');
+        navigate('users');
     } catch (e) {
         showAlert(alertEl, e.message, 'error');
     }
