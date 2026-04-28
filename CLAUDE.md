@@ -499,14 +499,12 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ---
 
 ## 📋 Pendientes por fase
-> Última actualización: 2026-04-27 (v2.4.17). Solo ítems pendientes — los completados se omiten.
+> Última actualización: 2026-04-28. Solo ítems pendientes — los completados se omiten.
 
 ### FASE 1 — APLICACIÓN
 | # | Item | Prioridad |
 |---|---|---|
 | 1.3 | Code Signing del installer `.exe` — Microsoft Azure Trusted Signing (elimina warning SmartScreen) | Media |
-| 1.7 | Electron: mostrar mensaje específico cuando el login retorna `EMAIL_NOT_VERIFIED` + link al portal | Media |
-| — | Limpiar rutas CRX legacy del backend (`/extension/updates.xml`, `/extension/latest.crx`) | Baja |
 
 ### FASE 2 — BACKEND
 | Item | Prioridad |
@@ -523,7 +521,6 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 | Landing page: revisar y completar sección Planes con precios actualizados | Alta |
 | Términos y Condiciones de Uso + Política de Privacidad | Alta |
 | Definir precios finales BASIC · PRO · ENTERPRISE | Media |
-| Email de bienvenida post-registro con instrucciones de activación | Media |
 
 ### FASE 4 — SOPORTE
 | Item | Prioridad |
