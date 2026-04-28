@@ -1174,13 +1174,13 @@ router.patch('/plans/:planId/activate', authenticateAdmin, async (req, res) => {
 router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
     const { userId } = req.params;
-    const { subsystem, amount, reason, ticket_id } = req.body;
+    const { subsystem, amount, unlimited, reason, ticket_id } = req.body;
 
     const validSubsystems = ['global', 'proc', 'batch', 'informe', 'monitor_novedades', 'monitor_partes'];
     if (!validSubsystems.includes(subsystem)) {
         return res.status(400).json({ error: `Subsistema inválido. Válidos: ${validSubsystems.join(', ')}` });
     }
-    if (!amount || isNaN(amount)) {
+    if (!unlimited && (!amount || isNaN(amount))) {
         return res.status(400).json({ error: 'amount debe ser un número entero' });
     }
 
@@ -1197,7 +1197,32 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
         const userCheck = await db.query(`SELECT email FROM users WHERE id = $1`, [userId]);
         if (userCheck.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-        const action = parseInt(amount) > 0 ? `+${amount}` : `${amount}`;
+        const action = unlimited ? '∞ ilimitado' : (parseInt(amount) > 0 ? `+${amount}` : `${amount}`);
+
+        // ── Caso ilimitado: setea usage_limit o bonus a 999999 ────────────────
+        if (unlimited) {
+            const UNLIMITED_VAL = 999999;
+            let updateResult;
+            if (subsystem === 'global') {
+                updateResult = await db.query(`
+                    UPDATE subscriptions SET usage_limit = $1 WHERE user_id = $2 RETURNING usage_limit
+                `, [UNLIMITED_VAL, userId]);
+            } else {
+                const bonusColUnlim = { proc: 'proc_bonus', batch: 'batch_bonus', informe: 'informe_bonus', monitor_novedades: 'monitor_novedades_bonus', monitor_partes: 'monitor_partes_bonus' }[subsystem];
+                updateResult = await db.query(`
+                    UPDATE subscriptions SET ${bonusColUnlim} = $1 WHERE user_id = $2 RETURNING ${bonusColUnlim}
+                `, [UNLIMITED_VAL, userId]);
+            }
+            if (updateResult.rows.length === 0) return res.status(404).json({ error: 'El usuario no tiene suscripción' });
+
+            await db.query(`
+                INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason, ticket_id)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [userId, req.user.id, subsystem, UNLIMITED_VAL, reason || `Establecido ilimitado`, ticket_id || null]);
+
+            require('../utils/logger').info(`🔓 ${subsystem} establecido ilimitado para usuario ${userId} por admin: ${req.user.id}`);
+            return res.json({ success: true, message: `${subsystem} establecido como ilimitado`, unlimited: true });
+        }
 
         // ── Caso especial: ajuste del contador global usage_count ──────────────
         if (subsystem === 'global') {

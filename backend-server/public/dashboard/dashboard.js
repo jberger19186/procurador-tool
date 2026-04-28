@@ -527,6 +527,7 @@ async function renderUserDetail(userId) {
                         <input type="number" id="adj-ticket" placeholder="ID ticket" style="width:100px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
                     </div>
                     <button class="btn btn-sm btn-primary" onclick="applyUsageAdjustment(${u.id})">Aplicar ajuste</button>
+                    <button class="btn btn-sm btn-secondary" onclick="applyUsageAdjustment(${u.id}, true)" title="Quita el límite para el subsistema seleccionado">🔓 Ilimitado</button>
                 </div>
                 <div style="margin-top:16px">
                     <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Historial de ajustes</div>
@@ -1609,19 +1610,26 @@ window.activatePlan = async function(planId) {
     } catch (e) { alert(e.message); }
 };
 
-window.applyUsageAdjustment = async function(userId) {
+window.applyUsageAdjustment = async function(userId, unlimited = false) {
     const subsystem = document.getElementById('adj-subsystem').value;
-    const amount    = parseInt(document.getElementById('adj-amount').value);
     const reason    = document.getElementById('adj-reason').value.trim();
     const ticketId  = document.getElementById('adj-ticket').value || null;
 
-    if (!amount || isNaN(amount)) { alert('Cantidad inválida'); return; }
+    if (unlimited) {
+        const label = subsystem === 'global' ? 'uso global' : subsystem;
+        if (!confirm(`¿Establecer ${label} como ILIMITADO para este usuario?`)) return;
+    }
+
+    const amount = unlimited ? null : parseInt(document.getElementById('adj-amount').value);
+    if (!unlimited && (!amount || isNaN(amount))) { alert('Cantidad inválida'); return; }
 
     try {
         const result = await apiFetch(`/admin/subscriptions/${userId}/adjust`, 'POST', {
-            subsystem, amount, reason: reason || null, ticket_id: ticketId ? parseInt(ticketId) : null
+            subsystem, amount, unlimited, reason: reason || null, ticket_id: ticketId ? parseInt(ticketId) : null
         });
-        const msg = subsystem === 'global'
+        const msg = unlimited
+            ? `🔓 ${subsystem === 'global' ? 'Uso global' : subsystem} establecido como ilimitado`
+            : subsystem === 'global'
             ? `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} al uso global. Nuevo valor: ${result.newUsageCount}`
             : `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} de ${subsystem}. Nuevo bonus: ${result.newBonus}`;
         showAlert(document.getElementById('ud-alert'), msg, 'success');
