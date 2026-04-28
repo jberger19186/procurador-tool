@@ -86,53 +86,10 @@ app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dashboard')
 // Servir página de registro público
 app.use('/register', express.static(path.join(__dirname, 'public', 'register')));
 
-// ── Distribución de la extensión de Chrome ──────────────────────────────────
-// Chrome consulta /extension/updates.xml para instalar y actualizar la extensión.
-// El CRX se sirve desde /extension/latest.crx (archivo en public/extension/).
-// Ver docs/extension-distribution.md para instrucciones de empaquetado.
-const EXTENSION_DIR  = path.join(__dirname, 'public', 'extension');
-const EXTENSION_META = path.join(EXTENSION_DIR, 'meta.json'); // { id, version, crxFile }
-
-app.get('/extension/updates.xml', (req, res) => {
-    try {
-        if (!fs.existsSync(EXTENSION_META)) {
-            return res.status(503).send('<!-- Extension not yet published -->');
-        }
-        const meta = JSON.parse(fs.readFileSync(EXTENSION_META, 'utf8'));
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const crxUrl  = `${baseUrl}/extension/latest.crx`;
-
-        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-        res.send(`<?xml version='1.0' encoding='UTF-8'?>
-<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
-  <app appid='${meta.id}'>
-    <updatecheck codebase='${crxUrl}' version='${meta.version}' />
-  </app>
-</gupdate>`);
-    } catch (e) {
-        console.error('Error sirviendo updates.xml:', e.message);
-        res.status(500).send('');
-    }
-});
-
-app.get('/extension/latest.crx', (req, res) => {
-    try {
-        if (!fs.existsSync(EXTENSION_META)) {
-            return res.status(404).json({ error: 'CRX no disponible' });
-        }
-        const meta    = JSON.parse(fs.readFileSync(EXTENSION_META, 'utf8'));
-        const crxPath = path.join(EXTENSION_DIR, meta.crxFile);
-        if (!fs.existsSync(crxPath)) {
-            return res.status(404).json({ error: 'Archivo CRX no encontrado' });
-        }
-        res.setHeader('Content-Type', 'application/x-chrome-extension');
-        res.setHeader('Content-Disposition', `attachment; filename="extension-${meta.version}.crx"`);
-        res.sendFile(crxPath);
-    } catch (e) {
-        console.error('Error sirviendo CRX:', e.message);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
+// ── Distribución de extensión Chrome: eliminada (migrado a Chrome Web Store v1.3.2)
+// Las rutas /extension/updates.xml y /extension/latest.crx fueron removidas.
+// La extensión se distribuye exclusivamente desde:
+// https://chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme
 
 // Rutas
 app.use('/auth', require('./routes/auth'));

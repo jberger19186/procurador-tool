@@ -255,21 +255,30 @@ async function handleLogin(email, password) {
             console.error('❌ Login fallido:', result.error);
 
             // Mensajes de error específicos
-            let errorMsg = 'Error al iniciar sesión';
-
-            if (result.error.includes('Credenciales inválidas')) {
-                errorMsg = 'Email o contraseña incorrectos';
-            } else if (result.error.includes('vinculada a otro dispositivo')) {
-                errorMsg = 'Esta cuenta está vinculada a otro dispositivo. Contacte al administrador.';
-            } else if (result.error.includes('suscripción')) {
-                errorMsg = 'No tiene una suscripción activa. Contacte al administrador.';
-            } else if (result.error.includes('conexión') || result.error.includes('ECONNREFUSED')) {
-                errorMsg = 'No se puede conectar al servidor. Verifique su conexión.';
+            if (result.code === 'EMAIL_NOT_VERIFIED') {
+                showErrorHTML(
+                    '📧 Debés verificar tu email antes de ingresar. ' +
+                    'Revisá tu casilla o <a href="https://api.procuradortool.com/usuarios/" ' +
+                    'target="_blank" style="color:inherit;font-weight:700;text-decoration:underline;">' +
+                    'ingresá al portal</a> para reenviar el link.'
+                );
             } else {
-                errorMsg = result.error;
-            }
+                let errorMsg = 'Error al iniciar sesión';
 
-            showError(errorMsg);
+                if (result.error.includes('Credenciales inválidas')) {
+                    errorMsg = 'Email o contraseña incorrectos';
+                } else if (result.error.includes('vinculada a otro dispositivo')) {
+                    errorMsg = 'Esta cuenta está vinculada a otro dispositivo. Contacte al administrador.';
+                } else if (result.error.includes('suscripción')) {
+                    errorMsg = 'No tiene una suscripción activa. Contacte al administrador.';
+                } else if (result.error.includes('conexión') || result.error.includes('ECONNREFUSED')) {
+                    errorMsg = 'No se puede conectar al servidor. Verifique su conexión.';
+                } else {
+                    errorMsg = result.error;
+                }
+
+                showError(errorMsg);
+            }
             setLoading(false);
         }
 
@@ -315,6 +324,14 @@ function showError(message) {
 function hideError() {
     const errorEl = document.getElementById('errorMessage');
     errorEl.style.display = 'none';
+}
+
+function showErrorHTML(html) {
+    const errorEl   = document.getElementById('errorMessage');
+    const errorText = document.getElementById('errorText');
+    errorText.innerHTML = html;
+    errorEl.style.display = 'flex';
+    setTimeout(() => { hideError(); errorText.innerHTML = ''; }, 10000);
 }
 
 function showSuccess(message) {
