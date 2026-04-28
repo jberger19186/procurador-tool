@@ -274,13 +274,9 @@ router.get('/verify-email', async (req, res) => {
             WHERE id = $1
         `, [user.id]);
 
-        // Activar suscripción trial: el usuario puede usar sus 20 ejecuciones de prueba
-        // sin necesidad de activación manual por admin. El admin sólo actualiza los límites al plan completo.
-        await db.query(`
-            UPDATE subscriptions
-            SET status = 'active', updated_at = NOW()
-            WHERE user_id = $1 AND status = 'suspended'
-        `, [user.id]);
+        // La suscripción se mantiene 'suspended' con usage_limit=20.
+        // El usuario puede usar la app hasta agotar ese cupo compartido entre todos
+        // los subsistemas. El admin activa formalmente para asignar los límites del plan.
 
         mailer.sendWelcomeEmail(user.email, user.nombre, user.plan_name).catch(() => {});
 
@@ -660,8 +656,9 @@ router.post('/refresh', authenticateToken, async (req, res) => {
 
         const user = userResult.rows[0];
 
-        // Verificar suscripción activa
-        if (!user.status || user.status !== 'active') {
+        // Verificar suscripción activa o trial con cuota disponible
+        const isTrialSub = user.status === 'suspended' && (user.usage_limit || 0) > 0 && (user.usage_count || 0) < (user.usage_limit || 0);
+        if (!user.status || (user.status !== 'active' && !isTrialSub)) {
             return res.status(403).json({
                 error: 'Suscripción no activa',
                 action: 'subscribe'

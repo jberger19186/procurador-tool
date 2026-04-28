@@ -48,8 +48,9 @@ router.post('/verify-session', authenticateToken, async (req, res) => {
 
         const user = result.rows[0];
 
-        // Verificar suscripción
-        if (!user.plan || user.status !== 'active') {
+        // Verificar suscripción activa o trial con cuota disponible
+        const isTrial = user.status === 'suspended' && (user.usage_limit || 0) > 0 && (user.usage_count || 0) < (user.usage_limit || 0);
+        if (!user.plan || (user.status !== 'active' && !isTrial)) {
             return res.status(403).json({
                 error: 'No tienes una suscripción activa',
                 action: 'subscribe'
@@ -98,10 +99,11 @@ router.get('/scripts/check/:scriptName', authenticateToken, async (req, res) => 
     const userId = req.user.id;
 
     try {
-        // Verificar suscripción activa (mismo criterio que el download)
+        // Verificar suscripción activa o trial con cuota disponible
         const subResult = await db.query(`
             SELECT 1 FROM subscriptions
-            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+            WHERE user_id = $1 AND expires_at > NOW()
+              AND (status = 'active' OR (status = 'suspended' AND usage_limit > 0 AND usage_count < usage_limit))
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -140,10 +142,11 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
     const userId = req.user.id;
 
     try {
-        // Verificar suscripción activa
+        // Verificar suscripción activa o trial con cuota disponible
         const subResult = await db.query(`
             SELECT * FROM subscriptions
-            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+            WHERE user_id = $1 AND expires_at > NOW()
+              AND (status = 'active' OR (status = 'suspended' AND usage_limit > 0 AND usage_count < usage_limit))
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -223,10 +226,11 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     try {
-        // Verificar suscripción
+        // Verificar suscripción activa o trial con cuota disponible
         const subResult = await db.query(`
             SELECT plan FROM subscriptions
-            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+            WHERE user_id = $1 AND expires_at > NOW()
+              AND (status = 'active' OR (status = 'suspended' AND usage_limit > 0 AND usage_count < usage_limit))
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -615,7 +619,8 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
                    p.promo_max_users, p.promo_used_count, p.promo_alert_days
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
+            WHERE s.user_id = $1 AND s.expires_at > NOW()
+              AND (s.status = 'active' OR (s.status = 'suspended' AND s.usage_limit > 0 AND s.usage_count < s.usage_limit))
         `, [userId]);
 
         if (result.rows.length === 0) {

@@ -374,11 +374,8 @@ router.post('/users/:userId/verify-email', authenticateAdmin, async (req, res) =
         if (result.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
         const u = result.rows[0];
 
-        // Activar suscripción trial si estaba suspendida
-        await db.query(`
-            UPDATE subscriptions SET status = 'active', updated_at = NOW()
-            WHERE user_id = $1 AND status = 'suspended'
-        `, [userId]);
+        // La suscripción se mantiene 'suspended': el usuario puede usar los 20 usos
+        // de prueba. El admin activa formalmente para asignar los límites del plan.
 
         require('../utils/logger').info(`✅ Email verificado manualmente por admin: ${u.email}`);
         res.json({ success: true, registration_status: u.registration_status });
