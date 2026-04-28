@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-27 (v2.4.17)
+> Última actualización: 2026-04-28
 
 ---
 
@@ -222,6 +222,18 @@ PRO              → app: 200 proc · 50 inf · 10 partes activas
 ENTERPRISE       → app: ilimitado · 50 partes activas
 ```
 Nuevos usuarios reciben 20 ejecuciones de prueba por 365 días (estado "suspended" hasta activación manual por admin).
+
+### Arquitectura de usage_limit / usage_count
+
+| Estado | usage_limit | Enforcement |
+|---|---|---|
+| `pending_activation` (trial) | 20 | Global: `usage_count < usage_limit` — compartido entre todos los subsistemas |
+| `active` (activado por admin) | 999999 | Por subsistema: `proc_usage`, `informe_usage`, etc. El global no se enforcea |
+
+- **Trial (`suspended`)**: Electron bloquea cuando `remaining = usage_limit - usage_count = 0`. Backend verifica lo mismo. 20 usos compartidos sin distinción de subsistema.
+- **Activo**: `usage_limit = 999999` → `remaining` nunca llega a 0 → Electron no interfiere. El backend enforcea cada subsistema independientemente via sus propias columnas.
+- `usage_count` siempre se incrementa (trial y activo) — sirve como contador histórico total.
+- El admin puede sobreescribir `usage_limit` manualmente desde la ficha de usuario ("Global (límite total)") o usar "🔓 Ilimitado".
 
 ---
 

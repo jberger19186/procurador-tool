@@ -240,7 +240,7 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
         }
 
         const u = userResult.rows[0];
-        const usageLimit = u.proc_executions_limit > 0 ? u.proc_executions_limit : 9999;
+        const usageLimit = 999999; // Activos: el gate real es por subsistema; global ilimitado
 
         await client.query(`
             UPDATE users
