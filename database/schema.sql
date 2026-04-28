@@ -1,8 +1,8 @@
-﻿--
+--
 -- PostgreSQL database dump
 --
 
-\restrict WUp7My2XYfGOikshQlXF6rd4T0iCn5eZeaG5g7IHMiKLpXFmwLtRwJFjeSylskF
+\restrict rwyAz8AID5wrCr843wkbcn1KCq0Z2JegK3oROBq4gmZYYk9HJ8HPiOeQSEbNrpd
 
 -- Dumped from database version 14.22 (Ubuntu 14.22-0ubuntu0.22.04.1)
 -- Dumped by pg_dump version 14.22 (Ubuntu 14.22-0ubuntu0.22.04.1)
@@ -92,6 +92,19 @@ ALTER TABLE public.active_executions_id_seq OWNER TO procurador_user;
 
 ALTER SEQUENCE public.active_executions_id_seq OWNED BY public.active_executions.id;
 
+
+--
+-- Name: app_settings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.app_settings (
+    key character varying(100) NOT NULL,
+    value text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.app_settings OWNER TO postgres;
 
 --
 -- Name: encrypted_scripts; Type: TABLE; Schema: public; Owner: procurador_user
@@ -530,7 +543,7 @@ CREATE TABLE public.usage_adjustments (
     reason text,
     ticket_id integer,
     created_at timestamp without time zone DEFAULT now(),
-    CONSTRAINT usage_adjustments_subsystem_check CHECK (((subsystem)::text = ANY (ARRAY[('proc'::character varying)::text, ('batch'::character varying)::text, ('informe'::character varying)::text, ('monitor_novedades'::character varying)::text, ('monitor_partes'::character varying)::text])))
+    CONSTRAINT usage_adjustments_subsystem_check CHECK (((subsystem)::text = ANY ((ARRAY['global'::character varying, 'proc'::character varying, 'batch'::character varying, 'informe'::character varying, 'monitor_novedades'::character varying, 'monitor_partes'::character varying])::text[])))
 );
 
 
@@ -568,7 +581,9 @@ CREATE TABLE public.usage_logs (
     script_name character varying(100),
     execution_date timestamp without time zone DEFAULT now(),
     success boolean,
-    error_message text
+    error_message text,
+    subsystem character varying(50),
+    expedientes_count integer
 );
 
 
@@ -633,19 +648,6 @@ CREATE TABLE public.users (
 
 
 ALTER TABLE public.users OWNER TO procurador_user;
-
---
--- Name: app_settings; Type: TABLE; Schema: public; Owner: procurador_user
---
-
-CREATE TABLE IF NOT EXISTS public.app_settings (
-    key         character varying(100) NOT NULL,
-    value       text                   NOT NULL,
-    updated_at  timestamp with time zone NOT NULL DEFAULT NOW(),
-    CONSTRAINT app_settings_pkey PRIMARY KEY (key)
-);
-
-ALTER TABLE public.app_settings OWNER TO procurador_user;
 
 --
 -- Name: TABLE users; Type: COMMENT; Schema: public; Owner: procurador_user
@@ -780,6 +782,14 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 
 ALTER TABLE ONLY public.active_executions
     ADD CONSTRAINT active_executions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: app_settings app_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.app_settings
+    ADD CONSTRAINT app_settings_pkey PRIMARY KEY (key);
 
 
 --
@@ -1269,8 +1279,15 @@ ALTER TABLE ONLY public.usage_logs
 
 
 --
+-- Name: TABLE app_settings; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,UPDATE ON TABLE public.app_settings TO procurador_user;
+
+
+--
 -- PostgreSQL database dump complete
 --
 
-\unrestrict WUp7My2XYfGOikshQlXF6rd4T0iCn5eZeaG5g7IHMiKLpXFmwLtRwJFjeSylskF
+\unrestrict rwyAz8AID5wrCr843wkbcn1KCq0Z2JegK3oROBq4gmZYYk9HJ8HPiOeQSEbNrpd
 
