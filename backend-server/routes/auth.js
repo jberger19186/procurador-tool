@@ -274,12 +274,20 @@ router.get('/verify-email', async (req, res) => {
             WHERE id = $1
         `, [user.id]);
 
+        // Activar suscripción trial: el usuario puede usar sus 20 ejecuciones de prueba
+        // sin necesidad de activación manual por admin. El admin sólo actualiza los límites al plan completo.
+        await db.query(`
+            UPDATE subscriptions
+            SET status = 'active', updated_at = NOW()
+            WHERE user_id = $1 AND status = 'suspended'
+        `, [user.id]);
+
         mailer.sendWelcomeEmail(user.email, user.nombre, user.plan_name).catch(() => {});
 
-        logger.info(`✅ Email verificado: ${user.email}`);
+        logger.info(`✅ Email verificado y suscripción trial activada: ${user.email}`);
 
         res.send(renderVerifyPage('success',
-            `¡Hola ${user.nombre}! Tu email fue confirmado. El administrador activará tu cuenta en breve. Mientras tanto, tenés 20 ejecuciones de prueba disponibles en la app.`));
+            `¡Hola ${user.nombre}! Tu email fue confirmado. Ya podés ingresar a la app y usar tus 20 ejecuciones de prueba. El administrador gestionará tu plan completo.`));
 
     } catch (error) {
         logger.error('Error en verify-email:', error.message);
