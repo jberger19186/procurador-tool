@@ -584,15 +584,21 @@
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon stat-icon-success">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><path d="M3 8l3.5 3.5L13 4.5"/></svg>
+                    <div class="stat-icon stat-icon-accent">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="15" height="15"><rect x="2" y="10" width="3" height="4"/><rect x="6.5" y="6" width="3" height="8"/><rect x="11" y="2" width="3" height="12"/></svg>
                     </div>
                     <div>
                         <div class="stat-val" id="statTasaExito">—</div>
-                        <div class="stat-label">Tasa de éxito</div>
+                        <div class="stat-label" id="statTasaExitoLabel">Usos en el período</div>
                         <div class="stat-delta" id="statTasaExitoDelta">—</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Sección: Uso por subsistema -->
+            <div id="stats-subsystem-section" style="display:none">
+                <div class="cfg-section-title" style="margin-top:8px">Uso por subsistema</div>
+                <div id="stats-subsystem-usage"></div>
             </div>
 
             <!-- Botón actualizar -->
@@ -692,6 +698,8 @@
             <div class="cuenta-panel" id="cuenta-plan">
                 <div id="cuenta-loading" class="cuenta-loading">Cargando información...</div>
                 <div id="cuenta-info" style="display:none">
+                    <!-- Banner trial / pendiente de activación -->
+                    <div id="cuenta-trial-banner" style="display:none"></div>
                     <div class="cuenta-info-grid">
                         <div class="cuenta-info-item"><label>📧 Email</label><span id="ci-email">—</span></div>
                         <div class="cuenta-info-item"><label>🪪 CUIT</label><span id="ci-cuit">—</span></div>
@@ -703,7 +711,7 @@
                     </div>
                     <div class="cuenta-uso" style="margin-top:12px">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                            <label style="font-size:12px;font-weight:600">📊 Uso por subsistema — período activo</label>
+                            <label id="ci-subsystem-label" style="font-size:12px;font-weight:600">📊 Uso por subsistema — período activo</label>
                             <span id="ci-plan-desc" style="font-size:11px;color:var(--text-3);font-style:italic"></span>
                         </div>
                         <div id="ci-subsystem-usage"></div>

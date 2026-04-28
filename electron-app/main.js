@@ -1437,6 +1437,7 @@ ipcMain.handle('get-stats', async () => {
 
         // Datos de cuenta desde la DB (fuente de verdad para conteos sincronizados)
         let procuracionDB = null, informesDB = null, monitoreoDBNov = null, monitoreoDBPartes = null;
+        let accountData = null;
         try {
             const accountResult = await authManager.backendClient.getAccount();
             if (accountResult.success && accountResult.account?.usage) {
@@ -1445,6 +1446,14 @@ ipcMain.handle('get-stats', async () => {
                 informesDB      =  u.informe?.used ?? 0;
                 monitoreoDBNov    =  u.monitor_novedades?.used ?? 0;
                 monitoreoDBPartes =  u.monitor_partes?.used    ?? 0;
+                // Pasar datos de cuenta para UI de estadísticas
+                accountData = {
+                    status:             accountResult.account.status,
+                    registrationStatus: accountResult.account.registrationStatus,
+                    usageCount:         accountResult.account.usageCount,
+                    usageLimit:         accountResult.account.usageLimit,
+                    usage:              accountResult.account.usage
+                };
             }
         } catch (_) { /* sin conexión: fallback a local */ }
 
@@ -1466,7 +1475,8 @@ ipcMain.handle('get-stats', async () => {
                 informes,
                 monitoreo,
                 ultimoProcesoTimestamp: data.ultimaEjecucion ? new Date(data.ultimaEjecucion).getTime() : null,
-                tasaExito
+                tasaExito,
+                account: accountData
             }
         };
     } catch (error) {

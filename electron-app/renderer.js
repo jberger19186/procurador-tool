@@ -1007,13 +1007,28 @@ async function loadStatistics() {
             document.getElementById('statProcuracion').textContent = (stats.procuracion ?? 0).toLocaleString('es-AR');
             document.getElementById('statInformes').textContent    = (stats.informes    ?? 0).toLocaleString('es-AR');
             document.getElementById('statMonitoreo').textContent   = (stats.monitoreo   ?? 0).toLocaleString('es-AR');
-            document.getElementById('statTasaExito').textContent   = stats.tasaExito != null ? `${stats.tasaExito}%` : '—';
 
-            // Deltas (opcionales según API)
+            // Usos en el período (reemplaza "Tasa de éxito")
+            const acc = stats.account;
+            const isTrial = acc?.status === 'suspended' && acc?.registrationStatus === 'pending_activation';
+            const usageCount = acc?.usageCount ?? 0;
+            const usageLimit = acc?.usageLimit ?? 0;
+            const usageEl    = document.getElementById('statTasaExito');
+            const usageLblEl = document.getElementById('statTasaExitoLabel');
+            if (isTrial) {
+                const trialLimit = Math.min(usageLimit, 20);
+                usageEl.textContent   = `${usageCount} / ${trialLimit}`;
+                if (usageLblEl) usageLblEl.textContent = 'Usos de prueba';
+            } else {
+                usageEl.textContent   = usageCount.toLocaleString('es-AR');
+                if (usageLblEl) usageLblEl.textContent = 'Usos en el período';
+            }
+            setStatDelta('statTasaExitoDelta', null); // sin delta para usos
+
+            // Deltas de los 3 conteos principales (opcionales)
             setStatDelta('statProcuracionDelta', stats.deltaProcuracion);
             setStatDelta('statInformesDelta',    stats.deltaInformes);
             setStatDelta('statMonitoreoDelta',   stats.deltaMonitoreo);
-            setStatDelta('statTasaExitoDelta',   stats.deltaTasaExito);
 
             // Última ejecución
             if (stats.ultimoProcesoTimestamp) {
@@ -1025,6 +1040,18 @@ async function loadStatistics() {
                     });
             } else {
                 document.getElementById('statUltimoProceso').textContent = '—';
+            }
+
+            // Sección de subsistemas
+            const subsysSection = document.getElementById('stats-subsystem-section');
+            const subsysEl      = document.getElementById('stats-subsystem-usage');
+            if (subsysSection && subsysEl) {
+                if (!isTrial && acc?.usage) {
+                    subsysEl.innerHTML = renderSubsystemUsageCards(acc.usage);
+                    subsysSection.style.display = '';
+                } else {
+                    subsysSection.style.display = 'none';
+                }
             }
 
             addLog('info', '📊 Estadísticas actualizadas');
@@ -1947,11 +1974,14 @@ async function loadAccountData() {
         const planName = (typeof a.plan === 'object' ? a.plan?.displayName || a.plan?.name : a.plan) || '—';
         document.getElementById('ci-plan').textContent = planName;
 
+        // Detectar cuenta trial (suspendida pendiente de activación)
+        const isTrial = a.status === 'suspended' && a.registrationStatus === 'pending_activation';
+
         const statusMap = {
             active:    '🟢 Activo',
             cancelled: '🔴 Cancelado',
             expired:   '🟠 Vencido',
-            suspended: '⚫ Suspendido'
+            suspended: isTrial ? '⏳ Pendiente de activación' : '⚫ Suspendido'
         };
         document.getElementById('ci-status').textContent = statusMap[a.status] || a.status || '—';
 
@@ -1973,10 +2003,50 @@ async function loadAccountData() {
             planDescEl.textContent = (typeof a.plan === 'object' ? a.plan?.description : null) || '';
         }
 
-        // Per-subsystem usage bars (new fields)
-        const subsysEl = document.getElementById('ci-subsystem-usage');
-        if (subsysEl && a.usage) {
-            subsysEl.innerHTML = renderSubsystemUsageBars(a.usage);
+        // Banner trial: muestra uso global X/20 y aviso de activación pendiente
+        const trialBannerEl = document.getElementById('cuenta-trial-banner');
+        if (trialBannerEl) {
+            if (isTrial) {
+                const used  = a.usageCount ?? 0;
+                const limit = Math.min(a.usageLimit ?? 20, 20);
+                const remaining = Math.max(0, limit - used);
+                const pct   = Math.min(100, Math.round((used / (limit || 1)) * 100));
+                const barColor = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#d97706';
+                trialBannerEl.innerHTML = `
+                    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                            <span style="font-size:20px">⏳</span>
+                            <div style="flex:1">
+                                <div style="font-size:13px;font-weight:700;color:#92400e">Cuenta pendiente de activación</div>
+                                <div style="font-size:11px;color:#78350f;margin-top:1px">El administrador activará tu cuenta en breve.</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:4px">
+                            <span style="color:#78350f;font-weight:600">Usos del período de prueba</span>
+                            <span style="font-weight:700;color:${barColor}">${used} / ${limit} — ${remaining} restantes</span>
+                        </div>
+                        <div style="height:6px;background:#fde68a;border-radius:3px;overflow:hidden">
+                            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width 0.3s"></div>
+                        </div>
+                        <div style="font-size:10px;color:#92400e;margin-top:5px">Los usos son compartidos entre todos los módulos durante el período de prueba.</div>
+                    </div>`;
+                trialBannerEl.style.display = '';
+            } else {
+                trialBannerEl.style.display = 'none';
+            }
+        }
+
+        // Sección de uso: cards por subsistema (activos) o mensaje para trial
+        const subsysEl    = document.getElementById('ci-subsystem-usage');
+        const subsysLabel = document.getElementById('ci-subsystem-label');
+        if (subsysEl) {
+            if (isTrial) {
+                if (subsysLabel) subsysLabel.textContent = '📊 Uso por subsistema — período de prueba';
+                subsysEl.innerHTML = '<div style="font-size:12px;color:#6b7280;padding:4px 0">Los usos individuales por módulo se habilitarán al activar tu cuenta.</div>';
+            } else {
+                if (subsysLabel) subsysLabel.textContent = '📊 Uso por subsistema — período activo';
+                if (a.usage) subsysEl.innerHTML = renderSubsystemUsageCards(a.usage);
+            }
         }
 
         loadingEl.style.display = 'none';
@@ -1992,47 +2062,54 @@ async function loadAccountData() {
     }
 }
 
-function renderSubsystemUsageBars(usage) {
+function renderSubsystemUsageCards(usage) {
     const subsystems = [
-        { key: 'proc',              label: 'Procuración' },
-        { key: 'batch',             label: 'Procurar Batch' },
-        { key: 'informe',           label: 'Informes' },
-        { key: 'monitor_partes',    label: 'Monitor Partes' },
-        { key: 'monitor_novedades', label: 'Monitor Novedades' }
+        { key: 'proc',              label: 'Procuración',       icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M3 5h10M5 5V3h6v2"/><path d="M4 5l.8 8h6.4l.8-8"/></svg>' },
+        { key: 'batch',             label: 'Procurar Batch',    icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M2 4h12M2 8h12M2 12h8"/></svg>' },
+        { key: 'informe',           label: 'Informes',          icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M4 2h8v12H4zM6 6h4M6 9h3"/></svg>' },
+        { key: 'monitor_partes',    label: 'Monitor Partes',    icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="8" cy="5" r="2.5"/><path d="M3 13c0-2.76 2.24-5 5-5s5 2.24 5 5"/></svg>' },
+        { key: 'monitor_novedades', label: 'Monitor Novedades', icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M3 12V8M7 12V5M11 12V3"/></svg>' }
     ];
 
-    return subsystems.map(({ key, label }) => {
+    const cards = subsystems.map(({ key, label, icon }) => {
         const s = usage[key];
         if (!s) return '';
         const used      = s.used ?? 0;
-        const limit     = s.limit;
-        const unlimited = s.unlimited || limit === null;
+        const unlimited = s.unlimited || s.limit === null;
+        const limit     = unlimited ? null : (s.limit ?? 0);
+        const remaining = unlimited ? null : (s.remaining ?? Math.max(0, limit - used));
         const pct       = unlimited ? 0 : Math.min(100, Math.round((used / (limit || 1)) * 100));
-        const color     = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#3b82f6';
-        const remaining = s.remaining !== null && s.remaining !== undefined ? s.remaining : '∞';
-        const limitText = unlimited ? '∞' : (limit ?? '—');
-        const bonusText = s.bonus > 0 ? ` <span style="color:#16a34a">(+${s.bonus} extra)</span>` : '';
-        // Línea extra para batch: expedientes por ejecución
+        const barColor  = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#d97706';
+        const remColor  = pct > 90 ? '#ef4444' : pct > 70 ? '#b45309' : '#16a34a';
+        const bonusText = s.bonus > 0 ? `<span style="font-size:10px;color:#16a34a;font-weight:600"> +${s.bonus}</span>` : '';
         const extraInfo = key === 'batch' && s.expedientesPerRun != null
-            ? `<div style="font-size:11px;color:#6b7280;margin-top:2px">Máx. <strong>${s.expedientesPerRun}</strong> expedientes por ejecución</div>`
+            ? `<div style="font-size:10px;color:#6b7280;margin-top:2px">Máx. ${s.expedientesPerRun} exp/ejec.</div>`
             : key === 'batch' && s.expedientesUnlimited
-            ? `<div style="font-size:11px;color:#16a34a;margin-top:2px">Sin límite de expedientes por ejecución</div>`
+            ? `<div style="font-size:10px;color:#16a34a;margin-top:2px">Sin límite de exp.</div>`
             : '';
 
         return `
-        <div style="margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:3px">
-                <span style="font-weight:600;color:#374151">${label}</span>
-                <span style="color:#6b7280">${used} / ${limitText}${bonusText} — <strong style="color:${color}">${remaining} restantes</strong></span>
+        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:6px;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;width:100%">
+                <div class="stat-icon stat-icon-accent" style="width:26px;height:26px;flex-shrink:0">${icon}</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:11px;font-weight:600;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+                    <div style="font-size:16px;font-weight:700;color:#1a1a1a;line-height:1.1">
+                        ${used}${bonusText}<span style="font-size:11px;font-weight:400;color:#9ca3af"> / ${unlimited ? '∞' : limit}</span>
+                    </div>
+                </div>
             </div>
             ${!unlimited
-                ? `<div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden">
-                       <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width 0.3s"></div>
-                   </div>`
-                : '<div style="font-size:11px;color:#16a34a">✓ Sin límite de ejecuciones</div>'}
+                ? `<div style="width:100%;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden">
+                       <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width 0.3s"></div>
+                   </div>
+                   <div style="font-size:10px;font-weight:600;color:${remColor}">${remaining} restantes</div>`
+                : `<div style="font-size:10px;color:#16a34a;font-weight:600">✓ Sin límite</div>`}
             ${extraInfo}
         </div>`;
     }).join('');
+
+    return `<div class="stats-grid stats-grid-subsys" style="margin-top:4px">${cards}</div>`;
 }
 
 // ============ ALERTA PROACTIVA DE CUOTA ============
