@@ -174,6 +174,7 @@ router.get('/users', authenticateAdmin, async (req, res) => {
     try {
         const result = await db.query(`
             SELECT u.id, u.email, u.role, u.created_at, u.last_login, u.machine_id,
+                   u.registration_status,
                    s.plan, s.status, s.expires_at, s.usage_count, s.usage_limit
             FROM users u
             LEFT JOIN subscriptions s ON u.id = s.user_id
@@ -729,10 +730,10 @@ router.get('/stats/overview', authenticateAdmin, async (req, res) => {
             ORDER BY user_count DESC
         `);
 
-        // Usuarios pendientes de activación
+        // Usuarios pendientes de activación (email verificado, esperando activación manual)
         const pendingResult = await db.query(`
             SELECT COUNT(*) as total FROM users
-            WHERE registration_status IN ('pending_email','pending_payment')
+            WHERE registration_status = 'pending_activation'
         `);
 
         res.json({

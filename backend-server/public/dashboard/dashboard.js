@@ -224,7 +224,7 @@ async function renderOverview() {
             <div><h2>Resumen del sistema</h2><p>Estado actual de la plataforma</p></div>
         </div>
         <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" onclick="navigate('users')" style="cursor:pointer" title="Ver lista de usuarios">
                 <div class="stat-icon">👥</div>
                 <div class="stat-body"><div class="stat-value">${s.totalUsers}</div><div class="stat-label">Usuarios registrados</div></div>
             </div>
@@ -288,7 +288,7 @@ async function renderUsers() {
                         <td>${u.email}</td>
                         <td>${roleBadge(u.role)}</td>
                         <td>${u.plan ? `<span class="badge badge-blue">${u.plan}</span>` : '—'}</td>
-                        <td>${statusBadge(u.status)}</td>
+                        <td>${registrationStatusBadge(u.registration_status, u.status)}</td>
                         <td>${u.usage_count ?? 0} / ${u.usage_limit ?? 0}</td>
                         <td>${u.expires_at ? fmtDate(u.expires_at) : '—'}</td>
                         <td>${u.last_login ? fmtDate(u.last_login) : '—'}</td>
@@ -437,7 +437,7 @@ async function renderUserDetail(userId) {
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Estado de registro</label>
                         <select id="reg-status" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg-secondary)">
                             <option value="pending_email"   ${u.registration_status === 'pending_email'   ? 'selected' : ''}>Email sin verificar</option>
-                            <option value="pending_activation" ${u.registration_status === 'pending_activation' ? 'selected' : ''}>Pendiente de pago</option>
+                            <option value="pending_activation" ${u.registration_status === 'pending_activation' ? 'selected' : ''}>Pendiente de activación</option>
                             <option value="active"          ${u.registration_status === 'active'          ? 'selected' : ''}>Activo</option>
                             <option value="trial"           ${u.registration_status === 'trial'           ? 'selected' : ''}>Trial</option>
                         </select>
@@ -1061,6 +1061,12 @@ function statusBadge(s) {
     const m = { active: 'badge-green', cancelled: 'badge-red', expired: 'badge-red', suspended: 'badge-yellow' };
     const l = { active: 'Activo', cancelled: 'Cancelado', expired: 'Expirado', suspended: 'Suspendido' };
     return s ? `<span class="badge ${m[s] || 'badge-gray'}">${l[s] || s}</span>` : '—';
+}
+// Muestra estado de registro cuando aplica (pendientes), o estado de suscripción para usuarios activos
+function registrationStatusBadge(regStatus, subStatus) {
+    if (regStatus === 'pending_email')      return '<span class="badge badge-gray">📧 Sin verificar</span>';
+    if (regStatus === 'pending_activation') return '<span class="badge badge-warning">⏳ Pend. activación</span>';
+    return statusBadge(subStatus);
 }
 function ticketStatusBadge(s) {
     const m = { open: 'badge-blue', in_progress: 'badge-yellow', resolved: 'badge-green', closed: 'badge-gray' };
