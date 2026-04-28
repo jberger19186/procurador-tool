@@ -276,23 +276,31 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
     }[subsystem] || null;
 
     try {
-        // Verificar suscripción activa
+        // Verificar suscripción activa o trial (suspended con cuotas disponibles)
         const subResult = await db.query(`
             SELECT s.*, p.proc_executions_limit, p.informe_limit, p.monitor_novedades_limit,
                    p.proc_expedientes_limit, p.batch_executions_limit, p.batch_expedientes_limit
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
+            WHERE s.user_id = $1
+              AND (
+                (s.status = 'active' AND s.expires_at > NOW())
+                OR
+                (s.status = 'suspended' AND s.usage_limit > 0 AND s.usage_count < s.usage_limit)
+              )
         `, [userId]);
 
         if (subResult.rows.length === 0) {
             return res.status(403).json({ error: 'No tienes una suscripción activa' });
         }
 
+        // Si el usuario está en modo trial (suspended), solo contar globalmente
+        const isTrial = subResult.rows[0].status === 'suspended';
+
         const sub = subResult.rows[0];
 
-        // Verificar límite por subsistema si aplica
-        if (usageCol && success) {
+        // Verificar límite por subsistema si aplica (no aplica en trial)
+        if (usageCol && success && !isTrial) {
             const limitVal = {
                 'proc_usage':               sub.proc_executions_limit,
                 'batch_usage':              sub.batch_executions_limit,
@@ -358,10 +366,15 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
                 return res.status(403).json({ error: 'Límite alcanzado', action: 'upgrade' });
             }
         } else {
-            // Backward compat: solo incrementar usage_count global
+            // Trial o backward compat: incrementar usage_count global
             await db.query(`
                 UPDATE subscriptions SET usage_count = usage_count + 1
-                WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+                WHERE user_id = $1
+                  AND (
+                    (status = 'active' AND expires_at > NOW())
+                    OR
+                    (status = 'suspended' AND usage_limit > 0 AND usage_count < usage_limit)
+                  )
                   AND usage_count < usage_limit
             `, [userId]);
         }
