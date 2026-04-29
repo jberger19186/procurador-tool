@@ -504,48 +504,153 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ### FASE 1 — APLICACIÓN
 | # | Item | Prioridad |
 |---|---|---|
-| 1.3 | Code Signing del installer `.exe` — Microsoft Azure Trusted Signing (elimina warning SmartScreen) | Media |
+| 1.3 | Code Signing installer `.exe` — Azure Trusted Signing (elimina warning SmartScreen) | Media |
+
+---
 
 ### FASE 2 — BACKEND
 | Item | Prioridad |
 |---|---|
 | Backups programados de PostgreSQL + procedimiento de restauración documentado | Alta |
 | Hardening: mover claves RSA y AES a variables de entorno (sacar de `keys/`) | Alta |
-| Análisis de seguridad profundo (app Electron + backend) | Media |
+| Análisis de seguridad profundo (Electron + backend) | Media |
 | Smoke tests / canary tests para endpoints críticos | Media |
-| Documentación técnica completa del backend (endpoints, esquema DB, flujos) | Media |
+| Documentación técnica completa del backend | Media |
+
+---
 
 ### FASE 3 — COMERCIAL
 | Item | Prioridad |
 |---|---|
-| Landing page: revisar y completar sección Planes con precios actualizados | Alta |
+| Landing page: completar sección Planes con precios actualizados | Alta |
 | Términos y Condiciones de Uso + Política de Privacidad | Alta |
-| Definir precios finales BASIC · PRO · ENTERPRISE | Media |
+| Definir precios finales BASIC · PRO · ENTERPRISE | Alta |
+| Documentar y publicar el flujo oficial de usuario (registro → trial → pago → activo) | Alta |
+| CUIT obligatorio en el registro — único por cuenta (1 CUIT = 1 usuario, constraint en DB) | Alta |
+| Definir política de cambio de plan: ¿se resetean usos? ¿hay proration? | Media |
+
+---
 
 ### FASE 4 — SOPORTE
+
+#### Soporte al usuario
 | Item | Prioridad |
 |---|---|
-| Conectar IA real al chat widget del asistente (actualmente respuesta placeholder) | Alta |
-| Pulir sistema de tickets: panel admin, plantillas de respuesta, notificaciones, SLA | Media |
+| Conectar IA real al chat widget (actualmente respuesta placeholder) | Alta |
+| Pulir sistema de tickets: plantillas, notificaciones, SLA | Media |
 | Asistente IA integrado en flujo de tickets (sugerencias automáticas) | Media |
-| Documentación de ayuda para usuarios finales (base de conocimiento) | Media |
+| Documentación de ayuda para usuarios finales | Media |
 | Comunicación masiva con usuarios (emails, anuncios) | Baja |
 
-### FASE 5 — COBRANZA
+#### Historial y auditoría
 | Item | Prioridad |
 |---|---|
-| Integración MercadoPago / Stripe — suscripciones recurrentes | Alta |
-| Campos en DB: `external_subscription_id`, `payment_provider`, `next_billing_date` | Alta |
+| Nueva tabla `user_events`: registro cronológico de todo evento del ciclo de vida (registro, verificación, activación, rechazo, suspensión, cambio de plan, ajuste de uso, pagos, reactivación) | Alta |
+| Vista historial en panel admin: timeline por usuario, filtrable por tipo de evento | Alta |
+| Ajustes manuales (bonus, resets, cambios de plan, suspensiones) registrados en `user_events` además de `usage_adjustments` | Alta |
+
+#### Notificaciones in-app (admin → usuario)
+| Item | Prioridad |
+|---|---|
+| Nueva tabla `user_notifications`: título, mensaje, tipo (info/warning/error/success), link opcional, leída/no leída, usuario específico o broadcast | Alta |
+| Electron: modal al iniciar si hay notificaciones no leídas + badge en Mi Cuenta | Alta |
+| Mi Cuenta: sección "Notificaciones" con historial y estado de lectura | Media |
+| Admin panel: botón "✉️ Enviar notificación" en ficha de usuario | Alta |
+| Admin panel: vista de notificaciones enviadas con estado de lectura por usuario | Media |
+| Admin panel: opción de broadcast global a todos los usuarios | Media |
+| Notificaciones automáticas disparadas por eventos: suspensión, rechazo, pago fallido | Alta |
+
+---
+
+### FASE 5 — COBRANZA
+
+#### Infraestructura de pagos
+| Item | Prioridad |
+|---|---|
+| Integración MercadoPago / Stripe — suscripciones recurrentes vía webhook | Alta |
+| Nueva tabla `payments`: monto, proveedor, estado, período de facturación, provider_payment_id | Alta |
+| Nueva tabla `payment_events`: cargo, reembolso, fallo, disputa | Alta |
 | Facturación AFIP | Media |
-| Soporte post-compra (flujo de renovación, cancelación, reembolso) | Media |
+
+#### Flujo registro → trial → pago → activación
+| Item | Prioridad |
+|---|---|
+| Nuevo estado `pending_payment` en `registration_status` (pagó, espera aprobación admin) | Alta |
+| Portal de pago: usuario elige plan y paga al agotar trial o antes | Alta |
+| Admin: cola "Pagos pendientes de aprobación" con datos del usuario + pago confirmado | Alta |
+| Admin al aprobar: activa suscripción + email bienvenida + `user_event` | Alta |
+| Admin al rechazar — dos opciones: **Bloquear** (revoca acceso + reembolso automático) o **Mantener trial** (conserva usos restantes + notificación in-app) | Alta |
+| Admin puede activar/rechazar en cualquier momento del trial, incluso antes de que se agoten los 20 usos | Alta |
+| Email + notificación in-app en cada transición del ciclo de vida | Alta |
+
+#### Ciclo activo, renovación y baja
+| Item | Prioridad |
+|---|---|
+| Renovación mensual automática vía webhook (sin intervención del admin) | Alta |
+| Pago fallido: período de gracia 3 días → suspensión automática → notificación in-app + email | Alta |
+| Cancelación voluntaria: acceso hasta fin del período pagado → baja definitiva | Media |
+| Liberación del CUIT al confirmar baja definitiva (retención de datos 90 días) | Media |
+| Reactivación: nuevo registro con mismo CUIT → historial preservado en `user_events` | Media |
+| Reembolso: manual por admin o automático al rechazar → registrado en `payment_events` | Media |
+
+---
 
 ### FASE 6 — ENTORNO DE PRUEBAS
 | Item | Prioridad |
 |---|---|
-| Servidor staging (puerto separado, BD staging, subdominio `staging.api.procuradortool.com`) | Media |
+| Servidor staging (puerto separado, BD staging, `staging.api.procuradortool.com`) | Media |
 | Smoke tests automatizados pre-deploy | Media |
 | Proceso de release documentado paso a paso | Media |
 | Mecanismo de rollback definido y probado | Media |
+
+---
+
+### Tablas DB nuevas planificadas
+| Tabla | Fase | Propósito |
+|---|---|---|
+| `user_events` | 4 | Auditoría completa del ciclo de vida del usuario |
+| `user_notifications` | 4 | Comunicaciones admin → usuario con aviso in-app |
+| `payments` | 5 | Historial de cobros por suscripción |
+| `payment_events` | 5 | Eventos de cargo, reembolso, fallo, disputa |
+
+### Flujo oficial de usuario (aprobado 2026-04-28)
+```
+1. REGISTRO
+   → Email + contraseña + CUIT (obligatorio, único en el sistema)
+   → Si CUIT ya existe → error, no permite continuar
+   → registration_status: pending_email
+   → Email de verificación
+
+2. VERIFICACIÓN DE EMAIL
+   → registration_status: pending_activation
+   → subscription: suspended, usage_limit = 20
+   → Email: "Tenés 20 usos de prueba. Para continuar necesitarás un medio de pago."
+
+3. PERÍODO DE PRUEBA (0 a 20 usos)
+   → Admin puede activar en cualquier momento → full plan (sin pago, caso especial)
+   → Admin puede rechazar en cualquier momento:
+      - Bloquear: acceso revocado + notificación con motivo
+      - Mantener trial: conserva usos restantes + notificación
+   → Electron muestra en Mi Cuenta: "X/20 usos — Para continuar configurá tu suscripción"
+
+4. USUARIO QUIERE CONTINUAR (agotó usos o decidió antes)
+   → Elige plan y paga en el portal
+   → registration_status: pending_payment
+   → Admin recibe notificación con datos del usuario + pago confirmado
+      - ✅ Aprueba → active, email bienvenida, ciclo mensual inicia
+      - ❌ Bloquea → reembolso automático + notificación con motivo
+      - ⏸ Mantiene trial → conserva usos restantes + notificación
+
+5. ACTIVO
+   → Renovación mensual automática vía webhook
+   → Pago fallido → gracia 3 días → suspensión → notificación in-app + email
+   → Admin puede suspender manualmente en cualquier momento con notificación
+
+6. CANCELACIÓN / BAJA
+   → Usuario cancela → acceso hasta fin del período pagado
+   → Baja definitiva → CUIT liberado, datos retenidos 90 días
+   → Reactivación futura → nuevo registro con mismo CUIT, historial preservado
+```
 
 ---
 
