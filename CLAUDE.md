@@ -143,15 +143,65 @@ ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
 > **Nota:** los scripts corren en el cliente (Electron), pero se descargan cifrados desde el servidor.
 > El archivo fuente local (en `backend-server/scripts/`) es solo referencia — lo que importa es lo que queda en la BD después del reencrypt.
 
-### Backup de base de datos
+### Backup completo del proyecto
+Cuando el usuario pide un backup, crear una carpeta en el escritorio con el formato:
+`YYYYMM_DDMMYYYY_ProcuradorTool`
+Ejemplo para el 29 de abril de 2026 → `202604_29042026_ProcuradorTool`
+
+Pasos a ejecutar en orden:
+
+```powershell
+# 1. Crear carpeta con nombre dinámico
+$fecha = Get-Date
+$carpeta = "C:\Users\JONATHAN\Desktop\$($fecha.ToString('yyyyMM'))_$($fecha.ToString('ddMMyyyy'))_ProcuradorTool"
+New-Item -ItemType Directory -Path $carpeta -Force
+
+# 2. Base de datos PostgreSQL
+ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "sudo -u postgres pg_dump procurador_db" > "$carpeta\procurador_db_backup.sql"
+
+# 3. Variables de entorno (.env)
+scp -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94:/var/www/procurador/backend-server/.env "$carpeta\env_backend.txt"
+
+# 4. Claves RSA
+New-Item -ItemType Directory -Path "$carpeta\keys" -Force
+scp -i "C:/Users/JONATHAN/.ssh/do_procurador" -r "root@142.93.64.94:/var/www/procurador/backend-server/keys/" "$carpeta/keys/"
+
+# 5. Certificados SSL
+New-Item -ItemType Directory -Path "$carpeta\certs" -Force
+scp -i "C:/Users/JONATHAN/.ssh/do_procurador" -r "root@142.93.64.94:/var/www/procurador/backend-server/certs/" "$carpeta/certs/"
+
+# 6. Código fuente (sin node_modules, dist ni .git)
+$source = "C:\Users\JONATHAN\source\repos\ProcuradorTool"
+$zipDest = "$carpeta\ProcuradorTool_source.zip"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::Open($zipDest, 'Create')
+$files = Get-ChildItem -Path $source -Recurse -File | Where-Object {
+    $_.FullName -notmatch '\\node_modules\\' -and
+    $_.FullName -notmatch '\\dist\\' -and
+    $_.FullName -notmatch '\\.git\\'
+}
+foreach ($file in $files) {
+    $entryName = $file.FullName.Substring($source.Length + 1)
+    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $entryName) | Out-Null
+}
+$zip.Dispose()
+```
+
+Contenido del backup:
+| Archivo | Qué cubre |
+|---|---|
+| `procurador_db_backup.sql` | Base de datos completa (usuarios, suscripciones, historial) |
+| `env_backend.txt` | Variables de entorno y secretos del servidor |
+| `keys/` | Claves RSA privadas y públicas |
+| `certs/` | Certificados SSL |
+| `ProcuradorTool_source.zip` | Código fuente completo |
+
+> ⚠️ Guardar la carpeta en lugar seguro — contiene claves privadas. No subir a lugares públicos.
+
+### Backup de schema DB solamente
 ```bash
-# Schema solamente
 ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
   "sudo -u postgres pg_dump --schema-only procurador_db" > database/schema.sql
-
-# Backup completo
-ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
-  "sudo -u postgres pg_dump procurador_db" > database/backup_$(date +%Y%m%d).sql
 ```
 
 ---
