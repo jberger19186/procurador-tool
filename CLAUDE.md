@@ -5,6 +5,23 @@
 
 ---
 
+## 🔄 Estado actual
+> Versión app Electron: **2.5.5** (publicada en GitHub Releases)
+> Última sesión: 2026-04-29
+
+### Últimas funcionalidades implementadas (listas en producción)
+- ✅ Sistema de notificaciones in-app completo (v2.5.x): modal al iniciar con badge, tab 🔔 en Mi Cuenta, mark-as-read por ítem y global, scroll fino
+- ✅ Panel admin — historial de eventos: detalles específicos por tipo (notification_sent, plan_changed, suspended, usage_adjusted, reactivated, activated, rejected), ícono 🗑️ en hover para eliminar notificaciones del historial (borra evento + notificación del usuario)
+- ✅ User chip: carga inmediata con datos locales sin "Cargando..." para cuentas pending_activation
+- ✅ Fix rutas API notificaciones: `/client/notifications` (era `/notifications` — bug que impedía que aparecieran)
+- ✅ Panel admin — hash routing: F5 / actualizar página conserva el usuario abierto (`#user-detail/ID`)
+- ✅ Modal notificaciones: X alineada a la derecha, botón Cerrar, scroll fino, tamaño X igual al de Mi Cuenta
+
+### Próximo paso concreto
+**Bloque 1 — Identidad de Marca & Landing:** copy unificado + sección Planes con precios + Términos y Condiciones
+
+---
+
 ## ¿Qué es Procurador SCW?
 
 **Procurador SCW** es una plataforma SaaS de automatización judicial para Argentina. Está dirigida exclusivamente a profesionales del derecho (abogados, procuradores) que cuentan con **credenciales propias en el sistema del Poder Judicial de la Nación (PJN)**.
