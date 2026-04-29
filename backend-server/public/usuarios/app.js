@@ -215,6 +215,10 @@ async function initDashboard() {
         showEmailVerificationBanner();
     }
 
+    // Cargar contador de notificaciones no leídas (badge sidebar)
+    refreshNotifBadge();
+    setInterval(refreshNotifBadge, 120000); // cada 2 min
+
     navigateTo('plan');
 }
 
@@ -315,6 +319,7 @@ function navigateTo(section) {
         case 'plan': renderPlan(); break;
         case 'facturacion': /* static placeholder */ break;
         case 'soporte': renderSoporte(); break;
+        case 'notificaciones': renderNotificaciones(); break;
         case 'ia': renderIA(); break;
     }
 }
@@ -970,6 +975,114 @@ function renderIA() {
     scrollChatToBottom();
 }
 
+// ─── SECCIÓN: NOTIFICACIONES ──────────────────────────────────────────────────
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function refreshNotifBadge() {
+    try {
+        const res = await apiFetch('/client/notifications');
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        const unread = (data.notifications || []).filter(n => !n.read_at);
+        const badge = document.getElementById('nav-notif-badge');
+        if (!badge) return;
+        if (unread.length > 0) {
+            badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
+            badge.style.display = 'block';
+        } else {
+            badge.style.display = 'none';
+        }
+    } catch (e) { /* silencioso */ }
+}
+
+async function renderNotificaciones() {
+    const container = document.getElementById('notifications-list-container');
+    container.innerHTML = '<div class="empty-state"><p>Cargando notificaciones...</p></div>';
+
+    try {
+        const res = await apiFetch('/client/notifications');
+        if (!res || !res.ok) {
+            container.innerHTML = '<div class="empty-state"><p>Error al cargar notificaciones.</p></div>';
+            return;
+        }
+        const data = await res.json();
+        const notifications = data.notifications || [];
+
+        if (notifications.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No tenés notificaciones todavía.</p></div>';
+            return;
+        }
+
+        const TYPE_ICON  = { info: 'ℹ️', warning: '⚠️', error: '🚫', success: '✅' };
+        const TYPE_COLOR = { info: '#3b82f6', warning: '#d97706', error: '#ef4444', success: '#10b981' };
+
+        container.innerHTML = notifications.map(n => {
+            const icon  = TYPE_ICON[n.type]  || 'ℹ️';
+            const color = TYPE_COLOR[n.type] || '#3b82f6';
+            const date  = new Date(n.created_at).toLocaleString('es-AR', {
+                day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'
+            });
+            const unread = !n.read_at;
+            return `
+            <div class="notif-row" data-id="${n.id}"
+                 style="display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid #e5e7eb;
+                        background:${unread ? 'rgba(59,130,246,0.05)' : 'transparent'};
+                        border-left:3px solid ${unread ? color : 'transparent'}">
+                <div style="font-size:22px;flex-shrink:0;line-height:1.2">${icon}</div>
+                <div style="flex:1;min-width:0">
+                    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+                        <div style="font-weight:${unread ? 700 : 500};font-size:14px;color:#111827">${escHtml(n.title)}
+                            ${unread ? '<span style="background:'+color+';color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;margin-left:6px;font-weight:600;letter-spacing:0.3px">NUEVA</span>' : ''}
+                        </div>
+                        <div style="font-size:11px;color:#6b7280;white-space:nowrap">${date}</div>
+                    </div>
+                    <div style="font-size:13px;color:#374151;line-height:1.5;margin-top:4px;white-space:pre-wrap">${escHtml(n.message)}</div>
+                    ${unread ? `<button class="btn btn-sm btn-secondary notif-mark-btn" data-id="${n.id}" style="margin-top:8px;font-size:12px">✓ Marcar como leída</button>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        // Marcar como leída individual
+        container.querySelectorAll('.notif-mark-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                btn.disabled = true;
+                try {
+                    await apiFetch(`/client/notifications/${id}/read`, { method: 'POST' });
+                    await renderNotificaciones();
+                    refreshNotifBadge();
+                } catch (e) {
+                    btn.disabled = false;
+                }
+            });
+        });
+    } catch (e) {
+        container.innerHTML = `<div class="alert alert-error">Error al cargar notificaciones: ${escHtml(e.message)}</div>`;
+    }
+}
+
+async function markAllNotificationsRead() {
+    const btn = document.getElementById('btn-mark-all-notifs');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+        const res = await apiFetch('/client/notifications');
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        const unread = (data.notifications || []).filter(n => !n.read_at);
+        for (const n of unread) {
+            await apiFetch(`/client/notifications/${n.id}/read`, { method: 'POST' });
+        }
+        await renderNotificaciones();
+        refreshNotifBadge();
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 function renderChatMessages() {
     const container = document.getElementById('chat-messages');
     if (!state.chatMessages.length) {
@@ -1115,6 +1228,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.nav-item[data-section]').forEach(el => {
         el.addEventListener('click', () => navigateTo(el.dataset.section));
     });
+
+    // Marcar todas las notificaciones como leídas
+    document.getElementById('btn-mark-all-notifs')?.addEventListener('click', markAllNotificationsRead);
 
     // Logout button
     document.getElementById('btn-logout').addEventListener('click', doLogout);

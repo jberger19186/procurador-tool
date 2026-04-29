@@ -79,6 +79,11 @@
                 <span class="nav-icon">🎫</span>
                 Soporte
             </button>
+            <button class="nav-item" data-section="notificaciones" style="position:relative">
+                <span class="nav-icon">🔔</span>
+                Notificaciones
+                <span id="nav-notif-badge" style="display:none;position:absolute;right:14px;top:50%;transform:translateY(-50%);background:#ef4444;color:#fff;border-radius:10px;min-width:20px;height:20px;font-size:11px;font-weight:700;line-height:20px;text-align:center;padding:0 6px;box-sizing:border-box">0</span>
+            </button>
             <button class="nav-item" data-section="ia">
                 <span class="nav-icon">🤖</span>
                 Asistente IA
@@ -304,6 +309,22 @@
                         ← Volver a mis tickets
                     </button>
                     <div id="ticket-detail-content"></div>
+                </div>
+            </section>
+
+            <!-- ===== SECCIÓN: NOTIFICACIONES ===== -->
+            <section class="section" id="section-notificaciones">
+                <div class="section-title">Notificaciones</div>
+                <div class="section-subtitle">Mensajes y avisos del equipo de Procurador SCW</div>
+
+                <div class="card">
+                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+                        <h3>Mis notificaciones</h3>
+                        <button class="btn btn-secondary btn-sm" id="btn-mark-all-notifs">Marcar todas como leídas</button>
+                    </div>
+                    <div class="card-body" id="notifications-list-container">
+                        <div class="empty-state"><p>Cargando notificaciones...</p></div>
+                    </div>
                 </div>
             </section>
 
