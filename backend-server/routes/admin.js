@@ -1717,6 +1717,49 @@ router.get('/notifications', authenticateAdmin, async (req, res) => {
     }
 });
 
+// ─── DELETE /admin/events/:eventId (solo notification_sent) ─────────────────
+router.delete('/events/:eventId', authenticateAdmin, async (req, res) => {
+    const { eventId } = req.params;
+    const db = req.app.get('db');
+    try {
+        // Verificar que el evento existe y es de tipo notification_sent
+        const evResult = await db.query(
+            `SELECT id, user_id, event_type, old_value FROM user_events WHERE id = $1`,
+            [eventId]
+        );
+        if (!evResult.rows.length) {
+            return res.status(404).json({ error: 'Evento no encontrado' });
+        }
+        const ev = evResult.rows[0];
+        if (ev.event_type !== 'notification_sent') {
+            return res.status(400).json({ error: 'Solo se pueden eliminar eventos de tipo notification_sent' });
+        }
+
+        const d = ev.old_value || {};
+        const title   = d.title   || null;
+        const message = d.message || null;
+
+        // Eliminar notificación correspondiente de user_notifications (por user_id + title + message)
+        if (title && ev.user_id) {
+            await db.query(
+                `DELETE FROM user_notifications
+                 WHERE user_id = $1 AND title = $2
+                   AND ($3::text IS NULL OR message = $3)`,
+                [ev.user_id, title, message]
+            );
+        }
+
+        // Eliminar el evento del historial
+        await db.query(`DELETE FROM user_events WHERE id = $1`, [eventId]);
+
+        logger.info(`🗑️ Evento #${eventId} (notification_sent) eliminado por admin ${req.user.id}`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error eliminando evento de notificación:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 // ─── GET /admin/settings ─────────────────────────────────────────────────────
 // Leer configuración de la app (Gap 5)
 router.get('/settings', authenticateAdmin, async (req, res) => {

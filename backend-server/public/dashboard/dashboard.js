@@ -700,7 +700,18 @@ async function renderUserDetail(userId) {
                             ? `<div style="margin-top:4px;font-size:12px;color:var(--text-muted);line-height:1.6">${detailLines.join(' &nbsp;·&nbsp; ')}</div>`
                             : '';
 
-                        return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+                        const delBtn = ev.event_type === 'notification_sent'
+                            ? `<div style="flex-shrink:0;display:flex;align-items:center;padding-left:6px">
+                                <button class="ev-del-btn" onclick="deleteNotifEvent(${ev.id}, ${userId})"
+                                    title="Eliminar del historial"
+                                    style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:14px;padding:4px 6px;border-radius:4px;opacity:0;transition:opacity .2s;line-height:1">🗑️</button>
+                               </div>`
+                            : '';
+
+                        return `<div id="ev-row-${ev.id}"
+                                     style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)"
+                                     onmouseenter="var b=this.querySelector('.ev-del-btn');if(b)b.style.opacity='1'"
+                                     onmouseleave="var b=this.querySelector('.ev-del-btn');if(b)b.style.opacity='0'">
                             <div style="font-size:18px;flex-shrink:0;line-height:1.4">${icon}</div>
                             <div style="flex:1;min-width:0">
                                 <div style="font-weight:600;font-size:13px;color:var(--text-primary)">${label}</div>
@@ -709,6 +720,7 @@ async function renderUserDetail(userId) {
                                 </div>
                                 ${detailHtml}
                             </div>
+                            ${delBtn}
                         </div>`;
                     }).join('')}
                 </div>`}
@@ -1905,3 +1917,29 @@ async function loadAdjustmentHistory(userId) {
         if (histEl) histEl.innerHTML = `<div style="font-size:12px;color:#ef4444">${e.message}</div>`;
     }
 }
+
+// ─── Eliminar evento notification_sent del historial ────────────────────────
+window.deleteNotifEvent = async function(eventId, userId) {
+    if (!confirm('¿Eliminar esta notificación del historial?\n\nSe borrará el registro del historial y la notificación del usuario. Esta acción no se puede deshacer.')) return;
+    try {
+        const res = await apiFetch(`/admin/events/${eventId}`, 'DELETE');
+        if (!res.success) throw new Error(res.error || 'Error al eliminar');
+
+        // Quitar la fila del DOM
+        const row = document.getElementById(`ev-row-${eventId}`);
+        if (row) {
+            row.style.transition = 'opacity .2s';
+            row.style.opacity = '0';
+            setTimeout(() => {
+                row.remove();
+                // Actualizar contador en el encabezado de la sección
+                const header = document.querySelector('#content h3');
+                if (header) {
+                    header.innerHTML = header.innerHTML.replace(/\((\d+)\)/, (_, n) => `(${Math.max(0, parseInt(n) - 1)})`);
+                }
+            }, 200);
+        }
+    } catch(e) {
+        alert('Error al eliminar: ' + e.message);
+    }
+};
