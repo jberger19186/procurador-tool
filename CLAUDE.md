@@ -846,10 +846,135 @@ Sección Sistema del sidebar:
 ### FASE 5 — COBRANZA (pendiente)
 **Objetivo:** cobro automático de suscripciones.
 
-- ⬜ Integración MercadoPago / Stripe (suscripciones recurrentes)
-- ⬜ Agregar a `subscriptions`: `external_subscription_id`, `payment_provider`, `next_billing_date`
+---
+
+#### Flujo completo — Registro, Trial y Suscripción
+
+##### 1. REGISTRO
+```
+Email + contraseña + CUIT
+  ├── CUIT duplicado → error
+  ├── Email duplicado → error
+  └── OK → registration_status: pending_email
+           → Email de verificación
+```
+
+##### 2. VERIFICACIÓN DE EMAIL
+```
+Usuario hace click en el link
+  └── registration_status: pending_activation
+      subscription: { status: suspended, usage_limit: 20 }
+      → Email: "Tenés 20 usos de prueba. El equipo revisará tu cuenta
+                y te avisará cuando puedas continuar."
+```
+
+##### 3. TRIAL (0 → 20 usos) — Admin decide
+```
+Admin recibe alerta de nuevo usuario pendiente.
+Puede decidir en cualquier momento durante el trial:
+
+  ✅ ACTIVA
+     → registration_status: active
+     → subscription: { status: active, plan asignado }
+     → user_event: activated
+     → user_notification + email: "Tu cuenta fue activada.
+                                    Configurá tu método de pago para continuar."
+     → Electron muestra banner → "Configurar suscripción"
+     → Usuario elige plan + carga método de pago (paso 4)
+
+  🚫 RECHAZA + BLOQUEA
+     → registration_status: rejected
+     → subscription: status: cancelled
+     → Acceso revocado inmediatamente, sin opción de pago
+     → user_event: rejected_blocked { reason }
+     → user_notification + email: "Acceso denegado. Motivo: ..."
+
+  ⏸ RECHAZA + MANTIENE TRIAL
+     → registration_status: pending_activation (sin cambio)
+     → subscription: sin cambio (sigue con los usos restantes)
+     → Puede seguir usando hasta agotar sus 20 usos
+     → No hay opción de pago — necesita aprobación del admin para convertir
+     → user_event: rejected_keep_trial { reason }
+     → user_notification: "Tu solicitud está en espera. Motivo: ..."
+     → Al agotar los 20 usos: acceso suspendido automáticamente
+```
+
+##### 4. CONFIGURACIÓN DE PAGO *(solo usuarios activados por admin)*
+```
+Usuario accede al portal de pago (desde Electron o web):
+  ├── Elige plan: BASIC / PRO / ENTERPRISE
+  ├── Carga método de pago (MercadoPago / Stripe)
+  └── Confirma → primer cobro ejecutado
+        ├── ✅ Cobro exitoso
+        │     → subscription: { status: active, payment_provider, next_billing_date }
+        │     → Ciclo mensual comienza
+        │     → user_event: payment_setup { plan, provider }
+        └── ❌ Cobro fallido
+              → Error en pantalla, invita a reintentar
+              → Acceso del trial activado se mantiene mientras resuelve
+```
+
+##### 5. ACTIVO — Ciclo mensual
+```
+Renovación automática cada 30 días:
+  ├── ✅ Cobro exitoso → next_billing_date += 30 días
+  └── ❌ Cobro fallido → 3 días de gracia
+        → user_notification + email: "Actualizá tu método antes del DD/MM."
+        → Sin resolución en 3 días → status: suspended
+        → user_event: payment_failed_suspended
+
+Admin puede suspender manualmente en cualquier momento:
+  → subscription: status: suspended
+  → user_event: suspended { reason }
+  → user_notification + email
+```
+
+##### 6. CANCELACIÓN
+```
+Usuario cancela desde el portal:
+  ├── Acceso hasta fin del período pago (sin reembolso parcial)
+  ├── subscription: cancel_at: fin_período
+  └── Al vencer → registration_status: cancelled
+
+Retención de datos: 90 días
+  └── CUIT liberado a los 90 días (campo nullificado en users)
+      user_events se preserva permanentemente
+
+Retorno después del CUIT liberado:
+  └── Nuevo registro con mismo CUIT — admin ve historial en user_events
+```
+
+##### Estados registration_status
+
+| Estado | Quién lo asigna | Descripción |
+|---|---|---|
+| `pending_email` | sistema | Registrado, email no verificado |
+| `pending_activation` | sistema / admin rechaza suave | Email verificado, en trial |
+| `active` | admin | Aprobado — puede configurar pago |
+| `rejected` | admin | Bloqueado, sin acceso |
+| `cancelled` | usuario | Baja voluntaria |
+
+---
+
+#### Items pendientes de implementar (Fase 5)
+
+- ⬜ Portal de pago en Electron: selector de plan + formulario MercadoPago/Stripe
+- ⬜ Integración MercadoPago / Stripe (primer cobro + webhooks de renovación)
+- ⬜ Banner post-activación en Electron: "Configurá tu método de pago"
+- ⬜ Ciclo mensual automático (cron job en backend)
+- ⬜ Gracia 3 días en pago fallido + suspensión automática
+- ⬜ Flujo de cancelación desde portal de usuario
+- ⬜ Retención CUIT 90 días + job de limpieza
 - ⬜ Facturación AFIP
-- ⬜ Soporte post-compra
+- ⬜ Campos DB a agregar:
+  ```sql
+  ALTER TABLE subscriptions ADD COLUMN payment_provider VARCHAR(20);
+  ALTER TABLE subscriptions ADD COLUMN external_subscription_id VARCHAR(100);
+  ALTER TABLE subscriptions ADD COLUMN next_billing_date TIMESTAMP WITH TIME ZONE;
+  ALTER TABLE subscriptions ADD COLUMN cancel_at TIMESTAMP WITH TIME ZONE;
+  ALTER TABLE subscriptions ADD COLUMN payment_grace_until TIMESTAMP WITH TIME ZONE;
+  ALTER TABLE users ADD COLUMN cuit_deleted_at TIMESTAMP WITH TIME ZONE;
+  ```
 
 ---
 
