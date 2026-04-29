@@ -50,7 +50,8 @@ async function doLogin() {
         }
 
         showApp();
-        navigate(location.hash.slice(1).split('/')[0] || 'overview');
+        const hashParts = location.hash.slice(1).split('/');
+        navigate(hashParts[0] || 'overview', hashParts[1] || null);
 
     } catch (e) {
         errEl.textContent   = e.message;
@@ -140,13 +141,17 @@ window.addEventListener('load', async () => {
     // Token válido local y en servidor — restaurar
     token = savedToken;
     showApp();
-    navigate(location.hash.slice(1).split('/')[0] || 'overview');
+    const hashParts = location.hash.slice(1).split('/');
+    navigate(hashParts[0] || 'overview', hashParts[1] || null);
 });
 
 // ───── ROUTING ─────
 function navigate(page, id) {
     if (currentPage && currentPage !== page) prevPage = currentPage;
     currentPage = page;
+    // Actualizar hash para que F5 preserve la página actual
+    const newHash = id ? `#${page}/${id}` : `#${page}`;
+    if (location.hash !== newHash) history.replaceState(null, '', newHash);
     document.querySelectorAll('#sidebar nav a').forEach(a => {
         a.classList.toggle('active', a.dataset.page === page);
     });
@@ -636,9 +641,11 @@ async function renderUserDetail(userId) {
                         const icon  = ICONS[ev.event_type]  || '📝';
                         const label = LABELS[ev.event_type] || escHtml(ev.event_type.replace(/_/g,' '));
 
-                        // Parsear detalles guardados en old_value
+                        // Parsear detalles guardados en old_value (JSONB → ya viene como objeto desde pg)
                         let d = {};
-                        try { d = ev.details ? JSON.parse(ev.details) : {}; } catch(_) {}
+                        if (ev.details) {
+                            d = typeof ev.details === 'string' ? JSON.parse(ev.details) : ev.details;
+                        }
 
                         // Construir línea de detalles específica por tipo de evento
                         let detailLines = [];
@@ -867,8 +874,7 @@ window.sendNotifToUser = async function(userId) {
     try {
         await apiFetch('/admin/notifications', 'POST', { userId, title, message, type });
         showAlert(document.getElementById('ud-alert'), 'Notificación enviada correctamente.', 'success');
-        document.getElementById('notif-title').value   = '';
-        document.getElementById('notif-message').value = '';
+        setTimeout(() => navigate('user-detail', userId), 1200);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
 window.reactivateSub = async function(id) {
