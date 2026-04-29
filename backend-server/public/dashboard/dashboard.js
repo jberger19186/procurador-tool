@@ -659,8 +659,7 @@ async function renderUserDetail(userId) {
                     ${events.map(ev => {
                         const ICONS = { activated:'✅', rejected_blocked:'🚫', rejected_keep_trial:'⚠️', suspended:'⏸', reactivated:'▶️', plan_changed:'💳', email_verified:'📧', system:'⚙️' };
                         const icon = ICONS[ev.event_type] || '📝';
-                        const details = ev.details ? (typeof ev.details === 'string' ? JSON.parse(ev.details) : ev.details) : {};
-                        const reasonStr = details.reason ? `<br><span style="color:var(--text-muted);font-size:12px">Motivo: ${escHtml(details.reason)}</span>` : '';
+                        const reasonStr = ev.reason ? `<br><span style="color:var(--text-muted);font-size:12px">Motivo: ${escHtml(ev.reason)}</span>` : '';
                         return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
                             <div style="font-size:18px;flex-shrink:0">${icon}</div>
                             <div style="flex:1;min-width:0">

@@ -8,17 +8,21 @@ const logger = require('../utils/logger');
 
 // ─── Helpers de auditoría ────────────────────────────────────────────────────
 
-async function logUserEvent(db, { userId, eventType, actorRole = 'admin', actorId = null, details = {} }) {
+// user_events columns: user_id, event_type, performed_by, reason, old_value, new_value
+async function logUserEvent(db, { userId, eventType, actorId = null, details = {} }) {
     try {
+        const reason   = details.reason || null;
+        const oldValue = Object.keys(details).length ? JSON.stringify(details) : null;
         await db.query(`
-            INSERT INTO user_events (user_id, event_type, actor_role, actor_id, details)
+            INSERT INTO user_events (user_id, event_type, performed_by, reason, old_value)
             VALUES ($1, $2, $3, $4, $5)
-        `, [userId, eventType, actorRole, actorId, JSON.stringify(details)]);
+        `, [userId, eventType, actorId, reason, oldValue]);
     } catch (err) {
         logger.warn(`⚠️ No se pudo registrar user_event (${eventType}) para usuario ${userId}: ${err.message}`);
     }
 }
 
+// user_notifications columns: user_id, title, message, type, created_by, expires_at
 async function createUserNotification(db, { userId = null, title, message, type = 'info', createdBy = null, expiresInDays = 90 }) {
     try {
         await db.query(`
@@ -466,10 +470,10 @@ router.get('/users/:userId/events', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
     try {
         const result = await db.query(`
-            SELECT e.id, e.event_type, e.actor_role, e.details, e.created_at,
+            SELECT e.id, e.event_type, e.reason, e.old_value AS details, e.created_at,
                    a.email AS actor_email
             FROM user_events e
-            LEFT JOIN users a ON e.actor_id = a.id
+            LEFT JOIN users a ON e.performed_by = a.id
             WHERE e.user_id = $1
             ORDER BY e.created_at DESC
             LIMIT 100
@@ -728,7 +732,11 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
                 updated_at = NOW()
         `, [userId, planData.name, planData.id, expiresAt, usageLimit]);
 
-        console.log(`💳 Suscripción "${planData.name}" creada/actualizada para usuario ${userId} por admin: ${req.user.id}`);
+        logger.info(`💳 Suscripción "${planData.name}" creada/actualizada para usuario ${userId} por admin: ${req.user.id}`);
+        await logUserEvent(db, {
+            userId: parseInt(userId), eventType: 'plan_changed', actorId: req.user.id,
+            details: { plan: planData.name, expires_at: expiresAt }
+        });
         res.json({ success: true, message: 'Suscripción creada/actualizada correctamente', subscription: { userId, plan: planData.name, expiresAt } });
     } catch (error) {
         console.error('Error gestionando suscripción:', error);
@@ -804,11 +812,18 @@ router.post('/subscriptions/:userId/reactivate', authenticateAdmin, async (req, 
 
     try {
         await db.query(
-            `UPDATE subscriptions SET status = 'active' WHERE user_id = $1`,
+            `UPDATE subscriptions SET status = 'active', updated_at = NOW() WHERE user_id = $1`,
             [userId]
         );
 
-        console.log(`▶️ Suscripción reactivada para usuario ${userId} por admin: ${req.user.id}`);
+        await logUserEvent(db, {
+            userId: parseInt(userId),
+            eventType: 'reactivated',
+            actorId: req.user.id,
+            details: {}
+        });
+
+        logger.info(`▶️ Suscripción reactivada para usuario ${userId} por admin: ${req.user.id}`);
 
         res.json({
             success: true,
@@ -1420,7 +1435,11 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
                 VALUES ($1, $2, $3, $4, $5, $6)
             `, [userId, req.user.id, subsystem, UNLIMITED_VAL, reason || `Establecido ilimitado`, ticket_id || null]);
 
-            require('../utils/logger').info(`🔓 ${subsystem} establecido ilimitado para usuario ${userId} por admin: ${req.user.id}`);
+            logger.info(`🔓 ${subsystem} establecido ilimitado para usuario ${userId} por admin: ${req.user.id}`);
+            await logUserEvent(db, {
+                userId: parseInt(userId), eventType: 'usage_adjusted', actorId: req.user.id,
+                details: { subsystem, unlimited: true, reason: reason || null }
+            });
             return res.json({ success: true, message: `${subsystem} establecido como ilimitado`, unlimited: true });
         }
 
@@ -1442,7 +1461,11 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
                 VALUES ($1, $2, 'global', $3, $4, $5)
             `, [userId, req.user.id, parseInt(amount), reason || null, ticket_id || null]);
 
-            require('../utils/logger').info(`Ajuste ${action} límite global para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
+            logger.info(`Ajuste ${action} límite global para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
+            await logUserEvent(db, {
+                userId: parseInt(userId), eventType: 'usage_adjusted', actorId: req.user.id,
+                details: { subsystem: 'global', amount: parseInt(amount), reason: reason || null }
+            });
 
             return res.json({
                 success: true,
@@ -1469,7 +1492,11 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
             VALUES ($1, $2, $3, $4, $5, $6)
         `, [userId, req.user.id, subsystem, parseInt(amount), reason || null, ticket_id || null]);
 
-        require('../utils/logger').info(`Ajuste ${action} usos de "${subsystem}" para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
+        logger.info(`Ajuste ${action} usos de "${subsystem}" para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
+        await logUserEvent(db, {
+            userId: parseInt(userId), eventType: 'usage_adjusted', actorId: req.user.id,
+            details: { subsystem, amount: parseInt(amount), reason: reason || null }
+        });
 
         res.json({
             success: true,
