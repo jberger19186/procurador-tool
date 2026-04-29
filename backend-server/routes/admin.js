@@ -1662,6 +1662,17 @@ router.post('/notifications', authenticateAdmin, async (req, res) => {
 
         const target = userId ? `usuario ${userId}` : 'todos los usuarios (broadcast)';
         logger.info(`📢 Notificación creada para ${target} por admin ${req.user.id}: "${title}"`);
+
+        // Registrar evento de auditoría (solo si no es broadcast)
+        if (userId) {
+            await logUserEvent(db, {
+                userId: parseInt(userId),
+                eventType: 'notification_sent',
+                actorId: req.user.id,
+                details: { title, message, type, reason: title }
+            });
+        }
+
         res.status(201).json({ success: true, notification: result.rows[0] });
     } catch (error) {
         console.error('Error creando notificación:', error);

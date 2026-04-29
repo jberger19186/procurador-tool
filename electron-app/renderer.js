@@ -1670,7 +1670,12 @@ function setupCuentaModal() {
 
 // ── Notificaciones in-app ────────────────────────────────────────────────────
 
-async function checkUnreadNotifications() {
+// Set para evitar abrir el modal múltiples veces para la misma notificación
+const _seenNotifIds = new Set();
+let _notifPollingStarted = false;
+
+async function checkUnreadNotifications(opts = {}) {
+    const { autoOpen = true } = opts;
     try {
         const res = await window.electronAPI.getNotifications();
         if (!res?.success) return;
@@ -1684,9 +1689,20 @@ async function checkUnreadNotifications() {
                 badge.style.display = 'none';
             }
         }
-        if (unread.length > 0) {
+
+        // Detectar notificaciones nuevas (no vistas en este ciclo de la app)
+        const newOnes = unread.filter(n => !_seenNotifIds.has(n.id));
+        unread.forEach(n => _seenNotifIds.add(n.id));
+
+        if (autoOpen && newOnes.length > 0) {
             renderNotificationsModal(res.notifications);
             openModal('modalNotificaciones');
+        }
+
+        // Iniciar polling cada 2 minutos (solo la primera vez)
+        if (!_notifPollingStarted) {
+            _notifPollingStarted = true;
+            setInterval(() => checkUnreadNotifications({ autoOpen: true }), 120000);
         }
     } catch (e) { /* silencioso */ }
 }
