@@ -460,26 +460,37 @@ function setupSidebar() {
 
 // ============ USER CHIP (SIDEBAR) ============
 async function updateUserChip() {
+    const nameEl = document.getElementById('userNameDisplay');
+    const planEl = document.getElementById('userPlanDisplay');
+    const initEl = document.getElementById('userAvatarInitials');
+
+    // Paso 1: poblar con datos locales (sin red) — inmediato
+    try {
+        const local = await window.electronAPI.getLocalUser();
+        if (local?.success && local.user) {
+            const u = local.user;
+            const nameRaw = u.email ? u.email.split('@')[0] : (u.cuit || u.nombre || '?');
+            if (nameEl) nameEl.textContent = nameRaw;
+            if (initEl) initEl.textContent = nameRaw.slice(0, 2).toUpperCase();
+            if (planEl && planEl.textContent === 'Cargando...') planEl.textContent = '—';
+        }
+    } catch (_) {}
+
+    // Paso 2: enriquecer con plan desde la API (puede tardar)
     try {
         const result = await window.electronAPI.getAccount();
         if (!result?.success || !result.account) return;
 
         const a = result.account;
-
-        // Nombre: email antes del @, o CUIT si no hay email
-        const nameRaw  = a.email ? a.email.split('@')[0] : (a.cuit || '?');
-        const nameEl   = document.getElementById('userNameDisplay');
-        const planEl   = document.getElementById('userPlanDisplay');
-        const initEl   = document.getElementById('userAvatarInitials');
-
+        const nameRaw = a.email ? a.email.split('@')[0] : (a.cuit || '?');
         if (nameEl) nameEl.textContent = nameRaw;
+        if (initEl) initEl.textContent = nameRaw.slice(0, 2).toUpperCase();
         if (planEl) {
             const planName = (typeof a.plan === 'object' ? a.plan?.displayName || a.plan?.name : a.plan) || '—';
             planEl.textContent = planName;
         }
-        if (initEl) initEl.textContent = nameRaw.slice(0, 2).toUpperCase();
     } catch (_) {
-        // Silencioso — el chip queda con los defaults del HTML
+        // El chip ya tiene datos del paso 1 — no pasa nada
     }
 }
 

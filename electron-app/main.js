@@ -1916,6 +1916,13 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
 
 // ============ CUENTA Y TICKETS ============
 
+// Datos locales de sesión — sin llamada de red, disponibles inmediatamente tras el login
+ipcMain.handle('get-local-user', () => {
+    const u = authManager.backendClient.getUser();
+    if (!u) return { success: false };
+    return { success: true, user: u };
+});
+
 ipcMain.handle('get-account', async () => {
     try {
         return await authManager.backendClient.getAccount();
