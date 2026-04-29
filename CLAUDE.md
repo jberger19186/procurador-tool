@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-28
+> Última actualización: 2026-04-28 (v2.4.22)
 
 ---
 
@@ -499,7 +499,7 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ---
 
 ## 📋 Pendientes por fase
-> Última actualización: 2026-04-28. Solo ítems pendientes — los completados se omiten.
+> Última actualización: 2026-04-28 (v2.4.22). Solo ítems pendientes — los completados se omiten.
 
 ### FASE 1 — APLICACIÓN
 | # | Item | Prioridad |
@@ -645,6 +645,28 @@ Sección Sistema del sidebar:
 - Se resetea y enfoca automáticamente al abrir el modal
 
 **Pendiente (Fase 4):** conectar IA real al endpoint del chat.
+
+---
+
+#### 1.7 Rediseño modales Mi Cuenta y Estadísticas — ✅ COMPLETADO (v2.4.21–v2.4.22)
+
+**Mi Cuenta — cuenta suspendida (pendiente de activación):**
+- Estado muestra "⏳ Pendiente de activación" en lugar de "⚫ Suspendido"
+- Banner amber con barra de progreso y contador **X / 20 usos globales** del período de prueba
+- Sección subsistema muestra aviso: "Los usos individuales se habilitarán al activar tu cuenta"
+
+**Mi Cuenta — cuenta activa:**
+- Sección "Uso por subsistema" reemplaza barras horizontales por **cards** (mismo estilo que Estadísticas)
+- Cada card: ícono + `usado / límite` + mini barra de progreso + restantes en color
+
+**Estadísticas — todas las cuentas:**
+- Eliminadas las 3 cards antiguas (Procuraciones / Informes / Monitoreo) sin límites — redundantes
+- Sección "Uso por subsistema": **5 cards** con uso + límite + restantes por módulo (solo activos)
+- Card "Tasa de éxito" → **"Usos en el período"** (`usage_count` real de la DB)
+- Para trial: muestra `X / 20 — Usos de prueba`
+- `get-stats` en `main.js` ahora pasa datos de cuenta (`status`, `registrationStatus`, `usage`) al renderer
+
+**Archivos modificados:** `index.html`, `renderer.js`, `main.js`, `styles.css`
 
 ---
 
