@@ -695,7 +695,7 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - Extensión publicada y aprobada en Chrome Web Store (v1.3.2)
 - Onboarding actualizado con enlace directo a la store
 - Aviso sobre warning de Chrome al instalar incluido en onboarding
-- ⬜ Limpiar distribución CRX vieja del backend (`/extension/updates.xml`, `/extension/download`, `/extension/latest.crx`) — baja urgencia
+- ✅ Limpiar distribución CRX vieja del backend (`/extension/updates.xml`, `/extension/download`, `/extension/latest.crx`)
 
 #### 1.3b Rediseño visual de los visores HTML ✅ COMPLETADO (sesión 2026-04-24)
 - `visorModal_template.html` (procuración): rediseñado — tabla plana con modal de movimientos, amber/Inter
