@@ -1281,10 +1281,17 @@ async function renderPendingUsers() {
                         <td>${escHtml(u.plan_display || u.plan_name || '—')}</td>
                         <td>${statusBadge(u.registration_status)}</td>
                         <td style="font-size:12px">${new Date(u.created_at).toLocaleDateString('es-AR')}</td>
-                        <td>
+                        <td style="white-space:nowrap">
                             ${u.registration_status === 'pending_activation'
-                                ? `<button class="btn btn-sm btn-primary" onclick="activateUser(${u.id}, '${escHtml(u.email)}')">Activar</button>`
-                                : '<span style="font-size:12px;color:var(--text-muted)">Esperando email</span>'}
+                                ? `<div style="display:flex;gap:4px;flex-wrap:wrap">
+                                    <button class="btn btn-sm btn-primary" onclick="activateUser(${u.id}, '${escHtml(u.email)}')">⚡ Activar</button>
+                                    <button class="btn btn-sm btn-danger" onclick="rejectUserPending(${u.id},'block')" title="Bloquear acceso">🚫</button>
+                                    <button class="btn btn-sm btn-warning" onclick="rejectUserPending(${u.id},'keep_trial')" title="Rechazar manteniendo trial">⚠️</button>
+                                   </div>`
+                                : `<div style="display:flex;gap:4px;flex-wrap:wrap">
+                                    <span style="font-size:12px;color:var(--text-muted)">Esperando email</span>
+                                    <button class="btn btn-sm btn-danger" onclick="rejectUserPending(${u.id},'block')" title="Bloquear acceso">🚫</button>
+                                   </div>`}
                         </td>
                     </tr>`).join('')}
                     </tbody>
@@ -1295,6 +1302,21 @@ async function renderPendingUsers() {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
+
+// Rechazar usuario desde la página de pendientes
+window.rejectUserPending = async function(id, mode) {
+    const modeLabel = mode === 'block' ? 'RECHAZAR Y BLOQUEAR' : 'RECHAZAR (mantener trial)';
+    const reason = prompt(`${modeLabel}\n\nMotivo (opcional, se notifica al usuario):`);
+    if (reason === null) return;
+    try {
+        await apiFetch(`/admin/users/${id}/reject`, 'POST', { mode, reason: reason.trim() });
+        const msg = mode === 'block'
+            ? 'Usuario rechazado y bloqueado.'
+            : 'Usuario rechazado — conserva sus usos de prueba.';
+        showAlert(document.getElementById('pending-alert'), msg, mode === 'block' ? 'error' : 'warning');
+        setTimeout(() => navigate('pending-users'), 1500);
+    } catch (e) { showAlert(document.getElementById('pending-alert'), e.message); }
+};
 
 window.verifyEmailManual = async function(userId) {
     if (!confirm('¿Marcar el email de este usuario como verificado manualmente?')) return;
