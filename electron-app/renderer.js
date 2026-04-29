@@ -1003,12 +1003,7 @@ async function loadStatistics() {
         if (result.success) {
             const stats = result.stats;
 
-            // Valores principales
-            document.getElementById('statProcuracion').textContent = (stats.procuracion ?? 0).toLocaleString('es-AR');
-            document.getElementById('statInformes').textContent    = (stats.informes    ?? 0).toLocaleString('es-AR');
-            document.getElementById('statMonitoreo').textContent   = (stats.monitoreo   ?? 0).toLocaleString('es-AR');
-
-            // Usos en el período (reemplaza "Tasa de éxito")
+            // Usos en el período
             const acc = stats.account;
             const isTrial = acc?.status === 'suspended' && acc?.registrationStatus === 'pending_activation';
             const usageCount = acc?.usageCount ?? 0;
@@ -1023,12 +1018,7 @@ async function loadStatistics() {
                 usageEl.textContent   = usageCount.toLocaleString('es-AR');
                 if (usageLblEl) usageLblEl.textContent = 'Usos en el período';
             }
-            setStatDelta('statTasaExitoDelta', null); // sin delta para usos
-
-            // Deltas de los 3 conteos principales (opcionales)
-            setStatDelta('statProcuracionDelta', stats.deltaProcuracion);
-            setStatDelta('statInformesDelta',    stats.deltaInformes);
-            setStatDelta('statMonitoreoDelta',   stats.deltaMonitoreo);
+            setStatDelta('statTasaExitoDelta', null);
 
             // Última ejecución
             if (stats.ultimoProcesoTimestamp) {
