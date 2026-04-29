@@ -651,7 +651,7 @@
 <div class="modal" id="modalNotificaciones">
     <div class="modal-content" style="max-width:520px">
         <div class="modal-header">
-            <div style="display:flex;align-items:center;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px;flex:1">
                 <span style="font-size:22px">🔔</span>
                 <div>
                     <div class="modal-cfg-title">Notificaciones</div>
@@ -663,8 +663,9 @@
         <div class="modal-body" style="max-height:400px;overflow-y:auto">
             <div id="notif-list"><!-- JS rellena --></div>
         </div>
-        <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right">
-            <button class="btn-secondary" id="btnMarkAllRead" style="font-size:13px">Marcar todas como leídas</button>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+            <button class="btn-secondary" id="btnMarkAllRead" style="font-size:13px">✓ Marcar todas como leídas</button>
+            <button class="btn-secondary" id="btnCloseNotifsFooter" style="font-size:13px" onclick="closeModal('modalNotificaciones')">Cerrar</button>
         </div>
     </div>
 </div>
@@ -716,7 +717,7 @@
                     <span style="font-size:13px;color:var(--text-3)" id="notif-tab-count">Cargando...</span>
                     <button class="btn-soporte-nuevo" id="btnMarkAllReadCuenta" style="display:none">✓ Marcar todas como leídas</button>
                 </div>
-                <div id="notif-tab-list" style="max-height:360px;overflow-y:auto"></div>
+                <div id="notif-tab-list" class="thin-scroll" style="max-height:360px;overflow-y:auto"></div>
             </div>
 
             <!-- Tab Soporte -->
