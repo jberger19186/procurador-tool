@@ -1646,10 +1646,23 @@ function setupCuentaModal() {
             tab.classList.add('active');
             const tabName = tab.dataset.tab;
             document.getElementById('cuenta-plan').style.display    = tabName === 'plan'    ? '' : 'none';
+            document.getElementById('cuenta-notif').style.display   = tabName === 'notif'   ? '' : 'none';
             document.getElementById('cuenta-soporte').style.display = tabName === 'soporte' ? '' : 'none';
             if (tabName === 'plan')    loadAccountData();
+            if (tabName === 'notif')   loadNotificationsTab();
             if (tabName === 'soporte') loadTicketList();
         });
+    });
+
+    // Marcar todas como leídas desde Mi Cuenta
+    document.getElementById('btnMarkAllReadCuenta')?.addEventListener('click', async () => {
+        const items = document.querySelectorAll('#notif-tab-list .notif-tab-item[data-unread="1"]');
+        for (const item of items) {
+            const id = item.dataset.id;
+            if (id) await window.electronAPI.markNotificationRead(id);
+        }
+        await refreshNotifBadge();
+        await loadNotificationsTab();
     });
 
     document.getElementById('btnNuevoTicket').addEventListener('click', () => showSoporteView('nuevo'));
@@ -1751,18 +1764,95 @@ function renderNotificationsModal(notifications) {
     });
 }
 
+async function loadNotificationsTab() {
+    const list      = document.getElementById('notif-tab-list');
+    const countEl   = document.getElementById('notif-tab-count');
+    const markAllBtn = document.getElementById('btnMarkAllReadCuenta');
+    if (!list) return;
+
+    list.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:16px 0">Cargando...</div>';
+    try {
+        const res = await window.electronAPI.getNotifications();
+        if (!res?.success) { list.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:16px 0">No se pudieron cargar las notificaciones.</div>'; return; }
+
+        const notifications = res.notifications || [];
+        const unread = notifications.filter(n => !n.read_at);
+
+        if (countEl) countEl.textContent = unread.length > 0
+            ? `${unread.length} no leída${unread.length > 1 ? 's' : ''} · ${notifications.length} total`
+            : `${notifications.length} notificación${notifications.length !== 1 ? 'es' : ''} · todas leídas`;
+
+        if (markAllBtn) markAllBtn.style.display = unread.length > 0 ? '' : 'none';
+
+        // Badge del tab
+        const tabBadge = document.getElementById('cuenta-notif-badge');
+        if (tabBadge) {
+            if (unread.length > 0) { tabBadge.textContent = unread.length; tabBadge.style.display = ''; }
+            else { tabBadge.style.display = 'none'; }
+        }
+
+        if (notifications.length === 0) {
+            list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3);font-size:13px">No hay notificaciones</div>';
+            return;
+        }
+
+        const TYPE_ICON  = { info: 'ℹ️', warning: '⚠️', error: '🚫', success: '✅' };
+        const TYPE_COLOR = { info: '#3b82f6', warning: '#d97706', error: '#ef4444', success: '#10b981' };
+
+        list.innerHTML = notifications.map(n => {
+            const icon  = TYPE_ICON[n.type]  || 'ℹ️';
+            const date  = new Date(n.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+            const isUnread = !n.read_at;
+            return `
+            <div class="notif-tab-item" data-id="${n.id}" data-unread="${isUnread ? 1 : 0}"
+                 style="display:flex;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);background:${isUnread ? 'rgba(217,119,6,0.05)' : 'transparent'}">
+                <div style="font-size:18px;flex-shrink:0;line-height:1.4">${icon}</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:${isUnread ? 700 : 500};font-size:13px;color:var(--text-1);margin-bottom:3px">
+                        ${isUnread ? '<span style="display:inline-block;width:7px;height:7px;background:#ef4444;border-radius:50%;margin-right:6px;vertical-align:middle"></span>' : ''}${escapeHtml(n.title)}
+                    </div>
+                    <div style="font-size:12px;color:var(--text-2);line-height:1.5">${escapeHtml(n.message)}</div>
+                    <div style="font-size:11px;color:var(--text-3);margin-top:4px">${date}</div>
+                </div>
+                ${isUnread ? `<button class="notif-tab-read-btn" data-id="${n.id}" title="Marcar como leída"
+                    style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-3);font-size:16px;align-self:flex-start;padding:2px">✓</button>` : ''}
+            </div>`;
+        }).join('');
+
+        // Marcar individualmente como leída
+        list.querySelectorAll('.notif-tab-read-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                await window.electronAPI.markNotificationRead(id);
+                await refreshNotifBadge();
+                await loadNotificationsTab();
+            });
+        });
+
+    } catch (e) {
+        list.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:16px 0">Error al cargar notificaciones.</div>';
+    }
+}
+
 async function refreshNotifBadge() {
     try {
         const res = await window.electronAPI.getNotifications();
         if (!res?.success) return;
         const unread = (res.notifications || []).filter(n => !n.read_at);
-        const badge  = document.getElementById('notif-badge');
-        if (!badge) return;
-        if (unread.length > 0) {
-            badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
-            badge.style.display = 'block';
-        } else {
-            badge.style.display = 'none';
+        const count  = unread.length;
+
+        // Badge en user chip (sidebar)
+        const badge = document.getElementById('notif-badge');
+        if (badge) {
+            if (count > 0) { badge.textContent = count > 9 ? '9+' : String(count); badge.style.display = 'block'; }
+            else { badge.style.display = 'none'; }
+        }
+
+        // Badge en pestaña Notificaciones de Mi Cuenta
+        const tabBadge = document.getElementById('cuenta-notif-badge');
+        if (tabBadge) {
+            if (count > 0) { tabBadge.textContent = count; tabBadge.style.display = ''; }
+            else { tabBadge.style.display = 'none'; }
         }
     } catch (e) { /* silencioso */ }
 }
@@ -1797,8 +1887,7 @@ function setupNotifModal() {
             const res = await window.electronAPI.getNotifications().catch(() => null);
             const unread = (res?.notifications || []).filter(n => !n.read_at);
             if (unread.length > 0) {
-                renderNotificationsModal(res.notifications);
-                openModal('modalNotificaciones');
+                openCuentaModalNotif();
             } else {
                 openCuentaModal();
             }
@@ -1812,9 +1901,22 @@ function openCuentaModal() {
     modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
     modalCuenta.querySelector('.cuenta-tab[data-tab="plan"]').classList.add('active');
     document.getElementById('cuenta-plan').style.display    = '';
+    document.getElementById('cuenta-notif').style.display   = 'none';
     document.getElementById('cuenta-soporte').style.display = 'none';
     openModal('modalCuenta');
     loadAccountData();
+}
+
+function openCuentaModalNotif() {
+    const modalCuenta = document.getElementById('modalCuenta');
+    modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
+    modalCuenta.querySelector('.cuenta-tab[data-tab="notif"]').classList.add('active');
+    document.getElementById('cuenta-plan').style.display    = 'none';
+    document.getElementById('cuenta-notif').style.display   = '';
+    document.getElementById('cuenta-soporte').style.display = 'none';
+    openModal('modalCuenta');
+    loadAccountData();
+    loadNotificationsTab();
 }
 
 function openCuentaModalSoporte() {
@@ -1822,6 +1924,7 @@ function openCuentaModalSoporte() {
     modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
     modalCuenta.querySelector('.cuenta-tab[data-tab="soporte"]').classList.add('active');
     document.getElementById('cuenta-plan').style.display    = 'none';
+    document.getElementById('cuenta-notif').style.display   = 'none';
     document.getElementById('cuenta-soporte').style.display = '';
     openModal('modalCuenta');
     loadAccountData();
