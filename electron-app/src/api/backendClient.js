@@ -294,7 +294,7 @@ class BackendClient {
      */
     async getNotifications() {
         try {
-            const response = await this.client.get('/notifications');
+            const response = await this.client.get('/client/notifications');
             return { success: true, notifications: response.data.notifications };
         } catch (error) {
             return { success: false, error: error.response?.data?.error || error.message };
@@ -306,7 +306,7 @@ class BackendClient {
      */
     async markNotificationRead(id) {
         try {
-            const response = await this.client.post(`/notifications/${id}/read`);
+            const response = await this.client.post(`/client/notifications/${id}/read`);
             return { success: true };
         } catch (error) {
             return { success: false, error: error.response?.data?.error || error.message };
