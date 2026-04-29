@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-28 (v2.4.22)
+> Última actualización: 2026-04-29
 
 ---
 
@@ -498,120 +498,78 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 
 ---
 
-## 📋 Pendientes por fase
-> Última actualización: 2026-04-28 (v2.4.22). Solo ítems pendientes — los completados se omiten.
-
-### FASE 1 — APLICACIÓN
-| # | Item | Prioridad |
-|---|---|---|
-| 1.3 | Code Signing installer `.exe` — Azure Trusted Signing (elimina warning SmartScreen) | Media |
+## 📋 Pendientes — Prioridad actual
+> Última actualización: 2026-04-29. Sin usuarios reales en producción — priorizar lo comercial antes que la infraestructura.
+> Regla: Bloques 6 y 7 son obligatorios **antes de abrir el registro público**, no antes. Bloques 1 a 3 se pueden avanzar esta semana.
 
 ---
 
-### FASE 2 — BACKEND
-| Item | Prioridad |
-|---|---|
-| Backups programados de PostgreSQL + procedimiento de restauración documentado | Alta |
-| Hardening: mover claves RSA y AES a variables de entorno (sacar de `keys/`) | Alta |
-| Análisis de seguridad profundo (Electron + backend) | Media |
-| Smoke tests / canary tests para endpoints críticos | Media |
-| Documentación técnica completa del backend | Media |
+### 🥇 BLOQUE 1 — Identidad de Marca & Landing
+- ⬜ Identidad de marca consolidada: copy unificado, tono consistente en todos los emails transaccionales
+- ⬜ Consistencia de nombre en instalador `.exe`, extensión Chrome Store y emails
+- ⬜ Landing: completar sección Planes con precios reales
+- ⬜ Términos y Condiciones de Uso + Política de Privacidad
 
 ---
 
-### FASE 3 — COMERCIAL
-| Item | Prioridad |
-|---|---|
-| Landing page: completar sección Planes con precios actualizados | Alta |
-| Términos y Condiciones de Uso + Política de Privacidad | Alta |
-| Definir precios finales BASIC · PRO · ENTERPRISE | Alta |
-| Documentar y publicar el flujo oficial de usuario (registro → trial → pago → activo) | Alta |
-| CUIT obligatorio en el registro — único por cuenta (1 CUIT = 1 usuario, constraint en DB) | Alta |
-| Definir política de cambio de plan: ¿se resetean usos? ¿hay proration? | Media |
+### 🥈 BLOQUE 2 — Planes & Precios
+- ⬜ Definir precios finales BASIC / PRO / ENTERPRISE
+- ⬜ Cerrar propuesta de valor por plan
+- ⬜ Publicar precios en landing y en flujo de registro/pago
 
 ---
 
-### FASE 4 — SOPORTE
-
-#### Soporte al usuario
-| Item | Prioridad |
-|---|---|
-| Conectar IA real al chat widget (actualmente respuesta placeholder) | Alta |
-| Pulir sistema de tickets: plantillas, notificaciones, SLA | Media |
-| Asistente IA integrado en flujo de tickets (sugerencias automáticas) | Media |
-| Documentación de ayuda para usuarios finales | Media |
-| Comunicación masiva con usuarios (emails, anuncios) | Baja |
-
-#### Historial y auditoría
-| Item | Prioridad |
-|---|---|
-| Nueva tabla `user_events`: registro cronológico de todo evento del ciclo de vida (registro, verificación, activación, rechazo, suspensión, cambio de plan, ajuste de uso, pagos, reactivación) | Alta |
-| Vista historial en panel admin: timeline por usuario, filtrable por tipo de evento | Alta |
-| Ajustes manuales (bonus, resets, cambios de plan, suspensiones) registrados en `user_events` además de `usage_adjustments` | Alta |
-
-#### Notificaciones in-app (admin → usuario)
-| Item | Prioridad |
-|---|---|
-| Nueva tabla `user_notifications`: título, mensaje, tipo (info/warning/error/success), link opcional, leída/no leída, usuario específico o broadcast | Alta |
-| Electron: modal al iniciar si hay notificaciones no leídas + badge en Mi Cuenta | Alta |
-| Mi Cuenta: sección "Notificaciones" con historial y estado de lectura | Media |
-| Admin panel: botón "✉️ Enviar notificación" en ficha de usuario | Alta |
-| Admin panel: vista de notificaciones enviadas con estado de lectura por usuario | Media |
-| Admin panel: opción de broadcast global a todos los usuarios | Media |
-| Notificaciones automáticas disparadas por eventos: suspensión, rechazo, pago fallido | Alta |
+### 🥉 BLOQUE 3 — Code Signing ← iniciar trámite ya (tiene tiempos externos)
+- ⬜ Crear cuenta Azure + Azure Trusted Signing (~USD 9/mes)
+- ⬜ Firmar instalador `.exe` (elimina warning SmartScreen en cada instalación nueva)
+- Docs: https://learn.microsoft.com/en-us/azure/trusted-signing/
 
 ---
 
-### FASE 5 — COBRANZA
-
-#### Infraestructura de pagos
-| Item | Prioridad |
-|---|---|
-| Integración MercadoPago / Stripe — suscripciones recurrentes vía webhook | Alta |
-| Nueva tabla `payments`: monto, proveedor, estado, período de facturación, provider_payment_id | Alta |
-| Nueva tabla `payment_events`: cargo, reembolso, fallo, disputa | Alta |
-| Facturación AFIP | Media |
-
-#### Flujo registro → trial → pago → activación
-| Item | Prioridad |
-|---|---|
-| Nuevo estado `pending_payment` en `registration_status` (pagó, espera aprobación admin) | Alta |
-| Portal de pago: usuario elige plan y paga al agotar trial o antes | Alta |
-| Admin: cola "Pagos pendientes de aprobación" con datos del usuario + pago confirmado | Alta |
-| Admin al aprobar: activa suscripción + email bienvenida + `user_event` | Alta |
-| Admin al rechazar — dos opciones: **Bloquear** (revoca acceso + reembolso automático) o **Mantener trial** (conserva usos restantes + notificación in-app) | Alta |
-| Admin puede activar/rechazar en cualquier momento del trial, incluso antes de que se agoten los 20 usos | Alta |
-| Email + notificación in-app en cada transición del ciclo de vida | Alta |
-
-#### Ciclo activo, renovación y baja
-| Item | Prioridad |
-|---|---|
-| Renovación mensual automática vía webhook (sin intervención del admin) | Alta |
-| Pago fallido: período de gracia 3 días → suspensión automática → notificación in-app + email | Alta |
-| Cancelación voluntaria: acceso hasta fin del período pagado → baja definitiva | Media |
-| Liberación del CUIT al confirmar baja definitiva (retención de datos 90 días) | Media |
-| Reactivación: nuevo registro con mismo CUIT → historial preservado en `user_events` | Media |
-| Reembolso: manual por admin o automático al rechazar → registrado en `payment_events` | Media |
+### 4️⃣ BLOQUE 4 — Pago & Facturación
+- ⬜ Decidir MercadoPago (recomendado, mercado local) vs Stripe como alternativa secundaria
+- ⬜ Portal de pago en Electron: selector de plan + formulario de pago
+- ⬜ Integración MercadoPago/Stripe: primer cobro + webhooks de renovación
+- ⬜ Campos DB a agregar:
+  ```sql
+  ALTER TABLE subscriptions ADD COLUMN payment_provider VARCHAR(20);
+  ALTER TABLE subscriptions ADD COLUMN external_subscription_id VARCHAR(100);
+  ALTER TABLE subscriptions ADD COLUMN next_billing_date TIMESTAMP WITH TIME ZONE;
+  ALTER TABLE subscriptions ADD COLUMN cancel_at TIMESTAMP WITH TIME ZONE;
+  ALTER TABLE subscriptions ADD COLUMN payment_grace_until TIMESTAMP WITH TIME ZONE;
+  ALTER TABLE users ADD COLUMN cuit_deleted_at TIMESTAMP WITH TIME ZONE;
+  ```
+- ⬜ Nuevas tablas: `payments` (historial de cobros) y `payment_events` (cargo, reembolso, fallo, disputa)
+- ⬜ Banner post-activación en Electron: "Configurá tu método de pago"
+- ⬜ Ciclo mensual automático (cron job en backend)
+- ⬜ Gracia 3 días en pago fallido + reintentos automáticos + suspensión automática
+- ⬜ Flujo de cancelación desde portal de usuario
+- ⬜ Retención CUIT 90 días + job de limpieza
+- ⬜ Facturación AFIP
 
 ---
 
-### FASE 6 — ENTORNO DE PRUEBAS
-| Item | Prioridad |
-|---|---|
-| Servidor staging (puerto separado, BD staging, `staging.api.procuradortool.com`) | Media |
-| Smoke tests automatizados pre-deploy | Media |
-| Proceso de release documentado paso a paso | Media |
-| Mecanismo de rollback definido y probado | Media |
+### 5️⃣ BLOQUE 5 — Soporte & FAQs & Chat & Tickets
+- ⬜ IA real en chat widget: integrar Intercom / Crisp / Tidio (no construir desde cero — SaaS en horas)
+- ⬜ Sistema de tickets mejorado: notificaciones email al usuario cuando admin responde, plantillas, filtros y prioridades
+- ⬜ Documentación de ayuda para usuarios finales (base de conocimiento vinculada al Asistente IA)
 
 ---
 
-### Tablas DB nuevas planificadas
-| Tabla | Fase | Propósito |
-|---|---|---|
-| `user_events` | 4 | Auditoría completa del ciclo de vida del usuario |
-| `user_notifications` | 4 | Comunicaciones admin → usuario con aviso in-app |
-| `payments` | 5 | Historial de cobros por suscripción |
-| `payment_events` | 5 | Eventos de cargo, reembolso, fallo, disputa |
+### 6️⃣ BLOQUE 6 — Seguridad & Backups & Tests & Documentación ← antes del lanzamiento público
+- ⬜ Backups programados PostgreSQL + procedimiento de restauración documentado
+- ⬜ Hardening: mover claves RSA y AES a variables de entorno (sacar de `keys/`)
+- ⬜ Análisis de seguridad profundo (Electron + backend)
+- ⬜ Smoke tests / canary tests para endpoints críticos
+- ⬜ Documentación técnica completa (endpoints, esquema DB, runbook de operaciones)
+
+---
+
+### 7️⃣ BLOQUE 7 — Entorno de Pruebas
+- ⬜ Servidor staging (proceso PM2 separado, BD `procurador_db_staging`, subdominio `staging.api.procuradortool.com`)
+- ⬜ Smoke tests automatizados pre-deploy
+- ⬜ Proceso de release documentado paso a paso
+- ⬜ Mecanismo de rollback definido y probado
 
 ### Flujo oficial de usuario (aprobado 2026-04-28)
 ```
