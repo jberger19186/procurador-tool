@@ -654,7 +654,7 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 
 ---
 
-## Plan de comercialización — 5 fases
+## Plan de comercialización — 6 fases
 
 ### FASE 1 — APLICACIÓN (en curso)
 **Objetivo:** producto terminado y pulido para el usuario final.
@@ -695,7 +695,7 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - Extensión publicada y aprobada en Chrome Web Store (v1.3.2)
 - Onboarding actualizado con enlace directo a la store
 - Aviso sobre warning de Chrome al instalar incluido en onboarding
-- Distribución CRX vieja del backend pendiente de limpiar (baja urgencia)
+- ⬜ Limpiar distribución CRX vieja del backend (`/extension/updates.xml`, `/extension/download`, `/extension/latest.crx`) — baja urgencia
 
 #### 1.3b Rediseño visual de los visores HTML ✅ COMPLETADO (sesión 2026-04-24)
 - `visorModal_template.html` (procuración): rediseñado — tabla plana con modal de movimientos, amber/Inter
@@ -784,124 +784,100 @@ Sección Sistema del sidebar:
 
 ---
 
+### FASE 2 — BACKEND (pendiente)
+**Objetivo:** infraestructura robusta, segura y documentada.
+
+- ⬜ Backups programados de PostgreSQL y procedimiento de restauración
+- ⬜ Hardening de secretos: mover claves RSA y AES a variables de entorno (sacar de `keys/`)
+- ⬜ Análisis de seguridad profundo (app Electron + backend)
+- ⬜ Smoke tests / canary tests para endpoints críticos
+- ⬜ Documentación técnica completa del backend (endpoints, esquema DB, flujos)
+
+---
+
 ### FASE 3 — COMERCIAL (en curso, paralela a Fase 1)
 **Objetivo:** presencia pública y capacidad de vender.
 
-#### 3.1 Página Web / Landing Page
+#### 3.1 Página Web / Landing Page ✅ COMPLETADO
 - Archivo fuente: `backend-server/public/landing/index.html`
 - URL: https://procuradortool.com
-- **Aclarar en toda la comunicación:** la app está dirigida solo a usuarios con credenciales del PJN
-- Sistema de diseño ya aplicado (amber, Inter, Crimson Pro)
+- Sistema de diseño aplicado (amber, Inter, Crimson Pro)
 - Estructura: Navbar · Hero · Problema · App Showcase · Funciones · Extensión · Cómo funciona · Seguridad/Privacidad · Planes · CTA · Footer
+- ⬜ **Agregar sección Planes con precios reales** (BASIC / PRO / ENTERPRISE / promos) — pendiente definir precios
 
-#### 3.2 Términos Legales
-- Términos y Condiciones de Uso
-- Política de Privacidad
-- Aviso de que las credenciales del PJN nunca pasan por los servidores
+#### 3.2 Términos Legales — PENDIENTE
+- ⬜ Términos y Condiciones de Uso
+- ⬜ Política de Privacidad
+- ⬜ Aviso de que las credenciales del PJN nunca pasan por los servidores
 
-#### 3.3 Estrategia de Venta y Planes
-- Promos de lanzamiento: EXTENSION_PROMO (USD 1/mes) y COMBO_PROMO (USD 9.99/mes)
-- Planes futuros: BASIC · PRO · ENTERPRISE (precios por definir)
+#### 3.3 Estrategia de Venta y Planes — PARCIALMENTE HECHO
+- ✅ Planes definidos en DB: EXTENSION_PROMO (USD 1/mes) · COMBO_PROMO (USD 9.99/mes) · BASIC · PRO · ENTERPRISE
+- ⬜ **Definir y publicar precios de BASIC / PRO / ENTERPRISE**
+- ⬜ Mostrar planes y precios en landing y en el flujo de registro
 - Registro en: `https://api.procuradortool.com/register/`
 
-#### 3.4 Registro y Recolección de Datos
-- Registro público con verificación de email
-- Flujo de activación manual por admin
-- Alertas de promo en Electron al registrarse
-- Ver plan pendiente: `C:\Users\JONATHAN\.claude\plans\cozy-cuddling-badger.md`
+#### 3.4 Registro y Recolección de Datos — PARCIALMENTE HECHO
+- ✅ Registro público con verificación de email
+- ✅ Flujo de activación manual por admin
+- ⬜ Alertas de promo en Electron al registrarse
+- ⬜ Ver plan pendiente: `C:\Users\JONATHAN\.claude\plans\cozy-cuddling-badger.md`
 
-#### 3.5 Identidad de Marca
+#### 3.5 Identidad de Marca ✅ COMPLETADO
 - Nombre: **Procurador SCW** / **ProcuradorTool**
 - Dominio: procuradortool.com
 - Publisher Chrome Store: Jonathan Berger
 
 ---
 
-### FASE 2 — BACKEND (pendiente)
-- Backups programados de PostgreSQL y procedimiento de restauración
-- Canary tests / smoke tests para endpoints críticos
-- Hardening de secretos: mover claves RSA y de cifrado a variables de entorno
-- Code Signing del instalador Electron (Azure Trusted Signing)
-- **Documentación técnica completa** del backend (endpoints, esquema DB, flujos)
-- **Análisis de seguridad profundo** (app Electron + backend)
+### FASE 4 — SOPORTE (en curso)
+**Objetivo:** atención al usuario eficiente con asistencia IA.
 
----
-
-### FASE 4 — SOPORTE (pendiente)
-- Comunicación masiva con usuarios
-- **Pulir sistema de tickets de soporte** — mejorar la experiencia de atención:
-  - Panel de admin para gestionar tickets de forma más eficiente (filtros, estados, prioridades)
+- ✅ Sistema de tickets básico (crear, responder, estados)
+- ✅ Notificaciones in-app admin → usuario (v2.5.x)
+- ⬜ **IA real en chat widget** ← **prioridad alta** — conectar endpoint al chat flotante de la app Electron (ver ítem 1.6 — placeholder listo)
+- ⬜ Mejoras al sistema de tickets:
+  - Notificaciones al usuario cuando el admin responde un ticket (email)
   - Respuestas predefinidas / plantillas para casos frecuentes
-  - Notificaciones al usuario cuando se responde un ticket (email)
-  - SLA básico: indicar tiempo estimado de respuesta al abrir un ticket
-  - Integración del Asistente IA en el flujo de tickets (sugerencia automática de respuesta para el admin)
-- Chat de soporte con IA / sistema de tickets con IA (Asistente IA — ver ítem 1.5)
-- Documentación de ayuda para usuarios finales (base de conocimiento vinculada al Asistente IA)
+  - Filtros y prioridades en el panel admin
+- ⬜ Documentación de ayuda para usuarios finales (base de conocimiento vinculada al Asistente IA)
 
 ---
 
 ### FASE 5 — COBRANZA (pendiente)
-- Integración MercadoPago / Stripe (suscripciones recurrentes)
-- Facturación AFIP
-- Soporte post-compra
-- Agregar a `subscriptions`: `external_subscription_id`, `payment_provider`, `next_billing_date`
+**Objetivo:** cobro automático de suscripciones.
+
+- ⬜ Integración MercadoPago / Stripe (suscripciones recurrentes)
+- ⬜ Agregar a `subscriptions`: `external_subscription_id`, `payment_provider`, `next_billing_date`
+- ⬜ Facturación AFIP
+- ⬜ Soporte post-compra
 
 ---
 
-### FASE 6 — ENTORNO DE PRUEBAS Y ACTUALIZACIÓN SEGURA (pendiente)
-
-**Objetivo:** tener un mecanismo controlado para desarrollar, probar y desplegar mejoras sin arriesgar la aplicación en producción.
+### FASE 6 — ENTORNO DE PRUEBAS Y RELEASE SEGURO (pendiente)
+**Objetivo:** mecanismo controlado para desarrollar, probar y desplegar sin arriesgar producción.
 
 #### 6.1 Entorno staging
+- Proceso PM2 separado en mismo VPS (puerto `3444`), DB `procurador_db_staging`
+- Subdominio `staging.api.procuradortool.com` (Nginx proxy)
+- App Electron en modo staging apunta a staging (variable de entorno al compilar)
 
-- Servidor o proceso separado en el mismo VPS (puerto distinto, ej: `3444`)
-- Base de datos de staging: `procurador_db_staging` con datos de prueba (nunca datos reales)
-- Subdominio: `staging.api.procuradortool.com` (Nginx proxy al puerto de staging)
-- PM2 proceso separado: `procurador-api-staging`
-- La app Electron en modo staging apunta a staging en lugar de producción (configurable por variable de entorno al compilar)
+#### 6.2 Smoke tests automatizados
+- `POST /auth/login` · `GET /client/scripts/available` · `GET /client/scripts/download/:name` · `POST /license/execution/start`
+- Ejecutar antes de cada deploy: `node test/smoke.js`
 
-#### 6.2 Cuentas y datos de prueba
-
-- Usuario admin de prueba con plan ENTERPRISE en staging
-- Set de expedientes de prueba conocidos (del PJN, que no cambien)
-- Scripts de seed para recrear el estado de prueba rápidamente
-
-#### 6.3 Builds de prueba (sin publicar a GitHub Releases)
-
-```powershell
-# Build local sin publicar — genera el installer en /dist pero NO sube a GitHub
-$env:GH_TOKEN="..."; Set-Location "electron-app"; npm run build
-# (build = electron-builder --win sin --publish)
-```
-
-- El installer de prueba se instala localmente y apunta a staging
-- Permite probar el flujo completo (login, procuración, scripts cifrados) antes de publicar
-
-#### 6.4 Smoke tests automatizados
-
-- Tests básicos de endpoints críticos del backend (canary tests):
-  - `POST /auth/login` → devuelve JWT
-  - `GET /client/scripts/available` → lista scripts
-  - `GET /client/scripts/download/:name` → descifra y verifica firma correctamente
-  - `POST /license/execution/start` → adquiere lock
-- Ejecutables antes de cada deploy: `node test/smoke.js`
-- Bloquear el deploy si algún test falla
-
-#### 6.5 Proceso de release seguro
-
+#### 6.3 Proceso de release seguro
 ```
 1. Desarrollar en rama feature/fix
-2. Probar en staging (build local + servidor staging)
+2. Probar en staging (build local apuntando a staging)
 3. Smoke tests ✅
-4. Merge a main
-5. Bump version + npm run release → GitHub Releases
-6. Verificar auto-update en una instalación de prueba antes de comunicar a usuarios
+4. Merge a main + bump version
+5. npm run release → GitHub Releases
+6. Verificar auto-update en instalación de prueba antes de comunicar a usuarios
 ```
 
-#### 6.6 Rollback
-
-- GitHub Releases conserva versiones anteriores → los usuarios pueden bajar manualmente si hay problema grave
-- El servidor puede revertirse con: `git checkout <hash-anterior> && pm2 restart procurador-api`
+#### 6.4 Rollback
+- GitHub Releases conserva versiones anteriores → usuarios pueden bajar manualmente
+- Backend: `git checkout <hash-anterior> && pm2 restart procurador-api`
 - Los scripts en BD tienen `version` — si hay rollback de código, reencriptar con la versión anterior
 
 ---
