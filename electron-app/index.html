@@ -206,12 +206,14 @@
 
         <!-- User chip -->
         <div class="sidebar-bottom">
-            <button class="user-chip" id="userChip">
+            <button class="user-chip" id="userChip" style="position:relative">
                 <div class="user-avatar" id="userAvatarInitials">?</div>
                 <div style="min-width:0">
                     <div class="user-name" id="userNameDisplay">Cargando...</div>
                     <div class="user-plan" id="userPlanDisplay">—</div>
                 </div>
+                <!-- Badge de notificaciones no leídas -->
+                <span id="notif-badge" style="display:none;position:absolute;top:6px;right:6px;background:#ef4444;color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:700;line-height:16px;text-align:center;">0</span>
             </button>
         </div>
     </aside>
@@ -641,6 +643,28 @@
         <div class="modal-footer">
             <button class="btn-secondary" id="btnCancelProcurarCustom">Cancelar</button>
             <button class="btn-primary" id="btnConfirmProcurarCustom" disabled>▶ Procesar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Notificaciones in-app -->
+<div class="modal" id="modalNotificaciones" style="display:none">
+    <div class="modal-content" style="max-width:520px">
+        <div class="modal-header">
+            <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:22px">🔔</span>
+                <div>
+                    <div class="modal-cfg-title">Notificaciones</div>
+                    <div class="modal-cfg-subtitle">Mensajes del equipo de Procurador SCW</div>
+                </div>
+            </div>
+            <button class="modal-close" id="btnCloseNotifs">✕</button>
+        </div>
+        <div class="modal-body" style="max-height:400px;overflow-y:auto">
+            <div id="notif-list"><!-- JS rellena --></div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right">
+            <button class="btn-secondary" id="btnMarkAllRead" style="font-size:13px">Marcar todas como leídas</button>
         </div>
     </div>
 </div>

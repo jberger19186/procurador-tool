@@ -161,10 +161,52 @@ async function sendPromoExpirationWarning(email, nombre, planName, daysLeft, pro
     );
 }
 
+/**
+ * Email al usuario cuando su solicitud es rechazada y bloqueada por el admin.
+ */
+async function sendAccountRejectedEmail(email, nombre, reason) {
+    await sendEmail(
+        email,
+        'Información sobre tu solicitud — Procurador SCW',
+        `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#d97706">Procurador SCW</h2>
+          <p>Hola <strong>${nombre}</strong>,</p>
+          <p>Tu solicitud de acceso a Procurador SCW no pudo ser aprobada en este momento.</p>
+          ${reason ? `<p><strong>Motivo:</strong> ${reason}</p>` : ''}
+          <p>Si tenés alguna consulta, podés contactarnos a través del soporte en la aplicación o escribirnos a <a href="mailto:soporte@procuradortool.com">soporte@procuradortool.com</a>.</p>
+          <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+        </div>
+        `
+    );
+}
+
+/**
+ * Email al usuario cuando su cuenta activa es suspendida por el admin.
+ */
+async function sendAccountSuspendedEmail(email, nombre, reason) {
+    await sendEmail(
+        email,
+        'Tu cuenta fue suspendida — Procurador SCW',
+        `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#d97706">Procurador SCW</h2>
+          <p>Hola <strong>${nombre}</strong>,</p>
+          <p>Tu cuenta en Procurador SCW ha sido suspendida por el administrador.</p>
+          ${reason ? `<p><strong>Motivo:</strong> ${reason}</p>` : ''}
+          <p>Si creés que se trata de un error o querés más información, contactanos a través del soporte en la aplicación o escribirnos a <a href="mailto:soporte@procuradortool.com">soporte@procuradortool.com</a>.</p>
+          <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+        </div>
+        `
+    );
+}
+
 module.exports = {
     sendEmail,
     sendEmailVerification,
     sendWelcomeEmail,
     sendAdminNewUserAlert,
     sendPromoExpirationWarning,
+    sendAccountRejectedEmail,
+    sendAccountSuspendedEmail,
 };

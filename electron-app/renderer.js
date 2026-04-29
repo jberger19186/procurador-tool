@@ -95,6 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
     checkQuotaAlert();  // Mostrar banner si cuota >= 80%
     window.electronAPI.getPromoStatus().then(ps => { if (ps) checkPromoAlert(ps); }).catch(() => {});
     setupChatWidget();
+    setupNotifModal();          // Configurar modal de notificaciones
+    checkUnreadNotifications(); // Verificar notificaciones in-app al iniciar
     addLog('info', 'Sistema iniciado correctamente ✅');
 });
 
@@ -414,8 +416,7 @@ function setupSidebar() {
         });
     }
 
-    // User chip → abrir modal de cuenta
-    document.getElementById('userChip')?.addEventListener('click', openCuentaModal);
+    // User chip → manejado por setupNotifModal (abre notificaciones si hay no leídas, o cuenta)
 
     // Campo fecha límite en sidebar → guardar en config al cambiar
     document.getElementById('sidebarFechaLimite')?.addEventListener('change', async function () {
@@ -1665,6 +1666,128 @@ function setupCuentaModal() {
         if (!confirmar) return;
         await window.electronAPI.logout();
     });
+}
+
+// ── Notificaciones in-app ────────────────────────────────────────────────────
+
+async function checkUnreadNotifications() {
+    try {
+        const res = await window.electronAPI.getNotifications();
+        if (!res?.success) return;
+        const unread = (res.notifications || []).filter(n => !n.read_at);
+        const badge  = document.getElementById('notif-badge');
+        if (badge) {
+            if (unread.length > 0) {
+                badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
+                badge.style.display = 'block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+        if (unread.length > 0) {
+            renderNotificationsModal(res.notifications);
+            openModal('modalNotificaciones');
+        }
+    } catch (e) { /* silencioso */ }
+}
+
+function renderNotificationsModal(notifications) {
+    const list = document.getElementById('notif-list');
+    if (!list) return;
+
+    const TYPE_ICON = { info: 'ℹ️', warning: '⚠️', error: '🚫', success: '✅' };
+    const TYPE_COLOR = { info: '#3b82f6', warning: '#d97706', error: '#ef4444', success: '#10b981' };
+
+    if (!notifications || notifications.length === 0) {
+        list.innerHTML = `<p style="color:var(--text-3);text-align:center;padding:20px">No hay notificaciones</p>`;
+        return;
+    }
+
+    list.innerHTML = notifications.map(n => {
+        const icon  = TYPE_ICON[n.type]  || 'ℹ️';
+        const color = TYPE_COLOR[n.type] || '#3b82f6';
+        const date  = new Date(n.created_at).toLocaleDateString('es-AR', { day:'2-digit', month:'short', year:'numeric' });
+        const unread = !n.read_at;
+        return `
+        <div class="notif-item ${unread ? 'notif-unread' : ''}" data-id="${n.id}"
+             style="display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:${unread ? 'rgba(217,119,6,0.06)' : 'transparent'}">
+            <div style="font-size:20px;flex-shrink:0;line-height:1.3">${icon}</div>
+            <div style="flex:1;min-width:0">
+                <div style="font-weight:${unread ? 700 : 500};font-size:14px;color:var(--text-1);margin-bottom:4px">${escapeHtml(n.title)}</div>
+                <div style="font-size:13px;color:var(--text-2);line-height:1.5">${escapeHtml(n.message)}</div>
+                <div style="font-size:11px;color:var(--text-3);margin-top:6px">${date}</div>
+            </div>
+            ${unread ? `<button class="notif-mark-read" data-id="${n.id}" title="Marcar como leída"
+                style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-3);font-size:18px;align-self:flex-start;padding:0">✓</button>` : ''}
+        </div>`;
+    }).join('');
+
+    // Marcar como leída al click en ✓
+    list.querySelectorAll('.notif-mark-read').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.id;
+            await window.electronAPI.markNotificationRead(id);
+            await refreshNotifBadge();
+            btn.closest('.notif-item').style.background = 'transparent';
+            btn.closest('.notif-item').classList.remove('notif-unread');
+            btn.remove();
+        });
+    });
+}
+
+async function refreshNotifBadge() {
+    try {
+        const res = await window.electronAPI.getNotifications();
+        if (!res?.success) return;
+        const unread = (res.notifications || []).filter(n => !n.read_at);
+        const badge  = document.getElementById('notif-badge');
+        if (!badge) return;
+        if (unread.length > 0) {
+            badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
+            badge.style.display = 'block';
+        } else {
+            badge.style.display = 'none';
+        }
+    } catch (e) { /* silencioso */ }
+}
+
+// ── setupNotifModal ──────────────────────────────────────────────────────────
+function setupNotifModal() {
+    const modal = document.getElementById('modalNotificaciones');
+    if (!modal) return;
+
+    // Cerrar con botón X
+    document.getElementById('btnCloseNotifs')?.addEventListener('click', () => closeModal('modalNotificaciones'));
+
+    // Marcar todas como leídas
+    document.getElementById('btnMarkAllRead')?.addEventListener('click', async () => {
+        const items = modal.querySelectorAll('.notif-item.notif-unread');
+        for (const item of items) {
+            const id = item.dataset.id;
+            if (id) await window.electronAPI.markNotificationRead(id);
+        }
+        await refreshNotifBadge();
+        modal.querySelectorAll('.notif-item').forEach(item => {
+            item.style.background = 'transparent';
+            item.classList.remove('notif-unread');
+            item.querySelector('.notif-mark-read')?.remove();
+        });
+    });
+
+    // Click en el user chip abre las notificaciones si hay no leídas, sino la cuenta
+    const userChip = document.getElementById('userChip');
+    if (userChip) {
+        userChip.addEventListener('click', async () => {
+            const res = await window.electronAPI.getNotifications().catch(() => null);
+            const unread = (res?.notifications || []).filter(n => !n.read_at);
+            if (unread.length > 0) {
+                renderNotificationsModal(res.notifications);
+                openModal('modalNotificaciones');
+            } else {
+                openCuentaModal();
+            }
+        });
+    }
 }
 
 function openCuentaModal() {

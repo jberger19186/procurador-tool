@@ -222,6 +222,9 @@ router.post('/register', registerLimiter, async (req, res) => {
 
     } catch (error) {
         if (error.code === '23505') {
+            if (error.detail && error.detail.includes('cuit')) {
+                return res.status(400).json({ error: 'Este CUIT ya tiene una cuenta registrada. Contactá al soporte si creés que es un error.' });
+            }
             return res.status(400).json({ error: 'El email ya está registrado' });
         }
         logger.error('Error en registro:', error.message);

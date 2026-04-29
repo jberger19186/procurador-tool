@@ -1964,6 +1964,23 @@ ipcMain.handle('add-ticket-comment', async (event, id, message) => {
     }
 });
 
+// ─── Notificaciones in-app ────────────────────────────────────────────────────
+ipcMain.handle('get-notifications', async () => {
+    try {
+        return await authManager.backendClient.getNotifications();
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('mark-notification-read', async (event, id) => {
+    try {
+        return await authManager.backendClient.markNotificationRead(id);
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
 // ============ MONITOR DE PARTES ============
 
 // ─── Generador de visor HTML para resultados del monitor ──────────────────────

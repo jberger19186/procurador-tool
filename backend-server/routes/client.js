@@ -681,4 +681,44 @@ router.post('/heartbeat', authenticateToken, async (req, res) => {
     }
 });
 
+// ==================== NOTIFICACIONES IN-APP ====================
+
+// GET /client/notifications — traer notificaciones no leídas del usuario
+router.get('/notifications', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+    try {
+        const result = await db.query(`
+            SELECT id, title, message, type, read_at, created_at
+            FROM user_notifications
+            WHERE (user_id = $1 OR user_id IS NULL)
+              AND (expires_at IS NULL OR expires_at > NOW())
+            ORDER BY created_at DESC
+            LIMIT 20
+        `, [userId]);
+        res.json({ success: true, notifications: result.rows });
+    } catch (error) {
+        console.error('Error obteniendo notificaciones:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// POST /client/notifications/:id/read — marcar notificación como leída
+router.post('/notifications/:id/read', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+    const { id } = req.params;
+    try {
+        await db.query(`
+            UPDATE user_notifications
+            SET read_at = NOW()
+            WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) AND read_at IS NULL
+        `, [id, userId]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error marcando notificación:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 module.exports = router;

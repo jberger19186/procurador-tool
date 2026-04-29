@@ -115,6 +115,10 @@ try {
         createTicket: (category, title, description) => ipcRenderer.invoke('create-ticket', category, title, description),
         addTicketComment: (id, message) => ipcRenderer.invoke('add-ticket-comment', id, message),
 
+        // ─── Notificaciones in-app ────────────────────────────────────────────
+        getNotifications: () => ipcRenderer.invoke('get-notifications'),
+        markNotificationRead: (id) => ipcRenderer.invoke('mark-notification-read', id),
+
         // ============ MONITOR DE PARTES ============
         runMonitoreo: (opts) => ipcRenderer.invoke('run-monitoreo', opts),
         monitorGetPartes: () => ipcRenderer.invoke('monitor-get-partes'),

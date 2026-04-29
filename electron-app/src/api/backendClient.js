@@ -290,6 +290,30 @@ class BackendClient {
     }
 
     /**
+     * Obtener notificaciones in-app del usuario
+     */
+    async getNotifications() {
+        try {
+            const response = await this.client.get('/notifications');
+            return { success: true, notifications: response.data.notifications };
+        } catch (error) {
+            return { success: false, error: error.response?.data?.error || error.message };
+        }
+    }
+
+    /**
+     * Marcar notificación como leída
+     */
+    async markNotificationRead(id) {
+        try {
+            const response = await this.client.post(`/notifications/${id}/read`);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.response?.data?.error || error.message };
+        }
+    }
+
+    /**
      * Adquirir lock de ejecución multi-dispositivo
      */
     async startExecution(scriptName) {

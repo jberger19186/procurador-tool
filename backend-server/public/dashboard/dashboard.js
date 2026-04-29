@@ -320,17 +320,19 @@ window.filterUsers = function() {
 // ───── DETALLE USUARIO ─────
 async function renderUserDetail(userId) {
     try {
-        const [uData, tData, mData, plansData] = await Promise.all([
+        const [uData, tData, mData, plansData, eventsData] = await Promise.all([
             apiFetch(`/admin/users/${userId}`),
             apiFetch(`/admin/tickets?userId=${userId}&limit=20`),
             apiFetch(`/admin/monitor/partes?userId=${userId}`),
-            apiFetch('/admin/plans')
+            apiFetch('/admin/plans'),
+            apiFetch(`/admin/users/${userId}/events`).catch(() => ({ events: [] }))
         ]);
         const u = uData.user;
         const logs = uData.recentLogs;
         const tickets = tData.tickets;
         const partes = mData.partes || [];
         const allPlans = (plansData.plans || []).filter(p => p.active);
+        const events = eventsData.events || [];
 
         document.getElementById('content').innerHTML = `
         <a class="back-btn" onclick="navigate(prevPage || 'users')">← Volver a ${prevPage === 'pending-users' ? 'Pendientes' : 'Usuarios'}</a>
@@ -410,7 +412,7 @@ async function renderUserDetail(userId) {
                             <button class="btn btn-sm btn-primary" onclick="updateSub(${u.id})">Aplicar</button>
                         </div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap">
-                            ${u.status === 'active' ? `<button class="btn btn-sm btn-danger" onclick="suspendSub(${u.id})">⏸ Suspender</button>` : `<button class="btn btn-sm btn-success" onclick="reactivateSub(${u.id})">▶ Reactivar</button>`}
+                            ${u.status === 'active' ? `<button class="btn btn-sm btn-danger" onclick="suspendSubWithReason(${u.id})">⏸ Suspender</button>` : `<button class="btn btn-sm btn-success" onclick="reactivateSub(${u.id})">▶ Reactivar</button>`}
                             <button class="btn btn-sm btn-secondary" onclick="resetUsage(${u.id})">🔄 Resetear uso</button>
                         </div>
                     </div>
@@ -491,8 +493,12 @@ async function renderUserDetail(userId) {
                     <button class="btn btn-sm btn-success" onclick="verifyEmailManual(${u.id})" style="font-size:12px;padding:4px 10px">✅ Verificar email</button>
                     <button class="btn btn-sm btn-secondary" onclick="resendVerification(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">✉️ Reenviar verificación</button>
                     <button class="btn btn-sm btn-primary" onclick="verifyAndActivateUser(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">⚡ Verificar y activar</button>
+                    <button class="btn btn-sm btn-danger" onclick="rejectUser(${u.id},'block')" style="font-size:12px;padding:4px 10px" title="Bloquea el acceso completamente">🚫 Rechazar y bloquear</button>
+                    <button class="btn btn-sm btn-warning" onclick="rejectUser(${u.id},'keep_trial')" style="font-size:12px;padding:4px 10px" title="Rechaza pero mantiene los usos de prueba">⚠️ Rechazar (mantener trial)</button>
                     ` : u.registration_status === 'pending_activation' ? `
                     <button class="btn btn-sm btn-primary" onclick="activateUserFromDetail(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">⚡ Activar cuenta</button>
+                    <button class="btn btn-sm btn-danger" onclick="rejectUser(${u.id},'block')" style="font-size:12px;padding:4px 10px" title="Bloquea el acceso completamente">🚫 Rechazar y bloquear</button>
+                    <button class="btn btn-sm btn-warning" onclick="rejectUser(${u.id},'keep_trial')" style="font-size:12px;padding:4px 10px" title="Rechaza pero mantiene los usos de prueba">⚠️ Rechazar (mantener trial)</button>
                     ` : ''}
                 </div>
             </div>
@@ -595,7 +601,7 @@ async function renderUserDetail(userId) {
         </div>
 
         <!-- Logs recientes -->
-        <div class="card">
+        <div class="card section-gap">
             <div class="card-header"><h3>📋 Últimas ejecuciones (${logs.length})</h3></div>
             <div class="card-body" style="padding:0">
                 ${logs.length === 0 ? '<div class="empty-state"><p>Sin ejecuciones</p></div>' : `
@@ -609,6 +615,63 @@ async function renderUserDetail(userId) {
                         <td style="font-size:12px;color:var(--text-muted)">${l.error_message || ''}</td>
                     </tr>`).join('')}
                     </tbody></table>
+                </div>`}
+            </div>
+        </div>
+
+        <!-- Enviar notificación -->
+        <div class="card section-gap">
+            <div class="card-header"><h3>📢 Enviar Notificación</h3></div>
+            <div class="card-body">
+                <div style="display:flex;flex-direction:column;gap:8px;max-width:600px">
+                    <div style="display:flex;gap:8px">
+                        <div style="flex:1">
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Título</label>
+                            <input type="text" id="notif-title" placeholder="Título de la notificación" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Tipo</label>
+                            <select id="notif-type" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                                <option value="info">ℹ️ Info</option>
+                                <option value="warning">⚠️ Aviso</option>
+                                <option value="success">✅ Éxito</option>
+                                <option value="error">🚫 Error</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Mensaje</label>
+                        <textarea id="notif-message" rows="3" placeholder="Texto del mensaje..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical"></textarea>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-primary" onclick="sendNotifToUser(${u.id})">📤 Enviar notificación</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historial de eventos -->
+        <div class="card section-gap">
+            <div class="card-header"><h3>📅 Historial de Eventos (${events.length})</h3></div>
+            <div class="card-body" style="padding:0">
+                ${events.length === 0 ? '<div class="empty-state"><p>Sin eventos registrados</p></div>' : `
+                <div style="padding:12px">
+                    ${events.map(ev => {
+                        const ICONS = { activated:'✅', rejected_blocked:'🚫', rejected_keep_trial:'⚠️', suspended:'⏸', reactivated:'▶️', plan_changed:'💳', email_verified:'📧', system:'⚙️' };
+                        const icon = ICONS[ev.event_type] || '📝';
+                        const details = ev.details ? (typeof ev.details === 'string' ? JSON.parse(ev.details) : ev.details) : {};
+                        const reasonStr = details.reason ? `<br><span style="color:var(--text-muted);font-size:12px">Motivo: ${escHtml(details.reason)}</span>` : '';
+                        return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+                            <div style="font-size:18px;flex-shrink:0">${icon}</div>
+                            <div style="flex:1;min-width:0">
+                                <div style="font-weight:600;font-size:13px;color:var(--text-primary)">${escHtml(ev.event_type.replace(/_/g,' '))}</div>
+                                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                                    ${ev.actor_email ? `Por: ${escHtml(ev.actor_email)} &nbsp;·&nbsp;` : ''} ${fmtDate(ev.created_at)}
+                                    ${reasonStr}
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('')}
                 </div>`}
             </div>
         </div>`;
@@ -663,6 +726,46 @@ window.suspendSub = async function(id) {
         await apiFetch(`/admin/subscriptions/${id}/suspend`, 'POST');
         showAlert(document.getElementById('ud-alert'), 'Suscripción suspendida.', 'success');
         setTimeout(() => navigate('user-detail', id), 1200);
+    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
+};
+
+window.suspendSubWithReason = async function(id) {
+    const reason = prompt('Motivo de la suspensión (opcional, se envía al usuario):');
+    if (reason === null) return; // canceló
+    try {
+        await apiFetch(`/admin/subscriptions/${id}/suspend`, 'POST', { reason: reason.trim() });
+        showAlert(document.getElementById('ud-alert'), 'Suscripción suspendida correctamente.', 'success');
+        setTimeout(() => navigate('user-detail', id), 1200);
+    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
+};
+
+window.rejectUser = async function(id, mode) {
+    const modeLabel = mode === 'block' ? 'RECHAZAR Y BLOQUEAR' : 'RECHAZAR (mantener trial)';
+    const reason = prompt(`${modeLabel}\n\nMotivo (opcional, se notifica al usuario):`);
+    if (reason === null) return; // canceló
+    try {
+        await apiFetch(`/admin/users/${id}/reject`, 'POST', { mode, reason: reason.trim() });
+        const msg = mode === 'block'
+            ? 'Usuario rechazado y bloqueado. Se envió email de notificación.'
+            : 'Usuario rechazado. Conserva sus usos de prueba restantes.';
+        showAlert(document.getElementById('ud-alert'), msg, mode === 'block' ? 'error' : 'warning');
+        setTimeout(() => navigate('user-detail', id), 1500);
+    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
+};
+
+window.sendNotifToUser = async function(userId) {
+    const title   = document.getElementById('notif-title')?.value?.trim();
+    const message = document.getElementById('notif-message')?.value?.trim();
+    const type    = document.getElementById('notif-type')?.value || 'info';
+    if (!title || !message) {
+        showAlert(document.getElementById('ud-alert'), 'Completá el título y el mensaje.', 'error');
+        return;
+    }
+    try {
+        await apiFetch('/admin/notifications', 'POST', { userId, title, message, type });
+        showAlert(document.getElementById('ud-alert'), 'Notificación enviada correctamente.', 'success');
+        document.getElementById('notif-title').value   = '';
+        document.getElementById('notif-message').value = '';
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
 window.reactivateSub = async function(id) {
