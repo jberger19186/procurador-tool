@@ -504,9 +504,57 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
-        <!-- Ajustes de uso por subsistema -->
-        <div class="card section-gap">
-            <div class="card-header"><h3>🎁 Ajustes Manuales de Uso</h3></div>
+        <!-- ═══════════════════════════════════════════════════════════════════
+             ORDEN: Tickets · Ajustes Manuales · Enviar Notificación · Historial
+                    · Partes Monitoreo · Últimas Ejecuciones
+             Todas colapsables (excepto Enviar Notificación). Click en título.
+             ═══════════════════════════════════════════════════════════════════ -->
+
+        ${(() => {
+            // Tickets activos = no resolved ni closed
+            const activeTickets = tickets.filter(t => t.status !== 'resolved' && t.status !== 'closed');
+            const previewTickets = activeTickets.slice(0, 5);
+            const ticketRow = t => `<tr>
+                <td>#${t.id}</td>
+                <td>${catBadge(t.category)}</td>
+                <td>${t.title}</td>
+                <td>${ticketStatusBadge(t.status)}</td>
+                <td>${priorityBadge(t.priority)}</td>
+                <td>${fmtDate(t.created_at)}</td>
+                <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
+            </tr>`;
+            const ticketTable = rows => `<div class="table-wrapper">
+                <table><thead><tr><th>#</th><th>Categoría</th><th>Título</th><th>Estado</th><th>Prioridad</th><th>Fecha</th><th></th></tr></thead>
+                <tbody>${rows.map(ticketRow).join('')}</tbody></table>
+            </div>`;
+
+            return `
+            <!-- TICKETS (preview-mode: 5 activos) -->
+            <div class="card section-gap collapsible preview-mode">
+                <div class="card-header" onclick="toggleSection(this)">
+                    <h3>🎫 Tickets — ${activeTickets.length} activo${activeTickets.length===1?'':'s'} / ${tickets.length} total <span class="chevron">▼</span></h3>
+                </div>
+                <div class="card-body" style="padding:0">
+                    <div class="preview-view">
+                        ${previewTickets.length === 0
+                            ? '<div class="empty-state"><p>Sin tickets activos</p></div>'
+                            : ticketTable(previewTickets) + (activeTickets.length > 5
+                                ? `<div style="padding:10px 16px;background:var(--bg);text-align:center;font-size:12px;color:var(--text-muted)">+ ${activeTickets.length - 5} ticket${activeTickets.length-5===1?'':'s'} activo${activeTickets.length-5===1?'':'s'} más — click en el título para ver todos</div>`
+                                : '')
+                        }
+                    </div>
+                    <div class="full-view">
+                        ${tickets.length === 0 ? '<div class="empty-state"><p>Sin tickets</p></div>' : ticketTable(tickets)}
+                    </div>
+                </div>
+            </div>`;
+        })()}
+
+        <!-- AJUSTES MANUALES DE USO (colapsada) -->
+        <div class="card section-gap collapsible">
+            <div class="card-header" onclick="toggleSection(this)">
+                <h3>🎁 Ajustes Manuales de Uso <span class="chevron">▶</span></h3>
+            </div>
             <div class="card-body">
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
                     <div>
@@ -543,83 +591,7 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
-        <!-- Tickets del usuario -->
-        <div class="card section-gap">
-            <div class="card-header">
-                <h3>🎫 Tickets (${tickets.length})</h3>
-                <a class="btn btn-sm btn-secondary" onclick="navigate('tickets')">Ver todos</a>
-            </div>
-            <div class="card-body" style="padding:0">
-                ${tickets.length === 0 ? '<div class="empty-state"><p>Sin tickets</p></div>' : `
-                <div class="table-wrapper">
-                    <table><thead><tr><th>#</th><th>Categoría</th><th>Título</th><th>Estado</th><th>Prioridad</th><th>Fecha</th><th></th></tr></thead>
-                    <tbody>${tickets.map(t => `<tr>
-                        <td>#${t.id}</td>
-                        <td>${catBadge(t.category)}</td>
-                        <td>${t.title}</td>
-                        <td>${ticketStatusBadge(t.status)}</td>
-                        <td>${priorityBadge(t.priority)}</td>
-                        <td>${fmtDate(t.created_at)}</td>
-                        <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
-                    </tr>`).join('')}
-                    </tbody></table>
-                </div>`}
-            </div>
-        </div>
-
-        <!-- Partes monitoreadas -->
-        <div class="card section-gap">
-            <div class="card-header">
-                <h3>🔍 Partes en Monitoreo (${partes.length})</h3>
-            </div>
-            <div class="card-body" style="padding:0">
-                ${partes.length === 0
-                    ? '<div class="empty-state"><p>Sin partes monitoreadas</p></div>'
-                    : `<div class="table-wrapper">
-                        <table><thead><tr>
-                            <th>Parte</th>
-                            <th>Jurisdicción</th>
-                            <th>Línea base</th>
-                            <th>Exp. confirmados</th>
-                            <th>Novedades pendientes</th>
-                            <th>Creada</th>
-                            <th></th>
-                        </tr></thead>
-                        <tbody>${partes.map(p => `<tr>
-                            <td>${p.nombre_parte}</td>
-                            <td><span class="badge badge-blue">${p.jurisdiccion_sigla || p.jurisdiccion_codigo || '—'}</span></td>
-                            <td>${p.tiene_linea_base ? '<span class="badge badge-green">Con base</span>' : '<span class="badge badge-gray">Sin base</span>'}</td>
-                            <td style="text-align:center">${p.exp_confirmados ?? 0}</td>
-                            <td style="text-align:center">${p.novedades_pendientes > 0 ? `<span class="badge badge-orange">${p.novedades_pendientes}</span>` : '0'}</td>
-                            <td>${fmtDate(p.fecha_creacion)}</td>
-                            <td><button class="btn btn-sm btn-danger" onclick="deleteMonitorParte(${p.id},'${p.nombre_parte.replace(/'/g, "\\'")}',${userId})">✕</button></td>
-                        </tr>`).join('')}
-                        </tbody></table>
-                    </div>`
-                }
-            </div>
-        </div>
-
-        <!-- Logs recientes -->
-        <div class="card section-gap">
-            <div class="card-header"><h3>📋 Últimas ejecuciones (${logs.length})</h3></div>
-            <div class="card-body" style="padding:0">
-                ${logs.length === 0 ? '<div class="empty-state"><p>Sin ejecuciones</p></div>' : `
-                <div class="table-wrapper">
-                    <table><thead><tr><th>Script</th><th>Subsistema</th><th>Resultado</th><th>Fecha</th><th>Error</th></tr></thead>
-                    <tbody>${logs.map(l => `<tr>
-                        <td>${l.script_name || '—'}</td>
-                        <td style="font-size:11px;color:var(--text-muted)">${l.subsystem || '—'}</td>
-                        <td>${l.success ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">Error</span>'}</td>
-                        <td>${fmtDate(l.execution_date)}</td>
-                        <td style="font-size:12px;color:var(--text-muted)">${l.error_message || ''}</td>
-                    </tr>`).join('')}
-                    </tbody></table>
-                </div>`}
-            </div>
-        </div>
-
-        <!-- Enviar notificación -->
+        <!-- ENVIAR NOTIFICACIÓN (siempre visible, no colapsada) -->
         <div class="card section-gap">
             <div class="card-header"><h3>📢 Enviar Notificación</h3></div>
             <div class="card-body">
@@ -650,14 +622,16 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
-        <!-- Historial de eventos -->
-        <div class="card section-gap">
-            <div class="card-header"><h3>📅 Historial de Eventos (${events.length})</h3></div>
+        <!-- HISTORIAL DE EVENTOS (colapsada) -->
+        <div class="card section-gap collapsible">
+            <div class="card-header" onclick="toggleSection(this)">
+                <h3>📅 Historial de Eventos (${events.length}) <span class="chevron">▶</span></h3>
+            </div>
             <div class="card-body" style="padding:0">
                 ${events.length === 0 ? '<div class="empty-state"><p>Sin eventos registrados</p></div>' : `
                 <div style="padding:12px">
                     ${events.map(ev => {
-                        const ICONS = { activated:'✅', rejected_blocked:'🚫', rejected_keep_trial:'⚠️', suspended:'⏸', reactivated:'▶️', plan_changed:'💳', email_verified:'📧', system:'⚙️' };
+                        const ICONS = { activated:'✅', rejected_blocked:'🚫', rejected_keep_trial:'⚠️', suspended:'⏸', reactivated:'▶️', plan_changed:'💳', email_verified:'📧', usage_adjusted:'🎁', notification_sent:'📢', system:'⚙️' };
                         const icon = ICONS[ev.event_type] || '📝';
                         const reasonStr = ev.reason ? `<br><span style="color:var(--text-muted);font-size:12px">Motivo: ${escHtml(ev.reason)}</span>` : '';
                         return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
@@ -673,7 +647,63 @@ async function renderUserDetail(userId) {
                     }).join('')}
                 </div>`}
             </div>
-        </div>`;
+        </div>
+
+        <!-- PARTES EN MONITOREO (colapsada) -->
+        <div class="card section-gap collapsible">
+            <div class="card-header" onclick="toggleSection(this)">
+                <h3>🔍 Partes en Monitoreo (${partes.length}) <span class="chevron">▶</span></h3>
+            </div>
+            <div class="card-body" style="padding:0">
+                ${partes.length === 0
+                    ? '<div class="empty-state"><p>Sin partes monitoreadas</p></div>'
+                    : `<div class="table-wrapper">
+                        <table><thead><tr>
+                            <th>Parte</th>
+                            <th>Jurisdicción</th>
+                            <th>Línea base</th>
+                            <th>Exp. confirmados</th>
+                            <th>Novedades pendientes</th>
+                            <th>Creada</th>
+                            <th></th>
+                        </tr></thead>
+                        <tbody>${partes.map(p => `<tr>
+                            <td>${p.nombre_parte}</td>
+                            <td><span class="badge badge-blue">${p.jurisdiccion_sigla || p.jurisdiccion_codigo || '—'}</span></td>
+                            <td>${p.tiene_linea_base ? '<span class="badge badge-green">Con base</span>' : '<span class="badge badge-gray">Sin base</span>'}</td>
+                            <td style="text-align:center">${p.exp_confirmados ?? 0}</td>
+                            <td style="text-align:center">${p.novedades_pendientes > 0 ? `<span class="badge badge-orange">${p.novedades_pendientes}</span>` : '0'}</td>
+                            <td>${fmtDate(p.fecha_creacion)}</td>
+                            <td><button class="btn btn-sm btn-danger" onclick="deleteMonitorParte(${p.id},'${p.nombre_parte.replace(/'/g, "\\'")}',${userId})">✕</button></td>
+                        </tr>`).join('')}
+                        </tbody></table>
+                    </div>`
+                }
+            </div>
+        </div>
+
+        <!-- ÚLTIMAS EJECUCIONES (colapsada) -->
+        <div class="card section-gap collapsible">
+            <div class="card-header" onclick="toggleSection(this)">
+                <h3>📋 Últimas Ejecuciones (${logs.length}) <span class="chevron">▶</span></h3>
+            </div>
+            <div class="card-body" style="padding:0">
+                ${logs.length === 0 ? '<div class="empty-state"><p>Sin ejecuciones</p></div>' : `
+                <div class="table-wrapper">
+                    <table><thead><tr><th>Script</th><th>Subsistema</th><th>Resultado</th><th>Fecha</th><th>Error</th></tr></thead>
+                    <tbody>${logs.map(l => `<tr>
+                        <td>${l.script_name || '—'}</td>
+                        <td style="font-size:11px;color:var(--text-muted)">${l.subsystem || '—'}</td>
+                        <td>${l.success ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">Error</span>'}</td>
+                        <td>${fmtDate(l.execution_date)}</td>
+                        <td style="font-size:12px;color:var(--text-muted)">${l.error_message || ''}</td>
+                    </tr>`).join('')}
+                    </tbody></table>
+                </div>`}
+            </div>
+        </div>
+
+`;
 
         // Cargar historial de ajustes
         loadAdjustmentHistory(userId);
@@ -681,6 +711,21 @@ async function renderUserDetail(userId) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
+
+// Toggle de secciones colapsables del detalle de usuario
+window.toggleSection = function(headerEl) {
+    const card = headerEl.closest('.card');
+    if (!card) return;
+    card.classList.toggle('expanded');
+    const chev = headerEl.querySelector('.chevron');
+    if (chev) {
+        chev.textContent = card.classList.contains('expanded') ? '▼' : '▶';
+        // Tickets en preview-mode usa otra flecha (siempre algo visible)
+        if (card.classList.contains('preview-mode')) {
+            chev.textContent = card.classList.contains('expanded') ? '▲' : '▼';
+        }
+    }
+};
 
 // User detail actions
 window.unbindHardware = async function(id) {

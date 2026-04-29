@@ -210,6 +210,26 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; display: fl
 .card-header h3 { font-size: 15px; font-weight: 600; }
 .card-body { padding: 20px; }
 
+/* ===== COLLAPSIBLE CARDS ===== */
+.card.collapsible > .card-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+}
+.card.collapsible > .card-header:hover { background: var(--bg, #f9fafb); }
+.card.collapsible .chevron {
+    display: inline-block;
+    margin-left: 8px;
+    color: var(--text-muted, #6b7280);
+    font-size: 12px;
+    transition: transform 0.15s;
+}
+.card.collapsible:not(.expanded):not(.preview-mode) > .card-body { display: none; }
+.card.collapsible.preview-mode > .card-body > .preview-view { display: block; }
+.card.collapsible.preview-mode > .card-body > .full-view    { display: none;  }
+.card.collapsible.preview-mode.expanded > .card-body > .preview-view { display: none;  }
+.card.collapsible.preview-mode.expanded > .card-body > .full-view    { display: block; }
+
 /* ===== STAT CARDS ===== */
 .stats-grid {
     display: grid;
