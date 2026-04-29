@@ -733,9 +733,14 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
         `, [userId, planData.name, planData.id, expiresAt, usageLimit]);
 
         logger.info(`💳 Suscripción "${planData.name}" creada/actualizada para usuario ${userId} por admin: ${req.user.id}`);
+
+        // Obtener plan anterior para el historial
+        const prevSubResult = await db.query(`SELECT plan FROM subscriptions WHERE user_id = $1`, [userId]).catch(() => ({ rows: [] }));
+        const fromPlan = prevSubResult.rows[0]?.plan || null;
+
         await logUserEvent(db, {
             userId: parseInt(userId), eventType: 'plan_changed', actorId: req.user.id,
-            details: { plan: planData.name, expires_at: expiresAt }
+            details: { from_plan: fromPlan, to_plan: planData.name, duration_days: durationDays || planData.period_days || 30, expires_at: expiresAt }
         });
         res.json({ success: true, message: 'Suscripción creada/actualizada correctamente', subscription: { userId, plan: planData.name, expiresAt } });
     } catch (error) {
@@ -816,11 +821,15 @@ router.post('/subscriptions/:userId/reactivate', authenticateAdmin, async (req, 
             [userId]
         );
 
+        // Obtener datos actuales para el historial
+        const subInfoResult = await db.query(`SELECT plan, status, expires_at FROM subscriptions WHERE user_id = $1`, [userId]).catch(() => ({ rows: [] }));
+        const subInfo = subInfoResult.rows[0] || {};
+
         await logUserEvent(db, {
             userId: parseInt(userId),
             eventType: 'reactivated',
             actorId: req.user.id,
-            details: {}
+            details: { plan: subInfo.plan || null, expires_at: subInfo.expires_at || null }
         });
 
         logger.info(`▶️ Suscripción reactivada para usuario ${userId} por admin: ${req.user.id}`);

@@ -631,17 +631,76 @@ async function renderUserDetail(userId) {
                 ${events.length === 0 ? '<div class="empty-state"><p>Sin eventos registrados</p></div>' : `
                 <div style="padding:12px">
                     ${events.map(ev => {
-                        const ICONS = { activated:'✅', rejected_blocked:'🚫', rejected_keep_trial:'⚠️', suspended:'⏸', reactivated:'▶️', plan_changed:'💳', email_verified:'📧', usage_adjusted:'🎁', notification_sent:'📢', system:'⚙️' };
-                        const icon = ICONS[ev.event_type] || '📝';
-                        const reasonStr = ev.reason ? `<br><span style="color:var(--text-muted);font-size:12px">Motivo: ${escHtml(ev.reason)}</span>` : '';
+                        const ICONS = { activated:'✅', rejected_blocked:'🚫', rejected_keep_trial:'⚠️', suspended:'⏸️', reactivated:'▶️', plan_changed:'💳', email_verified:'📧', usage_adjusted:'🎁', notification_sent:'📢', system:'⚙️' };
+                        const LABELS = { activated:'Cuenta activada', rejected_blocked:'Cuenta rechazada (bloqueada)', rejected_keep_trial:'Rechazada (mantiene trial)', suspended:'Cuenta suspendida', reactivated:'Suscripción reactivada', plan_changed:'Plan cambiado', email_verified:'Email verificado', usage_adjusted:'Ajuste de uso', notification_sent:'Notificación enviada', system:'Sistema' };
+                        const icon  = ICONS[ev.event_type]  || '📝';
+                        const label = LABELS[ev.event_type] || escHtml(ev.event_type.replace(/_/g,' '));
+
+                        // Parsear detalles guardados en old_value
+                        let d = {};
+                        try { d = ev.details ? JSON.parse(ev.details) : {}; } catch(_) {}
+
+                        // Construir línea de detalles específica por tipo de evento
+                        let detailLines = [];
+
+                        if (ev.event_type === 'notification_sent') {
+                            if (d.title)   detailLines.push(`<b>Título:</b> ${escHtml(d.title)}`);
+                            if (d.message) detailLines.push(`<b>Mensaje:</b> ${escHtml(d.message)}`);
+                            if (d.type)    detailLines.push(`<b>Tipo:</b> ${escHtml(d.type)}`);
+
+                        } else if (ev.event_type === 'plan_changed') {
+                            if (d.from_plan || d.to_plan) {
+                                const from = d.from_plan || '—';
+                                const to   = d.to_plan   || d.plan || '—';
+                                detailLines.push(`<b>Plan:</b> ${escHtml(from)} → ${escHtml(to)}`);
+                            } else if (d.plan) {
+                                detailLines.push(`<b>Plan:</b> ${escHtml(d.plan)}`);
+                            }
+                            if (d.duration_days) detailLines.push(`<b>Duración:</b> ${d.duration_days} días`);
+
+                        } else if (ev.event_type === 'reactivated') {
+                            if (d.plan)       detailLines.push(`<b>Plan vigente:</b> ${escHtml(d.plan)}`);
+                            if (d.expires_at) detailLines.push(`<b>Vence:</b> ${fmtDate(d.expires_at)}`);
+
+                        } else if (ev.event_type === 'suspended') {
+                            const motivo = d.reason || ev.reason;
+                            if (motivo)          detailLines.push(`<b>Motivo:</b> ${escHtml(motivo)}`);
+                            if (d.from_status)   detailLines.push(`<b>Estado previo:</b> ${escHtml(d.from_status)}`);
+
+                        } else if (ev.event_type === 'usage_adjusted') {
+                            const subsysLabel = { global:'Global (límite total)', proc:'Procuraciones', batch:'Por lote', informe:'Informes', monitor_novedades:'Novedades', monitor_partes:'Partes' };
+                            const sub = subsysLabel[d.subsystem] || d.subsystem || '—';
+                            detailLines.push(`<b>Subsistema:</b> ${escHtml(sub)}`);
+                            if (d.unlimited)     detailLines.push(`<b>Límite:</b> Ilimitado`);
+                            else if (d.amount != null) detailLines.push(`<b>Ajuste:</b> ${d.amount > 0 ? '+' : ''}${d.amount} usos`);
+                            if (d.reason)        detailLines.push(`<b>Motivo:</b> ${escHtml(d.reason)}`);
+
+                        } else if (ev.event_type === 'activated') {
+                            if (d.usage_limit)   detailLines.push(`<b>Límite asignado:</b> ${d.usage_limit}`);
+                            if (d.expires_days)  detailLines.push(`<b>Duración:</b> ${d.expires_days} días`);
+
+                        } else if (ev.event_type === 'rejected_blocked' || ev.event_type === 'rejected_keep_trial') {
+                            const motivo = d.reason || ev.reason;
+                            if (motivo) detailLines.push(`<b>Motivo:</b> ${escHtml(motivo)}`);
+                        }
+
+                        // Motivo genérico si no se procesó arriba y existe
+                        if (detailLines.length === 0 && ev.reason && ev.event_type !== 'notification_sent') {
+                            detailLines.push(`<b>Motivo:</b> ${escHtml(ev.reason)}`);
+                        }
+
+                        const detailHtml = detailLines.length
+                            ? `<div style="margin-top:4px;font-size:12px;color:var(--text-muted);line-height:1.6">${detailLines.join(' &nbsp;·&nbsp; ')}</div>`
+                            : '';
+
                         return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
-                            <div style="font-size:18px;flex-shrink:0">${icon}</div>
+                            <div style="font-size:18px;flex-shrink:0;line-height:1.4">${icon}</div>
                             <div style="flex:1;min-width:0">
-                                <div style="font-weight:600;font-size:13px;color:var(--text-primary)">${escHtml(ev.event_type.replace(/_/g,' '))}</div>
+                                <div style="font-weight:600;font-size:13px;color:var(--text-primary)">${label}</div>
                                 <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
-                                    ${ev.actor_email ? `Por: ${escHtml(ev.actor_email)} &nbsp;·&nbsp;` : ''} ${fmtDate(ev.created_at)}
-                                    ${reasonStr}
+                                    ${ev.actor_email ? `Por: ${escHtml(ev.actor_email)} &nbsp;·&nbsp;` : ''}${fmtDate(ev.created_at)}
                                 </div>
+                                ${detailHtml}
                             </div>
                         </div>`;
                     }).join('')}
