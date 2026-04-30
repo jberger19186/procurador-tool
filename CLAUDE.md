@@ -78,6 +78,38 @@ ProcuradorTool/
 
 ---
 
+## Servicios y cuentas asociadas al proyecto
+
+| Proveedor | Para qué | Cuenta / Usuario |
+|---|---|---|
+| **DigitalOcean** | VPS servidor producción (142.93.64.94) | — |
+| **Cloudflare** | CDN + WAF + SSL para procuradortool.com (landing) | — |
+| **GitHub** | Repositorio privado + GitHub Releases (distribución instalador) | jberger19186@gmail.com |
+| **Brevo** (ex Sendinblue) | SMTP transaccional — emails que salen con @procuradortool.com | jberger19186@gmail.com |
+| **Chrome Web Store** | Distribución extensión Chrome (v1.3.2) | jberger19186@gmail.com / Publisher: Jonathan Berger |
+| **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-06-29) | sin cuenta — corre en el servidor |
+| **Azure Trusted Signing** | Code Signing del instalador .exe — ⬜ pendiente contratar | — |
+| **MercadoPago / Stripe** | Pagos y suscripciones recurrentes — ⬜ pendiente integrar | — |
+
+### Emails del proyecto
+
+| Email | Rol |
+|---|---|
+| `jberger19186@gmail.com` | Cuenta personal — GitHub, Chrome Web Store, Brevo |
+| `procuradortool@gmail.com` | Recibe alertas de nuevos usuarios registrados (`ALERT_EMAIL_TO`) |
+| `soporte@procuradortool.com` | Remitente de todos los emails transaccionales al usuario (`SMTP_FROM`) |
+
+### Verificar / renovar SSL (certbot)
+```bash
+# Ver estado del certificado
+ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot certificates"
+
+# Renovar manualmente si hace falta
+ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot renew"
+```
+
+---
+
 ## Acceso al servidor de producción
 
 ```bash
