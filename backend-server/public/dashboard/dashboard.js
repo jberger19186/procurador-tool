@@ -50,8 +50,7 @@ async function doLogin() {
         }
 
         showApp();
-        const hashParts = location.hash.slice(1).split('/');
-        navigate(hashParts[0] || 'overview', hashParts[1] || null);
+        navigate(location.hash.slice(1).split('/')[0] || 'overview');
 
     } catch (e) {
         errEl.textContent   = e.message;
@@ -141,17 +140,13 @@ window.addEventListener('load', async () => {
     // Token válido local y en servidor — restaurar
     token = savedToken;
     showApp();
-    const hashParts = location.hash.slice(1).split('/');
-    navigate(hashParts[0] || 'overview', hashParts[1] || null);
+    navigate(location.hash.slice(1).split('/')[0] || 'overview');
 });
 
 // ───── ROUTING ─────
 function navigate(page, id) {
     if (currentPage && currentPage !== page) prevPage = currentPage;
     currentPage = page;
-    // Actualizar hash para que F5 preserve la página actual
-    const newHash = id ? `#${page}/${id}` : `#${page}`;
-    if (location.hash !== newHash) history.replaceState(null, '', newHash);
     document.querySelectorAll('#sidebar nav a').forEach(a => {
         a.classList.toggle('active', a.dataset.page === page);
     });
@@ -160,7 +155,7 @@ function navigate(page, id) {
         overview: 'Resumen del sistema',
         users: 'Usuarios',
         'user-detail': 'Detalle de usuario',
-        'pending-users': 'Usuarios pendientes de activación',
+        'pending-users': 'Usuarios pendientes / Solicitudes de reactivación',
         tickets: 'Tickets de soporte',
         'ticket-detail': 'Detalle de ticket',
         scripts: 'Scripts',
@@ -229,7 +224,7 @@ async function renderOverview() {
             <div><h2>Resumen del sistema</h2><p>Estado actual de la plataforma</p></div>
         </div>
         <div class="stats-grid">
-            <div class="stat-card" onclick="navigate('users')" style="cursor:pointer" title="Ver lista de usuarios">
+            <div class="stat-card">
                 <div class="stat-icon">👥</div>
                 <div class="stat-body"><div class="stat-value">${s.totalUsers}</div><div class="stat-label">Usuarios registrados</div></div>
             </div>
@@ -293,7 +288,7 @@ async function renderUsers() {
                         <td>${u.email}</td>
                         <td>${roleBadge(u.role)}</td>
                         <td>${u.plan ? `<span class="badge badge-blue">${u.plan}</span>` : '—'}</td>
-                        <td>${registrationStatusBadge(u.registration_status, u.status)}</td>
+                        <td>${statusBadge(u.status)}</td>
                         <td>${u.usage_count ?? 0} / ${u.usage_limit ?? 0}</td>
                         <td>${u.expires_at ? fmtDate(u.expires_at) : '—'}</td>
                         <td>${u.last_login ? fmtDate(u.last_login) : '—'}</td>
@@ -325,19 +320,17 @@ window.filterUsers = function() {
 // ───── DETALLE USUARIO ─────
 async function renderUserDetail(userId) {
     try {
-        const [uData, tData, mData, plansData, eventsData] = await Promise.all([
+        const [uData, tData, mData, plansData] = await Promise.all([
             apiFetch(`/admin/users/${userId}`),
             apiFetch(`/admin/tickets?userId=${userId}&limit=20`),
             apiFetch(`/admin/monitor/partes?userId=${userId}`),
-            apiFetch('/admin/plans'),
-            apiFetch(`/admin/users/${userId}/events`).catch(() => ({ events: [] }))
+            apiFetch('/admin/plans')
         ]);
         const u = uData.user;
         const logs = uData.recentLogs;
         const tickets = tData.tickets;
         const partes = mData.partes || [];
         const allPlans = (plansData.plans || []).filter(p => p.active);
-        const events = eventsData.events || [];
 
         document.getElementById('content').innerHTML = `
         <a class="back-btn" onclick="navigate(prevPage || 'users')">← Volver a ${prevPage === 'pending-users' ? 'Pendientes' : 'Usuarios'}</a>
@@ -365,10 +358,6 @@ async function renderUserDetail(userId) {
                         </button>
                         <button class="btn btn-sm btn-warning" onclick="sendPasswordReset(${u.id},'${escHtml(u.email)}')">🔑 Blanquear contraseña</button>
                     </div>
-                    ${u.role !== 'admin' ? `
-                    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-                        <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id},'${escHtml(u.email)}')">🗑️ Eliminar cuenta</button>
-                    </div>` : ''}
                     <div style="margin-top:12px">
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Asignar CUIT</label>
                         <div style="display:flex;gap:6px">
@@ -383,16 +372,7 @@ async function renderUserDetail(userId) {
                 <div class="card-body">
                     <div class="detail-grid">
                         <div class="detail-item"><label>Plan</label><span>${u.plan ? `<span class="badge badge-blue">${u.plan_display_name || u.plan}</span>` : '—'}</span></div>
-                        <div class="detail-item"><label>Estado</label>
-                            <div style="display:flex;flex-direction:column;gap:4px">
-                                <span>${statusBadge(u.status)}</span>
-                                ${u.registration_status === 'pending_email'
-                                    ? '<span style="font-size:11px;color:#b45309;font-weight:600">📧 Pendiente de verificación de email</span>'
-                                    : u.registration_status === 'pending_activation'
-                                    ? '<span style="font-size:11px;color:#d97706;font-weight:600">⏳ Pendiente de activación</span>'
-                                    : ''}
-                            </div>
-                        </div>
+                        <div class="detail-item"><label>Estado</label><span>${statusBadge(u.status)}</span></div>
                         <div class="detail-item"><label>Uso global <span style="font-weight:400;color:var(--text-muted)">(extensión)</span></label><span>${u.usage_count ?? 0} / ${u.usage_limit ?? 0}</span></div>
                         <div class="detail-item"><label>Expira</label><span>${u.expires_at ? fmtDate(u.expires_at) : '—'}</span></div>
                     </div>
@@ -417,7 +397,8 @@ async function renderUserDetail(userId) {
                             <button class="btn btn-sm btn-primary" onclick="updateSub(${u.id})">Aplicar</button>
                         </div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap">
-                            ${u.status === 'active' ? `<button class="btn btn-sm btn-danger" onclick="suspendSubWithReason(${u.id})">⏸ Suspender</button>` : `<button class="btn btn-sm btn-success" onclick="reactivateSub(${u.id})">▶ Reactivar</button>`}
+                            ${u.registration_status === 'active' ? `<button class="btn btn-sm btn-danger" onclick="adminSuspendUser(${u.id})">⏸ Suspender</button>` : ''}
+                            ${['suspended_admin','suspended','suspended_plan_expired'].includes(u.registration_status) ? `<button class="btn btn-sm btn-success" onclick="reactivateSub(${u.id})">▶ Reactivar</button>` : ''}
                             <button class="btn btn-sm btn-secondary" onclick="resetUsage(${u.id})">🔄 Resetear uso</button>
                         </div>
                     </div>
@@ -452,10 +433,14 @@ async function renderUserDetail(userId) {
                     <div>
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Estado de registro</label>
                         <select id="reg-status" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg-secondary)">
-                            <option value="pending_email"   ${u.registration_status === 'pending_email'   ? 'selected' : ''}>Email sin verificar</option>
-                            <option value="pending_activation" ${u.registration_status === 'pending_activation' ? 'selected' : ''}>Pendiente de activación</option>
-                            <option value="active"          ${u.registration_status === 'active'          ? 'selected' : ''}>Activo</option>
-                            <option value="trial"           ${u.registration_status === 'trial'           ? 'selected' : ''}>Trial</option>
+                            <option value="pending_email"          ${u.registration_status === 'pending_email'          ? 'selected' : ''}>Email sin verificar</option>
+                            <option value="pending_activation"     ${u.registration_status === 'pending_activation'     ? 'selected' : ''}>Trial pendiente de activación</option>
+                            <option value="active"                 ${u.registration_status === 'active'                 ? 'selected' : ''}>Activo</option>
+                            <option value="rejected"               ${u.registration_status === 'rejected'               ? 'selected' : ''}>Rechazado / Bloqueado</option>
+                            <option value="suspended"              ${u.registration_status === 'suspended'              ? 'selected' : ''}>Suspendido (pago)</option>
+                            <option value="suspended_admin"        ${u.registration_status === 'suspended_admin'        ? 'selected' : ''}>Suspendido por admin</option>
+                            <option value="suspended_plan_expired" ${u.registration_status === 'suspended_plan_expired' ? 'selected' : ''}>Plan vencido</option>
+                            <option value="cancelled"              ${u.registration_status === 'cancelled'              ? 'selected' : ''}>Cancelado</option>
                         </select>
                     </div>
                 </div>
@@ -495,77 +480,21 @@ async function renderUserDetail(userId) {
                         Email verificado: ${u.email_verified ? '✅ Sí' : '❌ No'} &nbsp;·&nbsp; T&C aceptado: ${u.toc_accepted_at ? fmtDate(u.toc_accepted_at) : '—'}
                     </span>
                     ${!u.email_verified ? `
-                    <button class="btn btn-sm btn-success" onclick="verifyEmailManual(${u.id})" style="font-size:12px;padding:4px 10px">✅ Verificar email</button>
+                    <button class="btn btn-sm btn-success" onclick="verifyEmailManual(${u.id})" style="font-size:12px;padding:4px 10px">✅ Marcar email verificado</button>
                     <button class="btn btn-sm btn-secondary" onclick="resendVerification(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">✉️ Reenviar verificación</button>
-                    <button class="btn btn-sm btn-primary" onclick="verifyAndActivateUser(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">⚡ Verificar y activar</button>
-                    <button class="btn btn-sm btn-danger" onclick="rejectUser(${u.id},'block')" style="font-size:12px;padding:4px 10px" title="Bloquea el acceso completamente">🚫 Rechazar y bloquear</button>
-                    <button class="btn btn-sm btn-warning" onclick="rejectUser(${u.id},'keep_trial')" style="font-size:12px;padding:4px 10px" title="Rechaza pero mantiene los usos de prueba">⚠️ Rechazar (mantener trial)</button>
-                    ` : u.registration_status === 'pending_activation' ? `
-                    <button class="btn btn-sm btn-primary" onclick="activateUserFromDetail(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">⚡ Activar cuenta</button>
-                    <button class="btn btn-sm btn-danger" onclick="rejectUser(${u.id},'block')" style="font-size:12px;padding:4px 10px" title="Bloquea el acceso completamente">🚫 Rechazar y bloquear</button>
-                    <button class="btn btn-sm btn-warning" onclick="rejectUser(${u.id},'keep_trial')" style="font-size:12px;padding:4px 10px" title="Rechaza pero mantiene los usos de prueba">⚠️ Rechazar (mantener trial)</button>
                     ` : ''}
                 </div>
             </div>
         </div>
 
-        <!-- ═══════════════════════════════════════════════════════════════════
-             ORDEN: Tickets · Ajustes Manuales · Enviar Notificación · Historial
-                    · Partes Monitoreo · Últimas Ejecuciones
-             Todas colapsables (excepto Enviar Notificación). Click en título.
-             ═══════════════════════════════════════════════════════════════════ -->
-
-        ${(() => {
-            // Tickets activos = no resolved ni closed
-            const activeTickets = tickets.filter(t => t.status !== 'resolved' && t.status !== 'closed');
-            const previewTickets = activeTickets.slice(0, 5);
-            const ticketRow = t => `<tr>
-                <td>#${t.id}</td>
-                <td>${catBadge(t.category)}</td>
-                <td>${t.title}</td>
-                <td>${ticketStatusBadge(t.status)}</td>
-                <td>${priorityBadge(t.priority)}</td>
-                <td>${fmtDate(t.created_at)}</td>
-                <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
-            </tr>`;
-            const ticketTable = rows => `<div class="table-wrapper">
-                <table><thead><tr><th>#</th><th>Categoría</th><th>Título</th><th>Estado</th><th>Prioridad</th><th>Fecha</th><th></th></tr></thead>
-                <tbody>${rows.map(ticketRow).join('')}</tbody></table>
-            </div>`;
-
-            return `
-            <!-- TICKETS (preview-mode: 5 activos) -->
-            <div class="card section-gap collapsible preview-mode">
-                <div class="card-header" onclick="toggleSection(this)">
-                    <h3>🎫 Tickets — ${activeTickets.length} activo${activeTickets.length===1?'':'s'} / ${tickets.length} total <span class="chevron">▼</span></h3>
-                </div>
-                <div class="card-body" style="padding:0">
-                    <div class="preview-view">
-                        ${previewTickets.length === 0
-                            ? '<div class="empty-state"><p>Sin tickets activos</p></div>'
-                            : ticketTable(previewTickets) + (activeTickets.length > 5
-                                ? `<div style="padding:10px 16px;background:var(--bg);text-align:center;font-size:12px;color:var(--text-muted)">+ ${activeTickets.length - 5} ticket${activeTickets.length-5===1?'':'s'} activo${activeTickets.length-5===1?'':'s'} más — click en el título para ver todos</div>`
-                                : '')
-                        }
-                    </div>
-                    <div class="full-view">
-                        ${tickets.length === 0 ? '<div class="empty-state"><p>Sin tickets</p></div>' : ticketTable(tickets)}
-                    </div>
-                </div>
-            </div>`;
-        })()}
-
-        <!-- AJUSTES MANUALES DE USO (colapsada) -->
-        <div class="card section-gap collapsible">
-            <div class="card-header" onclick="toggleSection(this)">
-                <h3>🎁 Ajustes Manuales de Uso <span class="chevron">▶</span></h3>
-            </div>
+        <!-- Ajustes de uso por subsistema -->
+        <div class="card section-gap">
+            <div class="card-header"><h3>🎁 Ajustes Manuales de Uso</h3></div>
             <div class="card-body">
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
                     <div>
                         <label style="font-size:12px;display:block;margin-bottom:4px">Subsistema</label>
                         <select id="adj-subsystem" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-                            <option value="global">── Global (límite total) ──</option>
                             <option value="proc">Procuración</option>
                             <option value="batch">Procurar Batch</option>
                             <option value="informe">Informes</option>
@@ -586,7 +515,6 @@ async function renderUserDetail(userId) {
                         <input type="number" id="adj-ticket" placeholder="ID ticket" style="width:100px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
                     </div>
                     <button class="btn btn-sm btn-primary" onclick="applyUsageAdjustment(${u.id})">Aplicar ajuste</button>
-                    <button class="btn btn-sm btn-secondary" onclick="applyUsageAdjustment(${u.id}, true)" title="Quita el límite para el subsistema seleccionado">🔓 Ilimitado</button>
                 </div>
                 <div style="margin-top:16px">
                     <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Historial de ajustes</div>
@@ -596,141 +524,34 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
-        <!-- ENVIAR NOTIFICACIÓN (siempre visible, no colapsada) -->
+        <!-- Tickets del usuario -->
         <div class="card section-gap">
-            <div class="card-header"><h3>📢 Enviar Notificación</h3></div>
-            <div class="card-body">
-                <div style="display:flex;flex-direction:column;gap:8px;max-width:600px">
-                    <div style="display:flex;gap:8px">
-                        <div style="flex:1">
-                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Título</label>
-                            <input type="text" id="notif-title" placeholder="Título de la notificación" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
-                        </div>
-                        <div>
-                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Tipo</label>
-                            <select id="notif-type" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-                                <option value="info">ℹ️ Info</option>
-                                <option value="warning">⚠️ Aviso</option>
-                                <option value="success">✅ Éxito</option>
-                                <option value="error">🚫 Error</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Mensaje</label>
-                        <textarea id="notif-message" rows="3" placeholder="Texto del mensaje..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical"></textarea>
-                    </div>
-                    <div>
-                        <button class="btn btn-sm btn-primary" onclick="sendNotifToUser(${u.id})">📤 Enviar notificación</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- HISTORIAL DE EVENTOS (colapsada) -->
-        <div class="card section-gap collapsible">
-            <div class="card-header" onclick="toggleSection(this)">
-                <h3>📅 Historial de Eventos (${events.length}) <span class="chevron">▶</span></h3>
+            <div class="card-header">
+                <h3>🎫 Tickets (${tickets.length})</h3>
+                <a class="btn btn-sm btn-secondary" onclick="navigate('tickets')">Ver todos</a>
             </div>
             <div class="card-body" style="padding:0">
-                ${events.length === 0 ? '<div class="empty-state"><p>Sin eventos registrados</p></div>' : `
-                <div style="padding:12px">
-                    ${events.map(ev => {
-                        const ICONS = { activated:'✅', rejected_blocked:'🚫', rejected_keep_trial:'⚠️', suspended:'⏸️', reactivated:'▶️', plan_changed:'💳', email_verified:'📧', usage_adjusted:'🎁', notification_sent:'📢', system:'⚙️' };
-                        const LABELS = { activated:'Cuenta activada', rejected_blocked:'Cuenta rechazada (bloqueada)', rejected_keep_trial:'Rechazada (mantiene trial)', suspended:'Cuenta suspendida', reactivated:'Suscripción reactivada', plan_changed:'Plan cambiado', email_verified:'Email verificado', usage_adjusted:'Ajuste de uso', notification_sent:'Notificación enviada', system:'Sistema' };
-                        const icon  = ICONS[ev.event_type]  || '📝';
-                        const label = LABELS[ev.event_type] || escHtml(ev.event_type.replace(/_/g,' '));
-
-                        // Parsear detalles guardados en old_value (JSONB → ya viene como objeto desde pg)
-                        let d = {};
-                        if (ev.details) {
-                            d = typeof ev.details === 'string' ? JSON.parse(ev.details) : ev.details;
-                        }
-
-                        // Construir línea de detalles específica por tipo de evento
-                        let detailLines = [];
-
-                        if (ev.event_type === 'notification_sent') {
-                            if (d.title)   detailLines.push(`<b>Título:</b> ${escHtml(d.title)}`);
-                            if (d.message) detailLines.push(`<b>Mensaje:</b> ${escHtml(d.message)}`);
-                            if (d.type)    detailLines.push(`<b>Tipo:</b> ${escHtml(d.type)}`);
-
-                        } else if (ev.event_type === 'plan_changed') {
-                            if (d.from_plan || d.to_plan) {
-                                const from = d.from_plan || '—';
-                                const to   = d.to_plan   || d.plan || '—';
-                                detailLines.push(`<b>Plan:</b> ${escHtml(from)} → ${escHtml(to)}`);
-                            } else if (d.plan) {
-                                detailLines.push(`<b>Plan:</b> ${escHtml(d.plan)}`);
-                            }
-                            if (d.duration_days) detailLines.push(`<b>Duración:</b> ${d.duration_days} días`);
-
-                        } else if (ev.event_type === 'reactivated') {
-                            if (d.plan)       detailLines.push(`<b>Plan vigente:</b> ${escHtml(d.plan)}`);
-                            if (d.expires_at) detailLines.push(`<b>Vence:</b> ${fmtDate(d.expires_at)}`);
-
-                        } else if (ev.event_type === 'suspended') {
-                            const motivo = d.reason || ev.reason;
-                            if (motivo)          detailLines.push(`<b>Motivo:</b> ${escHtml(motivo)}`);
-                            if (d.from_status)   detailLines.push(`<b>Estado previo:</b> ${escHtml(d.from_status)}`);
-
-                        } else if (ev.event_type === 'usage_adjusted') {
-                            const subsysLabel = { global:'Global (límite total)', proc:'Procuraciones', batch:'Por lote', informe:'Informes', monitor_novedades:'Novedades', monitor_partes:'Partes' };
-                            const sub = subsysLabel[d.subsystem] || d.subsystem || '—';
-                            detailLines.push(`<b>Subsistema:</b> ${escHtml(sub)}`);
-                            if (d.unlimited)     detailLines.push(`<b>Límite:</b> Ilimitado`);
-                            else if (d.amount != null) detailLines.push(`<b>Ajuste:</b> ${d.amount > 0 ? '+' : ''}${d.amount} usos`);
-                            if (d.reason)        detailLines.push(`<b>Motivo:</b> ${escHtml(d.reason)}`);
-
-                        } else if (ev.event_type === 'activated') {
-                            if (d.usage_limit)   detailLines.push(`<b>Límite asignado:</b> ${d.usage_limit}`);
-                            if (d.expires_days)  detailLines.push(`<b>Duración:</b> ${d.expires_days} días`);
-
-                        } else if (ev.event_type === 'rejected_blocked' || ev.event_type === 'rejected_keep_trial') {
-                            const motivo = d.reason || ev.reason;
-                            if (motivo) detailLines.push(`<b>Motivo:</b> ${escHtml(motivo)}`);
-                        }
-
-                        // Motivo genérico si no se procesó arriba y existe
-                        if (detailLines.length === 0 && ev.reason && ev.event_type !== 'notification_sent') {
-                            detailLines.push(`<b>Motivo:</b> ${escHtml(ev.reason)}`);
-                        }
-
-                        const detailHtml = detailLines.length
-                            ? `<div style="margin-top:4px;font-size:12px;color:var(--text-muted);line-height:1.6">${detailLines.join(' &nbsp;·&nbsp; ')}</div>`
-                            : '';
-
-                        const delBtn = ev.event_type === 'notification_sent'
-                            ? `<div style="flex-shrink:0;display:flex;align-items:center;padding-left:6px">
-                                <button class="ev-del-btn" onclick="deleteNotifEvent(${ev.id}, ${userId})"
-                                    title="Eliminar del historial"
-                                    style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:14px;padding:4px 6px;border-radius:4px;opacity:0;transition:opacity .2s;line-height:1">🗑️</button>
-                               </div>`
-                            : '';
-
-                        return `<div id="ev-row-${ev.id}"
-                                     style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)"
-                                     onmouseenter="var b=this.querySelector('.ev-del-btn');if(b)b.style.opacity='1'"
-                                     onmouseleave="var b=this.querySelector('.ev-del-btn');if(b)b.style.opacity='0'">
-                            <div style="font-size:18px;flex-shrink:0;line-height:1.4">${icon}</div>
-                            <div style="flex:1;min-width:0">
-                                <div style="font-weight:600;font-size:13px;color:var(--text-primary)">${label}</div>
-                                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
-                                    ${ev.actor_email ? `Por: ${escHtml(ev.actor_email)} &nbsp;·&nbsp;` : ''}${fmtDate(ev.created_at)}
-                                </div>
-                                ${detailHtml}
-                            </div>
-                            ${delBtn}
-                        </div>`;
-                    }).join('')}
+                ${tickets.length === 0 ? '<div class="empty-state"><p>Sin tickets</p></div>' : `
+                <div class="table-wrapper">
+                    <table><thead><tr><th>#</th><th>Categoría</th><th>Título</th><th>Estado</th><th>Prioridad</th><th>Fecha</th><th></th></tr></thead>
+                    <tbody>${tickets.map(t => `<tr>
+                        <td>#${t.id}</td>
+                        <td>${catBadge(t.category)}</td>
+                        <td>${t.title}</td>
+                        <td>${ticketStatusBadge(t.status)}</td>
+                        <td>${priorityBadge(t.priority)}</td>
+                        <td>${fmtDate(t.created_at)}</td>
+                        <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
+                    </tr>`).join('')}
+                    </tbody></table>
                 </div>`}
             </div>
         </div>
 
-        <!-- PARTES EN MONITOREO (colapsada) -->
-        <div class="card section-gap collapsible">
-            <div class="card-header" onclick="toggleSection(this)">
-                <h3>🔍 Partes en Monitoreo (${partes.length}) <span class="chevron">▶</span></h3>
+        <!-- Partes monitoreadas -->
+        <div class="card section-gap">
+            <div class="card-header">
+                <h3>🔍 Partes en Monitoreo (${partes.length})</h3>
             </div>
             <div class="card-body" style="padding:0">
                 ${partes.length === 0
@@ -760,11 +581,9 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
-        <!-- ÚLTIMAS EJECUCIONES (colapsada) -->
-        <div class="card section-gap collapsible">
-            <div class="card-header" onclick="toggleSection(this)">
-                <h3>📋 Últimas Ejecuciones (${logs.length}) <span class="chevron">▶</span></h3>
-            </div>
+        <!-- Logs recientes -->
+        <div class="card">
+            <div class="card-header"><h3>📋 Últimas ejecuciones (${logs.length})</h3></div>
             <div class="card-body" style="padding:0">
                 ${logs.length === 0 ? '<div class="empty-state"><p>Sin ejecuciones</p></div>' : `
                 <div class="table-wrapper">
@@ -779,9 +598,7 @@ async function renderUserDetail(userId) {
                     </tbody></table>
                 </div>`}
             </div>
-        </div>
-
-`;
+        </div>`;
 
         // Cargar historial de ajustes
         loadAdjustmentHistory(userId);
@@ -789,21 +606,6 @@ async function renderUserDetail(userId) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
-
-// Toggle de secciones colapsables del detalle de usuario
-window.toggleSection = function(headerEl) {
-    const card = headerEl.closest('.card');
-    if (!card) return;
-    card.classList.toggle('expanded');
-    const chev = headerEl.querySelector('.chevron');
-    if (chev) {
-        chev.textContent = card.classList.contains('expanded') ? '▼' : '▶';
-        // Tickets en preview-mode usa otra flecha (siempre algo visible)
-        if (card.classList.contains('preview-mode')) {
-            chev.textContent = card.classList.contains('expanded') ? '▲' : '▼';
-        }
-    }
-};
 
 // User detail actions
 window.unbindHardware = async function(id) {
@@ -842,57 +644,59 @@ window.updateSub = async function(id) {
         setTimeout(() => navigate('user-detail', id), 1200);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
-window.suspendSub = async function(id) {
-    if (!confirm('¿Suspender suscripción?')) return;
-    try {
-        await apiFetch(`/admin/subscriptions/${id}/suspend`, 'POST');
-        showAlert(document.getElementById('ud-alert'), 'Suscripción suspendida.', 'success');
-        setTimeout(() => navigate('user-detail', id), 1200);
-    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
+window.adminSuspendUser = function(userId) {
+    // Build inline modal for suspend
+    const existing = document.getElementById('suspend-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'suspend-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML = `
+        <div style="background:#fff;border-radius:10px;padding:28px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+            <h3 style="margin:0 0 16px;font-size:16px">Suspender usuario</h3>
+            <div style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo de suspensión <span style="color:red">*</span></label>
+                <textarea id="suspend-reason" rows="3" placeholder="Indicá el motivo de la suspensión..." style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical"></textarea>
+            </div>
+            <div style="margin-bottom:20px;display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="suspend-billing-paused" checked style="width:16px;height:16px;accent-color:#3b82f6">
+                <label for="suspend-billing-paused" style="font-size:13px;cursor:pointer">Pausar facturación durante la suspensión</label>
+            </div>
+            <div id="suspend-alert"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('suspend-modal').remove()">Cancelar</button>
+                <button class="btn btn-danger btn-sm" onclick="doAdminSuspend(${userId})">Suspender</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
 };
 
-window.suspendSubWithReason = async function(id) {
-    const reason = prompt('Motivo de la suspensión (opcional, se envía al usuario):');
-    if (reason === null) return; // canceló
-    try {
-        await apiFetch(`/admin/subscriptions/${id}/suspend`, 'POST', { reason: reason.trim() });
-        showAlert(document.getElementById('ud-alert'), 'Suscripción suspendida correctamente.', 'success');
-        setTimeout(() => navigate('user-detail', id), 1200);
-    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
-};
+window.doAdminSuspend = async function(userId) {
+    const reason = document.getElementById('suspend-reason').value.trim();
+    const billing_paused = document.getElementById('suspend-billing-paused').checked;
+    const alertEl = document.getElementById('suspend-alert');
 
-window.rejectUser = async function(id, mode) {
-    const modeLabel = mode === 'block' ? 'RECHAZAR Y BLOQUEAR' : 'RECHAZAR (mantener trial)';
-    const reason = prompt(`${modeLabel}\n\nMotivo (opcional, se notifica al usuario):`);
-    if (reason === null) return; // canceló
-    try {
-        await apiFetch(`/admin/users/${id}/reject`, 'POST', { mode, reason: reason.trim() });
-        const msg = mode === 'block'
-            ? 'Usuario rechazado y bloqueado. Se envió email de notificación.'
-            : 'Usuario rechazado. Conserva sus usos de prueba restantes.';
-        showAlert(document.getElementById('ud-alert'), msg, mode === 'block' ? 'error' : 'warning');
-        setTimeout(() => navigate('user-detail', id), 1500);
-    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
-};
-
-window.sendNotifToUser = async function(userId) {
-    const title   = document.getElementById('notif-title')?.value?.trim();
-    const message = document.getElementById('notif-message')?.value?.trim();
-    const type    = document.getElementById('notif-type')?.value || 'info';
-    if (!title || !message) {
-        showAlert(document.getElementById('ud-alert'), 'Completá el título y el mensaje.', 'error');
+    if (!reason) {
+        alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">El motivo es obligatorio.</div>';
         return;
     }
+
     try {
-        await apiFetch('/admin/notifications', 'POST', { userId, title, message, type });
-        showAlert(document.getElementById('ud-alert'), 'Notificación enviada correctamente.', 'success');
+        await apiFetch(`/admin/users/${userId}/suspend`, 'POST', { reason, billing_paused });
+        document.getElementById('suspend-modal').remove();
+        showAlert(document.getElementById('ud-alert'), '⏸ Usuario suspendido correctamente.', 'success');
         setTimeout(() => navigate('user-detail', userId), 1200);
-    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
+    } catch (e) {
+        alertEl.innerHTML = `<div class="alert alert-error" style="margin-bottom:8px">${escHtml(e.message)}</div>`;
+    }
 };
+
 window.reactivateSub = async function(id) {
+    if (!confirm('¿Reactivar esta cuenta? El estado pasará a "Activo".')) return;
     try {
-        await apiFetch(`/admin/subscriptions/${id}/reactivate`, 'POST');
-        showAlert(document.getElementById('ud-alert'), 'Suscripción reactivada.', 'success');
+        await apiFetch(`/admin/users/${id}/reactivation-request/approve`, 'POST');
+        showAlert(document.getElementById('ud-alert'), '✅ Cuenta reactivada correctamente.', 'success');
         setTimeout(() => navigate('user-detail', id), 1200);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
@@ -1296,15 +1100,17 @@ function roleBadge(r) {
     return r === 'admin' ? '<span class="badge badge-purple">Admin</span>' : '<span class="badge badge-gray">Usuario</span>';
 }
 function statusBadge(s) {
-    const m = { active: 'badge-green', cancelled: 'badge-red', expired: 'badge-red', suspended: 'badge-yellow' };
-    const l = { active: 'Activo', cancelled: 'Cancelado', expired: 'Expirado', suspended: 'Suspendido' };
+    const m = {
+        active: 'badge-green', cancelled: 'badge-red', expired: 'badge-red',
+        suspended: 'badge-yellow', suspended_admin: 'badge-red', suspended_plan_expired: 'badge-red',
+        pending_email: 'badge-gray', pending_activation: 'badge-warning', rejected: 'badge-red',
+    };
+    const l = {
+        active: 'Activo', cancelled: 'Cancelado', expired: 'Expirado', suspended: 'Suspendido',
+        suspended_admin: 'Susp. admin', suspended_plan_expired: 'Plan vencido',
+        pending_email: 'Email pendiente', pending_activation: 'Trial pendiente', rejected: 'Rechazado',
+    };
     return s ? `<span class="badge ${m[s] || 'badge-gray'}">${l[s] || s}</span>` : '—';
-}
-// Muestra estado de registro cuando aplica (pendientes), o estado de suscripción para usuarios activos
-function registrationStatusBadge(regStatus, subStatus) {
-    if (regStatus === 'pending_email')      return '<span class="badge badge-gray">📧 Sin verificar</span>';
-    if (regStatus === 'pending_activation') return '<span class="badge badge-warning">⏳ Pend. activación</span>';
-    return statusBadge(subStatus);
 }
 function ticketStatusBadge(s) {
     const m = { open: 'badge-blue', in_progress: 'badge-yellow', resolved: 'badge-green', closed: 'badge-gray' };
@@ -1351,93 +1157,102 @@ function renderSubsystemBar(label, used, limit, bonus) {
 // ───── USUARIOS PENDIENTES ─────
 async function renderPendingUsers() {
     try {
-        const data = await apiFetch('/admin/users/pending');
-        const users = data.users;
+        const [pendingData, reactData] = await Promise.all([
+            apiFetch('/admin/users/pending'),
+            apiFetch('/admin/users/reactivation-requests').catch(() => ({ users: [] })),
+        ]);
+        const users = pendingData.users;
+        const trialUsers = users.filter(u => u.registration_status === 'pending_activation');
+        const emailUsers = users.filter(u => u.registration_status === 'pending_email');
+        const reactUsers = reactData.users || [];
 
-        const statusBadge = s => s === 'pending_email'
-            ? '<span class="badge badge-gray">Email sin verificar</span>'
-            : '<span class="badge badge-warning">Pendiente de activación</span>';
+        const trialRows = trialUsers.length === 0
+            ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">No hay usuarios en trial pendientes de decisión.</td></tr>'
+            : trialUsers.map(u => `
+            <tr>
+                <td>${escHtml(u.nombre || '—')} ${escHtml(u.apellido || '')}</td>
+                <td>${escHtml(u.cuit || '—')}</td>
+                <td><a href="#" onclick="navigate('user-detail','${u.id}');return false;" style="color:var(--primary);text-decoration:none">${escHtml(u.email)}</a></td>
+                <td>${escHtml(u.plan_display || u.plan_name || '—')}</td>
+                <td style="font-size:12px">${new Date(u.created_at).toLocaleDateString('es-AR')}</td>
+                <td>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap">
+                        <button class="btn btn-sm btn-success" onclick="activateUser(${u.id}, '${escHtml(u.email)}')">✅ Activar</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectUserBlock(${u.id}, '${escHtml(u.email)}')">🚫 Rechazar</button>
+                        <button class="btn btn-sm btn-secondary" onclick="rejectUserKeepTrial(${u.id}, '${escHtml(u.email)}')">⏸ Mantener trial</button>
+                    </div>
+                </td>
+            </tr>`).join('');
 
-        // Cargar estado del registro para el toggle
-        let registerOpen = true;
-        try {
-            const sr = await apiFetch('/admin/settings');
-            registerOpen = sr.settings?.allow_public_register !== 'false';
-        } catch { /* usa default */ }
+        const emailRows = emailUsers.length === 0
+            ? '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px">No hay usuarios esperando verificación.</td></tr>'
+            : emailUsers.map(u => `
+            <tr>
+                <td>${escHtml(u.nombre || '—')} ${escHtml(u.apellido || '')}</td>
+                <td><a href="#" onclick="navigate('user-detail','${u.id}');return false;" style="color:var(--primary);text-decoration:none">${escHtml(u.email)}</a></td>
+                <td>${escHtml(u.plan_display || u.plan_name || '—')}</td>
+                <td style="font-size:12px">${new Date(u.created_at).toLocaleDateString('es-AR')}</td>
+                <td><span style="font-size:12px;color:var(--text-muted)">Esperando verificación</span></td>
+            </tr>`).join('');
+
+        const reactRows = reactUsers.length === 0
+            ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:16px">No hay solicitudes de reactivación pendientes.</td></tr>'
+            : reactUsers.map(u => {
+                const req = u.reactivation_request || {};
+                return `<tr>
+                    <td>${escHtml(u.nombre || '—')} ${escHtml(u.apellido || '')}</td>
+                    <td><a href="#" onclick="navigate('user-detail','${u.id}');return false;" style="color:var(--primary);text-decoration:none">${escHtml(u.email)}</a></td>
+                    <td style="font-size:12px;max-width:180px;white-space:normal">${escHtml(u.suspension_reason || '—')}</td>
+                    <td style="font-size:12px">${u.suspended_at ? new Date(u.suspended_at).toLocaleDateString('es-AR') : '—'}</td>
+                    <td style="font-size:12px;color:var(--text-muted);max-width:200px;white-space:normal">${escHtml(req.message || '(sin mensaje)')}</td>
+                    <td>
+                        <div style="display:flex;gap:5px">
+                            <button class="btn btn-sm btn-success" onclick="approveReactivation(${u.id}, '${escHtml(u.email)}')">✅ Aprobar</button>
+                            <button class="btn btn-sm btn-danger" onclick="rejectReactivation(${u.id}, '${escHtml(u.email)}')">❌ Rechazar</button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
 
         document.getElementById('content').innerHTML = `
         <div class="page-header">
-            <div><h2>Usuarios pendientes de activación</h2><p>${users.length} usuario${users.length !== 1 ? 's' : ''} en espera</p></div>
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
-                <span style="font-size:13px;font-weight:500">Registro público</span>
-                <button id="btn-toggle-register"
-                    onclick="togglePublicRegister()"
-                    style="padding:5px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;
-                           background:${registerOpen ? '#059669' : '#dc2626'};color:#fff">
-                    ${registerOpen ? '✅ Habilitado' : '⛔ Deshabilitado'}
-                </button>
-            </div>
+            <div><h2>Usuarios pendientes</h2><p>${trialUsers.length} en trial · ${emailUsers.length} sin verificar · ${reactUsers.length} solicitud${reactUsers.length !== 1 ? 'es' : ''} reactivación</p></div>
         </div>
         <div id="pending-alert"></div>
-        ${users.length === 0
-            ? '<div class="card"><div class="card-body" style="text-align:center;color:var(--text-muted);padding:40px">No hay usuarios pendientes.</div></div>'
-            : `<div class="card">
+
+        <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h3>🧪 En trial — pendientes de decisión (${trialUsers.length})</h3></div>
             <div class="table-wrapper">
                 <table>
-                    <thead><tr>
-                        <th>Nombre y Apellido</th><th>CUIT</th><th>Email</th>
-                        <th>Plan</th><th>Estado</th><th>Fecha registro</th><th></th>
-                    </tr></thead>
-                    <tbody>${users.map(u => `
-                    <tr>
-                        <td>${escHtml(u.nombre || '—')} ${escHtml(u.apellido || '')}</td>
-                        <td>${escHtml(u.cuit || '—')}</td>
-                        <td>
-                            <a href="#" onclick="navigate('user-detail','${u.id}');return false;"
-                               style="color:var(--primary);text-decoration:none"
-                               title="Ver ficha completa del usuario">
-                                ${escHtml(u.email)}
-                            </a>
-                        </td>
-                        <td>${escHtml(u.plan_display || u.plan_name || '—')}</td>
-                        <td>${statusBadge(u.registration_status)}</td>
-                        <td style="font-size:12px">${new Date(u.created_at).toLocaleDateString('es-AR')}</td>
-                        <td style="white-space:nowrap">
-                            ${u.registration_status === 'pending_activation'
-                                ? `<div style="display:flex;gap:4px;flex-wrap:wrap">
-                                    <button class="btn btn-sm btn-primary" onclick="activateUser(${u.id}, '${escHtml(u.email)}')">⚡ Activar</button>
-                                    <button class="btn btn-sm btn-danger" onclick="rejectUserPending(${u.id},'block')" title="Bloquear acceso">🚫</button>
-                                    <button class="btn btn-sm btn-warning" onclick="rejectUserPending(${u.id},'keep_trial')" title="Rechazar manteniendo trial">⚠️</button>
-                                   </div>`
-                                : `<div style="display:flex;gap:4px;flex-wrap:wrap">
-                                    <span style="font-size:12px;color:var(--text-muted)">Esperando email</span>
-                                    <button class="btn btn-sm btn-danger" onclick="rejectUserPending(${u.id},'block')" title="Bloquear acceso">🚫</button>
-                                   </div>`}
-                        </td>
-                    </tr>`).join('')}
-                    </tbody>
+                    <thead><tr><th>Nombre</th><th>CUIT</th><th>Email</th><th>Plan</th><th>Fecha</th><th>Acciones</th></tr></thead>
+                    <tbody>${trialRows}</tbody>
                 </table>
             </div>
-        </div>`}`;
+        </div>
+
+        <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h3>🔓 Solicitudes de reactivación (${reactUsers.length})</h3></div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>Nombre</th><th>Email</th><th>Motivo suspensión</th><th>Suspendido</th><th>Mensaje usuario</th><th>Acciones</th></tr></thead>
+                    <tbody>${reactRows}</tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h3>📧 Esperando verificación de email (${emailUsers.length})</h3></div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>Nombre</th><th>Email</th><th>Plan</th><th>Fecha</th><th>Estado</th></tr></thead>
+                    <tbody>${emailRows}</tbody>
+                </table>
+            </div>
+        </div>`;
     } catch (e) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
-
-// Rechazar usuario desde la página de pendientes
-window.rejectUserPending = async function(id, mode) {
-    const modeLabel = mode === 'block' ? 'RECHAZAR Y BLOQUEAR' : 'RECHAZAR (mantener trial)';
-    const reason = prompt(`${modeLabel}\n\nMotivo (opcional, se notifica al usuario):`);
-    if (reason === null) return;
-    try {
-        await apiFetch(`/admin/users/${id}/reject`, 'POST', { mode, reason: reason.trim() });
-        const msg = mode === 'block'
-            ? 'Usuario rechazado y bloqueado.'
-            : 'Usuario rechazado — conserva sus usos de prueba.';
-        showAlert(document.getElementById('pending-alert'), msg, mode === 'block' ? 'error' : 'warning');
-        setTimeout(() => navigate('pending-users'), 1500);
-    } catch (e) { showAlert(document.getElementById('pending-alert'), e.message); }
-};
 
 window.verifyEmailManual = async function(userId) {
     if (!confirm('¿Marcar el email de este usuario como verificado manualmente?')) return;
@@ -1452,42 +1267,12 @@ window.verifyEmailManual = async function(userId) {
     }
 };
 
-window.togglePublicRegister = async function() {
-    const btn = document.getElementById('btn-toggle-register');
-    if (!btn) return;
-    const isOpen = btn.textContent.includes('Habilitado');
-    const newValue = !isOpen;
-    if (!confirm(`¿${newValue ? 'Habilitar' : 'Deshabilitar'} el registro público de nuevos usuarios?`)) return;
-    btn.disabled = true;
-    try {
-        await apiFetch('/admin/settings', 'PUT', { key: 'allow_public_register', value: String(newValue) });
-        btn.style.background = newValue ? '#059669' : '#dc2626';
-        btn.textContent = newValue ? '✅ Habilitado' : '⛔ Deshabilitado';
-    } catch (e) {
-        alert('Error al actualizar la configuración: ' + e.message);
-    } finally {
-        btn.disabled = false;
-    }
-};
-
 window.resendVerification = async function(userId, email) {
     if (!confirm(`¿Reenviar el email de verificación a ${email}?`)) return;
     const alertEl = document.getElementById('ud-alert');
     try {
         const data = await apiFetch(`/admin/users/${userId}/resend-verification`, 'POST', {});
         showAlert(alertEl, `✉️ ${data.message}`, 'success');
-    } catch (e) {
-        showAlert(alertEl, e.message, 'error');
-    }
-};
-
-window.deleteUser = async function(id, email) {
-    if (!confirm(`⚠️ ELIMINAR CUENTA\n\n¿Estás seguro que querés eliminar al usuario:\n${email}\n\nEsta acción eliminará permanentemente su cuenta, suscripción, historial de uso y tickets. No se puede deshacer.`)) return;
-    if (!confirm(`Segunda confirmación:\n¿Eliminar definitivamente a ${email}?`)) return;
-    const alertEl = document.getElementById('ud-alert');
-    try {
-        await apiFetch(`/admin/users/${id}`, 'DELETE');
-        navigate('users');
     } catch (e) {
         showAlert(alertEl, e.message, 'error');
     }
@@ -1563,30 +1348,62 @@ window.activateUser = async function(userId, email) {
     }
 };
 
-// Activar desde la ficha de usuario (no desde la lista de pendientes)
-window.activateUserFromDetail = async function(userId, email) {
-    if (!confirm(`¿Activar la cuenta de ${email}?\n\nSe le asignarán 30 días con los límites de su plan actual.`)) return;
-    const alertEl = document.getElementById('ud-alert');
+window.rejectUserBlock = async function(userId, email) {
+    const reason = prompt(`Rechazar y BLOQUEAR a ${email}\n\nMotivo (obligatorio):`);
+    if (reason === null) return;
+    if (!reason.trim()) { alert('El motivo es obligatorio.'); return; }
+    if (!confirm(`¿Rechazar y bloquear a ${email}? Esta acción impide el acceso. ¿Confirmar?`)) return;
     try {
-        await apiFetch(`/admin/users/${userId}/activate`, 'POST', { expires_days: 30 });
-        showAlert(alertEl, `✅ Cuenta de ${email} activada correctamente.`, 'success');
-        setTimeout(() => navigate('user-detail', userId), 1200);
+        await apiFetch(`/admin/users/${userId}/reject`, 'POST', { mode: 'block', reason: reason.trim() });
+        const alertEl = document.getElementById('pending-alert');
+        if (alertEl) showAlert(alertEl, `🚫 Usuario ${email} rechazado y bloqueado.`, 'success');
+        setTimeout(() => renderPendingUsers(), 1200);
     } catch (e) {
-        showAlert(alertEl, e.message, 'error');
+        const alertEl = document.getElementById('pending-alert');
+        if (alertEl) showAlert(alertEl, e.message, 'error');
     }
 };
 
-// Verificar email + activar en un solo paso desde la ficha
-window.verifyAndActivateUser = async function(userId, email) {
-    if (!confirm(`¿Verificar el email y activar la cuenta de ${email} en un solo paso?\n\nSe le asignarán 30 días con los límites de su plan.`)) return;
-    const alertEl = document.getElementById('ud-alert');
+window.rejectUserKeepTrial = async function(userId, email) {
+    const reason = prompt(`Rechazar y mantener trial a ${email}\n\nMotivo (opcional):`);
+    if (reason === null) return;
+    if (!confirm(`¿Rechazar la solicitud de ${email} pero mantener su acceso de trial hasta que se agote?`)) return;
     try {
-        await apiFetch(`/admin/users/${userId}/verify-email`, 'POST', {});
-        await apiFetch(`/admin/users/${userId}/activate`, 'POST', { expires_days: 30 });
-        showAlert(alertEl, `✅ Email verificado y cuenta activada para ${email}.`, 'success');
-        setTimeout(() => navigate('user-detail', userId), 1200);
+        await apiFetch(`/admin/users/${userId}/reject`, 'POST', { mode: 'keep_trial', reason: (reason || '').trim() });
+        const alertEl = document.getElementById('pending-alert');
+        if (alertEl) showAlert(alertEl, `⏸ Solicitud de ${email} rechazada — sigue en trial.`, 'success');
+        setTimeout(() => renderPendingUsers(), 1200);
     } catch (e) {
-        showAlert(alertEl, e.message, 'error');
+        const alertEl = document.getElementById('pending-alert');
+        if (alertEl) showAlert(alertEl, e.message, 'error');
+    }
+};
+
+window.approveReactivation = async function(userId, email) {
+    if (!confirm(`¿Aprobar la solicitud de reactivación de ${email}?`)) return;
+    try {
+        await apiFetch(`/admin/users/${userId}/reactivation-request/approve`, 'POST');
+        const alertEl = document.getElementById('pending-alert');
+        if (alertEl) showAlert(alertEl, `✅ Cuenta de ${email} reactivada.`, 'success');
+        setTimeout(() => renderPendingUsers(), 1200);
+    } catch (e) {
+        const alertEl = document.getElementById('pending-alert');
+        if (alertEl) showAlert(alertEl, e.message, 'error');
+    }
+};
+
+window.rejectReactivation = async function(userId, email) {
+    const reason = prompt(`Rechazar solicitud de reactivación de ${email}\n\nMotivo (obligatorio):`);
+    if (reason === null) return;
+    if (!reason.trim()) { alert('El motivo es obligatorio.'); return; }
+    try {
+        await apiFetch(`/admin/users/${userId}/reactivation-request/reject`, 'POST', { reason: reason.trim() });
+        const alertEl = document.getElementById('pending-alert');
+        if (alertEl) showAlert(alertEl, `❌ Solicitud de ${email} rechazada.`, 'success');
+        setTimeout(() => renderPendingUsers(), 1200);
+    } catch (e) {
+        const alertEl = document.getElementById('pending-alert');
+        if (alertEl) showAlert(alertEl, e.message, 'error');
     }
 };
 
@@ -1856,31 +1673,20 @@ window.activatePlan = async function(planId) {
     } catch (e) { alert(e.message); }
 };
 
-window.applyUsageAdjustment = async function(userId, unlimited = false) {
+window.applyUsageAdjustment = async function(userId) {
     const subsystem = document.getElementById('adj-subsystem').value;
+    const amount    = parseInt(document.getElementById('adj-amount').value);
     const reason    = document.getElementById('adj-reason').value.trim();
     const ticketId  = document.getElementById('adj-ticket').value || null;
 
-    if (unlimited) {
-        const label = subsystem === 'global' ? 'uso global' : subsystem;
-        if (!confirm(`¿Establecer ${label} como ILIMITADO para este usuario?`)) return;
-    }
-
-    const amount = unlimited ? null : parseInt(document.getElementById('adj-amount').value);
-    if (!unlimited && (!amount || isNaN(amount))) { alert('Cantidad inválida'); return; }
+    if (!amount || isNaN(amount)) { alert('Cantidad inválida'); return; }
 
     try {
         const result = await apiFetch(`/admin/subscriptions/${userId}/adjust`, 'POST', {
-            subsystem, amount, unlimited, reason: reason || null, ticket_id: ticketId ? parseInt(ticketId) : null
+            subsystem, amount, reason: reason || null, ticket_id: ticketId ? parseInt(ticketId) : null
         });
-        const msg = unlimited
-            ? `🔓 ${subsystem === 'global' ? 'Límite global' : subsystem} establecido como ilimitado`
-            : subsystem === 'global'
-            ? `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} al límite global. Nuevo límite: ${result.newUsageLimit}`
-            : `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} de ${subsystem}. Nuevo bonus: ${result.newBonus}`;
-        showAlert(document.getElementById('ud-alert'), msg, 'success');
+        showAlert(document.getElementById('ud-alert'), `Ajuste aplicado: ${amount > 0 ? '+' : ''}${amount} de ${subsystem}. Nuevo bonus: ${result.newBonus}`, 'success');
         loadAdjustmentHistory(userId);
-        setTimeout(() => navigate('user-detail', userId), 1500);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
 
@@ -1899,7 +1705,7 @@ async function loadAdjustmentHistory(userId) {
             return;
         }
 
-        const subsysLabel = { global: 'Global', proc: 'Procuración', batch: 'Batch', informe: 'Informes', monitor_novedades: 'Mon. Novedades', monitor_partes: 'Mon. Partes' };
+        const subsysLabel = { proc: 'Procuración', informe: 'Informes', monitor_novedades: 'Mon. Novedades', monitor_partes: 'Mon. Partes' };
         histEl.innerHTML = `
         <div class="table-wrapper" style="max-height:200px;overflow-y:auto">
             <table style="font-size:12px">
@@ -1917,29 +1723,3 @@ async function loadAdjustmentHistory(userId) {
         if (histEl) histEl.innerHTML = `<div style="font-size:12px;color:#ef4444">${e.message}</div>`;
     }
 }
-
-// ─── Eliminar evento notification_sent del historial ────────────────────────
-window.deleteNotifEvent = async function(eventId, userId) {
-    if (!confirm('¿Eliminar esta notificación del historial?\n\nSe borrará el registro del historial y la notificación del usuario. Esta acción no se puede deshacer.')) return;
-    try {
-        const res = await apiFetch(`/admin/events/${eventId}`, 'DELETE');
-        if (!res.success) throw new Error(res.error || 'Error al eliminar');
-
-        // Quitar la fila del DOM
-        const row = document.getElementById(`ev-row-${eventId}`);
-        if (row) {
-            row.style.transition = 'opacity .2s';
-            row.style.opacity = '0';
-            setTimeout(() => {
-                row.remove();
-                // Actualizar contador en el encabezado de la sección
-                const header = document.querySelector('#content h3');
-                if (header) {
-                    header.innerHTML = header.innerHTML.replace(/\((\d+)\)/, (_, n) => `(${Math.max(0, parseInt(n) - 1)})`);
-                }
-            }, 200);
-        }
-    } catch(e) {
-        alert('Error al eliminar: ' + e.message);
-    }
-};

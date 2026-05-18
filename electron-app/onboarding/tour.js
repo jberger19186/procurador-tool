@@ -12,7 +12,7 @@
     const TOUR_KEY  = 'psc_tour_shown_v4';
     const STORE_URL = 'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme';
 
-    // ─── Pasos del tour (14 pasos) ────────────────────────────────────────────
+    // ─── Pasos del tour (13 pasos) ────────────────────────────────────────────
     const STEPS = [
         // ── 1 ──────────────────────────────────────────────────────────────
         {
@@ -43,8 +43,8 @@
             title: 'Procurar — novedades en tus expedientes',
             text:  'Busca automáticamente <strong>novedades en el PJN</strong> para todos tus expedientes.<br><br>'
                  + '• <strong>Sin fecha</strong> — trae solo movimientos del día<br>'
-                 + '• <strong>Con fecha límite</strong> — completá el campo debajo del botón para procurar desde ese día hasta hoy<br>'
-                 + '• <strong>Por lote</strong> — procesá un archivo .txt de causas',
+                 + '• <strong>Con fecha límite</strong> — completá el campo de fecha para procurar desde ese día hasta hoy<br>'
+                 + '• <strong>Por lote</strong> — con un archivo .txt de causas',
             setup: expandSidebar,
             preferRight: true,
         },
@@ -127,19 +127,7 @@
             setup: expandSidebar,
             preferRight: true,
         },
-        // ── 13 ─────────────────────────────────────────────────────────────
-        {
-            targets: [
-                '#btnSidebarTour',
-                '#btnSidebarAsistente',
-            ],
-            title: 'Tour y Asistente IA',
-            text:  '• <strong>Ver tour</strong> — relanzá esta guía en cualquier momento para repasar las funciones<br><br>'
-                 + '• <strong>Asistente IA</strong> — preguntas frecuentes sobre el uso de la app y acceso rápido al soporte técnico',
-            setup: expandSidebar,
-            preferRight: true,
-        },
-        // ── 14 ─────────────────────────────────────────────────────────────
+        // ── 13 (NUEVO) ──────────────────────────────────────────────────────
         {
             target: '#userChip',
             title: 'Tu cuenta — plan y soporte',
@@ -181,7 +169,6 @@
         return {
             left:   minLeft,
             top:    minTop,
-            right:  maxRight,
             width:  maxRight  - minLeft,
             height: maxBottom - minTop,
         };
@@ -284,54 +271,6 @@
     }
 
     // ─── Mostrar paso ─────────────────────────────────────────────────────────
-    function readRect(step) {
-        if (step.targets) return getBoundingBox(step.targets);
-        if (step.target)  { const el = document.querySelector(step.target); return el ? el.getBoundingClientRect() : null; }
-        return null;
-    }
-
-    function applyPosition(step, rect) {
-        const PAD    = 8;
-        const CARD_W = 318;
-        const CARD_H = card.offsetHeight || 220;
-        const GAP    = 14;
-
-        // Actualizar spotlight con rect fresco
-        Object.assign(spotlight.style, {
-            left:   `${rect.left   - PAD}px`,
-            top:    `${rect.top    - PAD}px`,
-            width:  `${rect.width  + PAD * 2}px`,
-            height: `${rect.height + PAD * 2}px`,
-        });
-
-        const spaceBelow = window.innerHeight - rect.top - rect.height - PAD - GAP;
-        const spaceAbove = rect.top           - PAD - GAP;
-        const spaceRight = window.innerWidth  - rect.right - PAD - GAP;
-
-        let cx, cy;
-
-        if (step.targets && step.preferRight) {
-            // Multi-target sidebar: a la derecha, centrado respecto al bounding box
-            cx = rect.right + PAD + GAP;
-            cy = rect.top + rect.height / 2 - CARD_H / 2;
-        } else if (step.preferRight && spaceRight >= CARD_W + 8) {
-            // Target único con preferRight
-            cx = rect.right + PAD + GAP;
-            cy = rect.top + rect.height / 2 - CARD_H / 2;
-        } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
-            cx = rect.left + rect.width / 2 - CARD_W / 2;
-            cy = rect.top + rect.height + PAD + GAP;
-        } else {
-            cx = rect.left + rect.width / 2 - CARD_W / 2;
-            cy = rect.top - PAD - GAP - CARD_H;
-        }
-
-        cx = Math.max(8, Math.min(cx, window.innerWidth  - CARD_W - 8));
-        cy = Math.max(8, Math.min(cy, window.innerHeight - CARD_H - 8));
-
-        Object.assign(card.style, { left: `${cx}px`, top: `${cy}px` });
-    }
-
     function showStep(idx) {
         const step = STEPS[idx];
 
@@ -346,12 +285,17 @@
         nextBtn.textContent   = idx === STEPS.length - 1 ? '✓ Finalizar' : 'Siguiente →';
         prevBtn.style.display = idx === 0 ? 'none' : '';
 
-        const PAD = 8;
+        // ── Resolver bounding box ──────────────────────────────────────────
+        let rect = null;
 
-        // Primer rect — puede ser con sidebar en transición
-        const rect0 = readRect(step);
+        if (step.targets) {
+            rect = getBoundingBox(step.targets);
+        } else if (step.target) {
+            const el = document.querySelector(step.target);
+            if (el) rect = el.getBoundingClientRect();
+        }
 
-        if (!rect0) {
+        if (!rect) {
             if (step.targets || step.target) { nextStep(); return; }
             // Sin target → card centrada, spotlight invisible
             Object.assign(spotlight.style, { left: '0px', top: '0px', width: '0px', height: '0px' });
@@ -365,23 +309,49 @@
             return;
         }
 
-        // Spotlight provisional (para que algo se vea mientras se abre la sidebar)
+        const PAD = 8;
+
         Object.assign(spotlight.style, {
-            left:   `${rect0.left   - PAD}px`,
-            top:    `${rect0.top    - PAD}px`,
-            width:  `${rect0.width  + PAD * 2}px`,
-            height: `${rect0.height + PAD * 2}px`,
+            left:   `${rect.left   - PAD}px`,
+            top:    `${rect.top    - PAD}px`,
+            width:  `${rect.width  + PAD * 2}px`,
+            height: `${rect.height + PAD * 2}px`,
         });
 
-        // Si hay setup (ej: expandir sidebar con transición CSS), esperar a que termine
-        // antes de leer las posiciones finales y ubicar el card.
-        const delay = step.setup ? 350 : 0;
-        setTimeout(() => {
-            requestAnimationFrame(() => {
-                const rect = readRect(step) || rect0;
-                applyPosition(step, rect);
-            });
-        }, delay);
+        // ── Posicionar card ────────────────────────────────────────────────
+        requestAnimationFrame(() => {
+            const CARD_W = 318;
+            const CARD_H = card.offsetHeight || 220;
+            const GAP    = 14;
+
+            const spaceBelow = window.innerHeight - rect.top - rect.height - PAD - GAP;
+            const spaceAbove = rect.top           - PAD - GAP;
+            const spaceRight = window.innerWidth  - rect.right - PAD - GAP;
+
+            let cx, cy;
+
+            if (step.preferRight && spaceRight >= CARD_W + 8) {
+                // Card a la derecha del spotlight (sidebar items)
+                cx = rect.right + PAD + GAP;
+                // Para rects muy altos (multi-target), centrar en viewport
+                cy = rect.height > CARD_H * 2
+                    ? (window.innerHeight - CARD_H) / 2
+                    : rect.top + rect.height / 2 - CARD_H / 2;
+            } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
+                // Debajo
+                cx = rect.left + rect.width / 2 - CARD_W / 2;
+                cy = rect.top + rect.height + PAD + GAP;
+            } else {
+                // Arriba
+                cx = rect.left + rect.width / 2 - CARD_W / 2;
+                cy = rect.top - PAD - GAP - CARD_H;
+            }
+
+            cx = Math.max(8, Math.min(cx, window.innerWidth  - CARD_W - 8));
+            cy = Math.max(8, Math.min(cy, window.innerHeight - CARD_H - 8));
+
+            Object.assign(card.style, { left: `${cx}px`, top: `${cy}px` });
+        });
     }
 
     // ─── Navegación ───────────────────────────────────────────────────────────

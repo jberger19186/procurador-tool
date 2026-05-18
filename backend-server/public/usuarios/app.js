@@ -283,8 +283,85 @@ async function loadAccount() {
 
         state.account = data.account;
         renderTopbar();
+        renderStatusBanner();
+        updateSidebarForStatus();
     } catch (e) {
         console.error('Error cargando cuenta:', e);
+    }
+}
+
+function renderStatusBanner() {
+    const acc = state.account;
+    const banner = document.getElementById('status-banner');
+    const bannerText = document.getElementById('status-banner-text');
+    if (!banner || !bannerText || !acc) return;
+
+    const rs = acc.registrationStatus;
+    const PORTAL = window.location.origin + window.location.pathname;
+
+    const configs = {
+        pending_activation: {
+            color: '#1d4ed8',
+            msg: () => {
+                const used = acc.usageCount ?? 0;
+                const limit = acc.usageLimit ?? 20;
+                const rem = limit - used;
+                return `${used}/${limit} usos de prueba — Configurá tu suscripción en Mi Plan` + (rem <= 5 ? ' 🔴' : '');
+            }
+        },
+        suspended: {
+            color: '#991b1b',
+            msg: () => 'Pago fallido. Actualizá tu método de pago en Facturación para reactivar tu cuenta.'
+        },
+        suspended_admin: {
+            color: '#991b1b',
+            msg: () => `Tu cuenta fue suspendida. Motivo: ${acc.suspensionReason || 'sin motivo indicado'}. Podés solicitar revisión abajo.`
+        },
+        suspended_plan_expired: {
+            color: '#991b1b',
+            msg: () => 'Tu plan venció. Seleccioná un nuevo plan en Mi Plan para reactivar.'
+        },
+        cancelled: {
+            color: '#374151',
+            msg: () => 'Tu suscripción fue cancelada.'
+        },
+    };
+
+    // Plan vence pronto (active)
+    if (rs === 'active' && acc.planExpiryDate) {
+        const days = Math.ceil((new Date(acc.planExpiryDate) - Date.now()) / 86400000);
+        if (days <= 30) {
+            banner.style.background = '#c2410c';
+            bannerText.textContent = `Tu plan vence el ${formatDate(acc.planExpiryDate)}. Seleccioná un nuevo plan en Mi Plan.`;
+            banner.style.display = 'flex';
+            return;
+        }
+    }
+
+    // Método de pago faltante (active)
+    if (rs === 'active' && !acc.paymentProvider) {
+        banner.style.background = '#b45309';
+        bannerText.textContent = 'Configurá tu método de pago en Facturación para evitar interrupciones.';
+        banner.style.display = 'flex';
+        return;
+    }
+
+    const cfg = configs[rs];
+    if (cfg) {
+        banner.style.background = cfg.color;
+        bannerText.textContent = cfg.msg();
+        banner.style.display = 'flex';
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+function updateSidebarForStatus() {
+    const rs = state.account?.registrationStatus;
+    // Mostrar sección reactivación solo si suspended_admin
+    const reactivBtn = document.getElementById('nav-reactivacion');
+    if (reactivBtn) {
+        reactivBtn.style.display = rs === 'suspended_admin' ? '' : 'none';
     }
 }
 
@@ -317,10 +394,11 @@ function navigateTo(section) {
     switch (section) {
         case 'perfil': renderPerfil(); break;
         case 'plan': renderPlan(); break;
-        case 'facturacion': /* static placeholder */ break;
+        case 'facturacion': renderFact(); break;
         case 'soporte': renderSoporte(); break;
         case 'notificaciones': renderNotificaciones(); break;
         case 'ia': renderIA(); break;
+        case 'reactivacion': renderReactivacion(); break;
     }
 }
 
@@ -517,13 +595,57 @@ function renderPlan() {
     const plan = acc.plan || {};
     const period = acc.period || {};
     const usage = acc.usage || {};
-    const statusBadgeClass = `badge badge-${acc.status || 'suspended'}`;
+    const rs = acc.registrationStatus;
+
+    // Status badge — use registrationStatus for v2.1 states
+    const statusLabels = {
+        pending_activation: 'Período de prueba',
+        active: 'Activo',
+        suspended: 'Suspendido (pago)',
+        suspended_admin: 'Suspendido por admin',
+        suspended_plan_expired: 'Plan vencido',
+        cancelled: 'Cancelado',
+        rejected: 'Rechazado',
+    };
+    const statusBadgeMap = {
+        active: 'badge-active',
+        pending_activation: 'badge-pending',
+        suspended: 'badge-suspended',
+        suspended_admin: 'badge-suspended',
+        suspended_plan_expired: 'badge-suspended',
+        cancelled: 'badge-cancelled',
+        rejected: 'badge-cancelled',
+    };
 
     // Info boxes
     document.getElementById('plan-name-display').textContent = plan.displayName || plan.name || 'Sin plan';
-    document.getElementById('plan-status-badge').className = statusBadgeClass;
-    document.getElementById('plan-status-badge').textContent = acc.status === 'active' ? 'Activo' : acc.status || '-';
-    document.getElementById('plan-expiry-display').textContent = `Vence: ${formatDate(acc.expiresAt)}`;
+    document.getElementById('plan-status-badge').className = `badge ${statusBadgeMap[rs] || 'badge-suspended'}`;
+    document.getElementById('plan-status-badge').textContent = statusLabels[rs] || rs || '-';
+
+    // Plan expiry date (from subscriptions.plan_expiry_date, v2.1)
+    if (acc.planExpiryDate) {
+        const days = Math.ceil((new Date(acc.planExpiryDate) - Date.now()) / 86400000);
+        const urgency = days <= 7 ? ' ⚠️' : days <= 30 ? ' ⏳' : '';
+        document.getElementById('plan-expiry-display').textContent = `Plan vence: ${formatDate(acc.planExpiryDate)} (${days > 0 ? days + ' días' : 'vencido'})${urgency}`;
+    } else {
+        document.getElementById('plan-expiry-display').textContent = acc.expiresAt ? `Período: vence ${formatDate(acc.expiresAt)}` : 'Sin fecha de vencimiento de plan';
+    }
+
+    // Alert for suspended_plan_expired
+    const planSection = document.getElementById('section-plan');
+    let expiredAlert = document.getElementById('plan-expired-alert');
+    if (rs === 'suspended_plan_expired') {
+        if (!expiredAlert) {
+            expiredAlert = document.createElement('div');
+            expiredAlert.id = 'plan-expired-alert';
+            expiredAlert.style.cssText = 'background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:14px 18px;margin-bottom:16px;color:#991b1b;font-size:14px';
+            planSection.insertBefore(expiredAlert, planSection.querySelector('.plan-card-main'));
+        }
+        expiredAlert.innerHTML = `<strong>Tu plan venció.</strong> Seleccioná un nuevo plan para reactivar tu cuenta.
+            <br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="openChangePlanModal()">Seleccionar plan</button>`;
+    } else if (expiredAlert) {
+        expiredAlert.remove();
+    }
 
     const daysRemaining = period.daysRemaining ?? 0;
     document.getElementById('plan-days-number').textContent = daysRemaining;
@@ -671,13 +793,29 @@ function renderPlansModal() {
     const container = document.getElementById('plans-list');
     const acc = state.account;
     const currentPlan = acc?.plan?.name;
+    const changesLeft = 2 - (acc?.planChangesThisCycle ?? 0);
+    const rs = acc?.registrationStatus;
+    const canChange = changesLeft > 0 || rs === 'suspended_plan_expired';
 
     if (!state.plans.length) {
         container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px 0">No hay planes disponibles en este momento.</p>';
         return;
     }
 
-    container.innerHTML = state.plans.map(p => {
+    if (!canChange) {
+        container.innerHTML = `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#78350f">
+            <strong>Límite de cambios alcanzado</strong><br>
+            Ya realizaste 2 cambios de plan en este ciclo. Podrás cambiar nuevamente en el próximo período.
+        </div>`;
+    } else if (changesLeft <= 1 && rs !== 'suspended_plan_expired') {
+        container.innerHTML = `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#92400e">
+            Te queda <strong>${changesLeft}</strong> cambio de plan en este ciclo.
+        </div>`;
+    } else {
+        container.innerHTML = '';
+    }
+
+    container.innerHTML += state.plans.map(p => {
         const isCurrent = p.name === currentPlan;
         const procLim = p.limits?.proc === -1 ? '∞' : (p.limits?.proc ?? '-');
         const infLim = p.limits?.informe === -1 ? '∞' : (p.limits?.informe ?? '-');
@@ -685,7 +823,7 @@ function renderPlansModal() {
         const batchLim = p.limits?.batch === -1 ? '∞' : (p.limits?.batch ?? '-');
         const price = p.priceUsd ? `USD ${p.priceUsd}/mes` : 'Gratis';
 
-        return `<div class="plan-option${isCurrent ? ' ' : ''}" style="${isCurrent ? 'border-color:var(--accent);background:var(--accent-light)' : ''}">
+        return `<div class="plan-option" style="${isCurrent ? 'border-color:var(--accent);background:var(--accent-light)' : ''}">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
                 <div class="plan-option-name">${escapeHtml(p.displayName || p.name)}</div>
                 ${isCurrent ? '<span class="badge badge-active">Plan actual</span>' : ''}
@@ -697,16 +835,11 @@ function renderPlansModal() {
                 <span>Monitor: ${monLim}</span>
                 <span>Batch: ${batchLim}</span>
             </div>
+            ${!isCurrent && canChange ? `<div style="margin-top:10px">
+                <button class="btn btn-primary btn-sm" onclick="changePlan('${escapeHtml(p.name)}')">Seleccionar este plan</button>
+            </div>` : ''}
         </div>`;
     }).join('');
-
-    // CTA para cambio de plan
-    container.innerHTML += `<div class="plan-upgrade-cta">
-        <strong>Para cambiar tu plan, contactá a soporte</strong>
-        Nuestro equipo te ayudará con el cambio o actualización de plan de forma personalizada.
-        <br><br>
-        <button class="btn btn-primary btn-sm" onclick="openTicketForPlanUpgrade()">Abrir ticket de cambio de plan</button>
-    </div>`;
 }
 
 function closePlanModal() {
@@ -965,6 +1098,210 @@ async function submitNewTicket(e) {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Enviar ticket';
+    }
+}
+
+// ─── CHANGE PLAN ─────────────────────────────────────────────────────────────
+async function changePlan(planName) {
+    if (!confirm(`¿Confirmar cambio al plan "${planName}"?`)) return;
+    closePlanModal();
+    try {
+        const res = await apiFetch('/users/change-plan', {
+            method: 'POST',
+            body: { plan_name: planName },
+        });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'Error al cambiar el plan.');
+        } else {
+            alert(data.message || 'Plan actualizado correctamente.');
+            await loadAccount();
+            renderPlan();
+        }
+    } catch (e) {
+        alert('Error de conexión. Intentá de nuevo.');
+    }
+}
+
+// ─── SECTION: FACTURACIÓN ────────────────────────────────────────────────────
+function renderFact() {
+    const acc = state.account;
+    const container = document.getElementById('facturacion-content');
+    if (!acc) return;
+
+    const rs = acc.registrationStatus;
+    const sub = {
+        nextBilling: acc.nextBillingDate,
+        provider: acc.paymentProvider,
+        cancelAt: acc.cancelAt,
+        planChanges: acc.planChangesThisCycle ?? 0,
+    };
+
+    let cancelAtHtml = '';
+    if (sub.cancelAt) {
+        cancelAtHtml = `<div style="margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#991b1b">
+            <strong>Cancelación programada:</strong> tu suscripción se cancela el ${formatDate(sub.cancelAt)}. Hasta esa fecha podés seguir usando el servicio.
+        </div>`;
+    }
+
+    const providerDisplay = sub.provider
+        ? `<span class="badge badge-active" style="font-size:12px">${escapeHtml(sub.provider)}</span>`
+        : `<span style="color:var(--text-muted);font-size:13px">No configurado — <a href="#" onclick="navigateTo('soporte');return false">contactar soporte</a></span>`;
+
+    const nextBillingDisplay = sub.nextBilling
+        ? formatDate(sub.nextBilling)
+        : '<span style="color:var(--text-muted)">No disponible</span>';
+
+    container.innerHTML = `
+        <div class="card">
+            <div class="card-header"><h3>Estado de facturación</h3></div>
+            <div class="card-body">
+                <div style="display:grid;gap:16px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                        <span style="font-size:13px;color:var(--text-muted)">Método de pago</span>
+                        <span>${providerDisplay}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                        <span style="font-size:13px;color:var(--text-muted)">Próxima renovación</span>
+                        <span style="font-size:13px;font-weight:500">${nextBillingDisplay}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                        <span style="font-size:13px;color:var(--text-muted)">Cambios de plan este ciclo</span>
+                        <span style="font-size:13px;font-weight:500">${sub.planChanges} / 2</span>
+                    </div>
+                </div>
+                ${cancelAtHtml}
+                ${rs === 'active' && !sub.cancelAt ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+                    <button class="btn btn-outline btn-sm" style="color:#991b1b;border-color:#fca5a5" onclick="confirmCancelSubscription()">Cancelar suscripción</button>
+                    <p style="font-size:11px;color:var(--text-muted);margin-top:6px">La cancelación es efectiva al finalizar el período actual.</p>
+                </div>` : ''}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <div class="billing-placeholder">
+                    <div class="billing-icon">💳</div>
+                    <h3>Historial de pagos — Próximamente</h3>
+                    <p>El historial de facturas y pagos estará disponible próximamente.</p>
+                    <div style="margin-top:16px">
+                        <button class="btn btn-outline btn-sm" onclick="navigateTo('soporte')">Consultar por facturación</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+}
+
+async function confirmCancelSubscription() {
+    if (!confirm('¿Cancelar tu suscripción? La cancelación será efectiva al finalizar el período actual y no se te cobrará más.')) return;
+    try {
+        const res = await apiFetch('/users/cancel', { method: 'POST' });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'Error al cancelar la suscripción.');
+        } else {
+            alert('Suscripción cancelada. Seguirás teniendo acceso hasta el fin del período.');
+            await loadAccount();
+            renderFact();
+        }
+    } catch (e) {
+        alert('Error de conexión. Intentá de nuevo.');
+    }
+}
+
+// ─── SECTION: REACTIVACIÓN ───────────────────────────────────────────────────
+async function renderReactivacion() {
+    const acc = state.account;
+    const container = document.getElementById('reactivacion-content');
+    if (!acc) return;
+
+    const rs = acc.registrationStatus;
+    if (rs !== 'suspended_admin') {
+        container.innerHTML = `<div class="card"><div class="card-body">
+            <p style="color:var(--text-muted);text-align:center;padding:20px 0">Esta sección no está disponible para tu estado de cuenta actual.</p>
+        </div></div>`;
+        return;
+    }
+
+    const req = acc.reactivationRequest;
+    const suspensionReason = acc.suspensionReason || 'No se indicó un motivo específico.';
+    const suspendedAt = acc.suspendedAt ? formatDate(acc.suspendedAt) : '-';
+
+    let reqHtml = '';
+    if (!req || req.status === 'rejected') {
+        const prevRejected = req && req.status === 'rejected';
+        reqHtml = `
+            <div id="react-form-wrap">
+                ${prevRejected ? `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#991b1b">
+                    Tu solicitud anterior fue rechazada. Podés enviar una nueva.
+                </div>` : ''}
+                <div class="form-group">
+                    <label for="react-message">Mensaje para el administrador <span style="color:var(--text-muted);font-size:12px">(opcional)</span></label>
+                    <textarea id="react-message" rows="4" placeholder="Explicá brevemente por qué creés que tu cuenta debería ser reactivada..."></textarea>
+                </div>
+                <div id="react-alert"></div>
+                <button class="btn btn-primary" id="btn-send-react" onclick="submitReactivacionRequest()">Enviar solicitud de reactivación</button>
+            </div>`;
+    } else if (req.status === 'pending') {
+        reqHtml = `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px 18px;color:#166534">
+            <strong>✅ Solicitud enviada</strong><br>
+            Tu solicitud fue enviada el ${formatDateTime(req.sent_at)}. El equipo de soporte la revisará a la brevedad.<br>
+            <span style="font-size:12px;color:#15803d;margin-top:4px;display:block">Solo podés enviar una solicitud por suspensión.</span>
+        </div>`;
+    } else if (req.status === 'approved') {
+        reqHtml = `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px 18px;color:#166534">
+            <strong>✅ Solicitud aprobada</strong> — Tu cuenta fue reactivada.
+        </div>`;
+    }
+
+    container.innerHTML = `
+        <div class="card">
+            <div class="card-header"><h3>Motivo de suspensión</h3></div>
+            <div class="card-body">
+                <div style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap">
+                    <div><span style="font-size:12px;color:var(--text-muted)">Fecha</span><br><strong>${suspendedAt}</strong></div>
+                </div>
+                <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 16px;font-size:14px;color:#7c2d12">
+                    ${escapeHtml(suspensionReason)}
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>Solicitud de revisión</h3></div>
+            <div class="card-body">${reqHtml}</div>
+        </div>`;
+}
+
+async function submitReactivacionRequest() {
+    const btn = document.getElementById('btn-send-react');
+    const alertEl = document.getElementById('react-alert');
+    const message = document.getElementById('react-message')?.value?.trim() || '';
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Enviando...';
+
+    try {
+        const res = await apiFetch('/users/reactivation-request', {
+            method: 'POST',
+            body: { message },
+        });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            alertEl.className = 'alert alert-error visible';
+            alertEl.innerHTML = `<span>❌</span> ${escapeHtml(data.error || 'Error al enviar la solicitud.')}`;
+            btn.disabled = false;
+            btn.textContent = 'Enviar solicitud de reactivación';
+        } else {
+            await loadAccount();
+            renderReactivacion();
+        }
+    } catch (e) {
+        alertEl.className = 'alert alert-error visible';
+        alertEl.innerHTML = '<span>❌</span> Error de conexión. Intentá de nuevo.';
+        btn.disabled = false;
+        btn.textContent = 'Enviar solicitud de reactivación';
     }
 }
 

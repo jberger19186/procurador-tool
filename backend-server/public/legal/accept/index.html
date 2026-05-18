@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aceptar Documentos Legales — Procurador SCW</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #f7f7f5;
+      color: #1a1a1a;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.75;
+      padding: 40px 20px 80px;
+    }
+
+    .container { max-width: 600px; margin: 0 auto; }
+
+    .brand {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .brand-name {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: #d97706;
+    }
+    .brand-sub { color: #6b7280; font-size: 13px; margin-top: 4px; }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 36px 40px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 1.7rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 8px;
+    }
+    .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+
+    /* Login form */
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px; }
+    input[type=email], input[type=password] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #1a1a1a;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input:focus { border-color: #d97706; }
+
+    /* Deadline badge */
+    .deadline-badge {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-left: 4px solid #d97706;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #92400e;
+      margin-bottom: 20px;
+    }
+    .deadline-badge strong { color: #78350f; }
+
+    /* Suspended warning */
+    .suspended-badge {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-left: 4px solid #dc2626;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #7f1d1d;
+      margin-bottom: 20px;
+    }
+
+    /* Doc list */
+    .doc-list { list-style: none; margin: 0 0 24px; }
+    .doc-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+    .doc-icon { font-size: 22px; flex-shrink: 0; }
+    .doc-info { flex: 1; }
+    .doc-title { font-weight: 600; font-size: 14px; color: #1a1a1a; }
+    .doc-version { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .doc-link { color: #d97706; font-size: 12px; text-decoration: none; }
+    .doc-link:hover { text-decoration: underline; }
+
+    /* Success state */
+    .success-state { text-align: center; padding: 16px 0; }
+    .success-icon { font-size: 56px; margin-bottom: 16px; }
+    .success-title {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 8px;
+    }
+    .success-msg { color: #6b7280; font-size: 14px; }
+
+    /* All good state */
+    .allgood-state { text-align: center; padding: 16px 0; }
+
+    /* Buttons */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 13px 20px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+      text-align: center;
+      text-decoration: none;
+    }
+    .btn-primary { background: #d97706; color: #fff; }
+    .btn-primary:hover { background: #b45309; }
+    .btn-primary:disabled { opacity: .6; cursor: default; }
+    .btn-secondary {
+      background: transparent;
+      color: #6b7280;
+      border: 1.5px solid #e5e7eb;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .btn-secondary:hover { background: #f9fafb; }
+
+    .error-msg {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #dc2626;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="brand">
+    <div class="brand-name">⚖️ Procurador SCW</div>
+    <div class="brand-sub">Automatización judicial</div>
+  </div>
+
+  <!-- PASO 1: Login -->
+  <div id="view-login" class="card">
+    <h1>Revisá los documentos</h1>
+    <p class="subtitle">Ingresá a tu cuenta para ver qué documentos están pendientes de aceptación.</p>
+    <div id="err-login" class="error-msg"></div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" placeholder="tu@email.com" autocomplete="email" />
+    </div>
+    <div class="field">
+      <label for="password">Contraseña</label>
+      <input id="password" type="password" placeholder="Tu contraseña" autocomplete="current-password" />
+    </div>
+    <button id="btn-login" class="btn btn-primary" onclick="doLogin()">Ingresar</button>
+  </div>
+
+  <!-- PASO 2: Documentos pendientes -->
+  <div id="view-docs" class="card hidden">
+    <h1>Documentos para aceptar</h1>
+    <p class="subtitle" id="docs-subtitle">Los siguientes documentos actualizados requieren tu aceptación para continuar usando el servicio.</p>
+
+    <div id="suspended-warn" class="suspended-badge hidden">
+      ⚠️ <strong>Tu cuenta está suspendida.</strong> Aceptá los documentos para restablecer el acceso.
+    </div>
+    <div id="deadline-info" class="deadline-badge hidden">
+      ⏳ Tenés plazo hasta el <strong id="deadline-date"></strong> para aceptar. Después de esa fecha tu acceso quedará suspendido.
+    </div>
+
+    <ul class="doc-list" id="doc-list"></ul>
+
+    <div id="err-accept" class="error-msg"></div>
+    <button id="btn-accept" class="btn btn-primary" onclick="doAccept()">
+      Acepto todos los documentos →
+    </button>
+    <a href="/dashboard" class="btn btn-secondary">Recordármelo más tarde</a>
+  </div>
+
+  <!-- PASO 3: Todo al día -->
+  <div id="view-allgood" class="card hidden">
+    <div class="allgood-state">
+      <div class="success-icon">✅</div>
+      <div class="success-title">¡Todo al día!</div>
+      <p class="success-msg">No tenés documentos pendientes de aceptación.</p>
+      <a href="/dashboard" class="btn btn-primary" style="margin-top:24px;display:inline-block;width:auto;padding:12px 32px">
+        Ir al dashboard →
+      </a>
+    </div>
+  </div>
+
+  <!-- PASO 4: Éxito -->
+  <div id="view-success" class="card hidden">
+    <div class="success-state">
+      <div class="success-icon">🎉</div>
+      <div class="success-title">¡Documentos aceptados!</div>
+      <p class="success-msg">Gracias. Tu acceso al servicio está activo.</p>
+      <a href="/dashboard" class="btn btn-primary" style="margin-top:24px;display:inline-block;width:auto;padding:12px 32px">
+        Ir al dashboard →
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = '';
+let authToken = null;
+
+// Intentar token de localStorage (por si viene desde Electron o la app)
+function tryAutoLogin() {
+    const tok = localStorage.getItem('psc_user_token') || sessionStorage.getItem('psc_user_token');
+    if (tok) {
+        authToken = tok;
+        show('view-login', false);
+        loadPending();
+    }
+}
+
+function show(id, visible = true) {
+    document.getElementById(id).classList.toggle('hidden', !visible);
+}
+
+function showView(name) {
+    ['view-login','view-docs','view-allgood','view-success'].forEach(v => {
+        document.getElementById(v).classList.add('hidden');
+    });
+    document.getElementById(name).classList.remove('hidden');
+}
+
+async function doLogin() {
+    const email    = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const errEl    = document.getElementById('err-login');
+    const btn      = document.getElementById('btn-login');
+
+    errEl.style.display = 'none';
+    if (!email || !password) {
+        errEl.textContent = 'Completá email y contraseña.';
+        errEl.style.display = 'block'; return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Ingresando…';
+
+    try {
+        const res  = await fetch(`${API}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al ingresar');
+        authToken = data.token || data.access_token;
+        localStorage.setItem('psc_user_token', authToken);
+        await loadPending();
+    } catch(e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Ingresar';
+    }
+}
+
+async function loadPending() {
+    try {
+        const res  = await fetch(`${API}/legal/pending`, {
+            headers: { Authorization: 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al cargar documentos');
+
+        if (!data.pending.length) {
+            showView('view-allgood'); return;
+        }
+
+        // Rellenar lista
+        const list = document.getElementById('doc-list');
+        list.innerHTML = '';
+        for (const doc of data.pending) {
+            const icon = doc.type === 'tyc' ? '📄' : '🔒';
+            const href = doc.type === 'tyc' ? '/terminos/' : '/privacidad/';
+            const label = doc.type === 'tyc' ? 'Términos y Condiciones' : 'Política de Privacidad';
+            list.insertAdjacentHTML('beforeend', `
+                <li class="doc-item">
+                    <div class="doc-icon">${icon}</div>
+                    <div class="doc-info">
+                        <div class="doc-title">${label}</div>
+                        <div class="doc-version">Versión ${doc.version} — ${doc.title}</div>
+                        <a href="${href}" target="_blank" class="doc-link">Leer documento →</a>
+                    </div>
+                </li>
+            `);
+        }
+
+        // Deadline
+        if (data.deadline) {
+            const d = new Date(data.deadline);
+            const str = d.toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+            document.getElementById('deadline-date').textContent = str;
+            show('deadline-info');
+        }
+
+        // Verificar si está suspendido (solo si hay token, hacemos quick check)
+        checkSuspended();
+
+        showView('view-docs');
+    } catch(e) {
+        console.error(e);
+        showView('view-login');
+        const errEl = document.getElementById('err-login');
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+    }
+}
+
+async function checkSuspended() {
+    try {
+        const res = await fetch(`${API}/client/verify-session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authToken },
+            body: JSON.stringify({ machineId: 'web' })
+        });
+        const data = await res.json();
+        if (data.legal_suspended) show('suspended-warn');
+    } catch { /* non-critical */ }
+}
+
+async function doAccept() {
+    const errEl = document.getElementById('err-accept');
+    const btn   = document.getElementById('btn-accept');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Guardando aceptación…';
+
+    try {
+        const res  = await fetch(`${API}/legal/accept`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: 'Bearer ' + authToken
+            }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al aceptar');
+        showView('view-success');
+    } catch(e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Acepto todos los documentos →';
+    }
+}
+
+// Permitir enviar con Enter en el form de login
+document.getElementById('password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+});
+document.getElementById('email').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+});
+
+// Inicializar
+tryAutoLogin();
+</script>
+</body>
+</html>

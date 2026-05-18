@@ -161,44 +161,126 @@ async function sendPromoExpirationWarning(email, nombre, planName, daysLeft, pro
     );
 }
 
-/**
- * Email al usuario cuando su solicitud es rechazada y bloqueada por el admin.
- */
-async function sendAccountRejectedEmail(email, nombre, reason) {
-    await sendEmail(
-        email,
-        'Información sobre tu solicitud — Procurador SCW',
-        `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <h2 style="color:#d97706">Procurador SCW</h2>
-          <p>Hola <strong>${nombre}</strong>,</p>
-          <p>Tu solicitud de acceso a Procurador SCW no pudo ser aprobada en este momento.</p>
-          ${reason ? `<p><strong>Motivo:</strong> ${reason}</p>` : ''}
-          <p>Si tenés alguna consulta, podés contactarnos a través del soporte en la aplicación o escribirnos a <a href="mailto:soporte@procuradortool.com">soporte@procuradortool.com</a>.</p>
-          <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-        </div>
-        `
-    );
+const PORTAL_URL = 'https://procuradortool.com/usuarios/';
+
+function dateAR(d) {
+    return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-/**
- * Email al usuario cuando su cuenta activa es suspendida por el admin.
- */
-async function sendAccountSuspendedEmail(email, nombre, reason) {
-    await sendEmail(
-        email,
-        'Tu cuenta fue suspendida — Procurador SCW',
-        `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <h2 style="color:#d97706">Procurador SCW</h2>
-          <p>Hola <strong>${nombre}</strong>,</p>
-          <p>Tu cuenta en Procurador SCW ha sido suspendida por el administrador.</p>
-          ${reason ? `<p><strong>Motivo:</strong> ${reason}</p>` : ''}
-          <p>Si creés que se trata de un error o querés más información, contactanos a través del soporte en la aplicación o escribirnos a <a href="mailto:soporte@procuradortool.com">soporte@procuradortool.com</a>.</p>
-          <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-        </div>
-        `
-    );
+async function sendActivationEmail(email, nombre) {
+    await sendEmail(email, 'Tu cuenta fue activada — Procurador SCW', `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#16a34a">✅ ¡Tu cuenta está activa!</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      <p>El administrador activó tu cuenta. Ya podés usar todas las funciones de tu plan sin límite de usos de prueba.</p>
+      <p><a href="${PORTAL_URL}" style="color:#1e40af">Ver mi plan en el portal →</a></p>
+      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+    </div>`);
+}
+
+async function sendRejectionEmail(email, nombre, reason, mode) {
+    const isBlock = mode === 'block';
+    const subject = isBlock ? 'Tu solicitud fue rechazada — Procurador SCW' : 'Tu solicitud está en espera — Procurador SCW';
+    const body = isBlock
+        ? `<p>Lamentablemente tu acceso fue <strong>denegado</strong>. Motivo: <em>${reason}</em>.</p><p>Si creés que es un error, contactanos en soporte@procuradortool.com.</p>`
+        : `<p>Tu solicitud está <strong>en espera</strong>. Motivo: <em>${reason}</em>. Podés seguir usando tus usos de prueba.</p>`;
+    await sendEmail(email, subject, `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#dc2626">Procurador SCW</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      ${body}
+      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+    </div>`);
+}
+
+async function sendTrialExhaustedEmail(email, nombre) {
+    await sendEmail(email, 'Tus usos de prueba se agotaron — Procurador SCW', `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#dc2626">Procurador SCW</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      <p>Utilizaste todos tus <strong>20 usos de prueba</strong>. Tu acceso fue bloqueado automáticamente.</p>
+      <p>Contactanos en soporte@procuradortool.com si querés activar una suscripción.</p>
+      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+    </div>`);
+}
+
+async function sendPlanExpiryWarningEmail(email, nombre, planExpiryDate) {
+    const fecha = dateAR(planExpiryDate);
+    await sendEmail(email, `Tu plan vence el ${fecha} — Procurador SCW`, `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#d97706">⚠️ Tu plan está por vencer</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      <p>Tu plan actual vence el <strong>${fecha}</strong>. Para continuar sin interrupciones, seleccioná un nuevo plan.</p>
+      <p><a href="${PORTAL_URL}" style="color:#1e40af">Seleccionar nuevo plan →</a></p>
+      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+    </div>`);
+}
+
+async function sendPlanExpiredSuspendedEmail(email, nombre) {
+    await sendEmail(email, 'Tu plan venció — Procurador SCW', `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#dc2626">Tu plan venció</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      <p>Tu plan venció y tu acceso fue suspendido. Podés reactivarlo eligiendo un nuevo plan desde el portal.</p>
+      <p><a href="${PORTAL_URL}" style="background:#d97706;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none">Seleccionar nuevo plan</a></p>
+      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+    </div>`);
+}
+
+async function sendAdminSuspendedEmail(email, nombre, reason) {
+    await sendEmail(email, 'Tu cuenta fue suspendida — Procurador SCW', `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#dc2626">Cuenta suspendida</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      <p>Tu cuenta fue suspendida por el administrador. Motivo: <em>${reason}</em>.</p>
+      <p>Podés solicitar una revisión desde el portal (una sola solicitud disponible).</p>
+      <p><a href="${PORTAL_URL}" style="color:#1e40af">Solicitar revisión →</a></p>
+      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+    </div>`);
+}
+
+async function sendReactivationResultEmail(email, nombre, approved, reason) {
+    const subject = approved ? 'Tu acceso fue restaurado — Procurador SCW' : 'Tu solicitud fue revisada — Procurador SCW';
+    const body = approved
+        ? '<p>¡Tu cuenta fue reactivada! Ya podés volver a usar la aplicación.</p>'
+        : `<p>Tu solicitud de reactivación fue revisada. La suspensión se mantiene${reason ? `. Motivo: <em>${reason}</em>` : ''}.</p><p>Contactanos en soporte@procuradortool.com si tenés dudas.</p>`;
+    await sendEmail(email, subject, `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:${approved ? '#16a34a' : '#dc2626'}">Procurador SCW</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      ${body}
+      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+    </div>`);
+}
+
+async function sendBillingReminderEmail(email, nombre, nextBillingDate) {
+    const fecha = dateAR(nextBillingDate);
+    await sendEmail(email, `Tu suscripción se renueva el ${fecha} — Procurador SCW`, `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#1e40af">Procurador SCW</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      <p>Tu suscripción se renueva automáticamente el <strong>${fecha}</strong>.</p>
+      <p>Si querés cambiar tu plan o método de pago, hacelo desde el portal antes de esa fecha.</p>
+      <p><a href="${PORTAL_URL}" style="color:#1e40af">Ir al portal →</a></p>
+      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
+    </div>`);
+}
+
+async function sendAdminReactivationRequest(nombre, apellido, email, suspensionReason, userMessage) {
+    const to = process.env.ALERT_EMAIL_TO;
+    if (!to) return;
+    await sendEmail(to, `Solicitud de reactivación — ${nombre} ${apellido}`, `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#d97706">Pedido de reactivación</h2>
+      <table style="width:100%;border-collapse:collapse">
+        <tr><td style="padding:8px;color:#6b7280">Usuario</td><td style="padding:8px"><strong>${nombre} ${apellido}</strong> (${email})</td></tr>
+        <tr style="background:#f9fafb"><td style="padding:8px;color:#6b7280">Motivo suspensión</td><td style="padding:8px">${suspensionReason || '-'}</td></tr>
+        <tr><td style="padding:8px;color:#6b7280">Mensaje del usuario</td><td style="padding:8px">${userMessage || '(sin mensaje)'}</td></tr>
+      </table>
+      <p style="margin-top:20px">
+        <a href="${process.env.BASE_URL || 'https://api.procuradortool.com'}/dashboard">Revisar en el panel de admin →</a>
+      </p>
+    </div>`);
 }
 
 module.exports = {
@@ -207,6 +289,13 @@ module.exports = {
     sendWelcomeEmail,
     sendAdminNewUserAlert,
     sendPromoExpirationWarning,
-    sendAccountRejectedEmail,
-    sendAccountSuspendedEmail,
+    sendActivationEmail,
+    sendRejectionEmail,
+    sendTrialExhaustedEmail,
+    sendPlanExpiryWarningEmail,
+    sendPlanExpiredSuspendedEmail,
+    sendAdminSuspendedEmail,
+    sendReactivationResultEmail,
+    sendBillingReminderEmail,
+    sendAdminReactivationRequest,
 };

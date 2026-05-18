@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Política de Privacidad — Procurador SCW</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #f7f7f5;
+      color: #1a1a1a;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.75;
+      padding: 48px 24px 80px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .doc-header {
+      margin-bottom: 40px;
+      padding-bottom: 32px;
+      border-bottom: 2px solid #e5e3df;
+    }
+
+    .brand {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #d97706;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .doc-header h1 {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 36px;
+      font-weight: 700;
+      color: #1a1a1a;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    .doc-date {
+      font-size: 14px;
+      color: #8a8a8a;
+      margin-bottom: 14px;
+    }
+
+    .doc-intro {
+      font-size: 15px;
+      color: #4a4a4a;
+      line-height: 1.65;
+      background: #ffffff;
+      border: 1px solid #e5e3df;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-top: 16px;
+    }
+
+    /* Sections */
+    .section {
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e5e3df;
+    }
+
+    p {
+      color: #4a4a4a;
+      margin-bottom: 14px;
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    strong {
+      color: #1a1a1a;
+      font-weight: 600;
+    }
+
+    /* Critical callout — amber */
+    .callout-amber {
+      background: #fffbeb;
+      border: 1.5px solid #f59e0b;
+      border-left: 4px solid #d97706;
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin: 16px 0;
+    }
+
+    .callout-amber p {
+      font-size: 15px;
+      color: #78350f;
+      margin-bottom: 10px;
+    }
+
+    .callout-amber p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Neutral callout */
+    .callout {
+      background: #ffffff;
+      border: 1px solid #e5e3df;
+      border-left: 4px solid #d97706;
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .callout p {
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    ul {
+      padding-left: 24px;
+      color: #4a4a4a;
+      margin-bottom: 14px;
+    }
+
+    ul li {
+      margin-bottom: 8px;
+    }
+
+    /* Data table */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 20px;
+      font-size: 14px;
+    }
+
+    .data-table th {
+      background: #ffffff;
+      border: 1px solid #e5e3df;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .data-table td {
+      border: 1px solid #e5e3df;
+      padding: 10px 14px;
+      color: #4a4a4a;
+      vertical-align: top;
+    }
+
+    .data-table tr:nth-child(even) td {
+      background: #fafaf8;
+    }
+
+    /* Tag no-collect */
+    .tag-no {
+      display: inline-block;
+      background: #d1fae5;
+      color: #065f46;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Back button */
+    .back-btn {
+      display: inline-block;
+      margin-top: 48px;
+      padding: 12px 28px;
+      background: #d97706;
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+
+    .back-btn:hover {
+      background: #b45309;
+    }
+
+    .divider {
+      height: 1px;
+      background: #e5e3df;
+      margin: 48px 0;
+    }
+
+    footer {
+      font-size: 13px;
+      color: #8a8a8a;
+      margin-top: 32px;
+    }
+
+    footer a {
+      color: #d97706;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div class="doc-header">
+      <div class="brand">Procurador SCW · procuradortool.com</div>
+      <h1>Política de Privacidad</h1>
+      <div class="doc-date">Vigente desde el 14 de mayo de 2026 &middot; Ley 25.326 de Protección de Datos Personales (Argentina)</div>
+      <div class="doc-intro">
+        En Procurador SCW el tratamiento de datos personales es mínimo y está orientado exclusivamente a la operación del servicio. No recopilamos datos que no sean estrictamente necesarios, no vendemos información a terceros y nunca accedemos a las credenciales del Poder Judicial de la Nación de nuestros usuarios.
+      </div>
+    </div>
+
+    <!-- 1. Responsable -->
+    <div class="section">
+      <h2>1. Responsable del Tratamiento</h2>
+      <p>
+        El responsable del tratamiento de los datos personales es:
+      </p>
+      <p>
+        <strong>Jonathan Berger / Procurador Tool</strong><br />
+        Correo electrónico: <strong>soporte@procuradortool.com</strong><br />
+        Sitio web: <strong>procuradortool.com</strong>
+      </p>
+      <p>
+        Para cualquier consulta, solicitud o reclamo vinculado al tratamiento de sus datos, puede comunicarse a la dirección indicada.
+      </p>
+    </div>
+
+    <!-- 2. Datos que recopilamos -->
+    <div class="section">
+      <h2>2. Datos que Recopilamos</h2>
+
+      <p><strong>2.1 Datos de registro de cuenta</strong></p>
+      <p>Al crear una cuenta en Procurador SCW recopilamos:</p>
+      <ul>
+        <li>Nombre y apellido</li>
+        <li>Correo electrónico</li>
+        <li>CUIT / CUIL</li>
+        <li>Domicilio (opcional, para facturación futura)</li>
+        <li>Plan seleccionado</li>
+        <li>Contraseña (almacenada únicamente como hash irreversible con bcrypt; nunca en texto plano)</li>
+      </ul>
+
+      <p><strong>2.2 Datos de uso del servicio</strong></p>
+      <p>Durante la operación del servicio registramos:</p>
+      <ul>
+        <li>Logs de ejecución: fecha y hora, tipo de operación realizada (procuración, informe, monitoreo) y resultado (éxito / error).</li>
+        <li>Identificador de dispositivo (Machine ID): un hash derivado del hardware del equipo del usuario, utilizado para el control de acceso por dispositivo autorizado. No permite identificar el equipo más allá del contexto del servicio.</li>
+        <li>Versión de la aplicación utilizada.</li>
+      </ul>
+
+      <p><strong>2.3 Analytics propios de la landing page</strong></p>
+      <p>
+        El sitio web (procuradortool.com) registra vistas de página y clics de forma anónima, utilizando únicamente un identificador de sesión aleatorio generado en cada visita, sin persistencia entre sesiones y sin vinculación a ningún dato personal. No se utilizan cookies de terceros ni herramientas de analytics externas (no se usa Google Analytics, Meta Pixel ni similares).
+      </p>
+
+      <div class="callout-amber">
+        <p>
+          <strong>Lo que NO recopilamos en ningún caso:</strong> las credenciales de acceso al Poder Judicial de la Nación (usuario y contraseña del PJN) no son recopiladas, almacenadas, transmitidas ni accedidas por Procurador SCW en ningún momento ni por ningún medio. Dichas credenciales permanecen exclusivamente en el gestor de contraseñas del navegador Chrome del propio usuario.
+        </p>
+      </div>
+    </div>
+
+    <!-- 3. Finalidad -->
+    <div class="section">
+      <h2>3. Finalidad del Tratamiento</h2>
+      <p>Los datos recopilados se utilizan exclusivamente para los siguientes fines:</p>
+      <ul>
+        <li><strong>Operación del servicio:</strong> autenticar al usuario, gestionar sesiones y habilitar las funciones contratadas.</li>
+        <li><strong>Gestión de suscripciones:</strong> administrar el plan del usuario, controlar cuotas de uso y procesar facturación.</li>
+        <li><strong>Soporte técnico:</strong> responder consultas, diagnosticar errores y mejorar la experiencia del usuario.</li>
+        <li><strong>Mejora del producto:</strong> analizar patrones de uso agregados y anónimos para orientar el desarrollo de nuevas funciones.</li>
+        <li><strong>Comunicaciones del servicio:</strong> notificar actualizaciones, cambios en los términos, alertas de seguridad o novedades relevantes del servicio.</li>
+      </ul>
+      <p>
+        No utilizamos los datos para publicidad de terceros, perfilado comercial ni ninguna finalidad ajena a la operación del servicio.
+      </p>
+    </div>
+
+    <!-- 4. Almacenamiento y seguridad -->
+    <div class="section">
+      <h2>4. Almacenamiento y Seguridad</h2>
+      <p>
+        Los datos se almacenan en servidores de <strong>DigitalOcean</strong> ubicados en la región de Nueva York (EE. UU.). Aplicamos las siguientes medidas de seguridad:
+      </p>
+      <ul>
+        <li><strong>Cifrado en tránsito:</strong> todas las comunicaciones entre la aplicación y el servidor utilizan HTTPS / TLS.</li>
+        <li><strong>Contraseñas:</strong> almacenadas como hash irreversible mediante bcrypt. El equipo de Procurador Tool no puede conocer ni recuperar la contraseña de ningún usuario.</li>
+        <li><strong>Credenciales PJN:</strong> nunca almacenadas en nuestros sistemas. Ver sección 2.</li>
+        <li><strong>Acceso restringido:</strong> solo el personal autorizado del equipo de Procurador Tool tiene acceso a la base de datos, bajo control de acceso estricto.</li>
+        <li><strong>Scripts de automatización:</strong> distribuidos cifrados (AES-256-CBC) con verificación de firma digital (RSA-2048) para proteger la integridad del código.</li>
+      </ul>
+      <p>
+        Aunque aplicamos medidas razonables de seguridad, ningún sistema de transmisión o almacenamiento de datos puede garantizar seguridad absoluta. En caso de detectar una brecha de seguridad que afecte datos personales, notificaremos a los usuarios afectados en el menor tiempo posible.
+      </p>
+    </div>
+
+    <!-- 5. Compartir datos -->
+    <div class="section">
+      <h2>5. Compartir Datos con Terceros</h2>
+      <p>
+        <strong>No vendemos, alquilamos ni compartimos datos personales de los usuarios con terceros</strong>, salvo en los siguientes casos limitados:
+      </p>
+      <ul>
+        <li><strong>Proveedores de infraestructura:</strong> DigitalOcean (alojamiento de servidores), bajo acuerdo de confidencialidad. Actúan exclusivamente como procesadores de datos bajo nuestras instrucciones.</li>
+        <li><strong>Requerimiento legal:</strong> cuando una autoridad competente de la República Argentina lo exija mediante orden judicial u obligación legal válida.</li>
+      </ul>
+      <p>
+        En ningún caso se comparten datos con fines publicitarios, de marketing de terceros o de perfilado comercial.
+      </p>
+    </div>
+
+    <!-- 6. Cookies y tracking -->
+    <div class="section">
+      <h2>6. Cookies y Tecnologías de Seguimiento</h2>
+      <p>
+        Procurador SCW <strong>no utiliza cookies de terceros</strong> ni herramientas de analytics externas. El seguimiento propio en la landing page se limita a:
+      </p>
+      <ul>
+        <li>Un identificador de sesión aleatorio generado al cargar la página, sin persistencia una vez cerrada la sesión del navegador.</li>
+        <li>Registro anónimo de vistas de página y eventos de interacción (clics en botones de registro y descarga), sin vinculación a ningún dato personal.</li>
+      </ul>
+      <p>
+        La aplicación de escritorio Electron y la extensión Chrome no utilizan cookies. La extensión Chrome utiliza <code>chrome.storage</code> exclusivamente para almacenar el token de sesión del usuario en el dispositivo local, sin transmisión a terceros.
+      </p>
+    </div>
+
+    <!-- 7. Derechos -->
+    <div class="section">
+      <h2>7. Derechos del Usuario (Ley 25.326)</h2>
+      <p>
+        De conformidad con la Ley 25.326 de Protección de Datos Personales de la República Argentina y su normativa reglamentaria, el usuario titular de los datos tiene derecho a:
+      </p>
+      <ul>
+        <li><strong>Acceso:</strong> solicitar información sobre los datos personales que el Prestador tiene registrados sobre su persona.</li>
+        <li><strong>Rectificación:</strong> solicitar la corrección de datos inexactos o desactualizados.</li>
+        <li><strong>Actualización:</strong> solicitar la puesta al día de sus datos.</li>
+        <li><strong>Supresión:</strong> solicitar la eliminación de sus datos cuando no sean necesarios para la finalidad que motivó su recopilación, o cuando haya revocado su consentimiento.</li>
+        <li><strong>Confidencialidad:</strong> ser informado sobre el uso que se da a sus datos personales.</li>
+      </ul>
+      <div class="callout">
+        <p>
+          Para ejercer cualquiera de estos derechos, envíe su solicitud a <strong>soporte@procuradortool.com</strong> indicando su nombre completo, correo electrónico registrado y el derecho que desea ejercer. Responderemos dentro de los plazos previstos por la normativa vigente.
+        </p>
+        <p>
+          El titular también tiene derecho a presentar una denuncia ante la <strong>Agencia de Acceso a la Información Pública (AAIP)</strong>, autoridad de control en materia de protección de datos personales en Argentina (www.argentina.gob.ar/aaip).
+        </p>
+      </div>
+    </div>
+
+    <!-- 8. Retención -->
+    <div class="section">
+      <h2>8. Retención de Datos</h2>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Tipo de dato</th>
+            <th>Período de retención</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Datos de cuenta (nombre, email, CUIT)</td>
+            <td>Mientras la cuenta esté activa, o hasta solicitud de baja por el usuario.</td>
+          </tr>
+          <tr>
+            <td>Contraseña (hash)</td>
+            <td>Mientras la cuenta esté activa. Se elimina al dar de baja la cuenta.</td>
+          </tr>
+          <tr>
+            <td>Logs de ejecución</td>
+            <td>12 meses desde la fecha del registro. Luego se eliminan de forma automática.</td>
+          </tr>
+          <tr>
+            <td>Identificador de dispositivo (Machine ID)</td>
+            <td>Mientras la cuenta esté activa. Se elimina al dar de baja la cuenta.</td>
+          </tr>
+          <tr>
+            <td>Analytics de landing (anónimos)</td>
+            <td>90 días en forma agregada; nunca vinculados a datos personales.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        Tras el período de retención indicado, los datos se eliminan de forma definitiva o se anoniminizan de modo que no puedan asociarse a ninguna persona identificable.
+      </p>
+    </div>
+
+    <!-- 9. Menores -->
+    <div class="section">
+      <h2>9. Menores de Edad</h2>
+      <p>
+        El Servicio está dirigido exclusivamente a profesionales del derecho mayores de edad. No recopilamos conscientemente datos de personas menores de 18 años. Si se detecta que se han registrado datos de un menor, serán eliminados de inmediato.
+      </p>
+    </div>
+
+    <!-- 10. Cambios en la política -->
+    <div class="section">
+      <h2>10. Modificaciones a esta Política</h2>
+      <p>
+        El Prestador puede actualizar esta Política de Privacidad en cualquier momento. Cuando se realicen cambios relevantes, se notificará al usuario por correo electrónico y/o mediante un aviso en la aplicación. La fecha de vigencia indicada en el encabezado refleja la última versión en vigor.
+      </p>
+    </div>
+
+    <!-- 11. Contacto -->
+    <div class="section">
+      <h2>11. Contacto</h2>
+      <p>
+        Para cualquier consulta relacionada con el tratamiento de datos personales, o para ejercer los derechos reconocidos en la Ley 25.326, contactar a:
+      </p>
+      <p>
+        <strong>Correo electrónico:</strong> soporte@procuradortool.com<br />
+        <strong>Sitio web:</strong> procuradortool.com
+      </p>
+    </div>
+
+    <div class="divider"></div>
+
+    <a href="/register/" class="back-btn">&#8592; Volver al registro</a>
+
+    <footer>
+      <p style="margin-top: 32px;">
+        &copy; 2026 Procurador Tool — Jonathan Berger &middot;
+        <a href="/register/">Registro</a> &middot;
+        <a href="/landing/terminos.html">Términos y Condiciones</a>
+      </p>
+    </footer>
+
+  </div>
+</body>
+</html>

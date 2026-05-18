@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Términos y Condiciones — Procurador SCW</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #f7f7f5;
+      color: #1a1a1a;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.75;
+      padding: 48px 24px 80px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .doc-header {
+      margin-bottom: 40px;
+      padding-bottom: 32px;
+      border-bottom: 2px solid #e5e3df;
+    }
+
+    .brand {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #d97706;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .doc-header h1 {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 36px;
+      font-weight: 700;
+      color: #1a1a1a;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    .doc-subtitle {
+      font-size: 14px;
+      font-weight: 600;
+      color: #d97706;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .doc-date {
+      font-size: 14px;
+      color: #8a8a8a;
+    }
+
+    /* Beta notice */
+    .beta-notice {
+      background: #fffbeb;
+      border: 1.5px solid #f59e0b;
+      border-left: 4px solid #d97706;
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 40px;
+    }
+
+    .beta-notice .notice-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #b45309;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .beta-notice p {
+      font-size: 14px;
+      color: #78350f;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    /* Sections */
+    .section {
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e5e3df;
+    }
+
+    p {
+      color: #4a4a4a;
+      margin-bottom: 14px;
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    strong {
+      color: #1a1a1a;
+      font-weight: 600;
+    }
+
+    /* Critical callout */
+    .callout {
+      background: #ffffff;
+      border: 1px solid #e5e3df;
+      border-left: 4px solid #d97706;
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .callout p {
+      margin-bottom: 10px;
+      font-size: 15px;
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    ol {
+      padding-left: 24px;
+      color: #4a4a4a;
+      margin-bottom: 14px;
+    }
+
+    ol li {
+      margin-bottom: 8px;
+      padding-left: 4px;
+    }
+
+    ul {
+      padding-left: 24px;
+      color: #4a4a4a;
+      margin-bottom: 14px;
+    }
+
+    ul li {
+      margin-bottom: 6px;
+    }
+
+    /* Back button */
+    .back-btn {
+      display: inline-block;
+      margin-top: 48px;
+      padding: 12px 28px;
+      background: #d97706;
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+
+    .back-btn:hover {
+      background: #b45309;
+    }
+
+    .divider {
+      height: 1px;
+      background: #e5e3df;
+      margin: 48px 0;
+    }
+
+    footer {
+      font-size: 13px;
+      color: #8a8a8a;
+      margin-top: 32px;
+    }
+
+    footer a {
+      color: #d97706;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div class="doc-header">
+      <div class="brand">Procurador SCW · procuradortool.com</div>
+      <h1>Términos y Condiciones de Uso</h1>
+      <div class="doc-subtitle">Versión Beta — Acceso Anticipado</div>
+      <div class="doc-date">Vigente desde el 14 de mayo de 2026</div>
+    </div>
+
+    <!-- Beta notice -->
+    <div class="beta-notice">
+      <div class="notice-title">Aviso importante — Servicio en Etapa de Prueba</div>
+      <p>
+        Procurador SCW se encuentra actualmente en etapa beta de acceso anticipado. El servicio puede experimentar interrupciones, errores o cambios significativos en sus funciones. En casos excepcionales, el servicio podría ser discontinuado. Al acceder al servicio en esta etapa, el usuario acepta estas condiciones con pleno conocimiento.
+      </p>
+    </div>
+
+    <!-- 1. Aceptación -->
+    <div class="section">
+      <h2>1. Aceptación de los Términos</h2>
+      <p>
+        Al registrarse, acceder o utilizar Procurador SCW (en adelante, "el Servicio"), el usuario acepta en su totalidad los presentes Términos y Condiciones de Uso. Si no está de acuerdo con alguna de las disposiciones aquí contenidas, debe abstenerse de utilizar el Servicio.
+      </p>
+      <p>
+        El Servicio es prestado por <strong>Jonathan Berger / Procurador Tool</strong> (en adelante, "el Prestador"), con domicilio electrónico en <strong>soporte@procuradortool.com</strong>.
+      </p>
+    </div>
+
+    <!-- 2. Descripción -->
+    <div class="section">
+      <h2>2. Descripción del Servicio</h2>
+      <p>Procurador SCW es una plataforma de automatización de tareas judiciales dirigida a profesionales del derecho matriculados en la República Argentina que poseen credenciales de acceso propias en el sistema del Poder Judicial de la Nación (PJN). El Servicio comprende dos componentes:</p>
+      <ol>
+        <li>
+          <strong>Aplicación de escritorio (Electron):</strong> automatiza, en nombre del usuario y mediante el uso de sus propias credenciales, tres operaciones sobre los portales del PJN: (a) procuración de expedientes en el sistema SCW, (b) generación de informes de estado de expedientes judiciales, y (c) monitoreo periódico de partes vinculadas a expedientes.
+        </li>
+        <li>
+          <strong>Extensión para Chrome:</strong> acelera la carga de datos de expedientes judiciales (jurisdicción, número y año) en los módulos del PJN, incluyendo consulta SCW, presentación de escritos, notificaciones y DEOX.
+        </li>
+      </ol>
+      <p>
+        Todas las acciones automatizadas se realizan <strong>en nombre del usuario, con sus propias credenciales y bajo su responsabilidad exclusiva</strong>. El Servicio actúa como una herramienta de asistencia y no como parte en ningún trámite judicial.
+      </p>
+    </div>
+
+    <!-- 3. Etapa Beta -->
+    <div class="section">
+      <h2>3. Etapa Beta y Acceso Anticipado</h2>
+      <p>
+        El Servicio se encuentra en etapa de acceso anticipado (beta). Esto implica que:
+      </p>
+      <ul>
+        <li>El Servicio puede contener errores, imprecisiones o comportamientos inesperados.</li>
+        <li>Las funciones disponibles pueden ser modificadas, reducidas o eliminadas sin previo aviso.</li>
+        <li>No se garantiza disponibilidad continua, ni un nivel mínimo de servicio (SLA).</li>
+        <li>Los precios y condiciones de los planes pueden cambiar durante esta etapa.</li>
+        <li>En casos excepcionales, el Servicio puede ser discontinuado de forma definitiva.</li>
+      </ul>
+      <p>
+        El Prestador agradece los comentarios y reportes de errores de los usuarios durante esta etapa, ya que contribuyen a mejorar el producto.
+      </p>
+    </div>
+
+    <!-- 4. Elegibilidad -->
+    <div class="section">
+      <h2>4. Requisitos de Elegibilidad</h2>
+      <p>
+        El uso del Servicio está <strong>exclusivamente habilitado para profesionales del derecho</strong> (abogados, procuradores y auxiliares de la justicia) que cuenten con:
+      </p>
+      <ul>
+        <li>Matrícula profesional habilitante vigente en la jurisdicción correspondiente.</li>
+        <li>Credenciales de acceso propias, personales e intransferibles en el sistema del Poder Judicial de la Nación.</li>
+      </ul>
+      <p>
+        Queda expresamente <strong>prohibido</strong> el uso del Servicio por parte de personas que no cumplan estos requisitos, que no posean credenciales propias en el PJN, o que pretendan actuar en nombre de terceros sin la habilitación legal correspondiente.
+      </p>
+    </div>
+
+    <!-- 5. Credenciales PJN -->
+    <div class="section">
+      <h2>5. Credenciales del Poder Judicial de la Nación</h2>
+      <div class="callout">
+        <p>
+          <strong>Las credenciales del PJN son personales e intransferibles.</strong> Procurador SCW no almacena, no accede, no transmite ni tiene conocimiento en ningún momento de las credenciales (usuario y contraseña) del PJN del usuario. Dichas credenciales permanecen en todo momento bajo el exclusivo control del usuario, gestionadas por el gestor de contraseñas del navegador Chrome instalado en el equipo del propio usuario.
+        </p>
+        <p>
+          El usuario es el único responsable de la custodia, confidencialidad y uso adecuado de sus credenciales del PJN. Queda expresamente prohibido el uso de credenciales ajenas o la cesión de las propias credenciales a terceros, ya sea a través de esta plataforma o por cualquier otro medio. El incumplimiento de esta disposición es exclusiva responsabilidad del usuario.
+        </p>
+      </div>
+    </div>
+
+    <!-- 6. Supervisión -->
+    <div class="section">
+      <h2>6. Supervisión de Procesos Automatizados</h2>
+      <div class="callout">
+        <p>
+          La automatización provista por el Servicio <strong>no reemplaza el criterio profesional del usuario</strong>. Se recomienda enfáticamente la supervisión activa de todos los procesos automatizados y la verificación independiente de los resultados obtenidos antes de considerarlos como definitivos o de actuar en consecuencia.
+        </p>
+        <p>
+          El usuario es responsable de controlar que las acciones realizadas mediante el Servicio sean correctas, completas y acordes a derecho. El Prestador no asume responsabilidad alguna por errores, omisiones o consecuencias derivadas de actuaciones judiciales basadas en resultados no verificados por el propio usuario.
+        </p>
+      </div>
+    </div>
+
+    <!-- 7. Suspensión -->
+    <div class="section">
+      <h2>7. Suspensión o Interrupción del Servicio</h2>
+      <p>El Servicio puede ser suspendido, total o parcialmente, en los siguientes supuestos:</p>
+      <ol>
+        <li>
+          <strong>Modificaciones en los sistemas del PJN:</strong> cuando cambios técnicos, actualizaciones o modificaciones en los portales del Poder Judicial de la Nación impidan o dificulten el correcto funcionamiento de la automatización, el Prestador podrá suspender el Servicio de forma inmediata, sin que ello genere responsabilidad alguna a su cargo. El Prestador realizará sus mejores esfuerzos para restablecer el Servicio en el menor tiempo posible una vez identificada y resuelta la incompatibilidad.
+        </li>
+        <li>
+          <strong>Decisión unilateral del Prestador:</strong> el Prestador se reserva el derecho de suspender, modificar o discontinuar el Servicio, en forma total o parcial, en cualquier momento, de manera unilateral y sin necesidad de invocar causa alguna, con o sin previo aviso. Esta facultad incluye, sin limitación, la posibilidad de dar por terminada la etapa beta y restructurar el Servicio.
+        </li>
+      </ol>
+      <p>
+        En ninguno de los dos supuestos el Prestador asumirá responsabilidad por daños directos, indirectos, incidentales o consecuentes derivados de la suspensión o interrupción del Servicio.
+      </p>
+    </div>
+
+    <!-- 8. Planes y Facturación -->
+    <div class="section">
+      <h2>8. Planes y Facturación</h2>
+      <p>El Servicio ofrece distintos planes de suscripción:</p>
+      <ul>
+        <li><strong>EXTENSION_PROMO:</strong> USD 1/mes — acceso a la extensión Chrome (hasta 5 flujos habilitados).</li>
+        <li><strong>COMBO_PROMO:</strong> USD 9.99/mes — extensión Chrome + aplicación de escritorio con cuotas de uso incluidas.</li>
+        <li><strong>Planes futuros:</strong> BASIC, PRO y ENTERPRISE, con condiciones a definir al momento de su lanzamiento.</li>
+      </ul>
+      <p>
+        Durante la etapa beta, los precios, cuotas y condiciones de los planes pueden variar. El Prestador notificará con antelación razonable cualquier cambio relevante en la facturación de suscripciones activas.
+      </p>
+      <p>
+        El acceso al Servicio queda sujeto a la activación manual por parte del equipo de Procurador Tool luego del registro. Los nuevos usuarios reciben un período de prueba limitado según las condiciones vigentes al momento del registro.
+      </p>
+    </div>
+
+    <!-- 9. Limitación de responsabilidad -->
+    <div class="section">
+      <h2>9. Limitación de Responsabilidad</h2>
+      <p>
+        El Servicio se provee <strong>"tal como está" (as is)</strong>, sin garantías de ningún tipo, expresas o implícitas. El Prestador no garantiza resultados específicos, exactitud de la automatización, ni que el Servicio sea adecuado para un propósito particular.
+      </p>
+      <p>
+        El Prestador no será responsable, en ningún caso, por:
+      </p>
+      <ul>
+        <li>Errores u omisiones en los resultados generados por la automatización.</li>
+        <li>Consecuencias de actuaciones judiciales basadas en información provista por el Servicio sin verificación independiente del usuario.</li>
+        <li>Pérdida de datos, interrupciones del servicio, o daños indirectos de cualquier naturaleza.</li>
+        <li>Cambios en los sistemas del PJN que afecten el funcionamiento de la automatización.</li>
+      </ul>
+      <p>
+        La responsabilidad máxima del Prestador frente al usuario, en cualquier circunstancia, no excederá el importe abonado por el usuario en los tres meses anteriores al evento que da origen al reclamo.
+      </p>
+    </div>
+
+    <!-- 10. Propiedad intelectual -->
+    <div class="section">
+      <h2>10. Propiedad Intelectual</h2>
+      <p>
+        El software, los scripts de automatización, los algoritmos, el diseño, la marca Procurador SCW / ProcuradorTool y todos los demás elementos del Servicio son propiedad exclusiva del Prestador o de sus licenciantes, y están protegidos por las leyes de propiedad intelectual aplicables.
+      </p>
+      <p>
+        El usuario recibe una licencia de uso <strong>no exclusiva, personal, intransferible y revocable</strong> para utilizar el Servicio exclusivamente según los términos aquí establecidos. Queda prohibida la reproducción, distribución, ingeniería inversa, modificación o cualquier otro uso no autorizado de los elementos del Servicio.
+      </p>
+    </div>
+
+    <!-- 11. Modificaciones -->
+    <div class="section">
+      <h2>11. Modificaciones a los Términos</h2>
+      <p>
+        El Prestador puede modificar los presentes Términos y Condiciones en cualquier momento. Cuando se realicen cambios relevantes, se notificará al usuario por correo electrónico a la dirección registrada y/o mediante un aviso en la aplicación. El uso continuado del Servicio tras la notificación implicará la aceptación de los términos modificados.
+      </p>
+    </div>
+
+    <!-- 12. Ley aplicable -->
+    <div class="section">
+      <h2>12. Ley Aplicable y Jurisdicción</h2>
+      <p>
+        Los presentes Términos y Condiciones se rigen por las leyes de la <strong>República Argentina</strong>. Para cualquier controversia derivada de su interpretación o aplicación, las partes se someten a la jurisdicción de los <strong>Tribunales Ordinarios de la Ciudad Autónoma de Buenos Aires</strong>, con renuncia expresa a cualquier otro fuero que pudiera corresponder.
+      </p>
+    </div>
+
+    <!-- 13. Contacto -->
+    <div class="section">
+      <h2>13. Contacto</h2>
+      <p>
+        Para consultas, reclamos o ejercicio de derechos vinculados a estos Términos y Condiciones, el usuario puede comunicarse con el Prestador a través de:
+      </p>
+      <p>
+        <strong>Correo electrónico:</strong> soporte@procuradortool.com<br />
+        <strong>Sitio web:</strong> procuradortool.com
+      </p>
+    </div>
+
+    <div class="divider"></div>
+
+    <a href="/register/" class="back-btn">&#8592; Volver al registro</a>
+
+    <footer>
+      <p style="margin-top: 32px;">
+        &copy; 2026 Procurador Tool — Jonathan Berger &middot;
+        <a href="/register/">Registro</a> &middot;
+        <a href="/landing/privacidad.html">Política de Privacidad</a>
+      </p>
+    </footer>
+
+  </div>
+</body>
+</html>

@@ -48,9 +48,8 @@ router.post('/verify-session', authenticateToken, async (req, res) => {
 
         const user = result.rows[0];
 
-        // Verificar suscripción activa o trial con cuota disponible
-        const isTrial = user.status === 'suspended' && (user.usage_limit || 0) > 0 && (user.usage_count || 0) < (user.usage_limit || 0);
-        if (!user.plan || (user.status !== 'active' && !isTrial)) {
+        // Verificar suscripción
+        if (!user.plan || user.status !== 'active') {
             return res.status(403).json({
                 error: 'No tienes una suscripción activa',
                 action: 'subscribe'
@@ -99,11 +98,10 @@ router.get('/scripts/check/:scriptName', authenticateToken, async (req, res) => 
     const userId = req.user.id;
 
     try {
-        // Verificar suscripción activa o trial con cuota disponible
+        // Verificar suscripción activa (mismo criterio que el download)
         const subResult = await db.query(`
             SELECT 1 FROM subscriptions
-            WHERE user_id = $1 AND expires_at > NOW()
-              AND (status = 'active' OR (status = 'suspended' AND usage_limit > 0 AND usage_count < usage_limit))
+            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -142,11 +140,10 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
     const userId = req.user.id;
 
     try {
-        // Verificar suscripción activa o trial con cuota disponible
+        // Verificar suscripción activa
         const subResult = await db.query(`
             SELECT * FROM subscriptions
-            WHERE user_id = $1 AND expires_at > NOW()
-              AND (status = 'active' OR (status = 'suspended' AND usage_limit > 0 AND usage_count < usage_limit))
+            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -226,11 +223,10 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     try {
-        // Verificar suscripción activa o trial con cuota disponible
+        // Verificar suscripción
         const subResult = await db.query(`
             SELECT plan FROM subscriptions
-            WHERE user_id = $1 AND expires_at > NOW()
-              AND (status = 'active' OR (status = 'suspended' AND usage_limit > 0 AND usage_count < usage_limit))
+            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -280,31 +276,23 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
     }[subsystem] || null;
 
     try {
-        // Verificar suscripción activa o trial (suspended con cuotas disponibles)
+        // Verificar suscripción activa
         const subResult = await db.query(`
             SELECT s.*, p.proc_executions_limit, p.informe_limit, p.monitor_novedades_limit,
                    p.proc_expedientes_limit, p.batch_executions_limit, p.batch_expedientes_limit
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1
-              AND (
-                (s.status = 'active' AND s.expires_at > NOW())
-                OR
-                (s.status = 'suspended' AND s.usage_limit > 0 AND s.usage_count < s.usage_limit)
-              )
+            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
         `, [userId]);
 
         if (subResult.rows.length === 0) {
             return res.status(403).json({ error: 'No tienes una suscripción activa' });
         }
 
-        // Si el usuario está en modo trial (suspended), solo contar globalmente
-        const isTrial = subResult.rows[0].status === 'suspended';
-
         const sub = subResult.rows[0];
 
-        // Verificar límite por subsistema si aplica (no aplica en trial)
-        if (usageCol && success && !isTrial) {
+        // Verificar límite por subsistema si aplica
+        if (usageCol && success) {
             const limitVal = {
                 'proc_usage':               sub.proc_executions_limit,
                 'batch_usage':              sub.batch_executions_limit,
@@ -370,15 +358,10 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
                 return res.status(403).json({ error: 'Límite alcanzado', action: 'upgrade' });
             }
         } else {
-            // Trial o backward compat: incrementar usage_count global
+            // Backward compat: solo incrementar usage_count global
             await db.query(`
                 UPDATE subscriptions SET usage_count = usage_count + 1
-                WHERE user_id = $1
-                  AND (
-                    (status = 'active' AND expires_at > NOW())
-                    OR
-                    (status = 'suspended' AND usage_limit > 0 AND usage_count < usage_limit)
-                  )
+                WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
                   AND usage_count < usage_limit
             `, [userId]);
         }
@@ -423,12 +406,16 @@ router.get('/account', authenticateToken, async (req, res) => {
 
     try {
         const result = await db.query(`
-            SELECT u.email, u.nombre, u.apellido, u.cuit, u.machine_id, u.last_login,
-                   u.email_verified, u.registration_status,
+            SELECT u.email, u.cuit, u.machine_id, u.last_login,
+                   u.registration_status,
                    s.plan, s.status, s.expires_at, s.usage_count, s.usage_limit,
                    s.period_start,
                    s.proc_usage, s.batch_usage, s.informe_usage, s.monitor_novedades_usage,
                    s.proc_bonus, s.batch_bonus, s.informe_bonus, s.monitor_novedades_bonus, s.monitor_partes_bonus,
+                   s.suspension_cause, s.suspended_at, s.suspension_reason,
+                   s.billing_paused, s.plan_expiry_date, s.plan_changes_this_cycle,
+                   s.next_billing_date, s.payment_provider, s.cancel_at,
+                   s.scheduled_plan, s.reactivation_request,
                    p.id as plan_id, p.display_name as plan_display_name, p.description as plan_description,
                    p.proc_executions_limit, p.proc_expedientes_limit,
                    p.batch_executions_limit, p.batch_expedientes_limit,
@@ -489,11 +476,7 @@ router.get('/account', authenticateToken, async (req, res) => {
             success: true,
             account: {
                 email: u.email,
-                nombre: u.nombre || null,
-                apellido: u.apellido || null,
                 cuit: u.cuit || null,
-                emailVerified: u.email_verified || false,
-                registrationStatus: u.registration_status || null,
                 machineBound: !!u.machine_id,
                 lastLogin: u.last_login,
                 plan: {
@@ -551,7 +534,20 @@ router.get('/account', authenticateToken, async (req, res) => {
                 // backward compat
                 usageCount: u.usage_count ?? 0,
                 usageLimit: u.usage_limit ?? 0,
-                remaining: u.usage_limit ? u.usage_limit - (u.usage_count ?? 0) : 0
+                remaining: u.usage_limit ? u.usage_limit - (u.usage_count ?? 0) : 0,
+                // Flujo v2.1 — estado y suscripción extendida
+                registrationStatus: u.registration_status || null,
+                suspensionCause: u.suspension_cause || null,
+                suspendedAt: u.suspended_at || null,
+                suspensionReason: u.suspension_reason || null,
+                billingPaused: u.billing_paused || false,
+                planExpiryDate: u.plan_expiry_date || null,
+                planChangesThisCycle: u.plan_changes_this_cycle || 0,
+                nextBillingDate: u.next_billing_date || null,
+                paymentProvider: u.payment_provider || null,
+                cancelAt: u.cancel_at || null,
+                scheduledPlan: u.scheduled_plan || null,
+                reactivationRequest: u.reactivation_request || null
             }
         });
     } catch (error) {
@@ -619,8 +615,7 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
                    p.promo_max_users, p.promo_used_count, p.promo_alert_days
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.expires_at > NOW()
-              AND (s.status = 'active' OR (s.status = 'suspended' AND s.usage_limit > 0 AND s.usage_count < s.usage_limit))
+            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
         `, [userId]);
 
         if (result.rows.length === 0) {
@@ -677,46 +672,6 @@ router.post('/heartbeat', authenticateToken, async (req, res) => {
 
     } catch (error) {
         console.error('Error en heartbeat:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
-// ==================== NOTIFICACIONES IN-APP ====================
-
-// GET /client/notifications — traer notificaciones no leídas del usuario
-router.get('/notifications', authenticateToken, async (req, res) => {
-    const db = req.app.get('db');
-    const userId = req.user.id;
-    try {
-        const result = await db.query(`
-            SELECT id, title, message, type, read_at, created_at
-            FROM user_notifications
-            WHERE (user_id = $1 OR user_id IS NULL)
-              AND (expires_at IS NULL OR expires_at > NOW())
-            ORDER BY created_at DESC
-            LIMIT 20
-        `, [userId]);
-        res.json({ success: true, notifications: result.rows });
-    } catch (error) {
-        console.error('Error obteniendo notificaciones:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
-// POST /client/notifications/:id/read — marcar notificación como leída
-router.post('/notifications/:id/read', authenticateToken, async (req, res) => {
-    const db = req.app.get('db');
-    const userId = req.user.id;
-    const { id } = req.params;
-    try {
-        await db.query(`
-            UPDATE user_notifications
-            SET read_at = NOW()
-            WHERE id = $1 AND (user_id = $2 OR user_id IS NULL) AND read_at IS NULL
-        `, [id, userId]);
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error marcando notificación:', error);
         res.status(500).json({ error: 'Error del servidor' });
     }
 });

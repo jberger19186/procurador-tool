@@ -88,6 +88,10 @@
                 <span class="nav-icon">🤖</span>
                 Asistente IA
             </button>
+            <button class="nav-item" id="nav-reactivacion" data-section="reactivacion" style="display:none">
+                <span class="nav-icon">🔓</span>
+                Reactivar cuenta
+            </button>
         </nav>
 
         <div class="sidebar-footer">
@@ -110,6 +114,11 @@
                 <button class="btn btn-secondary btn-sm" id="btn-logout">Cerrar sesión</button>
             </div>
         </header>
+
+        <!-- Status banner -->
+        <div id="status-banner" style="display:none;align-items:center;gap:10px;padding:10px 24px;font-size:13px;color:#fff;font-weight:500;flex-shrink:0">
+            <span id="status-banner-text"></span>
+        </div>
 
         <!-- Content -->
         <main id="content">
@@ -263,22 +272,18 @@
             <!-- ===== SECCIÓN: FACTURACIÓN ===== -->
             <section class="section" id="section-facturacion">
                 <div class="section-title">Facturación</div>
-                <div class="section-subtitle">Gestión de pagos y facturas</div>
+                <div class="section-subtitle">Estado de pagos y suscripción</div>
+                <div id="facturacion-content">
+                    <div class="empty-state"><span class="spinner" style="width:32px;height:32px;border-width:3px;color:var(--text-muted)"></span></div>
+                </div>
+            </section>
 
-                <div class="card">
-                    <div class="card-body">
-                        <div class="billing-placeholder">
-                            <div class="billing-icon">💳</div>
-                            <h3>Próximamente disponible</h3>
-                            <p>
-                                Esta sección estará disponible próximamente.
-                                Aquí podrás ver tus facturas, historial de pagos y gestionar tus medios de pago de forma sencilla.
-                            </p>
-                            <div style="margin-top:24px">
-                                <button class="btn btn-outline" onclick="navigateTo('soporte')">Consultar por facturación</button>
-                            </div>
-                        </div>
-                    </div>
+            <!-- ===== SECCIÓN: REACTIVACIÓN ===== -->
+            <section class="section" id="section-reactivacion">
+                <div class="section-title">Reactivar cuenta</div>
+                <div class="section-subtitle">Tu cuenta fue suspendida — podés solicitar una revisión</div>
+                <div id="reactivacion-content">
+                    <div class="empty-state"><span class="spinner" style="width:32px;height:32px;border-width:3px;color:var(--text-muted)"></span></div>
                 </div>
             </section>
 

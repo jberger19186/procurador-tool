@@ -86,30 +86,10 @@ router.get('/plan-availability', async (req, res) => {
     }
 });
 
-// ─── GET /auth/register-status ───────────────────────────────────────────────
-// Público — indica si el registro está abierto (Gap 5)
-router.get('/register-status', async (req, res) => {
-    const db = req.app.get('db');
-    try {
-        const r = await db.query(`SELECT value FROM app_settings WHERE key = 'allow_public_register'`);
-        const open = r.rows.length > 0 ? r.rows[0].value === 'true' : process.env.ALLOW_PUBLIC_REGISTER === 'true';
-        res.json({ open });
-    } catch {
-        const open = process.env.ALLOW_PUBLIC_REGISTER === 'true';
-        res.json({ open });
-    }
-});
-
 // ─── POST /auth/register ──────────────────────────────────────────────────────
 router.post('/register', registerLimiter, async (req, res) => {
-    // Leer configuración desde DB (con fallback a env var) — Gap 5
-    let registroHabilitado = process.env.ALLOW_PUBLIC_REGISTER === 'true';
-    try {
-        const r = await db.query(`SELECT value FROM app_settings WHERE key = 'allow_public_register'`);
-        if (r.rows.length > 0) registroHabilitado = r.rows[0].value === 'true';
-    } catch { /* usa fallback */ }
-    if (!registroHabilitado) {
-        return res.status(403).json({ error: 'El registro de nuevos usuarios está temporalmente cerrado.' });
+    if (process.env.ALLOW_PUBLIC_REGISTER !== 'true') {
+        return res.status(403).json({ error: 'Registro no habilitado' });
     }
 
     const {
@@ -161,6 +141,16 @@ router.post('/register', registerLimiter, async (req, res) => {
         const client = await db.connect();
         try {
             await client.query('BEGIN');
+
+            // Verificar CUIT duplicado (antes del INSERT para mensaje claro)
+            const cleanCuit = cuit.replace(/[-\s]/g, '');
+            const cuitExists = await client.query(
+                'SELECT id FROM users WHERE cuit = $1', [cleanCuit]
+            );
+            if (cuitExists.rows.length > 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'El CUIT ya está registrado en el sistema' });
+            }
 
             const hashedPassword = await bcrypt.hash(password, 10);
             const token = crypto.randomBytes(32).toString('hex');
@@ -222,9 +212,6 @@ router.post('/register', registerLimiter, async (req, res) => {
 
     } catch (error) {
         if (error.code === '23505') {
-            if (error.detail && error.detail.includes('cuit')) {
-                return res.status(400).json({ error: 'Este CUIT ya tiene una cuenta registrada. Contactá al soporte si creés que es un error.' });
-            }
             return res.status(400).json({ error: 'El email ya está registrado' });
         }
         logger.error('Error en registro:', error.message);
@@ -268,25 +255,39 @@ router.get('/verify-email', async (req, res) => {
 
         const user = result.rows[0];
 
-        await db.query(`
-            UPDATE users
-            SET email_verified = true,
-                registration_status = 'pending_activation',
-                email_verify_token = NULL,
-                email_verify_expires = NULL
-            WHERE id = $1
-        `, [user.id]);
-
-        // La suscripción se mantiene 'suspended' con usage_limit=20.
-        // El usuario puede usar la app hasta agotar ese cupo compartido entre todos
-        // los subsistemas. El admin activa formalmente para asignar los límites del plan.
+        const verifyClient = await db.connect();
+        try {
+            await verifyClient.query('BEGIN');
+            await verifyClient.query(`
+                UPDATE users
+                SET email_verified = true,
+                    registration_status = 'pending_activation',
+                    email_verify_token = NULL,
+                    email_verify_expires = NULL
+                WHERE id = $1
+            `, [user.id]);
+            await verifyClient.query(
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'email_verified', $2)`,
+                [user.id, JSON.stringify({ plan: user.plan_name })]
+            );
+            await verifyClient.query(
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'email_verified', $2)`,
+                [user.id, 'Tu email fue verificado. Tenés 20 usos de prueba disponibles.']
+            );
+            await verifyClient.query('COMMIT');
+        } catch (e) {
+            await verifyClient.query('ROLLBACK');
+            throw e;
+        } finally {
+            verifyClient.release();
+        }
 
         mailer.sendWelcomeEmail(user.email, user.nombre, user.plan_name).catch(() => {});
 
-        logger.info(`✅ Email verificado y suscripción trial activada: ${user.email}`);
+        logger.info(`✅ Email verificado: ${user.email}`);
 
         res.send(renderVerifyPage('success',
-            `¡Hola ${user.nombre}! Tu email fue confirmado. Ya podés ingresar a la app y usar tus 20 ejecuciones de prueba. El administrador gestionará tu plan completo.`));
+            `¡Hola ${user.nombre}! Tu email fue confirmado. El administrador activará tu cuenta en breve. Mientras tanto, tenés 20 ejecuciones de prueba disponibles en la app.`));
 
     } catch (error) {
         logger.error('Error en verify-email:', error.message);
@@ -339,48 +340,9 @@ a{color:#1e40af;text-decoration:none}</style></head>
 <div class="icon">${icon}</div>
 <h2>Procurador SCW</h2>
 <p>${message}</p>
-<p style="margin-top:24px"><a href="https://api.procuradortool.com/usuarios/">Ingresar al portal →</a></p>
+<p style="margin-top:24px"><a href="/">Volver al inicio</a></p>
 </div></body></html>`;
 }
-
-// ─── POST /auth/resend-verification ──────────────────────────────────────────
-// Público — reenvía el email de verificación (Gap 2)
-router.post('/resend-verification', async (req, res) => {
-    const { email } = req.body || {};
-    const db = req.app.get('db');
-
-    if (!email) return res.status(400).json({ error: 'Email requerido' });
-
-    try {
-        const result = await db.query(
-            `SELECT id, nombre FROM users WHERE email = $1 AND email_verified = false`,
-            [email.trim().toLowerCase()]
-        );
-
-        // Respuesta genérica para no revelar si el email existe
-        if (result.rows.length === 0) {
-            return res.json({ success: true, message: 'Si el email está registrado y pendiente de verificación, recibirás el enlace en breve.' });
-        }
-
-        const user = result.rows[0];
-        const token   = crypto.randomBytes(32).toString('hex');
-        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-        await db.query(
-            `UPDATE users SET email_verify_token=$1, email_verify_expires=$2 WHERE id=$3`,
-            [token, expires, user.id]
-        );
-
-        mailer.sendEmailVerification(email, user.nombre, token).catch(() => {});
-        logger.info(`📧 Reenvío de verificación solicitado: ${email}`);
-
-        res.json({ success: true, message: 'Email de verificación reenviado. Revisá tu casilla en los próximos minutos.' });
-
-    } catch (error) {
-        logger.error('Error en resend-verification:', error.message);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
 
 // Login admin (dashboard web — sin machineId ni suscripción requerida)
 router.post('/admin-login', loginLimiter, async (req, res) => {
@@ -460,28 +422,34 @@ router.post('/login', loginLimiter, async (req, res) => {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }
 
-        // Gap 1 — Bloquear acceso hasta verificar email
-        if (!user.email_verified) {
-            return res.status(403).json({
-                error: 'Debés verificar tu email antes de ingresar. Revisá tu casilla o solicitá un nuevo enlace desde el portal de usuarios.',
-                code: 'EMAIL_NOT_VERIFIED'
-            });
+        // Bloquear acceso según registration_status con mensajes específicos
+        const blockedStatuses = {
+            rejected:              { error: 'Tu cuenta fue rechazada. Contactá al administrador.', action: 'contact_admin' },
+            suspended_admin:       { error: 'Tu cuenta fue suspendida por el administrador. Podés solicitar revisión en el portal.', action: 'contact_admin' },
+            suspended_plan_expired:{ error: 'Tu plan venció. Ingresá al portal para seleccionar un nuevo plan.', action: 'portal' },
+            cancelled:             { error: 'Tu suscripción fue cancelada.', action: 'resubscribe' },
+        };
+        if (blockedStatuses[user.registration_status]) {
+            return res.status(403).json(blockedStatuses[user.registration_status]);
         }
 
-        // Verificar suscripción (también permite suspended con usage_limit > 0 = trial)
+        // Verificar suscripción — permite: active O trial (suspended + pending_activation + usos restantes)
         const subResult = await db.query(`
             SELECT s.*, p.promo_type, p.promo_end_date, p.promo_max_users,
                    p.promo_used_count, p.promo_alert_days, p.plan_type
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
             WHERE s.user_id = $1
-              AND (s.status = 'active' OR (s.status = 'suspended' AND s.usage_limit > 0))
-              AND s.expires_at > NOW()
+              AND (
+                (s.status = 'active' AND s.expires_at > NOW())
+                OR
+                (s.status = 'suspended' AND s.usage_count < s.usage_limit AND s.expires_at > NOW())
+              )
         `, [user.id]);
 
         if (subResult.rows.length === 0) {
             return res.status(403).json({
-                error: 'No tienes una suscripción activa',
+                error: 'No tenés una suscripción activa',
                 action: 'subscribe'
             });
         }
@@ -527,7 +495,8 @@ router.post('/login', loginLimiter, async (req, res) => {
             sessionKey,
             user: {
                 id: user.id,
-                role: user.role
+                role: user.role,
+                registrationStatus: user.registration_status
             },
             subscription: {
                 plan: subscription.plan,
@@ -535,7 +504,12 @@ router.post('/login', loginLimiter, async (req, res) => {
                 expiresAt: subscription.expires_at,
                 usageCount: subscription.usage_count,
                 usageLimit: subscription.usage_limit,
-                remaining: subscription.usage_limit - subscription.usage_count
+                remaining: subscription.usage_limit - subscription.usage_count,
+                planExpiryDate: subscription.plan_expiry_date || null,
+                nextBillingDate: subscription.next_billing_date || null,
+                paymentProvider: subscription.payment_provider || null,
+                suspensionReason: subscription.suspension_reason || null,
+                planChangesThisCycle: subscription.plan_changes_this_cycle || 0
             },
             promoStatus
         });
@@ -568,20 +542,30 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }
 
-        // Gap 4 — Permitir trial (suspended + usage_limit > 0) además de active
+        // Bloquear según registration_status con mensajes específicos
+        const blockedExtStatuses = {
+            rejected:              'Tu cuenta fue rechazada. Contactá al administrador.',
+            suspended_admin:       'Tu cuenta fue suspendida por el administrador.',
+            suspended_plan_expired:'Tu plan venció. Ingresá al portal para seleccionar un nuevo plan.',
+            cancelled:             'Tu suscripción fue cancelada.',
+            pending_email:         'Debés verificar tu email antes de continuar.',
+        };
+        if (blockedExtStatuses[user.registration_status]) {
+            return res.status(403).json({ error: blockedExtStatuses[user.registration_status] });
+        }
+
+        // Verificar suscripción activa y obtener flujos habilitados del plan
         const subResult = await db.query(`
-            SELECT s.plan, s.status, s.expires_at, s.usage_limit, s.usage_count,
+            SELECT s.plan, s.status, s.expires_at,
                    COALESCE(p.extension_flows, '[]'::jsonb) AS extension_flows
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1
-              AND (s.status = 'active' OR (s.status = 'suspended' AND s.usage_limit > 0))
-              AND s.expires_at > NOW()
+            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
         `, [user.id]);
 
         if (subResult.rows.length === 0) {
             return res.status(403).json({
-                error: 'No tienes una suscripción activa',
+                error: 'No tenés una suscripción activa',
                 action: 'subscribe'
             });
         }
@@ -602,13 +586,11 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
         res.json({
             success: true,
             token,
-            user: { id: user.id, email: user.email, emailVerified: user.email_verified },
+            user: { id: user.id, email: user.email },
             extension: {
                 enabledFlows: sub.extension_flows,
                 plan: sub.plan,
-                status: sub.status,
-                expiresAt: sub.expires_at,
-                isTrial: sub.status === 'suspended'
+                expiresAt: sub.expires_at
             }
         });
 
@@ -659,9 +641,8 @@ router.post('/refresh', authenticateToken, async (req, res) => {
 
         const user = userResult.rows[0];
 
-        // Verificar suscripción activa o trial con cuota disponible
-        const isTrialSub = user.status === 'suspended' && (user.usage_limit || 0) > 0 && (user.usage_count || 0) < (user.usage_limit || 0);
-        if (!user.status || (user.status !== 'active' && !isTrialSub)) {
+        // Verificar suscripción activa
+        if (!user.status || user.status !== 'active') {
             return res.status(403).json({
                 error: 'Suscripción no activa',
                 action: 'subscribe'

@@ -3,36 +3,6 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { getCacheStats, clearCache } = require('../utils/scriptEncryption');
 const { adminLimiter } = require('../middleware/rateLimiter');
-const mailer = require('../utils/mailer');
-const logger = require('../utils/logger');
-
-// ─── Helpers de auditoría ────────────────────────────────────────────────────
-
-// user_events columns: user_id, event_type, performed_by, reason, old_value, new_value
-async function logUserEvent(db, { userId, eventType, actorId = null, details = {} }) {
-    try {
-        const reason   = details.reason || null;
-        const oldValue = Object.keys(details).length ? JSON.stringify(details) : null;
-        await db.query(`
-            INSERT INTO user_events (user_id, event_type, performed_by, reason, old_value)
-            VALUES ($1, $2, $3, $4, $5)
-        `, [userId, eventType, actorId, reason, oldValue]);
-    } catch (err) {
-        logger.warn(`⚠️ No se pudo registrar user_event (${eventType}) para usuario ${userId}: ${err.message}`);
-    }
-}
-
-// user_notifications columns: user_id, title, message, type, created_by, expires_at
-async function createUserNotification(db, { userId = null, title, message, type = 'info', createdBy = null, expiresInDays = 90 }) {
-    try {
-        await db.query(`
-            INSERT INTO user_notifications (user_id, title, message, type, created_by, expires_at)
-            VALUES ($1, $2, $3, $4, $5, NOW() + ($6 || ' days')::INTERVAL)
-        `, [userId, title, message, type, createdBy, expiresInDays]);
-    } catch (err) {
-        logger.warn(`⚠️ No se pudo crear notificación para usuario ${userId}: ${err.message}`);
-    }
-}
 
 // Aplicar rate limiter a todas las rutas de admin
 router.use(adminLimiter);
@@ -204,7 +174,6 @@ router.get('/users', authenticateAdmin, async (req, res) => {
     try {
         const result = await db.query(`
             SELECT u.id, u.email, u.role, u.created_at, u.last_login, u.machine_id,
-                   u.registration_status,
                    s.plan, s.status, s.expires_at, s.usage_count, s.usage_limit
             FROM users u
             LEFT JOIN subscriptions s ON u.id = s.user_id
@@ -270,7 +239,7 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
         }
 
         const u = userResult.rows[0];
-        const usageLimit = 999999; // Activos: el gate real es por subsistema; global ilimitado
+        const usageLimit = u.proc_executions_limit > 0 ? u.proc_executions_limit : 9999;
 
         await client.query(`
             UPDATE users
@@ -289,17 +258,27 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
             WHERE user_id = $3
         `, [usageLimit, expires_days, userId]);
 
+        // Eventos, notificación y email
+        await client.query(
+            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'activated', $2)`,
+            [userId, JSON.stringify({ admin_id: req.user.id, plan: u.plan_name || '' })]
+        );
+        await client.query(
+            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'activate', $3)`,
+            [req.user.id, userId, JSON.stringify({ plan: u.plan_name || '' })]
+        );
+        await client.query(
+            `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'account_activated', $2)`,
+            [userId, 'Tu cuenta fue activada. Ya podés usar todas las funciones de tu plan.']
+        );
+
         await client.query('COMMIT');
 
-        // Auditoría
-        await logUserEvent(db, {
-            userId: parseInt(userId),
-            eventType: 'activated',
-            actorId: req.user.id,
-            details: { expires_days, plan_id: u.plan_id, usage_limit: usageLimit }
-        });
+        // Email fuera de transacción (no bloquea)
+        const mailer = require('../utils/mailer');
+        mailer.sendActivationEmail(u.email, u.email).catch(() => {});
 
-        logger.info(`✅ Usuario ${userId} (${u.email}) activado por admin ${req.user.id}`);
+        console.log(`✅ Usuario ${userId} (${u.email}) activado por admin ${req.user.id}`);
         res.json({ success: true, message: `Usuario ${u.email} activado correctamente` });
 
     } catch (error) {
@@ -311,110 +290,320 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
     }
 });
 
-// ─── Rechazar usuario ─────────────────────────────────────────────────────────
-// mode: 'block'      → bloquea acceso (usage_limit=0, registration_status='rejected')
-// mode: 'keep_trial' → mantiene los usos de prueba restantes, solo notifica
+// ─── Rechazar usuario (Opción B: bloquear / Opción C: mantener trial) ─────────
 router.post('/users/:userId/reject', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
-    const { reason = '', mode = 'block' } = req.body;
+    const { mode, reason } = req.body; // mode: 'block' | 'keep_trial'
     const db = req.app.get('db');
 
     if (!['block', 'keep_trial'].includes(mode)) {
         return res.status(400).json({ error: "mode debe ser 'block' o 'keep_trial'" });
+    }
+    if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: 'El motivo es obligatorio' });
     }
 
     const client = await db.connect();
     try {
         await client.query('BEGIN');
 
-        const userResult = await client.query(`
-            SELECT u.id, u.email, u.nombre, u.registration_status,
-                   s.status AS sub_status, s.usage_count, s.usage_limit
-            FROM users u
-            JOIN subscriptions s ON u.id = s.user_id
-            WHERE u.id = $1
-        `, [userId]);
-
+        const userResult = await client.query(
+            `SELECT u.id, u.email, u.nombre, u.registration_status
+             FROM users u WHERE u.id = $1`,
+            [userId]
+        );
         if (userResult.rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
-
         const u = userResult.rows[0];
 
-        if (u.registration_status === 'active') {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: 'No se puede rechazar un usuario activo. Use suspender.' });
-        }
+        const mailer = require('../utils/mailer');
 
         if (mode === 'block') {
-            // Bloquear acceso completamente
-            await client.query(`
-                UPDATE users SET registration_status = 'rejected', updated_at = NOW()
-                WHERE id = $1
-            `, [userId]);
-
-            await client.query(`
-                UPDATE subscriptions SET usage_limit = 0, updated_at = NOW()
-                WHERE user_id = $1
-            `, [userId]);
-
+            await client.query(
+                `UPDATE users SET registration_status = 'rejected', updated_at = NOW() WHERE id = $1`,
+                [userId]
+            );
+            await client.query(
+                `UPDATE subscriptions SET status = 'cancelled', updated_at = NOW() WHERE user_id = $1`,
+                [userId]
+            );
+            await client.query(
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'rejected_blocked', $2)`,
+                [userId, JSON.stringify({ reason, admin_id: req.user.id })]
+            );
+            await client.query(
+                `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'reject_block', $3)`,
+                [req.user.id, userId, JSON.stringify({ reason })]
+            );
+            await client.query(
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'account_rejected', $2)`,
+                [userId, `Tu solicitud fue rechazada. Motivo: ${reason}`]
+            );
             await client.query('COMMIT');
-
-            // Email al usuario
-            await mailer.sendAccountRejectedEmail(u.email, u.nombre, reason);
-
-            // Auditoría
-            await logUserEvent(db, {
-                userId: parseInt(userId),
-                eventType: 'rejected_blocked',
-                actorId: req.user.id,
-                details: { reason, from_status: u.registration_status }
-            });
-
-            // Notificación in-app
-            await createUserNotification(db, {
-                userId: parseInt(userId),
-                title: 'Solicitud no aprobada',
-                message: reason
-                    ? `Tu solicitud de acceso no pudo ser aprobada. Motivo: ${reason}`
-                    : 'Tu solicitud de acceso no pudo ser aprobada en este momento.',
-                type: 'error',
-                createdBy: req.user.id
-            });
-
-            logger.info(`🚫 Usuario ${userId} (${u.email}) rechazado (block) por admin ${req.user.id}. Motivo: ${reason}`);
-            return res.json({ success: true, message: `Usuario ${u.email} rechazado y bloqueado`, mode });
+            mailer.sendRejectionEmail(u.email, u.nombre, reason, 'block').catch(() => {});
+        } else {
+            // keep_trial: no cambia registration_status, solo notifica
+            await client.query(
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'rejected_keep_trial', $2)`,
+                [userId, JSON.stringify({ reason, admin_id: req.user.id })]
+            );
+            await client.query(
+                `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'reject_keep_trial', $3)`,
+                [req.user.id, userId, JSON.stringify({ reason })]
+            );
+            await client.query(
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'trial_review_pending', $2)`,
+                [userId, `Tu solicitud está en espera. Motivo: ${reason}. Podés seguir usando tus usos de prueba.`]
+            );
+            await client.query('COMMIT');
+            mailer.sendRejectionEmail(u.email, u.nombre, reason, 'keep_trial').catch(() => {});
         }
 
-        // mode === 'keep_trial'
-        await client.query('COMMIT');
-
-        // Auditoría
-        await logUserEvent(db, {
-            userId: parseInt(userId),
-            eventType: 'rejected_keep_trial',
-            actorId: req.user.id,
-            details: { reason, from_status: u.registration_status, trial_remaining: u.usage_limit - u.usage_count }
-        });
-
-        // Notificación in-app
-        await createUserNotification(db, {
-            userId: parseInt(userId),
-            title: 'Solicitud no aprobada — podés seguir con la prueba',
-            message: reason
-                ? `Tu solicitud de activación completa no fue aprobada en este momento. Motivo: ${reason}. Podés seguir usando los usos de prueba disponibles.`
-                : 'Tu solicitud de activación completa no fue aprobada en este momento. Podés seguir usando los usos de prueba disponibles.',
-            type: 'warning',
-            createdBy: req.user.id
-        });
-
-        logger.info(`⚠️ Usuario ${userId} (${u.email}) rechazado (keep_trial) por admin ${req.user.id}. Motivo: ${reason}`);
-        return res.json({ success: true, message: `Usuario ${u.email} rechazado — mantiene usos de prueba`, mode });
+        console.log(`🚫 Usuario ${userId} rechazado (${mode}) por admin ${req.user.id}`);
+        res.json({ success: true, mode });
 
     } catch (error) {
-        await client.query('ROLLBACK').catch(() => {});
+        await client.query('ROLLBACK');
         console.error('Error rechazando usuario:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    } finally {
+        client.release();
+    }
+});
+
+// ─── Suspender usuario por admin ──────────────────────────────────────────────
+router.post('/users/:userId/suspend', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const { reason, billing_paused = true } = req.body;
+    const db = req.app.get('db');
+
+    if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: 'El motivo de suspensión es obligatorio' });
+    }
+
+    const client = await db.connect();
+    try {
+        await client.query('BEGIN');
+
+        const userResult = await client.query(
+            `SELECT u.id, u.email, u.nombre, u.registration_status
+             FROM users u WHERE u.id = $1`,
+            [userId]
+        );
+        if (userResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        const u = userResult.rows[0];
+        if (u.registration_status !== 'active') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Solo se puede suspender una cuenta activa' });
+        }
+
+        await client.query(
+            `UPDATE users SET registration_status = 'suspended_admin', updated_at = NOW() WHERE id = $1`,
+            [userId]
+        );
+        await client.query(`
+            UPDATE subscriptions SET
+                status = 'suspended_admin',
+                suspension_cause = 'admin',
+                suspended_at = NOW(),
+                suspended_by = $1,
+                billing_paused = $2,
+                suspension_reason = $3,
+                updated_at = NOW()
+            WHERE user_id = $4
+        `, [req.user.id, billing_paused, reason.trim(), userId]);
+
+        await client.query(
+            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'admin_suspended', $2)`,
+            [userId, JSON.stringify({ reason, admin_id: req.user.id, billing_paused })]
+        );
+        await client.query(
+            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'suspend', $3)`,
+            [req.user.id, userId, JSON.stringify({ reason, billing_paused })]
+        );
+        await client.query(
+            `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'account_suspended', $2)`,
+            [userId, `Tu cuenta fue suspendida. Motivo: ${reason}. Podés solicitar revisión en el portal.`]
+        );
+
+        await client.query('COMMIT');
+
+        const mailer = require('../utils/mailer');
+        mailer.sendAdminSuspendedEmail(u.email, u.nombre, reason).catch(() => {});
+
+        console.log(`⏸️ Usuario ${userId} suspendido por admin ${req.user.id}. billing_paused=${billing_paused}`);
+        res.json({ success: true });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error suspendiendo usuario:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    } finally {
+        client.release();
+    }
+});
+
+// ─── Listar solicitudes de reactivación pendientes ────────────────────────────
+router.get('/users/reactivation-requests', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const result = await db.query(`
+            SELECT u.id, u.nombre, u.apellido, u.email,
+                   s.suspension_reason, s.suspended_at, s.reactivation_request
+            FROM users u
+            JOIN subscriptions s ON u.id = s.user_id
+            WHERE u.registration_status = 'suspended_admin'
+              AND s.reactivation_request IS NOT NULL
+              AND s.reactivation_request->>'status' = 'pending'
+            ORDER BY (s.reactivation_request->>'sent_at') ASC
+        `);
+        res.json({ success: true, requests: result.rows });
+    } catch (error) {
+        console.error('Error listando solicitudes de reactivación:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── Procesar solicitud de reactivación ──────────────────────────────────────
+router.post('/users/:userId/reactivation-request/:action', authenticateAdmin, async (req, res) => {
+    const { userId, action } = req.params;
+    const { reason } = req.body; // solo para 'reject'
+    const db = req.app.get('db');
+
+    if (!['approve', 'reject'].includes(action)) {
+        return res.status(400).json({ error: "action debe ser 'approve' o 'reject'" });
+    }
+    if (action === 'reject' && (!reason || !reason.trim())) {
+        return res.status(400).json({ error: 'El motivo es obligatorio para rechazar' });
+    }
+
+    const client = await db.connect();
+    try {
+        await client.query('BEGIN');
+
+        const userResult = await client.query(
+            `SELECT u.id, u.email, u.nombre, s.billing_paused, s.reactivation_request
+             FROM users u JOIN subscriptions s ON u.id = s.user_id WHERE u.id = $1`,
+            [userId]
+        );
+        if (userResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        const u = userResult.rows[0];
+        const mailer = require('../utils/mailer');
+
+        if (action === 'approve') {
+            // Recalcular next_billing_date si billing estaba pausado
+            const nextBilling = new Date();
+            nextBilling.setDate(nextBilling.getDate() + 30);
+
+            await client.query(
+                `UPDATE users SET registration_status = 'active', updated_at = NOW() WHERE id = $1`,
+                [userId]
+            );
+            await client.query(`
+                UPDATE subscriptions SET
+                    status = 'active',
+                    suspension_cause = NULL,
+                    suspended_at = NULL,
+                    suspended_by = NULL,
+                    billing_paused = false,
+                    suspension_reason = NULL,
+                    reactivation_request = jsonb_set(reactivation_request, '{status}', '"approved"'),
+                    next_billing_date = CASE WHEN billing_paused = true THEN $1 ELSE next_billing_date END,
+                    updated_at = NOW()
+                WHERE user_id = $2
+            `, [nextBilling, userId]);
+
+            await client.query(
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'admin_reactivated', $2)`,
+                [userId, JSON.stringify({ admin_id: req.user.id })]
+            );
+            await client.query(
+                `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'reactivate_approve', '{}')`,
+                [req.user.id, userId]
+            );
+            await client.query(
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'account_reactivated', $2)`,
+                [userId, 'Tu acceso fue restaurado. Ya podés usar la aplicación nuevamente.']
+            );
+            await client.query('COMMIT');
+            mailer.sendReactivationResultEmail(u.email, u.nombre, true).catch(() => {});
+
+        } else {
+            await client.query(`
+                UPDATE subscriptions SET
+                    reactivation_request = jsonb_set(reactivation_request, '{status}', '"rejected"'),
+                    updated_at = NOW()
+                WHERE user_id = $1
+            `, [userId]);
+            await client.query(
+                `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'reactivate_reject', $3)`,
+                [req.user.id, userId, JSON.stringify({ reason })]
+            );
+            await client.query(
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'reactivation_rejected', $2)`,
+                [userId, `Tu solicitud fue revisada. La suspensión se mantiene. Motivo: ${reason}`]
+            );
+            await client.query('COMMIT');
+            mailer.sendReactivationResultEmail(u.email, u.nombre, false, reason).catch(() => {});
+        }
+
+        console.log(`🔄 Solicitud de reactivación de usuario ${userId}: ${action} por admin ${req.user.id}`);
+        res.json({ success: true, action });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error procesando solicitud de reactivación:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    } finally {
+        client.release();
+    }
+});
+
+// ─── Configurar vencimiento de plan ──────────────────────────────────────────
+router.put('/plans/:planId/expiry', authenticateAdmin, async (req, res) => {
+    const { planId } = req.params;
+    const { plan_expiry_date } = req.body; // ISO string o null
+    const db = req.app.get('db');
+
+    const expiryValue = plan_expiry_date ? new Date(plan_expiry_date) : null;
+    if (plan_expiry_date && isNaN(expiryValue)) {
+        return res.status(400).json({ error: 'Fecha de vencimiento inválida' });
+    }
+
+    const client = await db.connect();
+    try {
+        await client.query('BEGIN');
+
+        await client.query(
+            `UPDATE plans SET plan_expiry_date = $1 WHERE id = $2`,
+            [expiryValue, planId]
+        );
+        // Propagar a todos los usuarios activos en este plan
+        await client.query(`
+            UPDATE subscriptions SET plan_expiry_date = $1, updated_at = NOW()
+            WHERE plan_id = $2 AND status = 'active'
+        `, [expiryValue, planId]);
+
+        await client.query(
+            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, NULL, 'set_plan_expiry', $2)`,
+            [req.user.id, JSON.stringify({ plan_id: planId, plan_expiry_date: expiryValue })]
+        );
+
+        await client.query('COMMIT');
+        console.log(`📅 Vencimiento del plan ${planId} configurado a ${expiryValue} por admin ${req.user.id}`);
+        res.json({ success: true, plan_expiry_date: expiryValue });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error configurando vencimiento de plan:', error);
         res.status(500).json({ error: 'Error del servidor' });
     } finally {
         client.release();
@@ -464,34 +653,13 @@ router.get('/users/:userId', authenticateAdmin, async (req, res) => {
     }
 });
 
-// ─── Historial de eventos de un usuario ──────────────────────────────────────
-router.get('/users/:userId/events', authenticateAdmin, async (req, res) => {
-    const { userId } = req.params;
-    const db = req.app.get('db');
-    try {
-        const result = await db.query(`
-            SELECT e.id, e.event_type, e.reason, e.old_value AS details, e.created_at,
-                   a.email AS actor_email
-            FROM user_events e
-            LEFT JOIN users a ON e.performed_by = a.id
-            WHERE e.user_id = $1
-            ORDER BY e.created_at DESC
-            LIMIT 100
-        `, [userId]);
-        res.json({ success: true, events: result.rows });
-    } catch (error) {
-        console.error('Error obteniendo eventos:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
 // Actualizar datos de registro de un usuario
 router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
     const { nombre, apellido, cuit, domicilio, registration_status } = req.body;
     const db = req.app.get('db');
 
-    const validStatuses = ['pending_email', 'pending_activation', 'active', 'trial'];
+    const validStatuses = ['pending_email', 'pending_activation', 'active', 'rejected', 'suspended', 'suspended_admin', 'suspended_plan_expired', 'cancelled'];
     if (registration_status && !validStatuses.includes(registration_status)) {
         return res.status(400).json({ error: 'Estado de registro inválido' });
     }
@@ -542,10 +710,6 @@ router.post('/users/:userId/verify-email', authenticateAdmin, async (req, res) =
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
         const u = result.rows[0];
-
-        // La suscripción se mantiene 'suspended': el usuario puede usar los 20 usos
-        // de prueba. El admin activa formalmente para asignar los límites del plan.
-
         require('../utils/logger').info(`✅ Email verificado manualmente por admin: ${u.email}`);
         res.json({ success: true, registration_status: u.registration_status });
     } catch (error) {
@@ -659,34 +823,6 @@ router.put('/users/:userId/cuit', authenticateAdmin, async (req, res) => {
     }
 });
 
-// ─── Eliminar usuario ─────────────────────────────────────────────────────────
-router.delete('/users/:userId', authenticateAdmin, async (req, res) => {
-    const { userId } = req.params;
-    const db = req.app.get('db');
-    try {
-        // Verificar que el usuario existe y no es admin
-        const check = await db.query('SELECT id, email, role FROM users WHERE id = $1', [userId]);
-        if (check.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
-        const target = check.rows[0];
-        if (target.role === 'admin') return res.status(403).json({ error: 'No se puede eliminar un usuario administrador' });
-
-        await db.query('BEGIN');
-        // Limpiar tablas sin CASCADE
-        await db.query('DELETE FROM ticket_comments WHERE author_id = $1', [userId]);
-        await db.query('DELETE FROM monitor_consultas_log WHERE user_id = $1', [userId]);
-        // El resto (subscriptions, usage_logs, support_tickets, monitor_partes, etc.) se eliminan en cascada
-        await db.query('DELETE FROM users WHERE id = $1', [userId]);
-        await db.query('COMMIT');
-
-        require('../utils/logger').info(`🗑️ Usuario eliminado: ${target.email} (id=${userId}) por admin ${req.user.id}`);
-        res.json({ success: true, message: `Usuario ${target.email} eliminado correctamente` });
-    } catch (error) {
-        await db.query('ROLLBACK').catch(() => {});
-        console.error('Error eliminando usuario:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
 // ==================== SUSCRIPCIONES ====================
 
 // Crear/actualizar suscripción
@@ -732,16 +868,7 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
                 updated_at = NOW()
         `, [userId, planData.name, planData.id, expiresAt, usageLimit]);
 
-        logger.info(`💳 Suscripción "${planData.name}" creada/actualizada para usuario ${userId} por admin: ${req.user.id}`);
-
-        // Obtener plan anterior para el historial
-        const prevSubResult = await db.query(`SELECT plan FROM subscriptions WHERE user_id = $1`, [userId]).catch(() => ({ rows: [] }));
-        const fromPlan = prevSubResult.rows[0]?.plan || null;
-
-        await logUserEvent(db, {
-            userId: parseInt(userId), eventType: 'plan_changed', actorId: req.user.id,
-            details: { from_plan: fromPlan, to_plan: planData.name, duration_days: durationDays || planData.period_days || 30, expires_at: expiresAt }
-        });
+        console.log(`💳 Suscripción "${planData.name}" creada/actualizada para usuario ${userId} por admin: ${req.user.id}`);
         res.json({ success: true, message: 'Suscripción creada/actualizada correctamente', subscription: { userId, plan: planData.name, expiresAt } });
     } catch (error) {
         console.error('Error gestionando suscripción:', error);
@@ -749,56 +876,18 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
     }
 });
 
-// Suspender suscripción (cuenta activa)
+// Suspender suscripción
 router.post('/subscriptions/:userId/suspend', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
-    const { reason = '' } = req.body;
     const db = req.app.get('db');
 
     try {
-        // Obtener datos del usuario para email y auditoría
-        const userResult = await db.query(`
-            SELECT u.id, u.email, u.nombre, u.registration_status, s.status AS sub_status
-            FROM users u
-            JOIN subscriptions s ON u.id = s.user_id
-            WHERE u.id = $1
-        `, [userId]);
-
-        if (userResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
-        const u = userResult.rows[0];
-
         await db.query(
-            `UPDATE subscriptions SET status = 'suspended', updated_at = NOW() WHERE user_id = $1`,
+            `UPDATE subscriptions SET status = 'suspended' WHERE user_id = $1`,
             [userId]
         );
 
-        // Auditoría
-        await logUserEvent(db, {
-            userId: parseInt(userId),
-            eventType: 'suspended',
-            actorId: req.user.id,
-            details: { reason, from_status: u.sub_status, registration_status: u.registration_status }
-        });
-
-        // Notificación in-app
-        await createUserNotification(db, {
-            userId: parseInt(userId),
-            title: 'Tu cuenta fue suspendida',
-            message: reason
-                ? `Tu cuenta en Procurador SCW ha sido suspendida. Motivo: ${reason}`
-                : 'Tu cuenta en Procurador SCW ha sido suspendida por el administrador.',
-            type: 'error',
-            createdBy: req.user.id
-        });
-
-        // Email (solo si la cuenta estaba activa, no en trial)
-        if (u.registration_status === 'active') {
-            await mailer.sendAccountSuspendedEmail(u.email, u.nombre, reason);
-        }
-
-        logger.info(`⏸️ Suscripción suspendida para usuario ${userId} (${u.email}) por admin: ${req.user.id}. Motivo: ${reason}`);
+        console.log(`⏸️ Suscripción suspendida para usuario ${userId} por admin: ${req.user.id}`);
 
         res.json({
             success: true,
@@ -817,22 +906,11 @@ router.post('/subscriptions/:userId/reactivate', authenticateAdmin, async (req, 
 
     try {
         await db.query(
-            `UPDATE subscriptions SET status = 'active', updated_at = NOW() WHERE user_id = $1`,
+            `UPDATE subscriptions SET status = 'active' WHERE user_id = $1`,
             [userId]
         );
 
-        // Obtener datos actuales para el historial
-        const subInfoResult = await db.query(`SELECT plan, status, expires_at FROM subscriptions WHERE user_id = $1`, [userId]).catch(() => ({ rows: [] }));
-        const subInfo = subInfoResult.rows[0] || {};
-
-        await logUserEvent(db, {
-            userId: parseInt(userId),
-            eventType: 'reactivated',
-            actorId: req.user.id,
-            details: { plan: subInfo.plan || null, expires_at: subInfo.expires_at || null }
-        });
-
-        logger.info(`▶️ Suscripción reactivada para usuario ${userId} por admin: ${req.user.id}`);
+        console.log(`▶️ Suscripción reactivada para usuario ${userId} por admin: ${req.user.id}`);
 
         res.json({
             success: true,
@@ -961,10 +1039,10 @@ router.get('/stats/overview', authenticateAdmin, async (req, res) => {
             ORDER BY user_count DESC
         `);
 
-        // Usuarios pendientes de activación (email verificado, esperando activación manual)
+        // Usuarios pendientes de activación
         const pendingResult = await db.query(`
             SELECT COUNT(*) as total FROM users
-            WHERE registration_status = 'pending_activation'
+            WHERE registration_status IN ('pending_email','pending_payment')
         `);
 
         res.json({
@@ -1398,13 +1476,13 @@ router.patch('/plans/:planId/activate', authenticateAdmin, async (req, res) => {
 router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
     const { userId } = req.params;
-    const { subsystem, amount, unlimited, reason, ticket_id } = req.body;
+    const { subsystem, amount, reason, ticket_id } = req.body;
 
-    const validSubsystems = ['global', 'proc', 'batch', 'informe', 'monitor_novedades', 'monitor_partes'];
+    const validSubsystems = ['proc', 'batch', 'informe', 'monitor_novedades', 'monitor_partes'];
     if (!validSubsystems.includes(subsystem)) {
         return res.status(400).json({ error: `Subsistema inválido. Válidos: ${validSubsystems.join(', ')}` });
     }
-    if (!unlimited && (!amount || isNaN(amount))) {
+    if (!amount || isNaN(amount)) {
         return res.status(400).json({ error: 'amount debe ser un número entero' });
     }
 
@@ -1421,69 +1499,7 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
         const userCheck = await db.query(`SELECT email FROM users WHERE id = $1`, [userId]);
         if (userCheck.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-        const action = unlimited ? '∞ ilimitado' : (parseInt(amount) > 0 ? `+${amount}` : `${amount}`);
-
-        // ── Caso ilimitado: setea usage_limit o bonus a 999999 ────────────────
-        if (unlimited) {
-            const UNLIMITED_VAL = 999999;
-            let updateResult;
-            if (subsystem === 'global') {
-                updateResult = await db.query(`
-                    UPDATE subscriptions SET usage_limit = $1 WHERE user_id = $2 RETURNING usage_limit
-                `, [UNLIMITED_VAL, userId]);
-            } else {
-                const bonusColUnlim = { proc: 'proc_bonus', batch: 'batch_bonus', informe: 'informe_bonus', monitor_novedades: 'monitor_novedades_bonus', monitor_partes: 'monitor_partes_bonus' }[subsystem];
-                updateResult = await db.query(`
-                    UPDATE subscriptions SET ${bonusColUnlim} = $1 WHERE user_id = $2 RETURNING ${bonusColUnlim}
-                `, [UNLIMITED_VAL, userId]);
-            }
-            if (updateResult.rows.length === 0) return res.status(404).json({ error: 'El usuario no tiene suscripción' });
-
-            await db.query(`
-                INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason, ticket_id)
-                VALUES ($1, $2, $3, $4, $5, $6)
-            `, [userId, req.user.id, subsystem, UNLIMITED_VAL, reason || `Establecido ilimitado`, ticket_id || null]);
-
-            logger.info(`🔓 ${subsystem} establecido ilimitado para usuario ${userId} por admin: ${req.user.id}`);
-            await logUserEvent(db, {
-                userId: parseInt(userId), eventType: 'usage_adjusted', actorId: req.user.id,
-                details: { subsystem, unlimited: true, reason: reason || null }
-            });
-            return res.json({ success: true, message: `${subsystem} establecido como ilimitado`, unlimited: true });
-        }
-
-        // ── Caso especial: ajuste del límite global usage_limit ───────────────
-        if (subsystem === 'global') {
-            const updateResult = await db.query(`
-                UPDATE subscriptions
-                SET usage_limit = GREATEST(0, usage_limit + $1)
-                WHERE user_id = $2
-                RETURNING usage_limit
-            `, [parseInt(amount), userId]);
-
-            if (updateResult.rows.length === 0) {
-                return res.status(404).json({ error: 'El usuario no tiene suscripción' });
-            }
-
-            await db.query(`
-                INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason, ticket_id)
-                VALUES ($1, $2, 'global', $3, $4, $5)
-            `, [userId, req.user.id, parseInt(amount), reason || null, ticket_id || null]);
-
-            logger.info(`Ajuste ${action} límite global para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
-            await logUserEvent(db, {
-                userId: parseInt(userId), eventType: 'usage_adjusted', actorId: req.user.id,
-                details: { subsystem: 'global', amount: parseInt(amount), reason: reason || null }
-            });
-
-            return res.json({
-                success: true,
-                message: `Ajuste aplicado: ${action} al límite global`,
-                newUsageLimit: updateResult.rows[0].usage_limit
-            });
-        }
-
-        // ── Ajuste por subsistema: modifica columna bonus ──────────────────────
+        // Aplicar bonificación en subscriptions
         const updateResult = await db.query(`
             UPDATE subscriptions
             SET ${bonusCol} = GREATEST(0, ${bonusCol} + $1)
@@ -1501,11 +1517,8 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
             VALUES ($1, $2, $3, $4, $5, $6)
         `, [userId, req.user.id, subsystem, parseInt(amount), reason || null, ticket_id || null]);
 
-        logger.info(`Ajuste ${action} usos de "${subsystem}" para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
-        await logUserEvent(db, {
-            userId: parseInt(userId), eventType: 'usage_adjusted', actorId: req.user.id,
-            details: { subsystem, amount: parseInt(amount), reason: reason || null }
-        });
+        const action = parseInt(amount) > 0 ? `+${amount}` : `${amount}`;
+        console.log(`Ajuste ${action} usos de "${subsystem}" para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
 
         res.json({
             success: true,
@@ -1644,156 +1657,6 @@ router.get('/monitor/stats', authenticateAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error('Error en GET /admin/monitor/stats:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
-// ==================== NOTIFICACIONES ====================
-
-// Crear notificación para un usuario o broadcast (user_id = null)
-router.post('/notifications', authenticateAdmin, async (req, res) => {
-    const { userId = null, title, message, type = 'info', expiresInDays = 90 } = req.body;
-    const db = req.app.get('db');
-
-    if (!title || !message) {
-        return res.status(400).json({ error: 'title y message son obligatorios' });
-    }
-    if (!['info', 'warning', 'error', 'success'].includes(type)) {
-        return res.status(400).json({ error: "type debe ser 'info', 'warning', 'error' o 'success'" });
-    }
-
-    try {
-        const result = await db.query(`
-            INSERT INTO user_notifications (user_id, title, message, type, created_by, expires_at)
-            VALUES ($1, $2, $3, $4, $5, NOW() + ($6 || ' days')::INTERVAL)
-            RETURNING id, user_id, title, message, type, created_at, expires_at
-        `, [userId, title, message, type, req.user.id, expiresInDays]);
-
-        const target = userId ? `usuario ${userId}` : 'todos los usuarios (broadcast)';
-        logger.info(`📢 Notificación creada para ${target} por admin ${req.user.id}: "${title}"`);
-
-        // Registrar evento de auditoría (solo si no es broadcast)
-        if (userId) {
-            await logUserEvent(db, {
-                userId: parseInt(userId),
-                eventType: 'notification_sent',
-                actorId: req.user.id,
-                details: { title, message, type, reason: title }
-            });
-        }
-
-        res.status(201).json({ success: true, notification: result.rows[0] });
-    } catch (error) {
-        console.error('Error creando notificación:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
-// Listar notificaciones (filtradas por usuario o todas)
-router.get('/notifications', authenticateAdmin, async (req, res) => {
-    const { userId, limit = 50 } = req.query;
-    const db = req.app.get('db');
-    try {
-        let query = `
-            SELECT n.*, u.email AS user_email, a.email AS admin_email
-            FROM user_notifications n
-            LEFT JOIN users u ON n.user_id = u.id
-            LEFT JOIN users a ON n.created_by = a.id
-            WHERE 1=1
-        `;
-        const params = [];
-        if (userId) {
-            params.push(userId);
-            query += ` AND n.user_id = $${params.length}`;
-        }
-        query += ` ORDER BY n.created_at DESC LIMIT $${params.length + 1}`;
-        params.push(parseInt(limit));
-
-        const result = await db.query(query, params);
-        res.json({ success: true, notifications: result.rows });
-    } catch (error) {
-        console.error('Error listando notificaciones:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
-// ─── DELETE /admin/events/:eventId (solo notification_sent) ─────────────────
-router.delete('/events/:eventId', authenticateAdmin, async (req, res) => {
-    const { eventId } = req.params;
-    const db = req.app.get('db');
-    try {
-        // Verificar que el evento existe y es de tipo notification_sent
-        const evResult = await db.query(
-            `SELECT id, user_id, event_type, old_value FROM user_events WHERE id = $1`,
-            [eventId]
-        );
-        if (!evResult.rows.length) {
-            return res.status(404).json({ error: 'Evento no encontrado' });
-        }
-        const ev = evResult.rows[0];
-        if (ev.event_type !== 'notification_sent') {
-            return res.status(400).json({ error: 'Solo se pueden eliminar eventos de tipo notification_sent' });
-        }
-
-        const d = ev.old_value || {};
-        const title   = d.title   || null;
-        const message = d.message || null;
-
-        // Eliminar notificación correspondiente de user_notifications (por user_id + title + message)
-        if (title && ev.user_id) {
-            await db.query(
-                `DELETE FROM user_notifications
-                 WHERE user_id = $1 AND title = $2
-                   AND ($3::text IS NULL OR message = $3)`,
-                [ev.user_id, title, message]
-            );
-        }
-
-        // Eliminar el evento del historial
-        await db.query(`DELETE FROM user_events WHERE id = $1`, [eventId]);
-
-        logger.info(`🗑️ Evento #${eventId} (notification_sent) eliminado por admin ${req.user.id}`);
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error eliminando evento de notificación:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
-// ─── GET /admin/settings ─────────────────────────────────────────────────────
-// Leer configuración de la app (Gap 5)
-router.get('/settings', authenticateAdmin, async (req, res) => {
-    const db = req.app.get('db');
-    try {
-        const result = await db.query(`SELECT key, value FROM app_settings ORDER BY key`);
-        const settings = {};
-        result.rows.forEach(r => { settings[r.key] = r.value; });
-        res.json({ success: true, settings });
-    } catch (error) {
-        console.error('Error en GET /admin/settings:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
-// ─── PUT /admin/settings ─────────────────────────────────────────────────────
-// Actualizar una clave de configuración (Gap 5)
-router.put('/settings', authenticateAdmin, async (req, res) => {
-    const { key, value } = req.body;
-    const db = req.app.get('db');
-    const allowedKeys = ['allow_public_register'];
-    if (!key || !allowedKeys.includes(key)) {
-        return res.status(400).json({ error: 'Clave de configuración no válida' });
-    }
-    try {
-        await db.query(`
-            INSERT INTO app_settings (key, value, updated_at)
-            VALUES ($1, $2, NOW())
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-        `, [key, String(value)]);
-        require('../utils/logger').info(`⚙️ Setting actualizado: ${key} = ${value} (por admin ${req.user.id})`);
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error en PUT /admin/settings:', error);
         res.status(500).json({ error: 'Error del servidor' });
     }
 });

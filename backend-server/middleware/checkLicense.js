@@ -3,9 +3,19 @@
     const userId = req.user.id;
 
     try {
+        // Permite acceso si está activo, o en trial (suspended + pending_activation con usos restantes)
         const result = await db.query(`
-            SELECT * FROM subscriptions
-            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+            SELECT s.* FROM subscriptions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.user_id = $1
+              AND s.expires_at > NOW()
+              AND (
+                (s.status = 'active')
+                OR
+                (s.status = 'suspended'
+                 AND u.registration_status = 'pending_activation'
+                 AND s.usage_count < s.usage_limit)
+              )
         `, [userId]);
 
         if (result.rows.length === 0) {
@@ -17,7 +27,7 @@
 
         const subscription = result.rows[0];
 
-        // Verificar límite de uso
+        // Verificar límite de uso (aplica a trial y a planes con límite)
         if (subscription.usage_count >= subscription.usage_limit) {
             return res.status(403).json({
                 error: 'Límite de uso alcanzado',

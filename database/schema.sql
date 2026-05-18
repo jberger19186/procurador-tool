@@ -1,8 +1,8 @@
---
+﻿--
 -- PostgreSQL database dump
 --
 
-\restrict rwyAz8AID5wrCr843wkbcn1KCq0Z2JegK3oROBq4gmZYYk9HJ8HPiOeQSEbNrpd
+\restrict WUp7My2XYfGOikshQlXF6rd4T0iCn5eZeaG5g7IHMiKLpXFmwLtRwJFjeSylskF
 
 -- Dumped from database version 14.22 (Ubuntu 14.22-0ubuntu0.22.04.1)
 -- Dumped by pg_dump version 14.22 (Ubuntu 14.22-0ubuntu0.22.04.1)
@@ -92,19 +92,6 @@ ALTER TABLE public.active_executions_id_seq OWNER TO procurador_user;
 
 ALTER SEQUENCE public.active_executions_id_seq OWNED BY public.active_executions.id;
 
-
---
--- Name: app_settings; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.app_settings (
-    key character varying(100) NOT NULL,
-    value text NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
-ALTER TABLE public.app_settings OWNER TO postgres;
 
 --
 -- Name: encrypted_scripts; Type: TABLE; Schema: public; Owner: procurador_user
@@ -378,8 +365,23 @@ CREATE TABLE public.subscriptions (
     monitor_partes_bonus integer DEFAULT 0,
     batch_usage integer DEFAULT 0,
     batch_bonus integer DEFAULT 0,
+    suspension_cause character varying(20) DEFAULT NULL,
+    suspended_at timestamp without time zone DEFAULT NULL,
+    suspended_by integer,
+    billing_paused boolean DEFAULT false,
+    suspension_reason text DEFAULT NULL,
+    plan_expiry_date timestamp without time zone DEFAULT NULL,
+    plan_changes_this_cycle integer DEFAULT 0,
+    next_billing_date timestamp without time zone DEFAULT NULL,
+    payment_provider character varying(30) DEFAULT NULL,
+    cancel_at timestamp without time zone DEFAULT NULL,
+    scheduled_plan jsonb DEFAULT NULL,
+    plan_change_history jsonb DEFAULT '[]',
+    reactivation_request jsonb DEFAULT NULL,
+    payment_grace_ends_at timestamp without time zone DEFAULT NULL,
     CONSTRAINT check_plan_valid CHECK (((plan)::text = ANY ((ARRAY['BASIC'::character varying, 'PRO'::character varying, 'ENTERPRISE'::character varying, 'EXTENSION_PROMO'::character varying, 'COMBO_PROMO'::character varying])::text[]))),
-    CONSTRAINT check_status_valid CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'suspended'::character varying])::text[]))),
+    CONSTRAINT check_status_valid CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'cancelled'::character varying, 'suspended'::character varying, 'suspended_admin'::character varying, 'suspended_plan_expired'::character varying])::text[]))),
+    CONSTRAINT check_suspension_cause_valid CHECK (((suspension_cause)::text = ANY ((ARRAY['payment'::character varying, 'admin'::character varying, 'plan_expired'::character varying])::text[]))),
     CONSTRAINT check_usage_count_positive CHECK ((usage_count >= 0)),
     CONSTRAINT check_usage_limit_positive CHECK ((usage_limit > 0))
 );
@@ -543,7 +545,7 @@ CREATE TABLE public.usage_adjustments (
     reason text,
     ticket_id integer,
     created_at timestamp without time zone DEFAULT now(),
-    CONSTRAINT usage_adjustments_subsystem_check CHECK (((subsystem)::text = ANY ((ARRAY['global'::character varying, 'proc'::character varying, 'batch'::character varying, 'informe'::character varying, 'monitor_novedades'::character varying, 'monitor_partes'::character varying])::text[])))
+    CONSTRAINT usage_adjustments_subsystem_check CHECK (((subsystem)::text = ANY (ARRAY[('proc'::character varying)::text, ('batch'::character varying)::text, ('informe'::character varying)::text, ('monitor_novedades'::character varying)::text, ('monitor_partes'::character varying)::text])))
 );
 
 
@@ -581,9 +583,7 @@ CREATE TABLE public.usage_logs (
     script_name character varying(100),
     execution_date timestamp without time zone DEFAULT now(),
     success boolean,
-    error_message text,
-    subsystem character varying(50),
-    expedientes_count integer
+    error_message text
 );
 
 
@@ -643,7 +643,8 @@ CREATE TABLE public.users (
     password_reset_token character varying(128),
     password_reset_expires timestamp without time zone,
     CONSTRAINT check_role_valid CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'admin'::character varying])::text[]))),
-    CONSTRAINT users_registration_status_check CHECK (((registration_status)::text = ANY ((ARRAY['pending_email'::character varying, 'pending_activation'::character varying, 'active'::character varying, 'trial'::character varying])::text[])))
+    CONSTRAINT users_registration_status_check CHECK (((registration_status)::text = ANY ((ARRAY['pending_email'::character varying, 'pending_activation'::character varying, 'active'::character varying, 'rejected'::character varying, 'suspended'::character varying, 'suspended_admin'::character varying, 'suspended_plan_expired'::character varying, 'cancelled'::character varying])::text[]))),
+    CONSTRAINT users_cuit_unique UNIQUE (cuit)
 );
 
 
@@ -690,6 +691,61 @@ ALTER TABLE public.users_id_seq OWNER TO procurador_user;
 --
 
 ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
+
+
+--
+-- Name: user_events; Type: TABLE; Schema: public; Owner: procurador_user
+--
+
+CREATE TABLE public.user_events (
+    id SERIAL PRIMARY KEY,
+    user_id integer REFERENCES public.users(id) ON DELETE SET NULL,
+    event_type character varying(50) NOT NULL,
+    payload jsonb DEFAULT '{}',
+    created_at timestamp without time zone DEFAULT now()
+);
+
+CREATE INDEX idx_user_events_user_id ON public.user_events(user_id);
+CREATE INDEX idx_user_events_event_type ON public.user_events(event_type);
+
+ALTER TABLE public.user_events OWNER TO procurador_user;
+
+
+--
+-- Name: admin_events; Type: TABLE; Schema: public; Owner: procurador_user
+--
+
+CREATE TABLE public.admin_events (
+    id SERIAL PRIMARY KEY,
+    admin_id integer REFERENCES public.users(id) ON DELETE SET NULL,
+    user_id integer REFERENCES public.users(id) ON DELETE SET NULL,
+    action character varying(50) NOT NULL,
+    payload jsonb DEFAULT '{}',
+    created_at timestamp without time zone DEFAULT now()
+);
+
+CREATE INDEX idx_admin_events_user_id ON public.admin_events(user_id);
+CREATE INDEX idx_admin_events_admin_id ON public.admin_events(admin_id);
+
+ALTER TABLE public.admin_events OWNER TO procurador_user;
+
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: procurador_user
+--
+
+CREATE TABLE public.notifications (
+    id SERIAL PRIMARY KEY,
+    user_id integer REFERENCES public.users(id) ON DELETE CASCADE,
+    type character varying(50) NOT NULL,
+    message text NOT NULL,
+    read boolean DEFAULT false,
+    created_at timestamp without time zone DEFAULT now()
+);
+
+CREATE INDEX idx_notifications_user_id ON public.notifications(user_id, read);
+
+ALTER TABLE public.notifications OWNER TO procurador_user;
 
 
 --
@@ -782,14 +838,6 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 
 ALTER TABLE ONLY public.active_executions
     ADD CONSTRAINT active_executions_pkey PRIMARY KEY (id);
-
-
---
--- Name: app_settings app_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.app_settings
-    ADD CONSTRAINT app_settings_pkey PRIMARY KEY (key);
 
 
 --
@@ -1279,15 +1327,8 @@ ALTER TABLE ONLY public.usage_logs
 
 
 --
--- Name: TABLE app_settings; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT SELECT,INSERT,UPDATE ON TABLE public.app_settings TO procurador_user;
-
-
---
 -- PostgreSQL database dump complete
 --
 
-\unrestrict rwyAz8AID5wrCr843wkbcn1KCq0Z2JegK3oROBq4gmZYYk9HJ8HPiOeQSEbNrpd
+\unrestrict WUp7My2XYfGOikshQlXF6rd4T0iCn5eZeaG5g7IHMiKLpXFmwLtRwJFjeSylskF
 

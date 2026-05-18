@@ -100,6 +100,7 @@ app.use('/client', require('./routes/client'));
 app.use('/tickets', require('./routes/tickets'));
 app.use('/monitor', require('./routes/monitor'));
 app.use('/license', require('./routes/license'));
+app.use('/users', require('./routes/users'));
 
 // Página guiada de actualización de extensión
 app.get('/descargar', (req, res) => {
@@ -448,6 +449,211 @@ cron.schedule('0 3 1 * *', async () => {
         logger.info(`✅ [CRON] Reset mensual completado: ${result.rowCount} suscripciones reseteadas`);
     } catch (err) {
         logger.error('❌ [CRON] Error en reset mensual de uso:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// ─── CRON: Flujo de usuario v2.1 ──────────────────────────────────────────────
+
+const mailerCron = require('./utils/mailer');
+
+// 5a. Bloqueo automático al agotar trial — cada hora
+cron.schedule('0 * * * *', async () => {
+    try {
+        const exhausted = await pool.query(`
+            SELECT u.id, u.email, u.nombre
+            FROM users u
+            JOIN subscriptions s ON u.id = s.user_id
+            WHERE u.registration_status = 'pending_activation'
+              AND s.usage_count >= s.usage_limit
+        `);
+        for (const u of exhausted.rows) {
+            await pool.query(`UPDATE users SET registration_status = 'rejected', updated_at = NOW() WHERE id = $1`, [u.id]);
+            await pool.query(`UPDATE subscriptions SET status = 'cancelled', updated_at = NOW() WHERE user_id = $1`, [u.id]);
+            await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'trial_exhausted_blocked')`, [u.id]);
+            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'trial_exhausted', $2)`,
+                [u.id, 'Tus usos de prueba se agotaron. Tu acceso ha sido bloqueado.']);
+            mailerCron.sendTrialExhaustedEmail(u.email, u.nombre).catch(() => {});
+        }
+        if (exhausted.rowCount > 0) logger.info(`[CRON] trial_exhausted: ${exhausted.rowCount} usuarios bloqueados`);
+    } catch (err) {
+        logger.error('[CRON] Error en bloqueo trial agotado:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// 5b. Aviso de vencimiento de plan — 30 días antes (diario 08:00 ART = 11:00 UTC)
+cron.schedule('0 11 * * *', async () => {
+    try {
+        const expiring = await pool.query(`
+            SELECT u.id, u.email, u.nombre, s.plan_expiry_date
+            FROM subscriptions s JOIN users u ON u.id = s.user_id
+            WHERE s.plan_expiry_date BETWEEN NOW() AND NOW() + INTERVAL '31 days'
+              AND s.status = 'active'
+              AND NOT EXISTS (
+                SELECT 1 FROM notifications n
+                WHERE n.user_id = s.user_id AND n.type = 'plan_expiry_warning'
+                  AND n.created_at > NOW() - INTERVAL '25 days'
+              )
+        `);
+        for (const u of expiring.rows) {
+            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expiry_warning', $2)`,
+                [u.id, `Tu plan vence el ${new Date(u.plan_expiry_date).toLocaleDateString('es-AR')}. Seleccioná un nuevo plan.`]);
+            await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_expiry_warning', $2)`,
+                [u.id, JSON.stringify({ plan_expiry_date: u.plan_expiry_date })]);
+            mailerCron.sendPlanExpiryWarningEmail(u.email, u.nombre, u.plan_expiry_date).catch(() => {});
+        }
+        if (expiring.rowCount > 0) logger.info(`[CRON] plan_expiry_warning: ${expiring.rowCount} avisos enviados`);
+    } catch (err) {
+        logger.error('[CRON] Error en aviso vencimiento plan:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// 5c. Suspensión automática por vencimiento de plan (diario 08:05 ART)
+cron.schedule('5 11 * * *', async () => {
+    try {
+        const expired = await pool.query(`
+            SELECT u.id, u.email, u.nombre
+            FROM users u JOIN subscriptions s ON u.id = s.user_id
+            WHERE u.registration_status = 'active'
+              AND s.plan_expiry_date IS NOT NULL
+              AND s.plan_expiry_date < NOW()
+        `);
+        for (const u of expired.rows) {
+            await pool.query(`UPDATE users SET registration_status = 'suspended_plan_expired', updated_at = NOW() WHERE id = $1`, [u.id]);
+            await pool.query(`UPDATE subscriptions SET status = 'suspended_plan_expired', suspension_cause = 'plan_expired', suspended_at = NOW(), updated_at = NOW() WHERE user_id = $1`, [u.id]);
+            await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'plan_expired_suspended')`, [u.id]);
+            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expired', $2)`,
+                [u.id, 'Tu plan venció. Seleccioná un nuevo plan en el portal para reactivar tu acceso.']);
+            mailerCron.sendPlanExpiredSuspendedEmail(u.email, u.nombre).catch(() => {});
+        }
+        if (expired.rowCount > 0) logger.info(`[CRON] plan_expired_suspended: ${expired.rowCount} usuarios suspendidos`);
+    } catch (err) {
+        logger.error('[CRON] Error en suspensión por vencimiento de plan:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// 5d. Aviso de renovación 7 días antes (diario 08:10 ART)
+cron.schedule('10 11 * * *', async () => {
+    try {
+        const renewing = await pool.query(`
+            SELECT u.id, u.email, u.nombre, s.next_billing_date
+            FROM subscriptions s JOIN users u ON u.id = s.user_id
+            WHERE s.next_billing_date BETWEEN NOW() AND NOW() + INTERVAL '8 days'
+              AND s.status = 'active'
+              AND s.next_billing_date IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM notifications n
+                WHERE n.user_id = s.user_id AND n.type = 'billing_reminder'
+                  AND n.created_at > NOW() - INTERVAL '6 days'
+              )
+        `);
+        for (const u of renewing.rows) {
+            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'billing_reminder', $2)`,
+                [u.id, `Tu suscripción se renueva el ${new Date(u.next_billing_date).toLocaleDateString('es-AR')}.`]);
+            mailerCron.sendBillingReminderEmail(u.email, u.nombre, u.next_billing_date).catch(() => {});
+        }
+    } catch (err) {
+        logger.error('[CRON] Error en aviso renovación:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// 5e. Liberación de CUIT a 90 días post-cancelación (diario 08:15 ART)
+cron.schedule('15 11 * * *', async () => {
+    try {
+        const result = await pool.query(`
+            UPDATE users SET cuit = NULL, updated_at = NOW()
+            WHERE registration_status = 'cancelled'
+              AND updated_at < NOW() - INTERVAL '90 days'
+              AND cuit IS NOT NULL
+            RETURNING id
+        `);
+        if (result.rowCount > 0) logger.info(`[CRON] cuit_released: ${result.rowCount} CUITs liberados`);
+    } catch (err) {
+        logger.error('[CRON] Error liberando CUITs:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// 5f. Cancelaciones vencidas → registration_status: cancelled (diario 08:20 ART)
+cron.schedule('20 11 * * *', async () => {
+    try {
+        const cancelled = await pool.query(`
+            SELECT u.id FROM users u
+            JOIN subscriptions s ON u.id = s.user_id
+            WHERE u.registration_status = 'active'
+              AND s.cancel_at IS NOT NULL
+              AND s.cancel_at < NOW()
+        `);
+        for (const u of cancelled.rows) {
+            await pool.query(`UPDATE users SET registration_status = 'cancelled', updated_at = NOW() WHERE id = $1`, [u.id]);
+            await pool.query(`UPDATE subscriptions SET status = 'cancelled', updated_at = NOW() WHERE user_id = $1`, [u.id]);
+            await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'subscription_cancelled_expired')`, [u.id]);
+        }
+        if (cancelled.rowCount > 0) logger.info(`[CRON] subscriptions_cancelled: ${cancelled.rowCount} cuentas canceladas`);
+    } catch (err) {
+        logger.error('[CRON] Error en cancelaciones vencidas:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// 5g. Aplicar downgrade programado al vencer ciclo (diario 08:25 ART)
+cron.schedule('25 11 * * *', async () => {
+    try {
+        const downgrades = await pool.query(`
+            SELECT u.id, u.email, u.nombre, s.scheduled_plan, s.id AS sub_id
+            FROM subscriptions s JOIN users u ON u.id = s.user_id
+            WHERE s.scheduled_plan IS NOT NULL
+              AND (s.scheduled_plan->>'apply_at')::timestamp < NOW()
+              AND s.status = 'active'
+        `);
+        for (const u of downgrades.rows) {
+            const sp = u.scheduled_plan;
+            const newPlanResult = await pool.query(`SELECT * FROM plans WHERE id = $1`, [sp.plan_id]);
+            if (newPlanResult.rows.length === 0) continue;
+            const np = newPlanResult.rows[0];
+            const newUsageLimit = np.proc_executions_limit === -1 ? 999999 : np.proc_executions_limit;
+            const newExpiry = new Date();
+            newExpiry.setDate(newExpiry.getDate() + (np.period_days || 30));
+
+            await pool.query(`
+                UPDATE subscriptions SET
+                    plan = $1, plan_id = $2, usage_limit = $3,
+                    expires_at = $4, next_billing_date = $4,
+                    period_start = NOW(),
+                    plan_changes_this_cycle = 0,
+                    scheduled_plan = NULL,
+                    updated_at = NOW()
+                WHERE user_id = $5
+            `, [np.name, np.id, newUsageLimit, newExpiry, u.id]);
+
+            await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_downgrade_applied', $2)`,
+                [u.id, JSON.stringify({ to: np.name })]);
+            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_downgrade_applied', $2)`,
+                [u.id, `Tu plan fue actualizado a ${np.display_name}.`]);
+        }
+        if (downgrades.rowCount > 0) logger.info(`[CRON] downgrades_applied: ${downgrades.rowCount}`);
+    } catch (err) {
+        logger.error('[CRON] Error aplicando downgrades:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// 5h. Suspensión por gracia de pago vencida — stub (diario 08:30 ART)
+cron.schedule('30 11 * * *', async () => {
+    try {
+        const grace = await pool.query(`
+            SELECT u.id, u.email, u.nombre
+            FROM users u JOIN subscriptions s ON u.id = s.user_id
+            WHERE u.registration_status = 'active'
+              AND s.payment_grace_ends_at IS NOT NULL
+              AND s.payment_grace_ends_at < NOW()
+        `);
+        for (const u of grace.rows) {
+            await pool.query(`UPDATE users SET registration_status = 'suspended', updated_at = NOW() WHERE id = $1`, [u.id]);
+            await pool.query(`UPDATE subscriptions SET status = 'suspended', suspension_cause = 'payment', suspended_at = NOW(), payment_grace_ends_at = NULL, updated_at = NOW() WHERE user_id = $1`, [u.id]);
+            await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'payment_failed_suspended')`, [u.id]);
+            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'payment_suspended', $2)`,
+                [u.id, 'Pago fallido. Actualizá tu método de pago en el portal para reactivar.']);
+        }
+        if (grace.rowCount > 0) logger.info(`[CRON] payment_failed_suspended: ${grace.rowCount} usuarios suspendidos`);
+    } catch (err) {
+        logger.error('[CRON] Error en suspensión por pago:', err.message);
     }
 }, { timezone: 'America/Argentina/Buenos_Aires' });
 

@@ -92,11 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setupMonitorModal();
     updateHeaderInfo(); // Actualizar info del header al inicio
     updateUserChip();   // Poblar user chip del sidebar
+    checkSubscriptionStatusBanner(); // Banner de estado de suscripción (v2.1)
     checkQuotaAlert();  // Mostrar banner si cuota >= 80%
     window.electronAPI.getPromoStatus().then(ps => { if (ps) checkPromoAlert(ps); }).catch(() => {});
-    setupChatWidget();
-    setupNotifModal();          // Configurar modal de notificaciones
-    checkUnreadNotifications(); // Verificar notificaciones in-app al iniciar
     addLog('info', 'Sistema iniciado correctamente ✅');
 });
 
@@ -298,20 +296,6 @@ function initializeButtons() {
     // Estadísticas
     bind('btnRefreshStats', loadStatistics);
 
-    // Sidebar — Ver tour
-    bind('btnSidebarTour', () => {
-        if (typeof window.startAppTour === 'function') window.startAppTour();
-    });
-
-    // Sidebar — Asistente IA
-    bind('btnSidebarAsistente', openAsistenteModal);
-
-    // Asistente — Abrir chat
-    bind('btnAsistenteSoporte', openChatWidget);
-
-    // FAQ — filtrado en vivo
-    document.getElementById('faqSearch')?.addEventListener('input', e => _faqFilter(e.target.value));
-
     // Modal fecha personalizada
     bind('btnConfirmCustomDate', runProcessCustomDate);
     bind('btnCancelCustomDate',  () => closeModal('modalCustomDate'));
@@ -416,7 +400,8 @@ function setupSidebar() {
         });
     }
 
-    // User chip → manejado por setupNotifModal (abre notificaciones si hay no leídas, o cuenta)
+    // User chip → abrir modal de cuenta
+    document.getElementById('userChip')?.addEventListener('click', openCuentaModal);
 
     // Campo fecha límite en sidebar → guardar en config al cambiar
     document.getElementById('sidebarFechaLimite')?.addEventListener('change', async function () {
@@ -460,37 +445,26 @@ function setupSidebar() {
 
 // ============ USER CHIP (SIDEBAR) ============
 async function updateUserChip() {
-    const nameEl = document.getElementById('userNameDisplay');
-    const planEl = document.getElementById('userPlanDisplay');
-    const initEl = document.getElementById('userAvatarInitials');
-
-    // Paso 1: poblar con datos locales (sin red) — inmediato
-    try {
-        const local = await window.electronAPI.getLocalUser();
-        if (local?.success && local.user) {
-            const u = local.user;
-            const nameRaw = u.email ? u.email.split('@')[0] : (u.cuit || u.nombre || '?');
-            if (nameEl) nameEl.textContent = nameRaw;
-            if (initEl) initEl.textContent = nameRaw.slice(0, 2).toUpperCase();
-            if (planEl && planEl.textContent === 'Cargando...') planEl.textContent = '—';
-        }
-    } catch (_) {}
-
-    // Paso 2: enriquecer con plan desde la API (puede tardar)
     try {
         const result = await window.electronAPI.getAccount();
         if (!result?.success || !result.account) return;
 
         const a = result.account;
-        const nameRaw = a.email ? a.email.split('@')[0] : (a.cuit || '?');
+
+        // Nombre: email antes del @, o CUIT si no hay email
+        const nameRaw  = a.email ? a.email.split('@')[0] : (a.cuit || '?');
+        const nameEl   = document.getElementById('userNameDisplay');
+        const planEl   = document.getElementById('userPlanDisplay');
+        const initEl   = document.getElementById('userAvatarInitials');
+
         if (nameEl) nameEl.textContent = nameRaw;
-        if (initEl) initEl.textContent = nameRaw.slice(0, 2).toUpperCase();
         if (planEl) {
             const planName = (typeof a.plan === 'object' ? a.plan?.displayName || a.plan?.name : a.plan) || '—';
             planEl.textContent = planName;
         }
+        if (initEl) initEl.textContent = nameRaw.slice(0, 2).toUpperCase();
     } catch (_) {
-        // El chip ya tiene datos del paso 1 — no pasa nada
+        // Silencioso — el chip queda con los defaults del HTML
     }
 }
 
@@ -628,7 +602,6 @@ async function loadConfiguration() {
 
 function populateConfigForm(config) {
     document.getElementById('fechaLimite').value = config.general.fechaLimite || '';
-    // Sincronizar campo de fecha en la sidebar
     const sidebarFecha = document.getElementById('sidebarFechaLimite');
     if (sidebarFecha) sidebarFecha.value = config.general.fechaLimite || '';
     // identificador es readonly y se carga desde la sesión (ver loadConfiguration)
@@ -809,7 +782,7 @@ async function runProcessCustomDate() {
     }
 }
 
-// Procurar desde la fecha límite ingresada en la sidebar (sin abrir modal)
+// Procurar desde fecha límite configurada en la sidebar (sin modal)
 async function runProcessFromSidebarFecha(fecha) {
     const regex = /^\d{2}\/\d{2}\/\d{4}$/;
     if (!regex.test(fecha)) {
@@ -1015,22 +988,17 @@ async function loadStatistics() {
         if (result.success) {
             const stats = result.stats;
 
-            // Usos en el período
-            const acc = stats.account;
-            const isTrial = acc?.status === 'suspended' && acc?.registrationStatus === 'pending_activation';
-            const usageCount = acc?.usageCount ?? 0;
-            const usageLimit = acc?.usageLimit ?? 0;
-            const usageEl    = document.getElementById('statTasaExito');
-            const usageLblEl = document.getElementById('statTasaExitoLabel');
-            if (isTrial) {
-                const trialLimit = Math.min(usageLimit, 20);
-                usageEl.textContent   = `${usageCount} / ${trialLimit}`;
-                if (usageLblEl) usageLblEl.textContent = 'Usos de prueba';
-            } else {
-                usageEl.textContent   = usageCount.toLocaleString('es-AR');
-                if (usageLblEl) usageLblEl.textContent = 'Usos en el período';
-            }
-            setStatDelta('statTasaExitoDelta', null);
+            // Valores principales
+            document.getElementById('statProcuracion').textContent = (stats.procuracion ?? 0).toLocaleString('es-AR');
+            document.getElementById('statInformes').textContent    = (stats.informes    ?? 0).toLocaleString('es-AR');
+            document.getElementById('statMonitoreo').textContent   = (stats.monitoreo   ?? 0).toLocaleString('es-AR');
+            document.getElementById('statTasaExito').textContent   = stats.tasaExito != null ? `${stats.tasaExito}%` : '—';
+
+            // Deltas (opcionales según API)
+            setStatDelta('statProcuracionDelta', stats.deltaProcuracion);
+            setStatDelta('statInformesDelta',    stats.deltaInformes);
+            setStatDelta('statMonitoreoDelta',   stats.deltaMonitoreo);
+            setStatDelta('statTasaExitoDelta',   stats.deltaTasaExito);
 
             // Última ejecución
             if (stats.ultimoProcesoTimestamp) {
@@ -1042,18 +1010,6 @@ async function loadStatistics() {
                     });
             } else {
                 document.getElementById('statUltimoProceso').textContent = '—';
-            }
-
-            // Sección de subsistemas
-            const subsysSection = document.getElementById('stats-subsystem-section');
-            const subsysEl      = document.getElementById('stats-subsystem-usage');
-            if (subsysSection && subsysEl) {
-                if (!isTrial && acc?.usage) {
-                    subsysEl.innerHTML = renderSubsystemUsageCards(acc.usage);
-                    subsysSection.style.display = '';
-                } else {
-                    subsysSection.style.display = 'none';
-                }
             }
 
             addLog('info', '📊 Estadísticas actualizadas');
@@ -1165,22 +1121,6 @@ function setupProcessListeners() {
         if (rutaExcel) addLog('info', `📊 Excel generado: ${rutaExcel}`);
         if (rutaHTML)  addLog('info', `🌐 Visor HTML generado: ${rutaHTML}`);
         showNotification(`Reportes batch generados: ${exitosos}/${total} expedientes`, 'success');
-
-        // Abrir visor HTML si la opción está activada
-        if (rutaHTML) {
-            const abrirVisorActivo = document.getElementById('tgl-abrirVisor')
-                ?.querySelector('.cfg-toggle')?.classList.contains('on');
-            if (abrirVisorActivo) {
-                setTimeout(async () => {
-                    try {
-                        await window.electronAPI.openFile(rutaHTML);
-                        addLog('info', '🌐 Visor de informe abierto automáticamente');
-                    } catch (e) {
-                        addLog('warning', `⚠️ Error al abrir visor de informe: ${e.message}`);
-                    }
-                }, 1000);
-            }
-        }
     });
 
     window.electronAPI.onProcessFinished((result) => {
@@ -1204,8 +1144,6 @@ function setupProcessListeners() {
             loadStatistics();
 
             if (isMonitor) {
-                // Restaurar foco a la ventana para que el teclado funcione en el modal
-                window.focus();
                 // Reabrir modal con estado actualizado
                 const esInicial = result.monitorModo === 'inicial';
                 openMonitorModal(esInicial);  // pasa flag para auto-abrir expedientes si es inicial
@@ -1214,8 +1152,8 @@ function setupProcessListeners() {
                 }
             } else if (!isInforme) {
                 // Abrir visor de procuración (solo para Ejecutar/Procurar, nunca para Informe)
-                const abrirVisorActivo = document.getElementById('tgl-abrirVisor')?.querySelector('.cfg-toggle')?.classList.contains('on');
-                if (abrirVisorActivo) {
+                const abrirVisorCheck = document.getElementById('abrirVisor');
+                if (abrirVisorCheck && abrirVisorCheck.checked) {
                     setTimeout(async () => {
                         try {
                             const visorResult = await window.electronAPI.getVisorPath();
@@ -1586,30 +1524,28 @@ function showLoginManualAlert(cuit, message) {
     overlay.innerHTML = `
         <div style="
             background:#0f172a;
-            border:1px solid rgba(234,179,8,0.28);
-            border-radius:12px;
-            padding:18px 20px 14px;
-            width:318px;
+            border:1px solid rgba(245,158,11,0.4);
+            border-radius:14px;
+            padding:26px 24px 20px;
+            width:400px;
             max-width:90vw;
-            box-shadow:0 16px 48px rgba(0,0,0,0.7);
+            box-shadow:0 24px 60px rgba(0,0,0,0.8);
             font-family:var(--font,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
         ">
-            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
                 <div style="width:44px;height:44px;background:#422006;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🔐</div>
                 <div style="flex:1;min-width:0;">
-                    <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;color:#eab308;text-transform:uppercase;margin-bottom:3px;">ACCIÓN REQUERIDA</div>
-                    <div style="font-size:14px;font-weight:700;color:#f8fafc;">Contraseña manual</div>
-                    <div style="font-size:12px;color:#94a3b8;margin-top:2px;">CUIT ${escapeHtml(String(cuit))}</div>
+                    <div style="font-size:15px;font-weight:700;color:#fef3c7;">Acción requerida</div>
+                    <div style="font-size:12px;color:#92400e;margin-top:2px;">CUIT ${escapeHtml(String(cuit))}</div>
                 </div>
             </div>
-            <p style="font-size:12.5px;color:#94a3b8;line-height:1.7;margin:0 0 16px;white-space:pre-line;">
-                Chrome está esperando que ingreses tu contraseña del PJN.<br>Ingresala en el campo de contraseña y presioná "Ingresar" para continuar la automatización.
+            <p style="font-size:13px;color:#fcd34d;line-height:1.65;margin:0 0 20px;">
+                ${escapeHtml(message)}
             </p>
-            <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1e293b;padding-top:12px;">
-                <span style="font-size:12px;color:#475569;">Chrome está esperando</span>
+            <div style="display:flex;justify-content:flex-end;">
                 <button id="__psc_manual_alert_btn"
-                        style="background:#eab308;border:none;color:#0f172a;padding:6px 14px;
-                               border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;
+                        style="background:#f59e0b;border:none;color:#0f172a;padding:9px 20px;
+                               border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;
                                font-family:var(--font,sans-serif);">
                     Entendido
                 </button>
@@ -1657,23 +1593,10 @@ function setupCuentaModal() {
             tab.classList.add('active');
             const tabName = tab.dataset.tab;
             document.getElementById('cuenta-plan').style.display    = tabName === 'plan'    ? '' : 'none';
-            document.getElementById('cuenta-notif').style.display   = tabName === 'notif'   ? '' : 'none';
             document.getElementById('cuenta-soporte').style.display = tabName === 'soporte' ? '' : 'none';
             if (tabName === 'plan')    loadAccountData();
-            if (tabName === 'notif')   loadNotificationsTab();
             if (tabName === 'soporte') loadTicketList();
         });
-    });
-
-    // Marcar todas como leídas desde Mi Cuenta
-    document.getElementById('btnMarkAllReadCuenta')?.addEventListener('click', async () => {
-        const items = document.querySelectorAll('#notif-tab-list .notif-tab-item[data-unread="1"]');
-        for (const item of items) {
-            const id = item.dataset.id;
-            if (id) await window.electronAPI.markNotificationRead(id);
-        }
-        await refreshNotifBadge();
-        await loadNotificationsTab();
     });
 
     document.getElementById('btnNuevoTicket').addEventListener('click', () => showSoporteView('nuevo'));
@@ -1692,507 +1615,15 @@ function setupCuentaModal() {
     });
 }
 
-// ── Notificaciones in-app ────────────────────────────────────────────────────
-
-// Set para evitar abrir el modal múltiples veces para la misma notificación
-const _seenNotifIds = new Set();
-let _notifPollingStarted = false;
-
-async function checkUnreadNotifications(opts = {}) {
-    const { autoOpen = true } = opts;
-    try {
-        const res = await window.electronAPI.getNotifications();
-        if (!res?.success) return;
-        const unread = (res.notifications || []).filter(n => !n.read_at);
-        const badge  = document.getElementById('notif-badge');
-        if (badge) {
-            if (unread.length > 0) {
-                badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
-                badge.style.display = 'block';
-            } else {
-                badge.style.display = 'none';
-            }
-        }
-
-        // Detectar notificaciones nuevas (no vistas en este ciclo de la app)
-        const newOnes = unread.filter(n => !_seenNotifIds.has(n.id));
-        unread.forEach(n => _seenNotifIds.add(n.id));
-
-        if (autoOpen && newOnes.length > 0) {
-            renderNotificationsModal(res.notifications);
-            openModal('modalNotificaciones');
-        }
-
-        // Iniciar polling cada 2 minutos (solo la primera vez)
-        if (!_notifPollingStarted) {
-            _notifPollingStarted = true;
-            setInterval(() => checkUnreadNotifications({ autoOpen: true }), 120000);
-        }
-    } catch (e) { /* silencioso */ }
-}
-
-function renderNotificationsModal(notifications) {
-    const list = document.getElementById('notif-list');
-    if (!list) return;
-
-    const TYPE_ICON = { info: 'ℹ️', warning: '⚠️', error: '🚫', success: '✅' };
-    const TYPE_COLOR = { info: '#3b82f6', warning: '#d97706', error: '#ef4444', success: '#10b981' };
-
-    if (!notifications || notifications.length === 0) {
-        list.innerHTML = `<p style="color:var(--text-3);text-align:center;padding:20px">No hay notificaciones</p>`;
-        return;
-    }
-
-    list.innerHTML = notifications.map(n => {
-        const icon  = TYPE_ICON[n.type]  || 'ℹ️';
-        const color = TYPE_COLOR[n.type] || '#3b82f6';
-        const date  = new Date(n.created_at).toLocaleDateString('es-AR', { day:'2-digit', month:'short', year:'numeric' });
-        const unread = !n.read_at;
-        return `
-        <div class="notif-item ${unread ? 'notif-unread' : ''}" data-id="${n.id}"
-             style="display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:${unread ? 'rgba(217,119,6,0.06)' : 'transparent'}">
-            <div style="font-size:20px;flex-shrink:0;line-height:1.3">${icon}</div>
-            <div style="flex:1;min-width:0">
-                <div style="font-weight:${unread ? 700 : 500};font-size:14px;color:var(--text-1);margin-bottom:4px">${escapeHtml(n.title)}</div>
-                <div style="font-size:13px;color:var(--text-2);line-height:1.5">${escapeHtml(n.message)}</div>
-                <div style="font-size:11px;color:var(--text-3);margin-top:6px">${date}</div>
-            </div>
-            ${unread ? `<button class="notif-mark-read" data-id="${n.id}" title="Marcar como leída"
-                style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-3);font-size:18px;align-self:flex-start;padding:0">✓</button>` : ''}
-        </div>`;
-    }).join('');
-
-    // Marcar como leída al click en ✓
-    list.querySelectorAll('.notif-mark-read').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const id = btn.dataset.id;
-            await window.electronAPI.markNotificationRead(id);
-            await refreshNotifBadge();
-            btn.closest('.notif-item').style.background = 'transparent';
-            btn.closest('.notif-item').classList.remove('notif-unread');
-            btn.remove();
-        });
-    });
-}
-
-async function loadNotificationsTab() {
-    const list      = document.getElementById('notif-tab-list');
-    const countEl   = document.getElementById('notif-tab-count');
-    const markAllBtn = document.getElementById('btnMarkAllReadCuenta');
-    if (!list) return;
-
-    list.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:16px 0">Cargando...</div>';
-    try {
-        const res = await window.electronAPI.getNotifications();
-        if (!res?.success) { list.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:16px 0">No se pudieron cargar las notificaciones.</div>'; return; }
-
-        const notifications = res.notifications || [];
-        const unread = notifications.filter(n => !n.read_at);
-
-        if (countEl) countEl.textContent = unread.length > 0
-            ? `${unread.length} no leída${unread.length > 1 ? 's' : ''} · ${notifications.length} total`
-            : `${notifications.length} notificación${notifications.length !== 1 ? 'es' : ''} · todas leídas`;
-
-        if (markAllBtn) markAllBtn.style.display = unread.length > 0 ? '' : 'none';
-
-        // Badge del tab
-        const tabBadge = document.getElementById('cuenta-notif-badge');
-        if (tabBadge) {
-            if (unread.length > 0) { tabBadge.textContent = unread.length; tabBadge.style.display = ''; }
-            else { tabBadge.style.display = 'none'; }
-        }
-
-        if (notifications.length === 0) {
-            list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3);font-size:13px">No hay notificaciones</div>';
-            return;
-        }
-
-        const TYPE_ICON  = { info: 'ℹ️', warning: '⚠️', error: '🚫', success: '✅' };
-        const TYPE_COLOR = { info: '#3b82f6', warning: '#d97706', error: '#ef4444', success: '#10b981' };
-
-        list.innerHTML = notifications.map(n => {
-            const icon  = TYPE_ICON[n.type]  || 'ℹ️';
-            const date  = new Date(n.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
-            const isUnread = !n.read_at;
-            return `
-            <div class="notif-tab-item" data-id="${n.id}" data-unread="${isUnread ? 1 : 0}"
-                 style="display:flex;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);background:${isUnread ? 'rgba(217,119,6,0.05)' : 'transparent'}">
-                <div style="font-size:18px;flex-shrink:0;line-height:1.4">${icon}</div>
-                <div style="flex:1;min-width:0">
-                    <div style="font-weight:${isUnread ? 700 : 500};font-size:13px;color:var(--text-1);margin-bottom:3px">
-                        ${isUnread ? '<span style="display:inline-block;width:7px;height:7px;background:#ef4444;border-radius:50%;margin-right:6px;vertical-align:middle"></span>' : ''}${escapeHtml(n.title)}
-                    </div>
-                    <div style="font-size:12px;color:var(--text-2);line-height:1.5">${escapeHtml(n.message)}</div>
-                    <div style="font-size:11px;color:var(--text-3);margin-top:4px">${date}</div>
-                </div>
-                ${isUnread ? `<button class="notif-tab-read-btn" data-id="${n.id}" title="Marcar como leída"
-                    style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-3);font-size:16px;align-self:flex-start;padding:2px">✓</button>` : ''}
-            </div>`;
-        }).join('');
-
-        // Marcar individualmente como leída
-        list.querySelectorAll('.notif-tab-read-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const id = btn.dataset.id;
-                await window.electronAPI.markNotificationRead(id);
-                await refreshNotifBadge();
-                await loadNotificationsTab();
-            });
-        });
-
-    } catch (e) {
-        list.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:16px 0">Error al cargar notificaciones.</div>';
-    }
-}
-
-async function refreshNotifBadge() {
-    try {
-        const res = await window.electronAPI.getNotifications();
-        if (!res?.success) return;
-        const unread = (res.notifications || []).filter(n => !n.read_at);
-        const count  = unread.length;
-
-        // Badge en user chip (sidebar)
-        const badge = document.getElementById('notif-badge');
-        if (badge) {
-            if (count > 0) { badge.textContent = count > 9 ? '9+' : String(count); badge.style.display = 'block'; }
-            else { badge.style.display = 'none'; }
-        }
-
-        // Badge en pestaña Notificaciones de Mi Cuenta
-        const tabBadge = document.getElementById('cuenta-notif-badge');
-        if (tabBadge) {
-            if (count > 0) { tabBadge.textContent = count; tabBadge.style.display = ''; }
-            else { tabBadge.style.display = 'none'; }
-        }
-    } catch (e) { /* silencioso */ }
-}
-
-// ── setupNotifModal ──────────────────────────────────────────────────────────
-function setupNotifModal() {
-    const modal = document.getElementById('modalNotificaciones');
-    if (!modal) return;
-
-    // Cerrar con botón X
-    document.getElementById('btnCloseNotifs')?.addEventListener('click', () => closeModal('modalNotificaciones'));
-
-    // Marcar todas como leídas
-    document.getElementById('btnMarkAllRead')?.addEventListener('click', async () => {
-        const items = modal.querySelectorAll('.notif-item.notif-unread');
-        for (const item of items) {
-            const id = item.dataset.id;
-            if (id) await window.electronAPI.markNotificationRead(id);
-        }
-        await refreshNotifBadge();
-        modal.querySelectorAll('.notif-item').forEach(item => {
-            item.style.background = 'transparent';
-            item.classList.remove('notif-unread');
-            item.querySelector('.notif-mark-read')?.remove();
-        });
-    });
-
-    // Click en el user chip abre las notificaciones si hay no leídas, sino la cuenta
-    const userChip = document.getElementById('userChip');
-    if (userChip) {
-        userChip.addEventListener('click', async () => {
-            const res = await window.electronAPI.getNotifications().catch(() => null);
-            const unread = (res?.notifications || []).filter(n => !n.read_at);
-            if (unread.length > 0) {
-                openCuentaModalNotif();
-            } else {
-                openCuentaModal();
-            }
-        });
-    }
-}
-
 function openCuentaModal() {
     // Reset to plan tab — scoped to #modalCuenta
     const modalCuenta = document.getElementById('modalCuenta');
     modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
     modalCuenta.querySelector('.cuenta-tab[data-tab="plan"]').classList.add('active');
     document.getElementById('cuenta-plan').style.display    = '';
-    document.getElementById('cuenta-notif').style.display   = 'none';
     document.getElementById('cuenta-soporte').style.display = 'none';
     openModal('modalCuenta');
     loadAccountData();
-}
-
-function openCuentaModalNotif() {
-    const modalCuenta = document.getElementById('modalCuenta');
-    modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
-    modalCuenta.querySelector('.cuenta-tab[data-tab="notif"]').classList.add('active');
-    document.getElementById('cuenta-plan').style.display    = 'none';
-    document.getElementById('cuenta-notif').style.display   = '';
-    document.getElementById('cuenta-soporte').style.display = 'none';
-    openModal('modalCuenta');
-    loadAccountData();
-    loadNotificationsTab();
-}
-
-function openCuentaModalSoporte() {
-    const modalCuenta = document.getElementById('modalCuenta');
-    modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
-    modalCuenta.querySelector('.cuenta-tab[data-tab="soporte"]').classList.add('active');
-    document.getElementById('cuenta-plan').style.display    = 'none';
-    document.getElementById('cuenta-notif').style.display   = 'none';
-    document.getElementById('cuenta-soporte').style.display = '';
-    openModal('modalCuenta');
-    loadAccountData();
-}
-
-// ── Asistente IA ────────────────────────────────────────────────────────────
-const FAQ_ITEMS = [
-    {
-        q: '¿Por qué no arranca el proceso?',
-        a: 'Verificá que Chrome esté completamente cerrado antes de iniciar. Si usás el modo headless (invisible), asegurate de que tus credenciales del PJN estén guardadas en el gestor de contraseñas de Chrome.',
-    },
-    {
-        q: '¿Cómo proceso expedientes desde una fecha específica?',
-        a: 'Usá el campo <strong>Fecha límite</strong> en la barra lateral (debajo del botón Procurar). Ingresá una fecha en formato DD/MM/YYYY. Si lo dejás vacío, el proceso trae solo movimientos del día.',
-    },
-    {
-        q: '¿Por qué el proceso tarda tanto?',
-        a: 'El sistema realiza hasta 10 reintentos automáticos si el PJN responde lento. Si tenés muchos expedientes o el portal está con alta demanda, el proceso puede extenderse. Es normal.',
-    },
-    {
-        q: '¿Qué secciones debo activar en Configuración?',
-        a: 'Depende de cómo estás matriculado: <strong>Letrado</strong> para causas propias, <strong>Parte</strong> si actuás como parte, <strong>Autorizado</strong> para expedientes en los que fuiste autorizado, <strong>Favoritos</strong> para los marcados en el PJN.',
-    },
-    {
-        q: '¿Cómo exporto los resultados a Excel?',
-        a: 'En <strong>Configuración → Reportes</strong>, activá "Generar Excel". El archivo se guarda automáticamente en tu carpeta de descargas después de cada proceso.',
-    },
-    {
-        q: '¿Por qué Chrome muestra un aviso al instalar la extensión?',
-        a: 'Es un aviso de precaución estándar de Chrome para extensiones relativamente nuevas y no indica ningún riesgo. Hacé click en <strong>"Continuar a la instalación"</strong> para instalarla sin inconvenientes.',
-    },
-    {
-        q: '¿Mis credenciales del PJN son seguras?',
-        a: 'Sí. Las credenciales <strong>nunca pasan por los servidores de Procurador</strong>. El sistema usa directamente el gestor de contraseñas de Chrome, igual que si ingresaras al PJN manualmente.',
-    },
-];
-
-function openAsistenteModal() {
-    const list = document.getElementById('faqList');
-    if (list && list.children.length === 0) {
-        FAQ_ITEMS.forEach(({ q, a }) => {
-            const item = document.createElement('div');
-            item.className = 'faq-item';
-            item.dataset.q = q.toLowerCase();
-            item.dataset.a = a.toLowerCase();
-            item.innerHTML = `
-                <button class="faq-question">
-                    ${q}
-                    <span class="faq-chevron">▼</span>
-                </button>
-                <div class="faq-answer" style="display:none"><p>${a}</p></div>`;
-            item.querySelector('.faq-question').addEventListener('click', () => {
-                const ans = item.querySelector('.faq-answer');
-                const isOpen = item.classList.contains('open');
-                item.classList.toggle('open', !isOpen);
-                ans.style.display = isOpen ? 'none' : '';
-            });
-            list.appendChild(item);
-        });
-    }
-
-    // Reset búsqueda al abrir
-    const search = document.getElementById('faqSearch');
-    if (search) {
-        search.value = '';
-        _faqFilter('');
-    }
-
-    openModal('modalAsistente');
-    search?.focus();
-}
-
-function _faqFilter(query) {
-    const list   = document.getElementById('faqList');
-    if (!list) return;
-    const items  = list.querySelectorAll('.faq-item');
-    const term   = query.trim().toLowerCase();
-    let visible  = 0;
-
-    items.forEach(item => {
-        const match = !term || item.dataset.q.includes(term) || item.dataset.a.includes(term);
-        item.style.display = match ? '' : 'none';
-        if (match) visible++;
-    });
-
-    // Mensaje "sin resultados"
-    let noRes = list.querySelector('.faq-no-results');
-    if (visible === 0) {
-        if (!noRes) {
-            noRes = document.createElement('p');
-            noRes.className = 'faq-no-results';
-            list.appendChild(noRes);
-        }
-        noRes.textContent = `Sin resultados para "${query}"`;
-        noRes.style.display = '';
-    } else if (noRes) {
-        noRes.style.display = 'none';
-    }
-}
-
-// ── Floating Chat Widget ─────────────────────────────────────────────────────
-let _chatInitialized = false;
-
-function _chatEscapeHtml(str) {
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-
-function _chatScrollToBottom() {
-    const msgs = document.getElementById('chatMessages');
-    if (msgs) msgs.scrollTop = msgs.scrollHeight;
-}
-
-function _chatAddBotMessage(html) {
-    const msgs = document.getElementById('chatMessages');
-    if (!msgs) return;
-    const div = document.createElement('div');
-    div.className = 'chat-msg chat-msg--bot';
-    div.innerHTML = `
-        <div class="chat-msg-avatar">🤖</div>
-        <div class="chat-msg-bubble">${html}</div>`;
-    msgs.appendChild(div);
-    _chatScrollToBottom();
-}
-
-function _chatAddUserMessage(text) {
-    const msgs = document.getElementById('chatMessages');
-    if (!msgs) return;
-    const div = document.createElement('div');
-    div.className = 'chat-msg chat-msg--user';
-    div.innerHTML = `<div class="chat-msg-bubble">${_chatEscapeHtml(text)}</div>`;
-    msgs.appendChild(div);
-    _chatScrollToBottom();
-}
-
-function _chatShowTyping() {
-    const msgs = document.getElementById('chatMessages');
-    if (!msgs) return null;
-    const div = document.createElement('div');
-    div.className = 'chat-msg chat-msg--bot';
-    div.id = 'chatTypingIndicator';
-    div.innerHTML = `
-        <div class="chat-msg-avatar">🤖</div>
-        <div class="chat-msg-bubble" style="padding:10px 14px">
-            <div class="chat-typing">
-                <div class="chat-typing-dot"></div>
-                <div class="chat-typing-dot"></div>
-                <div class="chat-typing-dot"></div>
-            </div>
-        </div>`;
-    msgs.appendChild(div);
-    _chatScrollToBottom();
-    return div;
-}
-
-async function _chatSendMessage() {
-    const input   = document.getElementById('chatInput');
-    const sendBtn = document.getElementById('chatSendBtn');
-    const text    = input?.value?.trim();
-    if (!text) return;
-
-    input.value = '';
-    if (sendBtn) sendBtn.disabled = true;
-
-    _chatAddUserMessage(text);
-
-    const typing = _chatShowTyping();
-    await new Promise(r => setTimeout(r, 1400));
-    if (typing) typing.remove();
-
-    _chatAddBotMessage(
-        'El asistente IA no está configurado aún. ' +
-        'Mientras tanto, revisá las <strong>preguntas frecuentes</strong> o ' +
-        'abrí un <strong>ticket de soporte</strong> con el botón 🎫 de arriba.'
-    );
-
-    if (sendBtn) sendBtn.disabled = false;
-    input?.focus();
-}
-
-function openChatWidget() {
-    closeModal('modalAsistente');
-
-    const widget = document.getElementById('chatWidget');
-    const win    = document.getElementById('chatWindow');
-    const bubble = document.getElementById('chatBubbleBtn');
-    if (!widget || !win || !bubble) return;
-
-    widget.classList.remove('chat-widget--hidden');
-    win.style.display    = 'flex';
-    bubble.style.display = 'none';
-
-    if (!_chatInitialized) {
-        _chatInitialized = true;
-        _chatAddBotMessage('¡Hola! Soy el asistente de Procurador SCW 👋<br>Escribime tu consulta y te ayudo. Si no puedo resolverla, podés abrir un ticket con el botón 🎫.');
-    }
-
-    document.getElementById('chatInput')?.focus();
-}
-
-function _chatMinimize() {
-    const win    = document.getElementById('chatWindow');
-    const bubble = document.getElementById('chatBubbleBtn');
-    if (!win || !bubble) return;
-    win.style.display    = 'none';
-    bubble.style.display = 'flex';
-}
-
-function _chatUpdatePosition() {
-    const statusbar = document.getElementById('consoleStatusbar');
-    const widget    = document.getElementById('chatWidget');
-    if (!statusbar || !widget) return;
-    const rect = statusbar.getBoundingClientRect();
-    // Distancia desde el tope del statusbar hasta el fondo del viewport
-    const distFromBottom = window.innerHeight - rect.top;
-    // Pequeño respiro sobre la línea del statusbar
-    widget.style.bottom = (distFromBottom + 12) + 'px';
-}
-
-function setupChatWidget() {
-    const sendBtn  = document.getElementById('chatSendBtn');
-    const bubble   = document.getElementById('chatBubbleBtn');
-    const minBtn   = document.getElementById('chatMinimizeBtn');
-    const closeBtn = document.getElementById('chatCloseBtn');
-    const tkBtn    = document.getElementById('chatTicketBtn');
-    const input    = document.getElementById('chatInput');
-
-    if (sendBtn) sendBtn.addEventListener('click', _chatSendMessage);
-    if (bubble)  bubble.addEventListener('click', () => {
-        const win = document.getElementById('chatWindow');
-        if (win) win.style.display = 'flex';
-        bubble.style.display = 'none';
-        document.getElementById('chatInput')?.focus();
-    });
-    if (minBtn)   minBtn.addEventListener('click', _chatMinimize);
-    if (closeBtn) closeBtn.addEventListener('click', () => {
-        const widget = document.getElementById('chatWidget');
-        if (widget) widget.classList.add('chat-widget--hidden');
-    });
-    if (tkBtn)   tkBtn.addEventListener('click', () => {
-        _chatMinimize();
-        openCuentaModalSoporte();
-    });
-    if (input) {
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                _chatSendMessage();
-            }
-        });
-    }
-
-    // Posicionamiento inicial y en resize
-    _chatUpdatePosition();
-    window.addEventListener('resize', _chatUpdatePosition);
 }
 
 async function loadAccountData() {
@@ -2217,14 +1648,11 @@ async function loadAccountData() {
         const planName = (typeof a.plan === 'object' ? a.plan?.displayName || a.plan?.name : a.plan) || '—';
         document.getElementById('ci-plan').textContent = planName;
 
-        // Detectar cuenta trial (suspendida pendiente de activación)
-        const isTrial = a.status === 'suspended' && a.registrationStatus === 'pending_activation';
-
         const statusMap = {
             active:    '🟢 Activo',
             cancelled: '🔴 Cancelado',
             expired:   '🟠 Vencido',
-            suspended: isTrial ? '⏳ Pendiente de activación' : '⚫ Suspendido'
+            suspended: '⚫ Suspendido'
         };
         document.getElementById('ci-status').textContent = statusMap[a.status] || a.status || '—';
 
@@ -2246,50 +1674,10 @@ async function loadAccountData() {
             planDescEl.textContent = (typeof a.plan === 'object' ? a.plan?.description : null) || '';
         }
 
-        // Banner trial: muestra uso global X/20 y aviso de activación pendiente
-        const trialBannerEl = document.getElementById('cuenta-trial-banner');
-        if (trialBannerEl) {
-            if (isTrial) {
-                const used  = a.usageCount ?? 0;
-                const limit = Math.min(a.usageLimit ?? 20, 20);
-                const remaining = Math.max(0, limit - used);
-                const pct   = Math.min(100, Math.round((used / (limit || 1)) * 100));
-                const barColor = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#d97706';
-                trialBannerEl.innerHTML = `
-                    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:12px">
-                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                            <span style="font-size:20px">⏳</span>
-                            <div style="flex:1">
-                                <div style="font-size:13px;font-weight:700;color:#92400e">Cuenta pendiente de activación</div>
-                                <div style="font-size:11px;color:#78350f;margin-top:1px">El administrador activará tu cuenta en breve.</div>
-                            </div>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:4px">
-                            <span style="color:#78350f;font-weight:600">Usos del período de prueba</span>
-                            <span style="font-weight:700;color:${barColor}">${used} / ${limit} — ${remaining} restantes</span>
-                        </div>
-                        <div style="height:6px;background:#fde68a;border-radius:3px;overflow:hidden">
-                            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width 0.3s"></div>
-                        </div>
-                        <div style="font-size:10px;color:#92400e;margin-top:5px">Los usos son compartidos entre todos los módulos durante el período de prueba.</div>
-                    </div>`;
-                trialBannerEl.style.display = '';
-            } else {
-                trialBannerEl.style.display = 'none';
-            }
-        }
-
-        // Sección de uso: cards por subsistema (activos) o mensaje para trial
-        const subsysEl    = document.getElementById('ci-subsystem-usage');
-        const subsysLabel = document.getElementById('ci-subsystem-label');
-        if (subsysEl) {
-            if (isTrial) {
-                if (subsysLabel) subsysLabel.textContent = '📊 Uso por subsistema — período de prueba';
-                subsysEl.innerHTML = '<div style="font-size:12px;color:#6b7280;padding:4px 0">Los usos individuales por módulo se habilitarán al activar tu cuenta.</div>';
-            } else {
-                if (subsysLabel) subsysLabel.textContent = '📊 Uso por subsistema — período activo';
-                if (a.usage) subsysEl.innerHTML = renderSubsystemUsageCards(a.usage);
-            }
+        // Per-subsystem usage bars (new fields)
+        const subsysEl = document.getElementById('ci-subsystem-usage');
+        if (subsysEl && a.usage) {
+            subsysEl.innerHTML = renderSubsystemUsageBars(a.usage);
         }
 
         loadingEl.style.display = 'none';
@@ -2305,54 +1693,47 @@ async function loadAccountData() {
     }
 }
 
-function renderSubsystemUsageCards(usage) {
+function renderSubsystemUsageBars(usage) {
     const subsystems = [
-        { key: 'proc',              label: 'Procuración',       icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M3 5h10M5 5V3h6v2"/><path d="M4 5l.8 8h6.4l.8-8"/></svg>' },
-        { key: 'batch',             label: 'Procurar Batch',    icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M2 4h12M2 8h12M2 12h8"/></svg>' },
-        { key: 'informe',           label: 'Informes',          icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M4 2h8v12H4zM6 6h4M6 9h3"/></svg>' },
-        { key: 'monitor_partes',    label: 'Monitor Partes',    icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="8" cy="5" r="2.5"/><path d="M3 13c0-2.76 2.24-5 5-5s5 2.24 5 5"/></svg>' },
-        { key: 'monitor_novedades', label: 'Monitor Novedades', icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M3 12V8M7 12V5M11 12V3"/></svg>' }
+        { key: 'proc',              label: 'Procuración' },
+        { key: 'batch',             label: 'Procurar Batch' },
+        { key: 'informe',           label: 'Informes' },
+        { key: 'monitor_partes',    label: 'Monitor Partes' },
+        { key: 'monitor_novedades', label: 'Monitor Novedades' }
     ];
 
-    const cards = subsystems.map(({ key, label, icon }) => {
+    return subsystems.map(({ key, label }) => {
         const s = usage[key];
         if (!s) return '';
         const used      = s.used ?? 0;
-        const unlimited = s.unlimited || s.limit === null;
-        const limit     = unlimited ? null : (s.limit ?? 0);
-        const remaining = unlimited ? null : (s.remaining ?? Math.max(0, limit - used));
+        const limit     = s.limit;
+        const unlimited = s.unlimited || limit === null;
         const pct       = unlimited ? 0 : Math.min(100, Math.round((used / (limit || 1)) * 100));
-        const barColor  = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#d97706';
-        const remColor  = pct > 90 ? '#ef4444' : pct > 70 ? '#b45309' : '#16a34a';
-        const bonusText = s.bonus > 0 ? `<span style="font-size:10px;color:#16a34a;font-weight:600"> +${s.bonus}</span>` : '';
+        const color     = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#3b82f6';
+        const remaining = s.remaining !== null && s.remaining !== undefined ? s.remaining : '∞';
+        const limitText = unlimited ? '∞' : (limit ?? '—');
+        const bonusText = s.bonus > 0 ? ` <span style="color:#16a34a">(+${s.bonus} extra)</span>` : '';
+        // Línea extra para batch: expedientes por ejecución
         const extraInfo = key === 'batch' && s.expedientesPerRun != null
-            ? `<div style="font-size:10px;color:#6b7280;margin-top:2px">Máx. ${s.expedientesPerRun} exp/ejec.</div>`
+            ? `<div style="font-size:11px;color:#6b7280;margin-top:2px">Máx. <strong>${s.expedientesPerRun}</strong> expedientes por ejecución</div>`
             : key === 'batch' && s.expedientesUnlimited
-            ? `<div style="font-size:10px;color:#16a34a;margin-top:2px">Sin límite de exp.</div>`
+            ? `<div style="font-size:11px;color:#16a34a;margin-top:2px">Sin límite de expedientes por ejecución</div>`
             : '';
 
         return `
-        <div class="stat-card" style="flex-direction:column;align-items:flex-start;gap:6px;min-width:0">
-            <div style="display:flex;align-items:center;gap:6px;width:100%">
-                <div class="stat-icon stat-icon-accent" style="width:26px;height:26px;flex-shrink:0">${icon}</div>
-                <div style="flex:1;min-width:0">
-                    <div style="font-size:11px;font-weight:600;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
-                    <div style="font-size:16px;font-weight:700;color:#1a1a1a;line-height:1.1">
-                        ${used}${bonusText}<span style="font-size:11px;font-weight:400;color:#9ca3af"> / ${unlimited ? '∞' : limit}</span>
-                    </div>
-                </div>
+        <div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:3px">
+                <span style="font-weight:600;color:#374151">${label}</span>
+                <span style="color:#6b7280">${used} / ${limitText}${bonusText} — <strong style="color:${color}">${remaining} restantes</strong></span>
             </div>
             ${!unlimited
-                ? `<div style="width:100%;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden">
-                       <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width 0.3s"></div>
-                   </div>
-                   <div style="font-size:10px;font-weight:600;color:${remColor}">${remaining} restantes</div>`
-                : `<div style="font-size:10px;color:#16a34a;font-weight:600">✓ Sin límite</div>`}
+                ? `<div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden">
+                       <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width 0.3s"></div>
+                   </div>`
+                : '<div style="font-size:11px;color:#16a34a">✓ Sin límite de ejecuciones</div>'}
             ${extraInfo}
         </div>`;
     }).join('');
-
-    return `<div class="stats-grid stats-grid-subsys" style="margin-top:4px">${cards}</div>`;
 }
 
 // ============ ALERTA PROACTIVA DE CUOTA ============
@@ -2412,6 +1793,99 @@ function checkPromoAlert(promoStatus) {
 }
 
 let quotaBannerDismissed = false;
+
+// ============ BANNER ESTADO DE SUSCRIPCIÓN (Flujo v2.1) ============
+async function checkSubscriptionStatusBanner() {
+    const banner  = document.getElementById('subscription-status-banner');
+    const textEl  = document.getElementById('subscription-status-text');
+    const btn     = document.getElementById('subscription-status-btn');
+    if (!banner || !textEl) return;
+
+    const PORTAL = 'https://procuradortool.com/usuarios/';
+
+    try {
+        const result = await window.electronAPI.getAccount();
+        if (!result?.success || !result.account) return;
+
+        const a    = result.account;
+        const rs   = a.registrationStatus || a.registration_status;
+        const sub  = a.subscription || {};
+
+        let msg    = null;
+        let color  = null;
+        let showBtn = true;
+
+        const daysUntil = (dateStr) => {
+            if (!dateStr) return null;
+            return Math.ceil((new Date(dateStr) - Date.now()) / 86400000);
+        };
+
+        if (rs === 'pending_activation') {
+            const used      = sub.usageCount ?? 0;
+            const limit     = sub.usageLimit ?? 20;
+            const remaining = limit - used;
+            const lowIcon   = remaining <= 5 ? ' 🔴' : '';
+            msg   = `${used}/${limit} usos de prueba — Para continuar configurá tu suscripción${lowIcon}`;
+            color = '#1d4ed8'; // azul
+        } else if (rs === 'active') {
+            const expiryDays = daysUntil(sub.planExpiryDate);
+            const billingDays = daysUntil(sub.nextBillingDate);
+
+            if (!sub.paymentProvider) {
+                msg   = 'Configurá tu método de pago para evitar interrupciones';
+                color = '#b45309'; // amarillo
+            } else if (expiryDays !== null && expiryDays <= 30) {
+                const fecha = sub.planExpiryDate ? new Date(sub.planExpiryDate).toLocaleDateString('es-AR') : '?';
+                msg   = `Tu plan vence el ${fecha}. Seleccioná un nuevo plan`;
+                color = '#c2410c'; // naranja
+                showBtn = true;
+            } else if (billingDays !== null && billingDays <= 7) {
+                const fecha = new Date(sub.nextBillingDate).toLocaleDateString('es-AR');
+                msg   = `Tu suscripción se renueva el ${fecha}`;
+                color = '#1e3a5f'; // informativo oscuro
+                showBtn = false;
+            }
+        } else if (rs === 'suspended') {
+            msg   = 'Pago fallido. Actualizá tu método de pago en el portal';
+            color = '#991b1b'; // rojo
+        } else if (rs === 'suspended_admin') {
+            const reason = sub.suspensionReason ? `. Motivo: ${sub.suspensionReason}` : '';
+            msg   = `Tu cuenta fue suspendida${reason}. Podés solicitar revisión en el portal`;
+            color = '#991b1b';
+        } else if (rs === 'suspended_plan_expired') {
+            msg   = 'Tu plan venció. Seleccioná un nuevo plan en el portal';
+            color = '#991b1b';
+        } else if (rs === 'cancelled') {
+            msg   = 'Tu suscripción fue cancelada';
+            color = '#374151'; // gris
+            showBtn = false;
+        }
+
+        if (!msg) {
+            banner.style.display = 'none';
+            return;
+        }
+
+        banner.style.background = color;
+        textEl.textContent = msg;
+        if (showBtn && btn) {
+            btn.style.display = 'inline-block';
+            btn.onclick = () => {
+                if (window.electronAPI?.openExternal) {
+                    window.electronAPI.openExternal(PORTAL);
+                } else {
+                    require('electron').shell.openExternal(PORTAL);
+                }
+            };
+        } else if (btn) {
+            btn.style.display = 'none';
+        }
+        banner.style.display = 'flex';
+
+    } catch (_) {
+        // Falla silenciosamente
+    }
+}
 
 async function checkQuotaAlert() {
     if (quotaBannerDismissed) return;
@@ -2986,15 +2460,14 @@ function setupMonitorModal() {
     // Botón agregar parte
     document.getElementById('btnMonitorAgregarParte').addEventListener('click', () => {
         _monitorEditandoId = null;
-        resetMonitorForm('➕ Agregar parte');
+        resetMonitorForm('Agregar parte');
         document.getElementById('monitor-form-parte').style.display = '';
         document.getElementById('btnMonitorAgregarParte').style.display = 'none';
+        // Scroll automático para mostrar los botones Cancelar/Guardar
         setTimeout(() => {
-            const modalBody = document.querySelector('#modalMonitor .modal-body');
-            if (modalBody) modalBody.scrollTop = 0;
-            const inputNombre = document.getElementById('monitor-form-nombre');
-            if (inputNombre) { inputNombre.disabled = false; inputNombre.focus(); }
-        }, 80);
+            const form = document.getElementById('monitor-form-parte');
+            form.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }, 50);
     });
 
     // Cancelar formulario
@@ -3055,7 +2528,7 @@ function setupMonitorModal() {
 function openMonitorModal(autoAbrirExpedientes) {
     // Resetear al tab de partes
     switchMonitorTab('monitor-partes');
-    // Ocultar formulario al reabrir
+    // Ocultar formulario
     document.getElementById('monitor-form-parte').style.display = 'none';
     document.getElementById('btnMonitorAgregarParte').style.display = '';
     openModal('modalMonitor');
@@ -3253,19 +2726,13 @@ function editarParteMonitor(id) {
     if (!parte) return;
 
     _monitorEditandoId = id;
-    document.getElementById('monitor-form-title').textContent = '✏️ Editar parte';
+    document.getElementById('monitor-form-title').textContent = 'Editar parte';
     document.getElementById('monitor-form-jurisdiccion').value = parte.jurisdiccion_codigo;
     document.getElementById('monitor-form-nombre').value = parte.nombre_parte;
     document.getElementById('monitor-form-parte-id').value = id;
     document.getElementById('monitor-form-error').style.display = 'none';
     document.getElementById('monitor-form-parte').style.display = '';
     document.getElementById('btnMonitorAgregarParte').style.display = 'none';
-    setTimeout(() => {
-        const modalBody = document.querySelector('#modalMonitor .modal-body');
-        if (modalBody) modalBody.scrollTop = 0;
-        const inputNombre = document.getElementById('monitor-form-nombre');
-        if (inputNombre) { inputNombre.disabled = false; inputNombre.focus(); }
-    }, 80);
 }
 
 async function guardarParte() {
@@ -3325,11 +2792,7 @@ async function guardarParte() {
 
 async function eliminarParteMonitor(id) {
     const parte = _monitorPartes.find(p => p.id === id);
-    const confirmado = await window.electronAPI.showConfirmDialog(
-        'Eliminar parte',
-        'Eliminar la parte "' + (parte ? parte.nombre_parte : id) + '"?\nEsta acci\u00f3n eliminar\u00e1 tambi\u00e9n sus expedientes.'
-    );
-    if (!confirmado) return;
+    if (!confirm('Eliminar la parte "' + (parte ? parte.nombre_parte : id) + '"? Esta acci\u00f3n eliminar\u00e1 tambi\u00e9n sus expedientes.')) return;
 
     try {
         const res = await window.electronAPI.monitorEliminarParte(id);
