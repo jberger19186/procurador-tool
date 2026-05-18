@@ -44,7 +44,7 @@ app.use((req, res, next) => {
             if (allowedOrigins.includes(origin)) {
                 return callback(null, true);
             }
-            return callback(new Error('Origen no permitido por CORS'));
+            return callback(null, false); // Rechaza sin lanzar error (el browser bloqueará; no expone 500)
         },
         credentials: true
     })(req, res, next);
