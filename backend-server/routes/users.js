@@ -395,7 +395,7 @@ router.post('/change-plan', async (req, res) => {
 // Marcar notificaciones como leídas
 router.post('/notifications/read', async (req, res) => {
     const db = req.app.get('db');
-    const { ids } = req.body; // array de IDs o vacío para marcar todas
+    const { ids } = req.body || {}; // array de IDs o vacío para marcar todas
 
     try {
         if (ids && Array.isArray(ids) && ids.length > 0) {
