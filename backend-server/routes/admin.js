@@ -217,7 +217,7 @@ router.get('/users/pending', authenticateAdmin, async (req, res) => {
 router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
     const { userId } = req.params;
-    const expires_days = req.body.expires_days || 30;
+    const expires_days = (req.body && req.body.expires_days) || 30;
 
     const client = await db.connect();
     try {
@@ -293,7 +293,7 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
 // ─── Rechazar usuario (Opción B: bloquear / Opción C: mantener trial) ─────────
 router.post('/users/:userId/reject', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
-    const { mode, reason } = req.body; // mode: 'block' | 'keep_trial'
+    const { mode, reason } = req.body || {}; // mode: 'block' | 'keep_trial'
     const db = req.app.get('db');
 
     if (!['block', 'keep_trial'].includes(mode)) {
@@ -376,7 +376,7 @@ router.post('/users/:userId/reject', authenticateAdmin, async (req, res) => {
 // ─── Suspender usuario por admin ──────────────────────────────────────────────
 router.post('/users/:userId/suspend', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
-    const { reason, billing_paused = true } = req.body;
+    const { reason, billing_paused = true } = req.body || {};
     const db = req.app.get('db');
 
     if (!reason || !reason.trim()) {
@@ -472,7 +472,7 @@ router.get('/users/reactivation-requests', authenticateAdmin, async (req, res) =
 // ─── Procesar solicitud de reactivación ──────────────────────────────────────
 router.post('/users/:userId/reactivation-request/:action', authenticateAdmin, async (req, res) => {
     const { userId, action } = req.params;
-    const { reason } = req.body; // solo para 'reject'
+    const { reason } = req.body || {}; // solo para 'reject'
     const db = req.app.get('db');
 
     if (!['approve', 'reject'].includes(action)) {
