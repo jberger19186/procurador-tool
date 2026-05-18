@@ -5,7 +5,13 @@
 -- ============================================================
 
 -- ────────────────────────────────────────────────────────────
--- 1a. CHECK constraint de users.registration_status
+-- 1a. Ampliar columna registration_status a VARCHAR(30)
+-- (suspended_plan_expired tiene 22 chars — VARCHAR(20) era insuficiente)
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE users ALTER COLUMN registration_status TYPE VARCHAR(30);
+
+-- ────────────────────────────────────────────────────────────
+-- 1b. CHECK constraint de users.registration_status
 -- ────────────────────────────────────────────────────────────
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_registration_status_check;
 
