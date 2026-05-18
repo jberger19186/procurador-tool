@@ -61,6 +61,12 @@ electron-app/cache/
 # ─── Backend específico ─────────────────────────────────────
 backend-server/uploads/
 
+# ─── Python ─────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+tests/**/__pycache__/
+
 # ─── Archivos temporales ────────────────────────────────────
 *.tmp
 *.temp
