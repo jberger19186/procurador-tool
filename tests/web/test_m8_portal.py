@@ -250,6 +250,205 @@ def test_H19_sidebar_reactivacion_oculto(logged_in_user_page: Page):
     if nav_reactivacion.count() == 0:
         pytest.skip("Elemento #nav-reactivacion no encontrado en el DOM")
     # Si el usuario está activo, debe estar oculto
-    style = nav_reactivacion.get_attribute("style") or ""
     is_hidden = nav_reactivacion.evaluate("el => getComputedStyle(el).display === 'none'")
     assert is_hidden, "El nav item de reactivación debería estar oculto para usuarios activos"
+
+
+# ─── H-08: Cambio de contraseña correcto ────────────────────────────────────
+@pytest.mark.web
+def test_H08_cambiar_password_correcto(logged_in_user_page: Page):
+    """Cambiar contraseña con datos correctos → toast de éxito, luego restaurar."""
+    import requests
+    p = logged_in_user_page
+
+    # Navegar a sección Perfil
+    p.locator("#nav-perfil, [data-section='perfil'], nav a:has-text('Perfil')").first.click()
+    p.wait_for_timeout(1_000)
+
+    # Buscar el formulario de cambio de contraseña
+    current_pw = p.locator("#current-password, input[name='currentPassword'], #currentPassword").first
+    if current_pw.count() == 0:
+        pytest.skip("No se encontró el campo de contraseña actual en el perfil")
+
+    new_pw_tmp = "QA_TmpPass_2025!"
+    current_pw.fill(USER_PASSWORD)
+    p.locator("#new-password, input[name='newPassword'], #newPassword").first.fill(new_pw_tmp)
+    p.locator("#confirm-password, input[name='confirmPassword'], #confirmPassword").first.fill(new_pw_tmp)
+    p.locator("button:has-text('Cambiar'), button:has-text('Guardar'), #btn-change-pwd").first.click()
+    p.wait_for_timeout(2_000)
+
+    # Debe aparecer toast o mensaje de éxito
+    success = p.locator(".toast, .alert-success, [class*='success'], .notification").count() > 0
+    p.screenshot(path="tests/screenshots/H08_pwd_changed.png")
+
+    # Restaurar la contraseña original via API directamente
+    token = p.evaluate("localStorage.getItem('psc_user_token')")
+    if token:
+        requests.post(
+            "https://api.procuradortool.com/auth/change-password",
+            json={"currentPassword": new_pw_tmp, "newPassword": USER_PASSWORD,
+                  "confirmPassword": USER_PASSWORD},
+            headers={"Authorization": f"Bearer {token}"},
+            verify=False, timeout=10
+        )
+
+    assert success, "Debería aparecer un mensaje de éxito al cambiar la contraseña"
+
+
+# ─── H-11: Sección Facturación ───────────────────────────────────────────────
+@pytest.mark.web
+def test_H11_seccion_facturacion(logged_in_user_page: Page):
+    """Sección Facturación muestra info de pago."""
+    p = logged_in_user_page
+    billing_nav = p.locator(
+        "#nav-facturacion, [data-section='facturacion'], nav a:has-text('Facturaci')"
+    ).first
+    if billing_nav.count() == 0:
+        pytest.skip("No se encontró nav de Facturación")
+    billing_nav.click()
+    p.wait_for_timeout(1_500)
+
+    content = p.locator("main, #content, #app").inner_text().lower()
+    has_billing_info = any(w in content for w in [
+        "facturaci", "pago", "billing", "suscripci", "vencimiento", "plan"
+    ])
+    p.screenshot(path="tests/screenshots/H11_facturacion.png")
+    assert has_billing_info, "La sección de facturación no muestra información esperada"
+
+
+# ─── H-14: Detalle de ticket ─────────────────────────────────────────────────
+@pytest.mark.web
+def test_H14_detalle_ticket(logged_in_user_page: Page):
+    """Sección Soporte — ver detalle de ticket muestra historial de comentarios."""
+    p = logged_in_user_page
+    soporte_nav = p.locator(
+        "#nav-soporte, [data-section='soporte'], nav a:has-text('Soporte')"
+    ).first
+    if soporte_nav.count() == 0:
+        pytest.skip("No se encontró nav de Soporte")
+    soporte_nav.click()
+    p.wait_for_timeout(1_500)
+
+    # Buscar algún ticket en la lista
+    ticket_row = p.locator(".ticket-item, .ticket-row, tr[data-id], [class*='ticket']").first
+    if ticket_row.count() == 0:
+        pytest.skip("No hay tickets en la lista de soporte")
+
+    ticket_row.click()
+    p.wait_for_timeout(1_000)
+
+    # Debe mostrar detalle del ticket
+    detail = p.locator(".ticket-detail, #ticket-detail, [class*='detail']").first
+    detail_text = p.locator("main, #content").inner_text().lower()
+    has_detail = any(w in detail_text for w in ["comentario", "mensaje", "subject", "asunto", "reply"])
+    p.screenshot(path="tests/screenshots/H14_ticket_detalle.png")
+    assert has_detail, "El detalle del ticket no muestra información esperada"
+
+
+# ─── H-15: Sección Reactivación (solo para suspended_admin) ─────────────────
+@pytest.mark.web
+def test_H15_seccion_reactivacion(browser, special_users):
+    """Sección Reactivación visible para usuario suspended_admin."""
+    from playwright.sync_api import Browser
+    from helpers.auth import generate_token_ssh
+
+    u = special_users["suspended_admin"]
+    token = generate_token_ssh(u["id"])
+
+    ctx = browser.new_context(ignore_https_errors=True)
+    p = ctx.new_page()
+    try:
+        p.goto(PORTAL)
+        p.evaluate(f"localStorage.setItem('psc_user_token', '{token}');")
+        p.reload()
+        p.wait_for_timeout(3_000)
+
+        # Buscar nav de reactivación
+        nav_react = p.locator(
+            "#nav-reactivacion, [data-section='reactivacion'], nav a:has-text('Reactivar')"
+        ).first
+        if nav_react.count() == 0:
+            pytest.skip("No se encontró nav de Reactivación en el DOM")
+
+        is_visible = nav_react.evaluate("el => getComputedStyle(el).display !== 'none'")
+        p.screenshot(path="tests/screenshots/H15_reactivacion.png")
+        assert is_visible, "El nav de reactivación debería estar visible para suspended_admin"
+    finally:
+        ctx.close()
+
+
+# ─── H-16: Enviar solicitud de reactivación ─────────────────────────────────
+@pytest.mark.web
+def test_H16_enviar_reactivacion(browser, special_users):
+    """Enviar solicitud de reactivación muestra estado 'pendiente'."""
+    from helpers.auth import generate_token_ssh
+    from helpers.db import psql
+
+    u = special_users["suspended_admin"]
+    # Limpiar request previo
+    psql(f"UPDATE subscriptions SET reactivation_request=NULL WHERE user_id={u['id']};")
+
+    token = generate_token_ssh(u["id"])
+    ctx = browser.new_context(ignore_https_errors=True)
+    p = ctx.new_page()
+    try:
+        p.goto(PORTAL)
+        p.evaluate(f"localStorage.setItem('psc_user_token', '{token}');")
+        p.reload()
+        p.wait_for_timeout(3_000)
+
+        # Navegar a sección reactivación
+        nav_react = p.locator(
+            "#nav-reactivacion, [data-section='reactivacion'], nav a:has-text('Reactivar')"
+        ).first
+        if nav_react.count() == 0:
+            pytest.skip("No se encontró nav de Reactivación")
+        nav_react.click()
+        p.wait_for_timeout(1_500)
+
+        # Buscar formulario y enviarlo
+        textarea = p.locator("textarea, #reactivacion-message, input[name='message']").first
+        if textarea.count() == 0:
+            pytest.skip("No se encontró formulario de reactivación")
+        textarea.fill("Solicitud de reactivación — test QA automático")
+
+        submit_btn = p.locator("button:has-text('Enviar'), button[type='submit']").first
+        submit_btn.click()
+        p.wait_for_timeout(2_000)
+        p.screenshot(path="tests/screenshots/H16_reactivacion.png")
+
+        content = p.locator("main, #content").inner_text().lower()
+        assert any(w in content for w in ["pendiente", "enviada", "solicitud", "revisando"]), \
+            "No se mostró confirmación de solicitud enviada"
+    finally:
+        ctx.close()
+
+
+# ─── H-20: Sidebar muestra Reactivar para suspended_admin ───────────────────
+@pytest.mark.web
+def test_H20_sidebar_reactivacion_visible(browser, special_users):
+    """Para usuario suspended_admin, el nav item 'Reactivar cuenta' es visible."""
+    from helpers.auth import generate_token_ssh
+
+    u = special_users["suspended_admin"]
+    token = generate_token_ssh(u["id"])
+
+    ctx = browser.new_context(ignore_https_errors=True)
+    p = ctx.new_page()
+    try:
+        p.goto(PORTAL)
+        p.evaluate(f"localStorage.setItem('psc_user_token', '{token}');")
+        p.reload()
+        p.wait_for_timeout(3_000)
+
+        nav_reactivacion = p.locator("#nav-reactivacion")
+        if nav_reactivacion.count() == 0:
+            pytest.skip("#nav-reactivacion no encontrado en el DOM")
+
+        is_visible = nav_reactivacion.evaluate(
+            "el => getComputedStyle(el).display !== 'none'"
+        )
+        p.screenshot(path="tests/screenshots/H20_sidebar_reactivacion.png")
+        assert is_visible, "El nav de reactivación debería estar visible para suspended_admin"
+    finally:
+        ctx.close()

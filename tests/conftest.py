@@ -2,15 +2,16 @@
 conftest.py — Fixtures globales de la suite QA de Procurador SCW.
 
 Fixtures disponibles:
-  api_url         — URL base del backend
-  user_token      — JWT de usuario activo (scope=session)
-  admin_token     — JWT de admin (scope=session)
-  api_session     — requests.Session con token de usuario y SSL desactivado
-  admin_session   — requests.Session con token de admin
-  browser         — instancia Playwright Chromium (scope=session)
-  page            — página nueva por test (scope=function)
-  logged_in_user_page   — página ya logueada como usuario
-  logged_in_admin_page  — página ya logueada como admin
+  api_url              — URL base del backend
+  user_token           — JWT de usuario activo (scope=session)
+  admin_token          — JWT de admin (scope=session)
+  api_session          — requests.Session con token de usuario y SSL desactivado
+  admin_session        — requests.Session con token de admin
+  special_users        — dict {estado: {email, password, id}} de usuarios con estados especiales
+  browser              — instancia Playwright Chromium (scope=session)
+  page                 — página nueva por test (scope=function)
+  logged_in_user_page  — página ya logueada como usuario
+  logged_in_admin_page — página ya logueada como admin
 """
 
 import urllib3
@@ -19,6 +20,7 @@ import requests
 from playwright.sync_api import sync_playwright, Browser, Page, Playwright
 
 from helpers.auth import get_user_token, get_admin_token, API_URL
+from helpers.db import ensure_special_users
 
 # Silenciar warnings de SSL (usamos verify=False en tests)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -73,6 +75,16 @@ def admin_session(admin_token: str) -> requests.Session:
     s.headers.update({"Authorization": f"Bearer {admin_token}"})
     s.verify = False
     return s
+
+
+# ─── Fixture de usuarios con estados especiales ────────────────────────────────
+@pytest.fixture(scope="session")
+def special_users() -> dict:
+    """
+    Crea (si no existen) usuarios de prueba con estados especiales para A04–A08 y otros.
+    Retorna {estado: {email, password, id}}.
+    """
+    return ensure_special_users()
 
 
 # ─── Fixtures de Playwright — Browser ─────────────────────────────────────────

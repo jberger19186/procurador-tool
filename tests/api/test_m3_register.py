@@ -149,6 +149,20 @@ def test_C08_verify_email_token_expirado():
 
 
 @pytest.mark.api
+def test_C04_email_duplicado():
+    """POST /auth/register con email ya registrado → 400 con error de email."""
+    from helpers.auth import TEST_USERS
+    payload = _registro_payload("c04-dup-email")
+    payload["email"] = TEST_USERS["user"]["email"]  # email ya registrado
+    r = requests.post(f"{BASE}/auth/register", json=payload, verify=False, timeout=15)
+    if r.status_code == 429:
+        pytest.skip("Rate limit activo")
+    assert r.status_code == 400, r.text
+    err = r.json().get("error", "").lower()
+    assert "email" in err or "registrado" in err or "exist" in err, f"Mensaje inesperado: '{err}'"
+
+
+@pytest.mark.api
 def test_C09_verify_email_token_invalido():
     """GET /auth/verify-email con token completamente inválido → 400."""
     r = requests.get(

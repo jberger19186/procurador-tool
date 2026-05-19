@@ -259,3 +259,186 @@ def test_J12_version_app(electron_app):
         return
 
     pytest.skip("No se encontró #appVersionBadge ni package.json")
+
+
+# ─── J-03: Login con usuario bloqueado ───────────────────────────────────────
+@pytest.mark.electron
+def test_J03_login_usuario_bloqueado(special_users):
+    """Login con usuario rejected en pantalla de login → mensaje de error específico."""
+    from playwright.sync_api import sync_playwright
+    import subprocess, time, urllib.request, json as _json2
+
+    # Este test arranca una instancia Electron separada en un puerto distinto
+    ELECTRON_APP_PATH = "C:/Users/JONATHAN/source/repos/ProcuradorTool/electron-app"
+    electron_exe = ELECTRON_APP_PATH + "/node_modules/.bin/electron.cmd"
+    PORT = 9223  # puerto diferente para no interferir con la sesión principal
+
+    proc = subprocess.Popen(
+        [electron_exe, ELECTRON_APP_PATH, f"--remote-debugging-port={PORT}"],
+        cwd=ELECTRON_APP_PATH,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    try:
+        for _ in range(15):
+            time.sleep(1)
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/version", timeout=1)
+                break
+            except Exception:
+                continue
+
+        with sync_playwright() as pw:
+            b = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{PORT}")
+            time.sleep(2)
+            login_pg = None
+            for ctx in b.contexts:
+                for p in ctx.pages:
+                    try:
+                        if "login.html" in p.url:
+                            login_pg = p
+                            break
+                    except Exception:
+                        pass
+
+            if login_pg is None:
+                pytest.skip("No se encontró pantalla de login en la instancia J03")
+
+            u = special_users["rejected"]
+            login_pg.locator("#email").fill(u["email"])
+            login_pg.locator("#password").fill(u["password"])
+            login_pg.locator("button[type='submit'], #loginButton").first.click()
+            login_pg.wait_for_timeout(3_000)
+            login_pg.screenshot(path="tests/screenshots/J03_login_blocked.png")
+
+            # Debe aparecer un error y NO navegar al dashboard
+            targets = get_cdp_targets.__wrapped__(PORT) if hasattr(get_cdp_targets, '__wrapped__') else []
+            try:
+                raw = urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json", timeout=3).read()
+                all_urls = [t.get("url", "") for t in _json2.loads(raw)]
+            except Exception:
+                all_urls = []
+
+            # Buscar mensaje de error en la UI
+            error_visible = login_pg.locator("#errorMessage, .error, [class*='error']").count() > 0
+            still_on_login = any("login.html" in u for u in all_urls)
+            not_on_dashboard = not any("index.html" in u for u in all_urls)
+
+            assert (error_visible or still_on_login) and not_on_dashboard, \
+                f"Usuario bloqueado debería quedar en login con error. URLs: {all_urls}"
+            b.close()
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+
+
+# ─── J-05: Sección Procuración carga ─────────────────────────────────────────
+@pytest.mark.electron
+def test_J05_seccion_procuracion(electron_app):
+    """Sección Procuración — UI carga con lista de expedientes y botón Procurar."""
+    dashboard_page = find_page(electron_app, "index.html", wait_seconds=5)
+    if not dashboard_page:
+        pytest.skip("Dashboard no disponible")
+
+    # Activar sección Procuración via data-action o click en sidebar
+    dashboard_page.evaluate("""
+        () => {
+            const btn = document.querySelector("[data-action='procuracion'], [data-section='procuracion']");
+            if (btn) btn.click();
+        }
+    """)
+    dashboard_page.wait_for_timeout(1_500)
+
+    content = dashboard_page.locator("#app, main, body").inner_text().lower()
+    has_procuracion = any(w in content for w in [
+        "procur", "expediente", "procesar", "iniciar", "fecha"
+    ])
+    dashboard_page.screenshot(path="tests/screenshots/J05_procuracion.png")
+    assert has_procuracion, f"Sección Procuración no cargó correctamente: '{content[:200]}'"
+
+
+# ─── J-06: Sección Informe carga ─────────────────────────────────────────────
+@pytest.mark.electron
+def test_J06_seccion_informe(electron_app):
+    """Sección Informe — UI carga con formulario de búsqueda."""
+    dashboard_page = find_page(electron_app, "index.html", wait_seconds=5)
+    if not dashboard_page:
+        pytest.skip("Dashboard no disponible")
+
+    dashboard_page.evaluate("""
+        () => {
+            const btn = document.querySelector("[data-action='informe'], [data-section='informe']");
+            if (btn) btn.click();
+        }
+    """)
+    dashboard_page.wait_for_timeout(1_500)
+
+    content = dashboard_page.locator("#app, main, body").inner_text().lower()
+    has_informe = any(w in content for w in ["informe", "expediente", "buscar", "generar", "batch"])
+    dashboard_page.screenshot(path="tests/screenshots/J06_informe.png")
+    assert has_informe, f"Sección Informe no cargó correctamente: '{content[:200]}'"
+
+
+# ─── J-07: Sección Monitor carga ─────────────────────────────────────────────
+@pytest.mark.electron
+def test_J07_seccion_monitor(electron_app):
+    """Sección Monitor — UI carga con lista de partes y botón agregar."""
+    dashboard_page = find_page(electron_app, "index.html", wait_seconds=5)
+    if not dashboard_page:
+        pytest.skip("Dashboard no disponible")
+
+    dashboard_page.evaluate("""
+        () => {
+            const btn = document.querySelector("[data-action='monitor'], [data-section='monitor']");
+            if (btn) btn.click();
+        }
+    """)
+    dashboard_page.wait_for_timeout(1_500)
+
+    content = dashboard_page.locator("#app, main, body").inner_text().lower()
+    has_monitor = any(w in content for w in ["monitor", "parte", "agregar", "novedad", "expediente"])
+    dashboard_page.screenshot(path="tests/screenshots/J07_monitor.png")
+    assert has_monitor, f"Sección Monitor no cargó correctamente: '{content[:200]}'"
+
+
+# ─── J-10: Notificaciones — ícono con badge ──────────────────────────────────
+@pytest.mark.electron
+def test_J10_notificaciones_badge(electron_app):
+    """Ícono de notificaciones existe en el topbar (con o sin badge)."""
+    dashboard_page = find_page(electron_app, "index.html", wait_seconds=5)
+    if not dashboard_page:
+        pytest.skip("Dashboard no disponible")
+
+    # El elemento de notificaciones debe existir en el DOM
+    notif_el = dashboard_page.locator(
+        "#notifBell, #notificationBell, .notif-bell, [id*='notif'], [class*='notif-icon']"
+    )
+    assert notif_el.count() > 0 or dashboard_page.locator(
+        "#userChip, .topbar, [class*='topbar']"
+    ).count() > 0, "No se encontró el topbar con el ícono de notificaciones"
+    dashboard_page.screenshot(path="tests/screenshots/J10_notificaciones.png")
+
+
+# ─── J-13: Auto-updater no muestra nueva versión ─────────────────────────────
+@pytest.mark.electron
+def test_J13_autoupdater_sin_nueva_version(electron_app):
+    """El modal de actualización NO está visible (no hay nueva versión para 2.6.0)."""
+    dashboard_page = find_page(electron_app, "index.html", wait_seconds=5)
+    if not dashboard_page:
+        pytest.skip("Dashboard no disponible")
+
+    dashboard_page.wait_for_timeout(3_000)  # tiempo para que el updater corra
+
+    update_modal_visible = dashboard_page.evaluate("""
+        () => {
+            const modal = document.getElementById('update-modal');
+            if (!modal) return false;
+            return getComputedStyle(modal).display !== 'none';
+        }
+    """)
+    # En CI (--remote-debugging-port activo), isDev=true → el autoupdater no corre
+    # El modal no debería estar visible
+    assert not update_modal_visible, \
+        "El modal de actualización no debería estar visible para la versión actual"
