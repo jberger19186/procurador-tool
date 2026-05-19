@@ -70,8 +70,12 @@ def test_I03_login_admin(page: Page):
     pass_input.fill(ADMIN_PASSWORD)
     page.locator("button[type='submit'], #btn-login, button:has-text('Ingresar')").first.click()
 
-    # Esperar carga del dashboard
-    page.wait_for_selector("#sidebar, #dashboard-content, main", timeout=12_000)
+    # Esperar a que la pantalla de login desaparezca (indicador de login exitoso)
+    page.wait_for_function(
+        "document.getElementById('login-page') === null || "
+        "(document.getElementById('login-page') && document.getElementById('login-page').style.display !== 'flex')",
+        timeout=12_000
+    )
     page.wait_for_timeout(1_500)
 
     # Debe haber contenido de admin (stats, usuarios, etc.)
@@ -212,7 +216,7 @@ def test_I06_detalle_usuario(logged_in_admin_page: Page):
     first_row.click()
     p.wait_for_timeout(1_500)
 
-    content = p.locator("main, #content, body").inner_text().lower()
+    content = p.locator("body").inner_text().lower()
     has_detail = any(w in content for w in [
         "registration", "suscripci", "status", "plan", "activo", "suspender", "suspend"
     ])
@@ -300,13 +304,17 @@ def test_I10_suspender_usuario(logged_in_admin_page: Page):
         if suspend_btn.count() == 0:
             pytest.skip("No se encontró botón Suspender")
         suspend_btn.click()
-        p.wait_for_timeout(1_000)
+        # Esperar a que el modal de suspensión aparezca
+        p.wait_for_timeout(1_500)
 
-        # Completar modal de suspensión
-        reason_field = p.locator("textarea, input[name='reason'], #suspension-reason").first
+        # Completar modal de suspensión — acotar selectors al modal para evitar capturar el botón trigger
+        # El modal se llama #suspend-modal y tiene textarea#suspend-reason + button "Suspender"
+        p.wait_for_selector("#suspend-modal", timeout=5_000)
+        reason_field = p.locator("#suspend-reason, #suspension-reason, #suspend-modal textarea").first
         if reason_field.count() > 0:
             reason_field.fill("Test QA — suspensión automática")
-        confirm_btn = p.locator("button:has-text('Confirmar'), button:has-text('Suspender'), button[type='submit']").first
+        # El botón de confirmar dice "Suspender", acotado al modal
+        confirm_btn = p.locator("#suspend-modal button:has-text('Suspender'), #suspend-modal button:has-text('Confirmar')").first
         if confirm_btn.count() > 0:
             confirm_btn.click()
         p.wait_for_timeout(2_000)

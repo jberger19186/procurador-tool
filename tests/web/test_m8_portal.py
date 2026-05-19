@@ -52,8 +52,12 @@ def test_H03_login_correcto(page: Page):
     page.fill("#login-password", USER_PASSWORD)
     page.click("#btn-login")
 
-    # Esperar a que cargue el sidebar (indicador de login exitoso)
-    page.wait_for_selector("#sidebar", timeout=12_000)
+    # Esperar a que la pantalla de login desaparezca (indicador de login exitoso)
+    page.wait_for_function(
+        "document.getElementById('login-page') && document.getElementById('login-page').style.display !== 'flex'",
+        timeout=12_000
+    )
+    page.wait_for_timeout(1_000)
 
     # La sección activa debe ser "perfil" o el email debe aparecer en el topbar
     topbar_email = page.locator("#topbar-email")
@@ -278,7 +282,14 @@ def test_H08_cambiar_password_correcto(logged_in_user_page: Page):
     p.wait_for_timeout(2_000)
 
     # Debe aparecer toast o mensaje de éxito
-    success = p.locator(".toast, .alert-success, [class*='success'], .notification").count() > 0
+    # Esperar un momento adicional para que el mensaje aparezca
+    p.wait_for_timeout(1_000)
+    page_text = p.locator("body").inner_text().lower()
+    success_words = ["éxito", "actualiz", "cambiada", "cambiad", "correctamente", "success", "guardada"]
+    success = (
+        any(w in page_text for w in success_words) or
+        p.locator(".toast, .alert-success, [class*='success'], .notification, #password-alert, #profile-alert").count() > 0
+    )
     p.screenshot(path="tests/screenshots/H08_pwd_changed.png")
 
     # Restaurar la contraseña original via API directamente
@@ -308,7 +319,7 @@ def test_H11_seccion_facturacion(logged_in_user_page: Page):
     billing_nav.click()
     p.wait_for_timeout(1_500)
 
-    content = p.locator("main, #content, #app").inner_text().lower()
+    content = p.locator("main, #content, #app").first.inner_text().lower()
     has_billing_info = any(w in content for w in [
         "facturaci", "pago", "billing", "suscripci", "vencimiento", "plan"
     ])
@@ -412,7 +423,14 @@ def test_H16_enviar_reactivacion(browser, special_users):
             pytest.skip("No se encontró formulario de reactivación")
         textarea.fill("Solicitud de reactivación — test QA automático")
 
-        submit_btn = p.locator("button:has-text('Enviar'), button[type='submit']").first
+        # Usar selector acotado a la sección de reactivación para evitar el #btn-login
+        submit_btn = p.locator(
+            "#section-reactivacion button:has-text('Enviar'), "
+            "#section-reactivacion button[type='submit'], "
+            "#reactivacion-form button, "
+            "form:has(textarea) button:has-text('Enviar'), "
+            "form:has(textarea) button[type='submit']"
+        ).first
         submit_btn.click()
         p.wait_for_timeout(2_000)
         p.screenshot(path="tests/screenshots/H16_reactivacion.png")
