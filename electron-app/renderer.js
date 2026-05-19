@@ -989,10 +989,14 @@ async function loadStatistics() {
             const stats = result.stats;
 
             // Valores principales
-            document.getElementById('statProcuracion').textContent = (stats.procuracion ?? 0).toLocaleString('es-AR');
-            document.getElementById('statInformes').textContent    = (stats.informes    ?? 0).toLocaleString('es-AR');
-            document.getElementById('statMonitoreo').textContent   = (stats.monitoreo   ?? 0).toLocaleString('es-AR');
-            document.getElementById('statTasaExito').textContent   = stats.tasaExito != null ? `${stats.tasaExito}%` : '—';
+            const elProc = document.getElementById('statProcuracion');
+            const elInf  = document.getElementById('statInformes');
+            const elMon  = document.getElementById('statMonitoreo');
+            const elTasa = document.getElementById('statTasaExito');
+            if (elProc) elProc.textContent = (stats.procuracion ?? 0).toLocaleString('es-AR');
+            if (elInf)  elInf.textContent  = (stats.informes    ?? 0).toLocaleString('es-AR');
+            if (elMon)  elMon.textContent  = (stats.monitoreo   ?? 0).toLocaleString('es-AR');
+            if (elTasa) elTasa.textContent = stats.tasaExito != null ? `${stats.tasaExito}%` : '—';
 
             // Deltas (opcionales según API)
             setStatDelta('statProcuracionDelta', stats.deltaProcuracion);
@@ -1001,15 +1005,17 @@ async function loadStatistics() {
             setStatDelta('statTasaExitoDelta',   stats.deltaTasaExito);
 
             // Última ejecución
-            if (stats.ultimoProcesoTimestamp) {
-                const fecha = new Date(stats.ultimoProcesoTimestamp);
-                document.getElementById('statUltimoProceso').textContent =
-                    fecha.toLocaleString('es-AR', {
+            const elUltimo = document.getElementById('statUltimoProceso');
+            if (elUltimo) {
+                if (stats.ultimoProcesoTimestamp) {
+                    const fecha = new Date(stats.ultimoProcesoTimestamp);
+                    elUltimo.textContent = fecha.toLocaleString('es-AR', {
                         day: '2-digit', month: '2-digit', year: 'numeric',
                         hour: '2-digit', minute: '2-digit'
                     });
-            } else {
-                document.getElementById('statUltimoProceso').textContent = '—';
+                } else {
+                    elUltimo.textContent = '—';
+                }
             }
 
             addLog('info', '📊 Estadísticas actualizadas');
