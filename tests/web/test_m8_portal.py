@@ -53,10 +53,17 @@ def test_H03_login_correcto(page: Page):
     page.click("#btn-login")
 
     # Esperar a que la pantalla de login desaparezca (indicador de login exitoso)
-    page.wait_for_function(
-        "document.getElementById('login-page') && document.getElementById('login-page').style.display !== 'flex'",
-        timeout=12_000
-    )
+    try:
+        page.wait_for_function(
+            "document.getElementById('login-page') && document.getElementById('login-page').style.display !== 'flex'",
+            timeout=12_000
+        )
+    except Exception:
+        # Si sigue en login, verificar si es rate limit
+        error_text = (page.locator("#login-error, .alert-error").first.text_content() or "").lower()
+        if any(w in error_text for w in ["rate", "limit", "429", "demasiados", "intentos", "espera"]):
+            pytest.skip("Rate limit activo — reintentar más tarde")
+        raise
     page.wait_for_timeout(1_000)
 
     # La sección activa debe ser "perfil" o el email debe aparecer en el topbar
