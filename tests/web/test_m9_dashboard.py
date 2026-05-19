@@ -124,18 +124,13 @@ def test_I11_seccion_pendientes(logged_in_admin_page: Page):
     """Sección Pendientes tiene subsecciones de trial, reactivación y esperando email."""
     p = logged_in_admin_page
 
-    # Navegar a sección pendientes
-    pending_nav = p.locator("[data-section='pendientes'], nav a:has-text('Pendientes'), button:has-text('Pendientes')").first
-    if pending_nav.count() == 0:
-        pytest.skip("No se encontró el nav item de Pendientes")
+    # La sección "pending-users" no tiene nav link directo — se navega via JS
+    p.evaluate("navigate('pending-users')")
+    p.wait_for_timeout(2_000)
 
-    pending_nav.click()
-    p.wait_for_timeout(1_500)
-
-    # Buscar las 3 subsecciones
-    text_content = p.locator("main, #content").inner_text()
-    assert any(word in text_content for word in ["trial", "Trial", "pendiente", "Pendiente"]), \
-        "No se encontró subsección de trial pendientes"
+    text_content = p.locator("#content").inner_text()
+    assert any(word in text_content for word in ["trial", "Trial", "pendiente", "Pendiente", "En trial"]), \
+        f"No se encontró subsección de pendientes. Contenido: {text_content[:200]}"
 
 
 # ─── I-15: Sección Tickets ────────────────────────────────────────────────────
@@ -237,31 +232,24 @@ def test_I07_activar_usuario(logged_in_admin_page: Page):
         p.reload()
         p.wait_for_timeout(2_000)
 
-        # Ir a sección pendientes o buscar al usuario
-        pending_nav = p.locator(
-            "[data-section='pendientes'], nav a:has-text('Pendientes'), button:has-text('Pendiente')"
-        ).first
-        if pending_nav.count() == 0:
-            pytest.skip("No se encontró sección Pendientes")
-        pending_nav.click()
-        p.wait_for_timeout(1_500)
-
-        # Buscar y clickear el usuario
-        user_row = p.locator(f"tr:has-text('qa-i07-web'), [data-email='qa-i07-web@test.com']").first
-        if user_row.count() == 0:
-            pytest.skip("No se encontró el usuario de prueba en la lista")
-        user_row.click()
-        p.wait_for_timeout(1_000)
-
-        # Buscar y clickear botón Activar
-        activate_btn = p.locator("button:has-text('Activar'), #btn-activate").first
-        if activate_btn.count() == 0:
-            pytest.skip("No se encontró botón Activar")
-        activate_btn.click()
+        # Navegar a pending-users via JS (no hay nav link directo en sidebar)
+        p.evaluate("navigate('pending-users')")
         p.wait_for_timeout(2_000)
+
+        # Buscar la fila del usuario de prueba
+        user_row = p.locator("tr:has-text('qa-i07-web')").first
+        if user_row.count() == 0:
+            pytest.skip("No se encontró el usuario de prueba en la lista de pendientes")
+
+        # Manejar el confirm() que dispara activateUser()
+        p.once("dialog", lambda d: d.accept())
+        activate_btn = user_row.locator("button:has-text('Activar')").first
+        if activate_btn.count() == 0:
+            pytest.skip("No se encontró botón Activar junto al usuario")
+        activate_btn.click()
+        p.wait_for_timeout(2_500)
         p.screenshot(path="tests/screenshots/I07_activar.png")
 
-        # Verificar en DB
         raw = psql(f"SELECT registration_status FROM users WHERE id={uid};")
         assert raw.strip() == "active", f"Estado esperado 'active': '{raw.strip()}'"
     finally:
@@ -330,40 +318,35 @@ def test_I10_suspender_usuario(logged_in_admin_page: Page):
 @pytest.mark.web
 def test_I16_responder_ticket(logged_in_admin_page: Page, api_session):
     """Responder ticket desde admin → comentario guardado."""
-    import requests as req
     p = logged_in_admin_page
 
-    tickets_nav = p.locator(
-        "[data-section='tickets'], nav a:has-text('Tickets'), button:has-text('Tickets')"
-    ).first
+    tickets_nav = p.locator("[data-page='tickets']").first
     if tickets_nav.count() == 0:
         pytest.skip("No se encontró nav de Tickets en el dashboard")
     tickets_nav.click()
     p.wait_for_timeout(1_500)
 
-    # Clickear el primer ticket
-    first_ticket = p.locator("table tbody tr, .ticket-row, [class*='ticket-item']").first
-    if first_ticket.count() == 0:
+    # Clickear botón "Ver" del primer ticket (abre ticket-detail con reply textarea)
+    ver_btn = p.locator("table tbody tr button:has-text('Ver'), td button:has-text('Ver')").first
+    if ver_btn.count() == 0:
         pytest.skip("No hay tickets disponibles")
-    first_ticket.click()
-    p.wait_for_timeout(1_000)
+    ver_btn.click()
+    p.wait_for_timeout(1_500)
 
-    # Escribir respuesta
-    reply_box = p.locator("textarea, #reply-message, input[name='message']").first
+    # El detalle tiene #reply-msg (no #reply-message)
+    reply_box = p.locator("#reply-msg, textarea[placeholder*='respuesta'], textarea[placeholder*='Respuesta']").first
     if reply_box.count() == 0:
-        pytest.skip("No se encontró campo de respuesta")
+        pytest.skip("No se encontró campo de respuesta #reply-msg")
     reply_box.fill("Respuesta de admin QA — test automático")
 
-    send_btn = p.locator("button:has-text('Enviar'), button:has-text('Responder'), button[type='submit']").first
+    send_btn = p.locator("button:has-text('Responder')").first
     if send_btn.count() > 0:
         send_btn.click()
     p.wait_for_timeout(2_000)
     p.screenshot(path="tests/screenshots/I16_ticket_respuesta.png")
 
-    # Verificar que el comentario aparece en la UI
-    content = p.locator("main, #content").inner_text().lower()
-    assert "respuesta" in content or "comentario" in content or "admin" in content or \
-           "enviado" in content or "reply" in content, \
+    content = p.locator("#content").inner_text().lower()
+    assert any(w in content for w in ["respuesta", "comentario", "admin", "enviado", "reply", "qa"]), \
         "No se confirmó la respuesta del ticket"
 
 
@@ -403,3 +386,217 @@ def test_I19_seccion_monitor(logged_in_admin_page: Page):
     content = p.locator("main, #content").inner_text().lower()
     assert any(w in content for w in ["monitor", "parte", "expediente", "notificaci"]), \
         "La sección Monitor no muestra información esperada"
+
+
+# ─── I-08: Rechazar y bloquear usuario ───────────────────────────────────────
+@pytest.mark.web
+def test_I08_rechazar_bloquear(logged_in_admin_page: Page):
+    """Botón 'Rechazar' (block) en pending_activation → registration_status='rejected'."""
+    from helpers.db import create_test_user, cleanup_user, psql
+
+    uid = create_test_user("qa-i08-reject@test.com",
+                           registration_status="pending_activation", sub_status="suspended")
+    try:
+        p = logged_in_admin_page
+        p.reload()
+        p.wait_for_timeout(2_000)
+
+        p.evaluate("navigate('pending-users')")
+        p.wait_for_timeout(2_000)
+
+        user_row = p.locator("tr:has-text('qa-i08-reject')").first
+        if user_row.count() == 0:
+            pytest.skip("No se encontró usuario de prueba en pendientes")
+
+        # rejectUserBlock dispara: prompt() → confirm()
+        dialogs = []
+
+        def handle_dialog(d):
+            if d.type == "prompt":
+                d.accept("Rechazado por test QA")
+            else:
+                d.accept()
+
+        p.on("dialog", handle_dialog)
+        reject_btn = user_row.locator("button:has-text('Rechazar')").first
+        if reject_btn.count() == 0:
+            p.remove_listener("dialog", handle_dialog)
+            pytest.skip("No se encontró botón Rechazar junto al usuario")
+        reject_btn.click()
+        p.wait_for_timeout(3_000)
+        p.remove_listener("dialog", handle_dialog)
+        p.screenshot(path="tests/screenshots/I08_rechazar.png")
+
+        raw = psql(f"SELECT registration_status FROM users WHERE id={uid};")
+        assert raw.strip() == "rejected", f"Estado esperado 'rejected': '{raw.strip()}'"
+    finally:
+        cleanup_user(uid)
+
+
+# ─── I-09: Mantener trial ────────────────────────────────────────────────────
+@pytest.mark.web
+def test_I09_mantener_trial(logged_in_admin_page: Page):
+    """Botón 'Mantener trial' → registration_status no cambia, solo user_event."""
+    from helpers.db import create_test_user, cleanup_user, psql
+
+    uid = create_test_user("qa-i09-trial@test.com",
+                           registration_status="pending_activation", sub_status="suspended")
+    try:
+        p = logged_in_admin_page
+        p.reload()
+        p.wait_for_timeout(2_000)
+
+        p.evaluate("navigate('pending-users')")
+        p.wait_for_timeout(2_000)
+
+        user_row = p.locator("tr:has-text('qa-i09-trial')").first
+        if user_row.count() == 0:
+            pytest.skip("No se encontró usuario de prueba en pendientes")
+
+        # rejectUserKeepTrial dispara: prompt() → confirm()
+        def handle_dialog(d):
+            if d.type == "prompt":
+                d.accept("")           # motivo opcional
+            else:
+                d.accept()
+
+        p.on("dialog", handle_dialog)
+        keep_btn = user_row.locator("button:has-text('Mantener trial')").first
+        if keep_btn.count() == 0:
+            p.remove_listener("dialog", handle_dialog)
+            pytest.skip("No se encontró botón 'Mantener trial'")
+        keep_btn.click()
+        p.wait_for_timeout(3_000)
+        p.remove_listener("dialog", handle_dialog)
+        p.screenshot(path="tests/screenshots/I09_mantener_trial.png")
+
+        # Estado NO debe cambiar — sigue en pending_activation
+        raw = psql(f"SELECT registration_status FROM users WHERE id={uid};")
+        assert raw.strip() == "pending_activation", \
+            f"Estado debería seguir en 'pending_activation': '{raw.strip()}'"
+    finally:
+        cleanup_user(uid)
+
+
+# ─── I-12: Solicitudes de reactivación visibles ──────────────────────────────
+@pytest.mark.web
+def test_I12_solicitudes_reactivacion(logged_in_admin_page: Page, special_users):
+    """Subsección solicitudes de reactivación muestra usuarios con request pendiente."""
+    from helpers.db import psql
+
+    u = special_users["suspended_admin"]
+    # Asegurar que hay una solicitud pendiente (usar json_build_object para evitar quoting issues)
+    psql(
+        f"UPDATE subscriptions SET "
+        f"reactivation_request=json_build_object('status','pending','message','test QA')::jsonb "
+        f"WHERE user_id={u['id']};"
+    )
+
+    p = logged_in_admin_page
+    p.evaluate("navigate('pending-users')")
+    p.wait_for_timeout(2_000)
+
+    content = p.locator("#content").inner_text().lower()
+    assert any(w in content for w in ["reactivaci", "solicitud", "aprobar", "rechazar"]), \
+        f"No se encontró sección de solicitudes de reactivación. Contenido: {content[:300]}"
+
+
+# ─── I-13: Aprobar solicitud de reactivación ─────────────────────────────────
+@pytest.mark.web
+def test_I13_aprobar_reactivacion(browser, admin_token):
+    """Botón 'Aprobar' en solicitud de reactivación → usuario pasa a active."""
+    from helpers.db import create_test_user, cleanup_user, psql
+
+    uid = create_test_user("qa-i13-react@test.com",
+                           registration_status="suspended_admin", sub_status="suspended")
+    ctx = browser.new_context(ignore_https_errors=True)
+    p = ctx.new_page()
+    try:
+        psql(
+            f"UPDATE subscriptions SET "
+            f"suspension_cause='admin', suspended_at=NOW(), suspension_reason='Test', "
+            f"reactivation_request=json_build_object('status','pending','message','quiero volver')::jsonb "
+            f"WHERE user_id={uid};"
+        )
+
+        p.goto(DASHBOARD)
+        p.evaluate(f"localStorage.setItem('admin_token', '{admin_token}');")
+        p.reload()
+        p.wait_for_function("typeof navigate === 'function'", timeout=10_000)
+        p.wait_for_timeout(500)
+
+        p.evaluate("navigate('pending-users')")
+        # Esperar activamente a que aparezca la fila del usuario (timeout 12s)
+        try:
+            p.wait_for_selector("tr:has-text('qa-i13-react')", timeout=12_000)
+        except Exception:
+            content_debug = p.locator("#content").inner_text()[:300] if p.locator("#content").count() > 0 else "NO #content"
+            p.screenshot(path="tests/screenshots/I13_debug.png")
+            pytest.skip(f"Usuario no encontrado en solicitudes de reactivación. Contenido: {content_debug}")
+
+        user_row = p.locator("tr:has-text('qa-i13-react')").first
+        p.once("dialog", lambda d: d.accept())
+        approve_btn = user_row.locator("button:has-text('Aprobar')").first
+        if approve_btn.count() == 0:
+            pytest.skip("No se encontró botón Aprobar")
+        approve_btn.click()
+        p.wait_for_timeout(3_000)
+        p.screenshot(path="tests/screenshots/I13_aprobar_reactivacion.png")
+
+        raw = psql(f"SELECT registration_status FROM users WHERE id={uid};")
+        assert raw.strip() == "active", \
+            f"Estado esperado 'active' tras aprobar, got '{raw.strip()}'"
+    finally:
+        cleanup_user(uid)
+        ctx.close()
+
+
+# ─── I-14: Rechazar solicitud de reactivación ────────────────────────────────
+@pytest.mark.web
+def test_I14_rechazar_reactivacion(browser, admin_token):
+    """Botón 'Rechazar' en solicitud de reactivación → reactivation_request.status='rejected'."""
+    from helpers.db import create_test_user, cleanup_user, psql
+
+    uid = create_test_user("qa-i14-react@test.com",
+                           registration_status="suspended_admin", sub_status="suspended")
+    ctx = browser.new_context(ignore_https_errors=True)
+    p = ctx.new_page()
+    try:
+        psql(
+            f"UPDATE subscriptions SET "
+            f"suspension_cause='admin', suspended_at=NOW(), suspension_reason='Test', "
+            f"reactivation_request=json_build_object('status','pending','message','quiero volver')::jsonb "
+            f"WHERE user_id={uid};"
+        )
+
+        p.goto(DASHBOARD)
+        p.evaluate(f"localStorage.setItem('admin_token', '{admin_token}');")
+        p.reload()
+        p.wait_for_function("typeof navigate === 'function'", timeout=10_000)
+        p.wait_for_timeout(500)
+
+        p.evaluate("navigate('pending-users')")
+        try:
+            p.wait_for_selector("tr:has-text('qa-i14-react')", timeout=12_000)
+        except Exception:
+            content_debug = p.locator("#content").inner_text()[:300] if p.locator("#content").count() > 0 else "NO #content"
+            p.screenshot(path="tests/screenshots/I14_debug.png")
+            pytest.skip(f"Usuario no encontrado en solicitudes de reactivación. Contenido: {content_debug}")
+
+        user_row = p.locator("tr:has-text('qa-i14-react')").first
+        p.once("dialog", lambda d: d.accept("Rechazado por test QA automático"))
+        reject_btn = user_row.locator("button:has-text('Rechazar')").first
+        if reject_btn.count() == 0:
+            pytest.skip("No se encontró botón Rechazar en solicitud de reactivación")
+        reject_btn.click()
+        p.wait_for_timeout(3_000)
+        p.screenshot(path="tests/screenshots/I14_rechazar_reactivacion.png")
+
+        req_raw = psql(
+            f"SELECT reactivation_request->>'status' FROM subscriptions WHERE user_id={uid};"
+        )
+        assert req_raw.strip() == "rejected", \
+            f"reactivation_request.status esperado 'rejected', got '{req_raw.strip()}'"
+    finally:
+        cleanup_user(uid)
+        ctx.close()

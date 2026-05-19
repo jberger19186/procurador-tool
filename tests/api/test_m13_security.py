@@ -3,7 +3,8 @@
 import pytest
 import requests
 
-from helpers.auth import API_URL
+from helpers.auth import API_URL, generate_token_ssh, login_http, TEST_USERS
+from helpers.db import create_test_user, cleanup_user
 
 BASE = API_URL
 
@@ -121,3 +122,56 @@ def test_M10_cors_origen_no_permitido():
         "CORS no debería incluir el origen malicioso en la respuesta"
     # El server debe responder (200/4xx), no crashear con 500
     assert r.status_code != 500, "El servidor no debe retornar 500 en origen CORS no permitido"
+
+
+@pytest.mark.api
+def test_M06_download_script_sin_suscripcion():
+    """GET /client/scripts/download/:name con token válido pero suscripción inactiva → 403."""
+    uid = create_test_user("qa-m06-nosub@test.com",
+                           registration_status="active", sub_status="suspended")
+    try:
+        token = generate_token_ssh(uid)
+        # Obtener un nombre de script de la API pública (con token de admin o user normal)
+        r_list = requests.get(f"{BASE}/client/scripts/available",
+                              headers={"Authorization": f"Bearer {token}"},
+                              verify=False, timeout=10)
+        if r_list.status_code == 403:
+            # checkLicense ya bloqueó en /available → correcto
+            return
+
+        scripts = r_list.json().get("scripts") or r_list.json()
+        if not scripts:
+            pytest.skip("No hay scripts disponibles")
+
+        script_name = scripts[0].get("name") or scripts[0].get("script_name") or scripts[0]
+        r = requests.get(
+            f"{BASE}/client/scripts/download/{script_name}",
+            headers={"Authorization": f"Bearer {token}"},
+            verify=False, timeout=15
+        )
+        assert r.status_code == 403, \
+            f"Sin suscripción activa debería ser 403, got {r.status_code}"
+    finally:
+        cleanup_user(uid)
+
+
+@pytest.mark.api
+def test_M07_multiples_logins_simultaneos():
+    """Múltiples logins simultáneos con la misma cuenta → ambos exitosos (by design)."""
+    u = TEST_USERS["user"]
+    token1 = login_http(u["email"], u["password"], "TEST-M07-DEVICE-A")
+    token2 = login_http(u["email"], u["password"], "TEST-M07-DEVICE-B")
+
+    if token1 is None or token2 is None:
+        pytest.skip("Rate limit activo — no se pudieron obtener ambos tokens")
+
+    # Ambos tokens deben funcionar independientemente
+    r1 = requests.get(f"{BASE}/users/account",
+                      headers={"Authorization": f"Bearer {token1}"},
+                      verify=False, timeout=10)
+    r2 = requests.get(f"{BASE}/users/account",
+                      headers={"Authorization": f"Bearer {token2}"},
+                      verify=False, timeout=10)
+
+    assert r1.status_code == 200, f"Primer token debería funcionar, got {r1.status_code}"
+    assert r2.status_code == 200, f"Segundo token debería funcionar, got {r2.status_code}"

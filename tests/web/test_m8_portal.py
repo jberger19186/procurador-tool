@@ -449,6 +449,61 @@ def test_H16_enviar_reactivacion(browser, special_users):
         ctx.close()
 
 
+# ─── H-12: Cancelar suscripción desde facturación ────────────────────────────
+@pytest.mark.web
+def test_H12_cancelar_suscripcion(browser):
+    """Botón 'Cancelar suscripción' confirma, llama /users/cancel y muestra cancel_at."""
+    import requests as req
+    from helpers.auth import generate_token_ssh
+    from helpers.db import create_test_user, cleanup_user, psql
+
+    uid = create_test_user("qa-h12-cancel@test.com",
+                           registration_status="active", sub_status="active")
+    token = generate_token_ssh(uid)
+    ctx = browser.new_context(ignore_https_errors=True)
+    p = ctx.new_page()
+    try:
+        p.goto(PORTAL)
+        p.evaluate(f"localStorage.setItem('psc_user_token', '{token}');")
+        p.reload()
+        p.wait_for_function(
+            "document.getElementById('login-page') && document.getElementById('login-page').style.display !== 'flex'",
+            timeout=10_000
+        )
+        p.wait_for_timeout(1_000)
+
+        # Navegar a sección facturación
+        billing_nav = p.locator(
+            "#nav-facturacion, [data-section='facturacion'], nav a:has-text('Facturaci')"
+        ).first
+        if billing_nav.count() == 0:
+            pytest.skip("No se encontró nav de Facturación")
+        billing_nav.click()
+        p.wait_for_timeout(1_500)
+
+        # El botón solo existe si el usuario es active y no tiene cancel_at
+        cancel_btn = p.locator("button:has-text('Cancelar suscripci')").first
+        if cancel_btn.count() == 0:
+            pytest.skip("No se encontró botón 'Cancelar suscripción' (puede requerir active sin cancel_at)")
+
+        # Manejar el confirm() que dispara confirmCancelSubscription()
+        p.once("dialog", lambda d: d.accept())
+        # El alert() que sigue también se acepta automáticamente
+        p.on("dialog", lambda d: d.accept())
+
+        cancel_btn.click()
+        p.wait_for_timeout(2_500)
+        p.screenshot(path="tests/screenshots/H12_cancel_sub.png")
+
+        # Verificar en DB que cancel_at fue seteado
+        raw = psql(f"SELECT cancel_at FROM subscriptions WHERE user_id={uid};")
+        assert raw.strip() and raw.strip().lower() not in ("", "null", "none"), \
+            f"cancel_at debería estar seteado en DB, got '{raw.strip()}'"
+    finally:
+        cleanup_user(uid)
+        ctx.close()
+
+
 # ─── H-20: Sidebar muestra Reactivar para suspended_admin ───────────────────
 @pytest.mark.web
 def test_H20_sidebar_reactivacion_visible(browser, special_users):

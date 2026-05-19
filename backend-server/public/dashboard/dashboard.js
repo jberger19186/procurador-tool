@@ -1164,7 +1164,7 @@ async function renderPendingUsers() {
         const users = pendingData.users;
         const trialUsers = users.filter(u => u.registration_status === 'pending_activation');
         const emailUsers = users.filter(u => u.registration_status === 'pending_email');
-        const reactUsers = reactData.users || [];
+        const reactUsers = reactData.requests || reactData.users || [];
 
         const trialRows = trialUsers.length === 0
             ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">No hay usuarios en trial pendientes de decisión.</td></tr>'
