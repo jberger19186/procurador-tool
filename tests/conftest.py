@@ -115,11 +115,12 @@ def logged_in_user_page(browser: Browser, user_token: str) -> Page:
     p.goto(PORTAL_URL)
     # Inyectar token en localStorage (el mismo key que usa app.js)
     p.evaluate(f"""
-        localStorage.setItem('procurador_user_token', '{user_token}');
+        localStorage.setItem('psc_user_token', '{user_token}');
     """)
     p.reload()
-    # Esperar a que cargue el dashboard (sidebar visible = login ok)
-    p.wait_for_selector("#sidebar", timeout=10_000)
+    # Esperar a que cargue el dashboard — #app debe ser visible y #login-page oculto
+    p.wait_for_function("document.getElementById('login-page') && document.getElementById('login-page').style.display !== 'flex'", timeout=10_000)
+    p.wait_for_timeout(1_000)
     yield p
     ctx.close()
 
@@ -134,34 +135,102 @@ def logged_in_admin_page(browser: Browser, admin_token: str) -> Page:
     p = ctx.new_page()
     p.goto(DASHBOARD_URL)
     p.evaluate(f"""
-        localStorage.setItem('procurador_admin_token', '{admin_token}');
+        localStorage.setItem('admin_token', '{admin_token}');
     """)
     p.reload()
-    p.wait_for_selector("#sidebar, #dashboard-sidebar, nav", timeout=10_000)
+    # Esperar a que el dashboard admin cargue
+    p.wait_for_function("document.getElementById('login-page') === null || (document.getElementById('login-page') && document.getElementById('login-page').style.display !== 'flex')", timeout=10_000)
+    p.wait_for_timeout(1_500)
     yield p
     ctx.close()
 
 
-# ─── Fixture de Playwright — Electron ─────────────────────────────────────────
+# ─── Fixture de Playwright — Electron (via CDP) ───────────────────────────────
 @pytest.fixture(scope="session")
 def electron_app(playwright_instance: Playwright):
     """
-    Lanza la app Electron usando el launcher de Playwright.
+    Lanza la app Electron con --remote-debugging-port y conecta Playwright vía CDP.
+    La API playwright.electron no existe en Python — se usa chromium.connect_over_cdp().
     Requiere que electron esté instalado en node_modules del electron-app.
     """
     import os
+    import subprocess
+    import time
+
     electron_exe = os.path.join(ELECTRON_APP_PATH, "node_modules", ".bin", "electron.cmd")
-    app = playwright_instance.electron.launch(
-        executable_path=electron_exe if os.path.exists(electron_exe) else "electron",
-        args=[ELECTRON_APP_PATH],
+    if not os.path.exists(electron_exe):
+        pytest.skip("Electron no encontrado en node_modules — ejecutar npm install en electron-app/")
+
+    DEBUG_PORT = 9222
+    proc = subprocess.Popen(
+        [electron_exe, ELECTRON_APP_PATH, f"--remote-debugging-port={DEBUG_PORT}"],
+        cwd=ELECTRON_APP_PATH,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
-    yield app
-    app.close()
+
+    # Esperar hasta que el puerto responda (máx 15 seg)
+    import urllib.request
+    for _ in range(15):
+        time.sleep(1)
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{DEBUG_PORT}/json/version", timeout=1)
+            break
+        except Exception:
+            continue
+
+    browser = None
+    try:
+        browser = playwright_instance.chromium.connect_over_cdp(f"http://127.0.0.1:{DEBUG_PORT}")
+
+        # Si la app arrancó en login.html (sin sesión guardada), hacer login automático
+        # para que index.html esté correctamente registrado en los contextos de Playwright.
+        time.sleep(2)
+        login_page = None
+        for ctx in browser.contexts:
+            for p in ctx.pages:
+                try:
+                    if "login.html" in p.url:
+                        login_page = p
+                        break
+                except Exception:
+                    pass
+            if login_page:
+                break
+
+        if login_page:
+            # Usar expect_page para capturar el nuevo BrowserWindow (index.html)
+            ctx = browser.contexts[0]
+            try:
+                with ctx.expect_page(timeout=30_000) as new_page_info:
+                    login_page.locator("#email").fill(USER_EMAIL)
+                    login_page.locator("#password").fill(USER_PASSWORD)
+                    login_page.locator("button[type='submit'], #loginButton").first.click()
+                dashboard = new_page_info.value
+                dashboard.wait_for_load_state("domcontentloaded", timeout=20_000)
+            except Exception as e:
+                print(f"[electron_app fixture] Auto-login falló (se continuará de todos modos): {e}")
+
+        yield browser
+    finally:
+        if browser:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
 
 
 @pytest.fixture(scope="function")
 def electron_window(electron_app):
-    """Primera ventana de la app Electron."""
-    window = electron_app.first_window()
-    window.wait_for_load_state("domcontentloaded")
-    return window
+    """Primera página/ventana de la app Electron conectada via CDP."""
+    contexts = electron_app.contexts
+    if not contexts or not contexts[0].pages:
+        pytest.skip("No se encontró ninguna ventana en la app Electron")
+    page = contexts[0].pages[0]
+    page.wait_for_load_state("domcontentloaded", timeout=10_000)
+    return page

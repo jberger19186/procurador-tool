@@ -42,11 +42,18 @@ def test_I02_login_usuario_no_admin(page: Page):
     pass_input.fill(USER_PASSWORD_NORMAL)
 
     page.locator("button[type='submit'], #btn-login, button:has-text('Ingresar')").first.click()
-    page.wait_for_timeout(2_000)
+    page.wait_for_timeout(2_500)
 
-    # No debe cargar el dashboard de admin
-    dashboard_loaded = page.locator("#sidebar, #dashboard-content, nav.admin-nav").count() > 0
-    assert not dashboard_loaded, "Un usuario no-admin no debería poder acceder al dashboard"
+    # El login-page debe seguir visible (display flex = login visible, login no fue exitoso)
+    login_still_visible = page.evaluate("""
+        () => {
+            const lp = document.getElementById('login-page');
+            if (!lp) return false;
+            const style = window.getComputedStyle(lp);
+            return style.display !== 'none';
+        }
+    """)
+    assert login_still_visible, "El login-page debería seguir visible tras un intento fallido de usuario no-admin"
 
 
 # ─── I-03: Login correcto con admin ───────────────────────────────────────────
