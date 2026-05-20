@@ -1733,22 +1733,46 @@ async function renderMetrics() {
         const data = await apiFetch('/admin/stats/overview');
         const s = data.stats;
 
-        // Usage logs por subsistema (últimos 30 días)
-        let logsHtml = '';
+        // Construir breakdown de usuarios por estado
+        const statusRows = [
+            { label: 'Activos',                color: '#16a34a', val: s.activeUsers       ?? 0 },
+            { label: 'Pendientes de activación',color: '#f59e0b', val: s.pendingUsers      ?? 0 },
+            { label: 'Suspendidos (admin)',      color: '#f97316', val: s.suspendedUsers    ?? 0 },
+            { label: 'Plan vencido',             color: '#ef4444', val: s.expiredUsers      ?? 0 },
+            { label: 'Cancelados',               color: '#6b7280', val: s.cancelledUsers    ?? 0 },
+            { label: 'Rechazados',               color: '#dc2626', val: s.rejectedUsers     ?? 0 },
+            { label: 'Pendiente de email',       color: '#a3a3a3', val: s.pendingEmailUsers ?? 0 },
+        ].filter(r => r.val > 0);
+
+        const total = s.totalUsers ?? 0;
+        const statusBars = statusRows.map(r => {
+            const pct = total > 0 ? Math.round(r.val / total * 100) : 0;
+            return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px">
+                <div style="width:130px;color:var(--text-muted);flex-shrink:0">${r.label}</div>
+                <div style="flex:1;background:#f3f4f6;border-radius:4px;height:14px;overflow:hidden">
+                    <div style="width:${pct}%;background:${r.color};height:100%;border-radius:4px;transition:width 0.4s"></div>
+                </div>
+                <div style="width:60px;text-align:right;font-weight:600;color:${r.color}">${r.val}</div>
+                <div style="width:36px;text-align:right;color:var(--text-muted)">${pct}%</div>
+            </div>`;
+        }).join('');
+
+        // Distribución por plan
+        let planHtml = '';
         try {
-            const logs = await apiFetch('/admin/stats/usage');
-            if (logs && logs.usage) {
-                const subsysLabel = { procuracion:'Procuración', informe:'Informe', monitoreo:'Monitor', batch:'Por lote', novedades:'Novedades' };
-                logsHtml = `
+            const planData = await apiFetch('/admin/stats/plans');
+            if (planData && planData.plans) {
+                planHtml = `
                 <div class="card section-gap">
-                    <h3 style="margin-bottom:16px">Uso por subsistema — últimos 30 días</h3>
-                    <div class="stats-grid">
-                        ${logs.usage.map(u => `
-                        <div class="stat-card">
-                            <div class="stat-label">${subsysLabel[u.subsystem] || u.subsystem}</div>
-                            <div class="stat-value">${u.count}</div>
-                            <div class="stat-sub">ejecuciones</div>
-                        </div>`).join('')}
+                    <h3 style="margin-bottom:16px">Distribución por plan</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Plan</th><th>Usuarios activos</th><th>%</th></tr></thead>
+                            <tbody>${planData.plans.map(p => {
+                                const pct2 = s.activeUsers > 0 ? Math.round(p.count / s.activeUsers * 100) : 0;
+                                return `<tr><td>${p.plan_name}</td><td><strong>${p.count}</strong></td><td style="color:var(--text-muted)">${pct2}%</td></tr>`;
+                            }).join('')}</tbody>
+                        </table>
                     </div>
                 </div>`;
             }
@@ -1757,54 +1781,42 @@ async function renderMetrics() {
         content.innerHTML = `
         <div class="page-header"><h2>Métricas del sistema</h2></div>
 
-        <div class="card section-gap">
-            <h3 style="margin-bottom:16px">Usuarios</h3>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Total registrados</div>
-                    <div class="stat-value">${s.totalUsers ?? '—'}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Activos</div>
-                    <div class="stat-value" style="color:#16a34a">${s.activeUsers ?? '—'}</div>
-                </div>
-                <div class="stat-card ${(s.pendingUsers ?? 0) > 0 ? 'stat-card-warning' : ''}">
-                    <div class="stat-label">Pendientes de activación</div>
-                    <div class="stat-value">${s.pendingUsers ?? '—'}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Suspendidos</div>
-                    <div class="stat-value" style="color:#f59e0b">${s.suspendedUsers ?? '—'}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Cancelados / Rechazados</div>
-                    <div class="stat-value" style="color:#ef4444">${(s.cancelledUsers ?? 0) + (s.rejectedUsers ?? 0)}</div>
-                </div>
+        <div class="stats-grid" style="margin-bottom:20px">
+            <div class="stat-card">
+                <div class="stat-label">Total usuarios</div>
+                <div class="stat-value">${total}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Activos</div>
+                <div class="stat-value" style="color:#16a34a">${s.activeUsers ?? '—'}</div>
+            </div>
+            <div class="stat-card ${(s.pendingUsers ?? 0) > 0 ? 'stat-card-warning' : ''}">
+                <div class="stat-label">Pendientes activación</div>
+                <div class="stat-value">${s.pendingUsers ?? 0}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Suscripciones activas</div>
+                <div class="stat-value" style="color:#16a34a">${s.activeSubscriptions ?? '—'}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tickets abiertos</div>
+                <div class="stat-value">${s.openTickets ?? '—'}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Scripts activos</div>
+                <div class="stat-value">${s.activeScripts ?? '—'}</div>
             </div>
         </div>
 
         <div class="card section-gap">
-            <h3 style="margin-bottom:16px">Suscripciones</h3>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Suscripciones activas</div>
-                    <div class="stat-value" style="color:#16a34a">${s.activeSubscriptions ?? '—'}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Tickets abiertos</div>
-                    <div class="stat-value">${s.openTickets ?? '—'}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Scripts activos</div>
-                    <div class="stat-value">${s.activeScripts ?? '—'}</div>
-                </div>
-            </div>
+            <h3 style="margin-bottom:16px">Distribución de usuarios por estado</h3>
+            ${statusBars || '<p style="color:var(--text-muted);font-size:13px">Sin datos.</p>'}
         </div>
 
-        ${logsHtml}
+        ${planHtml}
 
-        <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
-            Datos en tiempo real desde <code>/admin/stats/overview</code>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
+            Datos en tiempo real · <a href="#" onclick="renderMetrics()" style="color:var(--primary)">↻ Actualizar</a>
         </p>`;
     } catch (e) {
         content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
@@ -1812,8 +1824,14 @@ async function renderMetrics() {
 }
 
 // ───── LEGAL ─────
+// Estado del editor legal (persiste entre llamadas)
+let legalEditorMode  = null; // null | 'create' | 'edit'
+let legalEditorDocId = null;
+
 async function renderLegal() {
     const content = document.getElementById('content');
+    legalEditorMode  = null;
+    legalEditorDocId = null;
     try {
         const data = await apiFetch('/legal/admin/documents');
         const docs  = data.documents || [];
@@ -1821,111 +1839,305 @@ async function renderLegal() {
         const typeLabel = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
         const typeIcon  = { tyc: '📄', pyp: '🔒' };
 
-        const rows = docs.map(d => `
-        <tr>
-            <td>${typeIcon[d.type] || '📄'} ${typeLabel[d.type] || d.type}</td>
-            <td><span class="badge">${d.version}</span></td>
-            <td><span class="status-badge ${d.is_current ? 'status-active' : 'status-suspended'}">${d.is_current ? '✅ Publicado' : '⏳ Borrador'}</span></td>
-            <td>${d.requires_acceptance ? 'Sí' : 'No'}</td>
-            <td>${d.acceptance_count ?? 0} usuarios</td>
-            <td>${d.effective_date ? fmtDate(d.effective_date) : '—'}</td>
-            <td>${fmtDate(d.created_at)}</td>
-            <td>
-                <button class="btn btn-sm btn-secondary" onclick="legalViewStats(${d.id}, '${escHtml(typeLabel[d.type] || d.type)} v${d.version}')">Ver stats</button>
-                ${!d.is_current ? `<button class="btn btn-sm btn-primary" onclick="legalPublish(${d.id})">Publicar</button>` : ''}
-            </td>
-        </tr>`).join('');
+        // Agrupar por tipo para mostrar versiones
+        const byType = { tyc: [], pyp: [] };
+        docs.forEach(d => { if (byType[d.type]) byType[d.type].push(d); });
+
+        function docTable(type) {
+            const list = byType[type];
+            if (!list.length) return `<p style="color:var(--text-muted);font-size:13px">Sin versiones.</p>`;
+            return `<div class="table-wrapper">
+                <table>
+                    <thead><tr><th>Versión</th><th>Estado</th><th>Vigencia</th><th>Aceptaciones</th><th>Requiere aceptación</th><th>Creado por</th><th>Fecha</th><th style="min-width:200px">Acciones</th></tr></thead>
+                    <tbody>${list.map(d => `<tr>
+                        <td><strong>${escHtml(d.version)}</strong></td>
+                        <td><span class="status-badge ${d.is_current ? 'status-active' : 'status-suspended'}">${d.is_current ? '✅ Publicado' : '⏳ Borrador'}</span></td>
+                        <td>${d.effective_date ? fmtDate(d.effective_date) : '—'}</td>
+                        <td><a href="#" onclick="legalViewStats(${d.id},'${escHtml(typeLabel[type])} v${escHtml(d.version)}')" style="color:var(--primary)">${d.acceptance_count ?? 0} usuarios</a></td>
+                        <td>${d.requires_acceptance ? '✅' : '—'}</td>
+                        <td style="font-size:12px">${d.created_by_email ? escHtml(d.created_by_email) : '—'}</td>
+                        <td style="font-size:12px">${fmtDate(d.created_at)}</td>
+                        <td>
+                            <div style="display:flex;gap:4px;flex-wrap:wrap">
+                                <button class="btn btn-sm btn-secondary" onclick="legalPreview(${d.id})">👁 Ver</button>
+                                ${!d.is_current
+                                    ? `<button class="btn btn-sm btn-secondary" onclick="legalEdit(${d.id})">✏️ Editar</button>
+                                       <button class="btn btn-sm btn-primary"   onclick="legalPublish(${d.id})">🚀 Publicar</button>
+                                       <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5" onclick="legalDelete(${d.id})">🗑</button>`
+                                    : ``}
+                            </div>
+                        </td>
+                    </tr>`).join('')}</tbody>
+                </table>
+            </div>`;
+        }
 
         content.innerHTML = `
         <div class="page-header">
             <h2>Documentos legales</h2>
+            <div style="display:flex;gap:8px">
+                <a href="/terminos/" target="_blank" class="btn btn-sm btn-secondary">Ver T&C público →</a>
+                <a href="/privacidad/" target="_blank" class="btn btn-sm btn-secondary">Ver PyP público →</a>
+            </div>
         </div>
 
         <div class="card section-gap">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h3>Versiones de T&C y Política de Privacidad</h3>
-                <div style="display:flex;gap:8px">
-                    <a href="/terminos/" target="_blank" class="btn btn-sm btn-secondary">Ver T&C →</a>
-                    <a href="/privacidad/" target="_blank" class="btn btn-sm btn-secondary">Ver PyP →</a>
-                </div>
+                <h3>📄 Términos y Condiciones</h3>
+                <button class="btn btn-sm btn-primary" onclick="legalCreate('tyc')">+ Nueva versión T&C</button>
             </div>
-            ${docs.length === 0
-                ? '<p style="color:var(--text-muted)">No hay documentos cargados.</p>'
-                : `<div class="table-wrapper">
-                    <table>
-                        <thead><tr><th>Documento</th><th>Versión</th><th>Estado</th><th>Requiere aceptación</th><th>Aceptaciones</th><th>Vigencia</th><th>Creado</th><th>Acciones</th></tr></thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                   </div>`
-            }
+            ${docTable('tyc')}
         </div>
 
-        <div id="legal-stats-panel" style="display:none"></div>`;
+        <div class="card section-gap">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h3>🔒 Política de Privacidad</h3>
+                <button class="btn btn-sm btn-primary" onclick="legalCreate('pyp')">+ Nueva versión PyP</button>
+            </div>
+            ${docTable('pyp')}
+        </div>
+
+        <div id="legal-detail-panel"></div>`;
 
     } catch (e) {
         content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
 
+function legalScrollToPanel() {
+    setTimeout(() => {
+        const p = document.getElementById('legal-detail-panel');
+        if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+}
+
 async function legalViewStats(id, label) {
-    const panel = document.getElementById('legal-stats-panel');
+    const panel = document.getElementById('legal-detail-panel');
     if (!panel) return;
-    panel.style.display = 'block';
     panel.innerHTML = '<div class="loading">Cargando estadísticas...</div>';
+    legalScrollToPanel();
     try {
         const data = await apiFetch(`/legal/admin/documents/${id}/stats`);
         const pct  = data.total_users > 0 ? Math.round(data.accepted_count / data.total_users * 100) : 0;
+        const barW = Math.max(pct, 2);
         const rows = (data.acceptances || []).map(a => `
             <tr>
-                <td>${a.email}</td>
-                <td>${a.nombre || '—'}</td>
+                <td>${escHtml(a.email)}</td>
+                <td>${escHtml(a.nombre || '—')}</td>
                 <td>${fmtDate(a.accepted_at)}</td>
             </tr>`).join('');
-
         panel.innerHTML = `
         <div class="card section-gap">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h3>Stats — ${label}</h3>
-                <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-stats-panel').style.display='none'">✕ Cerrar</button>
+                <h3>📊 Estadísticas — ${escHtml(label)}</h3>
+                <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cerrar</button>
             </div>
             <div class="stats-grid" style="margin-bottom:20px">
-                <div class="stat-card">
-                    <div class="stat-label">Usuarios elegibles</div>
-                    <div class="stat-value">${data.total_users}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Aceptaron</div>
-                    <div class="stat-value" style="color:#16a34a">${data.accepted_count}</div>
-                </div>
-                <div class="stat-card ${pct < 80 ? 'stat-card-warning' : ''}">
-                    <div class="stat-label">% aceptación</div>
-                    <div class="stat-value">${pct}%</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Pendientes</div>
-                    <div class="stat-value" style="color:#f59e0b">${data.total_users - data.accepted_count}</div>
-                </div>
+                <div class="stat-card"><div class="stat-label">Usuarios elegibles</div><div class="stat-value">${data.total_users}</div></div>
+                <div class="stat-card"><div class="stat-label">Aceptaron</div><div class="stat-value" style="color:#16a34a">${data.accepted_count}</div></div>
+                <div class="stat-card ${pct < 80 ? 'stat-card-warning' : ''}"><div class="stat-label">% aceptación</div><div class="stat-value">${pct}%</div></div>
+                <div class="stat-card"><div class="stat-label">Pendientes</div><div class="stat-value" style="color:#f59e0b">${data.total_users - data.accepted_count}</div></div>
             </div>
-            ${rows ? `
-            <div class="table-wrapper" style="max-height:300px;overflow-y:auto">
-                <table style="font-size:12px">
-                    <thead><tr><th>Email</th><th>Nombre</th><th>Aceptado el</th></tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>` : '<p style="color:var(--text-muted);font-size:13px">Sin aceptaciones todavía.</p>'}
+            <div style="background:#f3f4f6;border-radius:6px;height:18px;margin-bottom:20px;overflow:hidden">
+                <div style="width:${barW}%;background:#16a34a;height:100%;border-radius:6px;transition:width 0.5s"></div>
+            </div>
+            ${rows
+                ? `<div class="table-wrapper" style="max-height:280px;overflow-y:auto">
+                    <table style="font-size:12px">
+                        <thead><tr><th>Email</th><th>Nombre</th><th>Aceptado el</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                   </div>`
+                : '<p style="color:var(--text-muted);font-size:13px">Sin aceptaciones todavía.</p>'}
         </div>`;
     } catch (e) {
         panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
 
+async function legalPreview(id) {
+    const panel = document.getElementById('legal-detail-panel');
+    if (!panel) return;
+    panel.innerHTML = '<div class="loading">Cargando documento...</div>';
+    legalScrollToPanel();
+    try {
+        const data = await apiFetch(`/legal/admin/documents/${id}`);
+        const doc  = data.document;
+        const typeLabel = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
+        panel.innerHTML = `
+        <div class="card section-gap">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h3>👁 Vista previa — ${escHtml(typeLabel[doc.type] || doc.type)} v${escHtml(doc.version)}</h3>
+                <div style="display:flex;gap:8px">
+                    ${!doc.is_current ? `<button class="btn btn-sm btn-secondary" onclick="legalEdit(${doc.id})">✏️ Editar</button>` : ''}
+                    <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cerrar</button>
+                </div>
+            </div>
+            <div style="border:1px solid var(--border);border-radius:8px;padding:24px;max-height:500px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.7;font-size:14px">
+                ${doc.html_content}
+            </div>
+            ${doc.summary_of_changes ? `<div style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:6px;font-size:13px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>` : ''}
+        </div>`;
+    } catch (e) {
+        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+}
+
+function legalCreate(type) {
+    legalEditorMode  = 'create';
+    legalEditorDocId = null;
+    const typeLabel  = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
+    const panel = document.getElementById('legal-detail-panel');
+    if (!panel) return;
+    panel.innerHTML = legalEditorHTML(null, type, typeLabel[type]);
+    legalScrollToPanel();
+}
+
+async function legalEdit(id) {
+    const panel = document.getElementById('legal-detail-panel');
+    if (!panel) return;
+    panel.innerHTML = '<div class="loading">Cargando...</div>';
+    legalScrollToPanel();
+    try {
+        const data = await apiFetch(`/legal/admin/documents/${id}`);
+        const doc  = data.document;
+        const typeLabel = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
+        legalEditorMode  = 'edit';
+        legalEditorDocId = id;
+        panel.innerHTML  = legalEditorHTML(doc, doc.type, typeLabel[doc.type]);
+    } catch (e) {
+        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+}
+
+function legalEditorHTML(doc, type, typeLabel) {
+    const isEdit = !!doc;
+    const today  = new Date().toISOString().slice(0, 10);
+    return `
+    <div class="card section-gap">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h3>${isEdit ? '✏️ Editar borrador' : '+ Nueva versión'} — ${escHtml(typeLabel)}</h3>
+            <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cancelar</button>
+        </div>
+        <div id="legal-editor-error" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="form-group">
+                <label>Versión *</label>
+                <input id="le-version" type="text" value="${isEdit ? escHtml(doc.version) : ''}" placeholder="ej: 1.1" />
+            </div>
+            <div class="form-group">
+                <label>Título *</label>
+                <input id="le-title" type="text" value="${isEdit ? escHtml(doc.title) : escHtml(typeLabel)}" />
+            </div>
+            <div class="form-group">
+                <label>Fecha de vigencia</label>
+                <input id="le-date" type="date" value="${isEdit && doc.effective_date ? doc.effective_date.slice(0,10) : today}" />
+            </div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+            <label>Resumen de cambios (visible para usuarios en la notificación)</label>
+            <input id="le-summary" type="text" value="${isEdit && doc.summary_of_changes ? escHtml(doc.summary_of_changes) : ''}" placeholder="ej: Actualizamos la sección de pagos y datos personales." />
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <input type="checkbox" id="le-requires" ${(!isEdit || doc.requires_acceptance) ? 'checked' : ''} />
+            <label for="le-requires" style="margin:0;font-weight:400;cursor:pointer">Requiere aceptación explícita de los usuarios</label>
+        </div>
+        <div class="form-group">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <label style="margin:0">Contenido HTML *</label>
+                <div style="display:flex;gap:6px">
+                    <button class="btn btn-sm btn-secondary" onclick="legalTogglePreviewEditor()">👁 Preview</button>
+                </div>
+            </div>
+            <textarea id="le-content" rows="18" style="font-family:monospace;font-size:12px;width:100%;resize:vertical">${isEdit ? escHtml(doc.html_content) : ''}</textarea>
+        </div>
+        <div id="le-preview-box" style="display:none;border:1px solid var(--border);border-radius:8px;padding:24px;max-height:400px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.7;font-size:14px;margin-bottom:12px"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
+            <button class="btn btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">Cancelar</button>
+            <button class="btn btn-primary" onclick="legalSave()">💾 Guardar borrador</button>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:8px">Los borradores no son visibles para los usuarios. Publicá cuando esté listo.</p>
+    </div>`;
+}
+
+function legalTogglePreviewEditor() {
+    const preview = document.getElementById('le-preview-box');
+    const textarea = document.getElementById('le-content');
+    if (!preview || !textarea) return;
+    const isHidden = preview.style.display === 'none';
+    if (isHidden) {
+        preview.innerHTML = textarea.value;
+        preview.style.display = 'block';
+        textarea.style.display = 'none';
+    } else {
+        preview.style.display = 'none';
+        textarea.style.display = '';
+    }
+}
+
+async function legalSave() {
+    const errEl = document.getElementById('legal-editor-error');
+    const version = document.getElementById('le-version')?.value?.trim();
+    const title   = document.getElementById('le-title')?.value?.trim();
+    const content = document.getElementById('le-content')?.value?.trim();
+    const summary = document.getElementById('le-summary')?.value?.trim();
+    const date    = document.getElementById('le-date')?.value;
+    const req     = document.getElementById('le-requires')?.checked;
+
+    if (!version || !title || !content) {
+        if (errEl) { errEl.textContent = 'Completá Versión, Título y Contenido HTML.'; errEl.style.display = ''; }
+        return;
+    }
+    if (errEl) errEl.style.display = 'none';
+
+    try {
+        if (legalEditorMode === 'create') {
+            // Necesitamos el type — lo guardamos en el botón de la función que llama legalCreate
+            const typeInput = document.querySelector('#legal-detail-panel [data-legal-type]');
+            const type = typeInput?.dataset?.legalType || (title.toLowerCase().includes('privacidad') ? 'pyp' : 'tyc');
+            await apiFetch('/legal/admin/documents', 'POST', { type, version, title, html_content: content, summary_of_changes: summary || null, requires_acceptance: req, effective_date: date || null });
+        } else {
+            await apiFetch(`/legal/admin/documents/${legalEditorDocId}`, 'PUT', { version, title, html_content: content, summary_of_changes: summary || null, requires_acceptance: req, effective_date: date || null });
+        }
+        await renderLegal();
+        // Scroll al inicio para mostrar la tabla actualizada
+        document.getElementById('content')?.scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+        if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
+    }
+}
+
 async function legalPublish(id) {
-    if (!confirm('¿Publicar este documento? Se notificará a todos los usuarios activos que no lo aceptaron.')) return;
+    if (!confirm('¿Publicar este documento?\n\nSe notificará por email y notificación in-app a todos los usuarios activos que no lo aceptaron.\nEsta acción no se puede deshacer.')) return;
     try {
         const data = await apiFetch(`/legal/admin/documents/${id}/publish`, 'PUT');
-        alert(`✅ Publicado. ${data.notified} usuario(s) notificado(s).`);
+        alert(`✅ Publicado correctamente.\n${data.notified} usuario(s) notificado(s).`);
         renderLegal();
     } catch (e) {
         alert('Error al publicar: ' + e.message);
     }
 }
+
+async function legalDelete(id) {
+    if (!confirm('¿Eliminar este borrador? Esta acción no se puede deshacer.')) return;
+    try {
+        await apiFetch(`/legal/admin/documents/${id}`, 'DELETE');
+        renderLegal();
+    } catch (e) {
+        alert('Error al eliminar: ' + e.message);
+    }
+}
+
+// Patch legalCreate para pasar el type al editor via data attribute
+const _origLegalCreate = legalCreate;
+window.legalCreate = function(type) {
+    _origLegalCreate(type);
+    // Inyectar data-legal-type en un elemento hidden para que legalSave lo lea
+    const panel = document.getElementById('legal-detail-panel');
+    if (panel) {
+        const hidden = document.createElement('input');
+        hidden.type  = 'hidden';
+        hidden.dataset.legalType = type;
+        panel.appendChild(hidden);
+    }
+};
