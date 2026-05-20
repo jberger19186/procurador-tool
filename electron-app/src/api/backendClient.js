@@ -306,7 +306,9 @@ class BackendClient {
      */
     async markNotificationRead(id) {
         try {
-            const response = await this.client.post(`/client/notifications/${id}/read`);
+            // id === null → marcar todas como leídas
+            const url = id != null ? `/client/notifications/${id}/read` : '/client/notifications/all/read';
+            await this.client.post(url);
             return { success: true };
         } catch (error) {
             return { success: false, error: error.response?.data?.error || error.message };

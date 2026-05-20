@@ -676,4 +676,47 @@ router.post('/heartbeat', authenticateToken, async (req, res) => {
     }
 });
 
+// ─── GET /client/notifications ───────────────────────────────────────────────
+// Retorna las últimas notificaciones del usuario autenticado (para la app Electron)
+router.get('/notifications', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const result = await db.query(
+            `SELECT id, type, message, read, created_at
+             FROM notifications
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT 50`,
+            [req.user.id]
+        );
+        res.json({ success: true, notifications: result.rows });
+    } catch (error) {
+        console.error('Error fetching notifications:', error);
+        res.status(500).json({ success: false, error: 'Error al obtener notificaciones' });
+    }
+});
+
+// ─── POST /client/notifications/:id/read ─────────────────────────────────────
+// id = número → marca esa notificación; id = 'all' → marca todas las del usuario
+router.post('/notifications/:id/read', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const paramId = req.params.id;
+        if (paramId === 'all') {
+            await db.query('UPDATE notifications SET read = true WHERE user_id = $1', [req.user.id]);
+            return res.json({ success: true });
+        }
+        const notifId = parseInt(paramId, 10);
+        if (isNaN(notifId)) return res.status(400).json({ success: false, error: 'ID inválido' });
+        await db.query(
+            'UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2',
+            [notifId, req.user.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error marking notification read:', error);
+        res.status(500).json({ success: false, error: 'Error al marcar notificación' });
+    }
+});
+
 module.exports = router;

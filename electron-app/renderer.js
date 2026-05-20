@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupMonitorModal();
     updateHeaderInfo(); // Actualizar info del header al inicio
     updateUserChip();   // Poblar user chip del sidebar
+    loadNotifications().catch(() => {}); // Badge de notificaciones no leídas
     checkSubscriptionStatusBanner(); // Banner de estado de suscripción (v2.1)
     checkQuotaAlert();  // Mostrar banner si cuota >= 80%
     window.electronAPI.getPromoStatus().then(ps => { if (ps) checkPromoAlert(ps); }).catch(() => {});
@@ -415,6 +416,17 @@ function setupSidebar() {
         try { await window.electronAPI.saveConfig(currentConfig); } catch (_) { /* silencioso */ }
     });
 
+    // ===== VER TOUR =====
+    document.getElementById('btnSidebarTour')?.addEventListener('click', () => {
+        if (typeof window.startAppTour === 'function') window.startAppTour();
+        else addLog('info', '🗺️ Abriendo tour...');
+    });
+
+    // ===== ASISTENTE IA =====
+    document.getElementById('btnSidebarAsistente')?.addEventListener('click', () => {
+        openAsistente();
+    });
+
     // ===== TAB BUTTONS → misma acción que sidebar =====
     const tabMap = {
         'tabProcurar':  'procurar-hoy',
@@ -466,6 +478,93 @@ async function updateUserChip() {
     } catch (_) {
         // Silencioso — el chip queda con los defaults del HTML
     }
+}
+
+// ============ ASISTENTE IA ============
+const FAQ_ITEMS = [
+    { q: '¿Cómo procuro mis expedientes?', a: 'Hacé click en "Procurar" en el sidebar o en el botón ▶ Procurar. El sistema accede automáticamente al SCW del PJN con tus credenciales guardadas en Chrome.' },
+    { q: '¿Qué significa que el login falló?', a: 'El sistema no pudo ingresar al PJN. Verificá que Chrome tenga guardada la contraseña del SCW (botón "Agregar contraseña SCW" en Configuración > Seguridad).' },
+    { q: '¿Por qué se colgó el proceso?', a: 'Podés detenerlo con el botón "Detener". Si se repite, revisá que el Chrome del PJN no tenga otras pestañas bloqueando el acceso.' },
+    { q: '¿Cómo cambio de plan?', a: 'Abrí "Mi Cuenta" (chip de usuario en la barra lateral) y vas a ver las opciones de plan disponibles.' },
+    { q: '¿Dónde están los archivos descargados?', a: 'En la sección "Abrir descargas" del sidebar, o directamente en la carpeta de descargas configurada en Configuración > General.' },
+    { q: '¿Qué es el Monitor de partes?', a: 'Controlá automáticamente si aparecen nuevos expedientes vinculados a determinadas partes. Configurá las partes en la sección Monitor.' },
+    { q: '¿Cómo genero un informe?', a: 'Click en "Informe" en el sidebar. Podés procesar un expediente individual o un lote desde un archivo Excel.' },
+    { q: '¿Por qué no puedo ejecutar? Dice que hay un proceso activo', a: 'El sistema tiene un candado anti-concurrencia. Asegurate de no tener otra instancia abierta. Si el problema persiste, reiniciá la app.' },
+    { q: '¿Cómo actualizo la extensión de Chrome?', a: 'La extensión se actualiza automáticamente desde la Chrome Web Store. Podés verificar la versión actual en Configuración > Extensión.' },
+    { q: '¿Necesito dejar el navegador abierto?', a: 'No. El sistema abre y cierra Chrome automáticamente en segundo plano durante la procuración.' },
+];
+
+let asistenteMsgs = [];
+
+function openAsistente() {
+    setupAsistente();
+    openModal('modalAsistente');
+}
+
+function setupAsistente() {
+    const faqList   = document.getElementById('faqList');
+    const faqSearch = document.getElementById('faqSearch');
+    const btnSop    = document.getElementById('btnAsistenteSoporte');
+
+    if (!faqList) return;
+
+    function renderFaq(filter = '') {
+        const q = filter.toLowerCase().trim();
+        const filtered = q
+            ? FAQ_ITEMS.filter(f => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q))
+            : FAQ_ITEMS;
+
+        faqList.innerHTML = filtered.length === 0
+            ? '<p style="padding:16px;color:var(--text-3);font-size:12.5px;text-align:center">Sin resultados. Intentá con otras palabras.</p>'
+            : filtered.map((f, i) => `
+                <div class="faq-item" data-idx="${i}" style="border-bottom:1px solid var(--border)">
+                    <button class="faq-question" style="width:100%;text-align:left;padding:12px 16px;background:none;border:none;cursor:pointer;font-size:12.5px;font-weight:500;color:var(--text-1);display:flex;justify-content:space-between;align-items:center;gap:8px">
+                        <span>${escHtml(f.q)}</span>
+                        <span style="font-size:10px;color:var(--text-3);flex-shrink:0">▸</span>
+                    </button>
+                    <div class="faq-answer" style="display:none;padding:0 16px 12px;font-size:12px;color:var(--text-2);line-height:1.5">${escHtml(f.a)}</div>
+                </div>`
+            ).join('');
+
+        // Toggle expand
+        faqList.querySelectorAll('.faq-question').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const ans = btn.nextElementSibling;
+                const arrow = btn.querySelector('span:last-child');
+                const open = ans.style.display !== 'none';
+                // close all others
+                faqList.querySelectorAll('.faq-answer').forEach(a => a.style.display = 'none');
+                faqList.querySelectorAll('.faq-question span:last-child').forEach(a => a.textContent = '▸');
+                if (!open) { ans.style.display = ''; arrow.textContent = '▾'; }
+            });
+        });
+    }
+
+    // Init
+    renderFaq();
+
+    // Search — replace handler to avoid stacking listeners
+    const newSearch = faqSearch?.cloneNode(true);
+    faqSearch?.parentNode?.replaceChild(newSearch, faqSearch);
+    newSearch?.addEventListener('input', e => renderFaq(e.target.value));
+
+    // "Abrir soporte" → Mi Cuenta tab Soporte
+    const newBtn = btnSop?.cloneNode(true);
+    btnSop?.parentNode?.replaceChild(newBtn, btnSop);
+    newBtn?.addEventListener('click', () => {
+        closeModal('modalAsistente');
+        // Abrir Mi Cuenta en la pestaña Soporte
+        const modalCuenta = document.getElementById('modalCuenta');
+        if (modalCuenta) {
+            modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
+            const tabSop = modalCuenta.querySelector('.cuenta-tab[data-tab="soporte"]');
+            if (tabSop) tabSop.classList.add('active');
+            document.getElementById('cuenta-plan').style.display    = 'none';
+            document.getElementById('cuenta-soporte').style.display = '';
+        }
+        openModal('modalCuenta');
+        loadAccountData();
+    });
 }
 
 // ============ MENÚ DROPDOWN EJECUTAR ============
@@ -1617,8 +1716,10 @@ function setupCuentaModal() {
             const tabName = tab.dataset.tab;
             document.getElementById('cuenta-plan').style.display    = tabName === 'plan'    ? '' : 'none';
             document.getElementById('cuenta-soporte').style.display = tabName === 'soporte' ? '' : 'none';
+            document.getElementById('cuenta-notif').style.display   = tabName === 'notif'   ? '' : 'none';
             if (tabName === 'plan')    loadAccountData();
             if (tabName === 'soporte') loadTicketList();
+            if (tabName === 'notif')   loadNotifications();
         });
     });
 
@@ -1627,6 +1728,13 @@ function setupCuentaModal() {
     document.getElementById('btnBackTicketsDetalle').addEventListener('click', () => showSoporteView('lista'));
     document.getElementById('btnEnviarTicket').addEventListener('click', submitNewTicket);
     document.getElementById('btnEnviarReply').addEventListener('click', submitTicketReply);
+
+    document.getElementById('btnMarkAllReadCuenta')?.addEventListener('click', async () => {
+        try {
+            await window.electronAPI.markNotificationRead(null); // null = marcar todas
+            await loadNotifications();
+        } catch (_) {}
+    });
 
     document.getElementById('btnCerrarSesion').addEventListener('click', async () => {
         const confirmar = await window.electronAPI.showConfirmDialog(
@@ -1785,6 +1893,74 @@ function renderSubsystemUsageBars(usage) {
         </div>`;
     }).join('');
 }
+
+// ============ NOTIFICACIONES IN-APP ============
+async function loadNotifications() {
+    try {
+        const result = await window.electronAPI.getNotifications();
+        if (!result.success) return;
+
+        const notifs  = result.notifications || [];
+        const unread  = notifs.filter(n => !n.read);
+        const count   = unread.length;
+
+        // Badge en sidebar
+        const badge = document.getElementById('notif-badge');
+        if (badge) {
+            badge.textContent    = count;
+            badge.style.display  = count > 0 ? '' : 'none';
+        }
+
+        // Badge en la pestaña del modal
+        const tabBadge = document.getElementById('cuenta-notif-badge');
+        if (tabBadge) {
+            tabBadge.textContent   = count;
+            tabBadge.style.display = count > 0 ? '' : 'none';
+        }
+
+        // Texto de pestaña en el botón (solo si visible el panel de notif)
+        const tabBtn = document.getElementById('tab-notif-btn');
+        if (tabBtn) {
+            tabBtn.childNodes[0].textContent = `🔔 Notificaciones `;
+        }
+
+        // Panel de notificaciones (si está visible)
+        const countEl     = document.getElementById('notif-tab-count');
+        const listEl      = document.getElementById('notif-tab-list');
+        const markAllBtn  = document.getElementById('btnMarkAllReadCuenta');
+
+        if (countEl) countEl.textContent = notifs.length > 0 ? `${notifs.length} notificación${notifs.length !== 1 ? 'es' : ''}` : 'Sin notificaciones';
+        if (markAllBtn) markAllBtn.style.display = unread.length > 0 ? '' : 'none';
+
+        if (listEl) {
+            if (notifs.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center;color:var(--text-3);padding:24px;font-size:13px">No tenés notificaciones</div>';
+            } else {
+                const typeIcon = { account_activated:'✅', account_suspended:'🚫', account_reactivated:'🔓', account_rejected:'❌', plan_changed:'📦', plan_downgrade_scheduled:'⏳', cancellation_scheduled:'🗓️', email_verified:'📧', trial_review_pending:'🔍', reactivation_rejected:'❌', test_badge:'🔔' };
+                listEl.innerHTML = notifs.map(n => {
+                    const icon = typeIcon[n.type] || '🔔';
+                    const date = new Date(n.created_at).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                    const readStyle = n.read ? 'opacity:0.6' : 'font-weight:600';
+                    return `<div style="padding:10px 0;border-bottom:1px solid var(--border);${readStyle}">
+                        <div style="display:flex;gap:8px;align-items:flex-start">
+                            <span style="font-size:16px;flex-shrink:0">${icon}</span>
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:13px;color:var(--text-1);line-height:1.4">${n.message}</div>
+                                <div style="font-size:11px;color:var(--text-3);margin-top:3px">${date}</div>
+                            </div>
+                            ${!n.read ? `<button onclick="markNotifRead(${n.id})" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:11px;white-space:nowrap;padding:2px 6px;border-radius:4px;hover:background:#f3f4f6" title="Marcar como leída">✓ Leída</button>` : ''}
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        }
+    } catch (_) {}
+}
+
+window.markNotifRead = async function(id) {
+    await window.electronAPI.markNotificationRead(id);
+    await loadNotifications();
+};
 
 // ============ ALERTA PROACTIVA DE CUOTA ============
 // ─── Banner de promo (vencimiento / extensión) ───────────────────────────────

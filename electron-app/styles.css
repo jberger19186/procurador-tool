@@ -340,6 +340,10 @@ body {
   margin-top: auto;
   border-top: 1px solid var(--border);
   padding-top: 8px;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-surface);
+  z-index: 1;
 }
 
 /* User chip */

@@ -143,9 +143,8 @@ function createLoginWindow() {
     });
 
     console.log('isDev:', isDev, 'isPackaged:', app.isPackaged);
-    if (isDev) {
-        loginWindow.webContents.openDevTools();
-    }
+    // DevTools deshabilitado en login para QA — re-habilitar si se necesita depurar
+    // if (isDev) { loginWindow.webContents.openDevTools(); }
 
     loginWindow.on('closed', () => {
         loginWindow = null;
@@ -159,9 +158,9 @@ function createLoginWindow() {
 function createMainWindow() {
     mainWindow = new BrowserWindow({
         width: 1200,
-        height: 700,
+        height: 820,
         minWidth: 800,
-        minHeight: 400,
+        minHeight: 620,
         frame: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
