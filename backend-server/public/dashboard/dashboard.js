@@ -1732,167 +1732,205 @@ async function renderMetrics() {
     try {
         const data = await apiFetch('/admin/stats/overview');
         const s = data.stats;
+        const total = s.totalUsers ?? 0;
 
-        // Construir breakdown de usuarios por estado
         const statusRows = [
-            { label: 'Activos',                color: '#16a34a', val: s.activeUsers       ?? 0 },
-            { label: 'Pendientes de activación',color: '#f59e0b', val: s.pendingUsers      ?? 0 },
-            { label: 'Suspendidos (admin)',      color: '#f97316', val: s.suspendedUsers    ?? 0 },
-            { label: 'Plan vencido',             color: '#ef4444', val: s.expiredUsers      ?? 0 },
-            { label: 'Cancelados',               color: '#6b7280', val: s.cancelledUsers    ?? 0 },
-            { label: 'Rechazados',               color: '#dc2626', val: s.rejectedUsers     ?? 0 },
-            { label: 'Pendiente de email',       color: '#a3a3a3', val: s.pendingEmailUsers ?? 0 },
+            { label: 'Activos',               color: '#16a34a', val: s.activeUsers        ?? 0 },
+            { label: 'Trial pendiente',        color: '#f59e0b', val: s.pendingUsers       ?? 0 },
+            { label: 'Suspendidos',            color: '#f97316', val: s.suspendedUsers     ?? 0 },
+            { label: 'Plan vencido',           color: '#ef4444', val: s.expiredUsers       ?? 0 },
+            { label: 'Cancelados',             color: '#6b7280', val: s.cancelledUsers     ?? 0 },
+            { label: 'Rechazados',             color: '#dc2626', val: s.rejectedUsers      ?? 0 },
+            { label: 'Email pendiente',        color: '#a3a3a3', val: s.pendingEmailUsers  ?? 0 },
         ].filter(r => r.val > 0);
 
-        const total = s.totalUsers ?? 0;
         const statusBars = statusRows.map(r => {
             const pct = total > 0 ? Math.round(r.val / total * 100) : 0;
-            return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px">
-                <div style="width:130px;color:var(--text-muted);flex-shrink:0">${r.label}</div>
-                <div style="flex:1;background:#f3f4f6;border-radius:4px;height:14px;overflow:hidden">
-                    <div style="width:${pct}%;background:${r.color};height:100%;border-radius:4px;transition:width 0.4s"></div>
+            return `
+            <div style="display:flex;align-items:center;gap:12px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)">
+                <div style="width:140px;color:var(--text);flex-shrink:0">${r.label}</div>
+                <div style="flex:1;background:#f3f4f6;border-radius:4px;height:12px;overflow:hidden">
+                    <div style="width:${Math.max(pct,1)}%;background:${r.color};height:100%;border-radius:4px"></div>
                 </div>
-                <div style="width:60px;text-align:right;font-weight:600;color:${r.color}">${r.val}</div>
-                <div style="width:36px;text-align:right;color:var(--text-muted)">${pct}%</div>
+                <div style="width:44px;text-align:right;font-weight:700;color:${r.color}">${r.val}</div>
+                <div style="width:38px;text-align:right;color:var(--text-muted);font-size:12px">${pct}%</div>
             </div>`;
         }).join('');
 
-        // Distribución por plan
-        let planHtml = '';
-        try {
-            const planData = await apiFetch('/admin/stats/plans');
-            if (planData && planData.plans) {
-                planHtml = `
-                <div class="card section-gap">
-                    <h3 style="margin-bottom:16px">Distribución por plan</h3>
-                    <div class="table-wrapper">
-                        <table>
-                            <thead><tr><th>Plan</th><th>Usuarios activos</th><th>%</th></tr></thead>
-                            <tbody>${planData.plans.map(p => {
-                                const pct2 = s.activeUsers > 0 ? Math.round(p.count / s.activeUsers * 100) : 0;
-                                return `<tr><td>${p.plan_name}</td><td><strong>${p.count}</strong></td><td style="color:var(--text-muted)">${pct2}%</td></tr>`;
-                            }).join('')}</tbody>
-                        </table>
-                    </div>
-                </div>`;
-            }
-        } catch (_) { /* endpoint opcional */ }
+        const pendingStyle = (s.pendingUsers ?? 0) > 0
+            ? 'border:2px solid #f59e0b'
+            : '';
 
         content.innerHTML = `
-        <div class="page-header"><h2>Métricas del sistema</h2></div>
+        <div class="page-header">
+            <div><h2>Métricas del sistema</h2><p>Datos en tiempo real</p></div>
+            <button class="btn btn-sm btn-secondary" onclick="renderMetrics()">↻ Actualizar</button>
+        </div>
 
         <div class="stats-grid" style="margin-bottom:20px">
             <div class="stat-card">
-                <div class="stat-label">Total usuarios</div>
-                <div class="stat-value">${total}</div>
+                <div class="stat-icon">👥</div>
+                <div class="stat-body">
+                    <div class="stat-value">${total}</div>
+                    <div class="stat-label">Total registrados</div>
+                </div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Activos</div>
-                <div class="stat-value" style="color:#16a34a">${s.activeUsers ?? '—'}</div>
+                <div class="stat-icon">✅</div>
+                <div class="stat-body">
+                    <div class="stat-value" style="color:#16a34a">${s.activeUsers ?? '—'}</div>
+                    <div class="stat-label">Usuarios activos</div>
+                </div>
             </div>
-            <div class="stat-card ${(s.pendingUsers ?? 0) > 0 ? 'stat-card-warning' : ''}">
-                <div class="stat-label">Pendientes activación</div>
-                <div class="stat-value">${s.pendingUsers ?? 0}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Suscripciones activas</div>
-                <div class="stat-value" style="color:#16a34a">${s.activeSubscriptions ?? '—'}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Tickets abiertos</div>
-                <div class="stat-value">${s.openTickets ?? '—'}</div>
+            <div class="stat-card" style="${pendingStyle}">
+                <div class="stat-icon">⏳</div>
+                <div class="stat-body">
+                    <div class="stat-value" style="${(s.pendingUsers ?? 0) > 0 ? 'color:#f59e0b' : ''}">${s.pendingUsers ?? 0}</div>
+                    <div class="stat-label">Pendientes de activación</div>
+                </div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Scripts activos</div>
-                <div class="stat-value">${s.activeScripts ?? '—'}</div>
+                <div class="stat-icon">💳</div>
+                <div class="stat-body">
+                    <div class="stat-value" style="color:#16a34a">${s.activeSubscriptions ?? '—'}</div>
+                    <div class="stat-label">Suscripciones activas</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎫</div>
+                <div class="stat-body">
+                    <div class="stat-value">${s.openTickets ?? '—'}</div>
+                    <div class="stat-label">Tickets abiertos</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📜</div>
+                <div class="stat-body">
+                    <div class="stat-value">${s.activeScripts ?? '—'}</div>
+                    <div class="stat-label">Scripts activos</div>
+                </div>
             </div>
         </div>
 
         <div class="card section-gap">
-            <h3 style="margin-bottom:16px">Distribución de usuarios por estado</h3>
-            ${statusBars || '<p style="color:var(--text-muted);font-size:13px">Sin datos.</p>'}
-        </div>
+            <h3 style="margin-bottom:16px;font-size:15px;font-weight:600">Distribución de usuarios por estado</h3>
+            ${statusBars || '<p style="color:var(--text-muted);font-size:13px">Sin datos aún.</p>'}
+        </div>`;
 
-        ${planHtml}
-
-        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
-            Datos en tiempo real · <a href="#" onclick="renderMetrics()" style="color:var(--primary)">↻ Actualizar</a>
-        </p>`;
     } catch (e) {
         content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
 
 // ───── LEGAL ─────
-// Estado del editor legal (persiste entre llamadas)
 let legalEditorMode  = null; // null | 'create' | 'edit'
+let legalEditorType  = null; // 'tyc' | 'pyp'
 let legalEditorDocId = null;
+
+// Auto-incrementa versión: "1" → "1.1", "1.0" → "1.1", "1.1" → "1.2", "2" → "2.1"
+function legalNextVersion(ver) {
+    if (!ver) return '1.0';
+    const parts = String(ver).split('.');
+    if (parts.length === 1) {
+        return parts[0] + '.1';
+    }
+    const last = parseInt(parts[parts.length - 1], 10);
+    parts[parts.length - 1] = isNaN(last) ? '1' : String(last + 1);
+    return parts.join('.');
+}
 
 async function renderLegal() {
     const content = document.getElementById('content');
     legalEditorMode  = null;
+    legalEditorType  = null;
     legalEditorDocId = null;
     try {
         const data = await apiFetch('/legal/admin/documents');
         const docs  = data.documents || [];
 
-        const typeLabel = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
-        const typeIcon  = { tyc: '📄', pyp: '🔒' };
+        const TYPE_LABEL = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
 
-        // Agrupar por tipo para mostrar versiones
+        // Agrupar por tipo, ordenados: publicado primero, luego borradores desc
         const byType = { tyc: [], pyp: [] };
         docs.forEach(d => { if (byType[d.type]) byType[d.type].push(d); });
+        Object.keys(byType).forEach(t => {
+            byType[t].sort((a, b) => (b.is_current ? 1 : 0) - (a.is_current ? 1 : 0)
+                || new Date(b.created_at) - new Date(a.created_at));
+        });
 
         function docTable(type) {
             const list = byType[type];
-            if (!list.length) return `<p style="color:var(--text-muted);font-size:13px">Sin versiones.</p>`;
+            if (!list.length) {
+                return `<div class="empty-state" style="padding:24px">
+                    <div class="empty-icon">📋</div>
+                    <p>No hay versiones todavía. Creá la primera con el botón de arriba.</p>
+                </div>`;
+            }
             return `<div class="table-wrapper">
                 <table>
-                    <thead><tr><th>Versión</th><th>Estado</th><th>Vigencia</th><th>Aceptaciones</th><th>Requiere aceptación</th><th>Creado por</th><th>Fecha</th><th style="min-width:200px">Acciones</th></tr></thead>
-                    <tbody>${list.map(d => `<tr>
-                        <td><strong>${escHtml(d.version)}</strong></td>
-                        <td><span class="status-badge ${d.is_current ? 'status-active' : 'status-suspended'}">${d.is_current ? '✅ Publicado' : '⏳ Borrador'}</span></td>
-                        <td>${d.effective_date ? fmtDate(d.effective_date) : '—'}</td>
-                        <td><a href="#" onclick="legalViewStats(${d.id},'${escHtml(typeLabel[type])} v${escHtml(d.version)}')" style="color:var(--primary)">${d.acceptance_count ?? 0} usuarios</a></td>
-                        <td>${d.requires_acceptance ? '✅' : '—'}</td>
-                        <td style="font-size:12px">${d.created_by_email ? escHtml(d.created_by_email) : '—'}</td>
-                        <td style="font-size:12px">${fmtDate(d.created_at)}</td>
-                        <td>
-                            <div style="display:flex;gap:4px;flex-wrap:wrap">
-                                <button class="btn btn-sm btn-secondary" onclick="legalPreview(${d.id})">👁 Ver</button>
-                                ${!d.is_current
-                                    ? `<button class="btn btn-sm btn-secondary" onclick="legalEdit(${d.id})">✏️ Editar</button>
-                                       <button class="btn btn-sm btn-primary"   onclick="legalPublish(${d.id})">🚀 Publicar</button>
-                                       <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5" onclick="legalDelete(${d.id})">🗑</button>`
-                                    : ``}
-                            </div>
-                        </td>
-                    </tr>`).join('')}</tbody>
+                    <thead>
+                        <tr>
+                            <th>Versión</th>
+                            <th>Estado</th>
+                            <th>Vigencia desde</th>
+                            <th>Aceptaciones</th>
+                            <th>Req. aceptación</th>
+                            <th>Fecha creación</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    ${list.map(d => `
+                        <tr>
+                            <td><strong>v${escHtml(d.version)}</strong></td>
+                            <td>${d.is_current
+                                ? '<span class="badge badge-green">✅ Publicado</span>'
+                                : '<span class="badge badge-gray">⏳ Borrador</span>'}</td>
+                            <td style="font-size:12px">${d.effective_date ? fmtDate(d.effective_date) : '—'}</td>
+                            <td>
+                                ${d.acceptance_count > 0
+                                    ? `<a href="#" onclick="legalViewStats(${d.id},'${escHtml(TYPE_LABEL[type])} v${escHtml(d.version)}')" style="color:var(--primary);font-weight:600">${d.acceptance_count} usuarios</a>`
+                                    : `<span style="color:var(--text-muted)">0</span>`}
+                            </td>
+                            <td style="text-align:center">${d.requires_acceptance ? '✅' : '—'}</td>
+                            <td style="font-size:12px">${fmtDate(d.created_at)}</td>
+                            <td>
+                                <div style="display:flex;gap:4px;flex-wrap:wrap">
+                                    <button class="btn btn-sm btn-secondary" onclick="legalPreview(${d.id})">👁 Ver</button>
+                                    ${!d.is_current ? `
+                                        <button class="btn btn-sm btn-secondary" onclick="legalEdit(${d.id})">✏️ Editar</button>
+                                        <button class="btn btn-sm btn-primary"   onclick="legalPublish(${d.id})">🚀 Publicar</button>
+                                        <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;padding:4px 8px" onclick="legalDelete(${d.id})" title="Eliminar borrador">🗑</button>
+                                    ` : ''}
+                                </div>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
                 </table>
             </div>`;
         }
 
         content.innerHTML = `
         <div class="page-header">
-            <h2>Documentos legales</h2>
+            <div><h2>Documentos legales</h2><p>Gestión de versiones de T&C y Política de Privacidad</p></div>
             <div style="display:flex;gap:8px">
-                <a href="/terminos/" target="_blank" class="btn btn-sm btn-secondary">Ver T&C público →</a>
+                <a href="/terminos/"  target="_blank" class="btn btn-sm btn-secondary">Ver T&C público →</a>
                 <a href="/privacidad/" target="_blank" class="btn btn-sm btn-secondary">Ver PyP público →</a>
             </div>
         </div>
 
         <div class="card section-gap">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h3>📄 Términos y Condiciones</h3>
-                <button class="btn btn-sm btn-primary" onclick="legalCreate('tyc')">+ Nueva versión T&C</button>
+                <h3 style="font-size:15px;font-weight:600">📄 Términos y Condiciones</h3>
+                <button class="btn btn-sm btn-primary" onclick="legalCreate('tyc')">+ Nueva versión</button>
             </div>
             ${docTable('tyc')}
         </div>
 
         <div class="card section-gap">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h3>🔒 Política de Privacidad</h3>
-                <button class="btn btn-sm btn-primary" onclick="legalCreate('pyp')">+ Nueva versión PyP</button>
+                <h3 style="font-size:15px;font-weight:600">🔒 Política de Privacidad</h3>
+                <button class="btn btn-sm btn-primary" onclick="legalCreate('pyp')">+ Nueva versión</button>
             </div>
             ${docTable('pyp')}
         </div>
@@ -1908,9 +1946,186 @@ function legalScrollToPanel() {
     setTimeout(() => {
         const p = document.getElementById('legal-detail-panel');
         if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+    }, 80);
 }
 
+// ── Crear nueva versión — pre-rellena desde el documento publicado actual ──
+async function legalCreate(type) {
+    legalEditorMode  = 'create';
+    legalEditorType  = type;
+    legalEditorDocId = null;
+    const TYPE_LABEL = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
+    const panel = document.getElementById('legal-detail-panel');
+    if (!panel) return;
+    panel.innerHTML = '<div class="loading">Preparando editor...</div>';
+    legalScrollToPanel();
+
+    // Buscar el documento publicado actual para ese tipo
+    try {
+        const data = await apiFetch('/legal/admin/documents');
+        const docs  = data.documents || [];
+        const current = docs.find(d => d.type === type && d.is_current);
+        const today   = new Date().toISOString().slice(0, 10);
+
+        // Pre-rellenar desde el publicado o dejar vacío si no hay ninguno
+        const prefill = current ? {
+            version:     legalNextVersion(current.version),
+            title:       current.title,
+            html_content: current.html_content,
+            summary:     '',                         // siempre vacío en nueva versión
+            date:        today,
+            requires:    current.requires_acceptance,
+        } : {
+            version:     '1.0',
+            title:       TYPE_LABEL[type],
+            html_content: '',
+            summary:     '',
+            date:        today,
+            requires:    true,
+        };
+
+        panel.innerHTML = legalEditorHTML(prefill, type, TYPE_LABEL[type], 'create');
+    } catch (e) {
+        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+}
+
+// ── Editar borrador existente ──
+async function legalEdit(id) {
+    const panel = document.getElementById('legal-detail-panel');
+    if (!panel) return;
+    panel.innerHTML = '<div class="loading">Cargando borrador...</div>';
+    legalScrollToPanel();
+    try {
+        const data = await apiFetch(`/legal/admin/documents/${id}`);
+        const doc  = data.document;
+        const TYPE_LABEL = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
+        legalEditorMode  = 'edit';
+        legalEditorType  = doc.type;
+        legalEditorDocId = id;
+        const prefill = {
+            version:      doc.version,
+            title:        doc.title,
+            html_content: doc.html_content,
+            summary:      doc.summary_of_changes || '',
+            date:         doc.effective_date ? doc.effective_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+            requires:     doc.requires_acceptance,
+        };
+        panel.innerHTML = legalEditorHTML(prefill, doc.type, TYPE_LABEL[doc.type], 'edit');
+    } catch (e) {
+        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+}
+
+// ── HTML del editor (compartido por crear y editar) ──
+function legalEditorHTML(prefill, type, typeLabel, mode) {
+    const title = mode === 'edit' ? `✏️ Editar borrador — ${escHtml(typeLabel)}` : `+ Nueva versión — ${escHtml(typeLabel)}`;
+    return `
+    <div class="card section-gap">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h3 style="font-size:15px;font-weight:600">${title}</h3>
+            <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cancelar</button>
+        </div>
+
+        <div id="legal-editor-error" class="alert alert-error" style="display:none;margin-bottom:16px"></div>
+
+        <div style="display:grid;grid-template-columns:160px 1fr 180px;gap:12px;margin-bottom:12px">
+            <div class="form-group" style="margin:0">
+                <label>Versión *</label>
+                <input id="le-version" type="text" value="${escHtml(prefill.version)}" placeholder="ej: 1.1" />
+            </div>
+            <div class="form-group" style="margin:0">
+                <label>Título *</label>
+                <input id="le-title" type="text" value="${escHtml(prefill.title)}" />
+            </div>
+            <div class="form-group" style="margin:0">
+                <label>Vigencia desde</label>
+                <input id="le-date" type="date" value="${escHtml(prefill.date)}" />
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Resumen de cambios <span style="color:var(--text-muted);font-weight:400">(se muestra a usuarios en la notificación — dejá en blanco si no aplica)</span></label>
+            <input id="le-summary" type="text" value="${escHtml(prefill.summary)}" placeholder="ej: Actualizamos la cláusula de pagos y retención de datos." />
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+            <input type="checkbox" id="le-requires" ${prefill.requires ? 'checked' : ''} />
+            <label for="le-requires" style="margin:0;font-weight:400;cursor:pointer;font-size:13px">Requiere aceptación explícita de los usuarios al publicar</label>
+        </div>
+
+        <div class="form-group" style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <label style="margin:0">Contenido HTML *</label>
+                <button class="btn btn-sm btn-secondary" id="le-preview-btn" onclick="legalTogglePreviewEditor()">👁 Vista previa</button>
+            </div>
+            <textarea id="le-content" rows="20" style="font-family:'Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.5;width:100%;resize:vertical;background:#f9fafb">${escHtml(prefill.html_content)}</textarea>
+        </div>
+
+        <div id="le-preview-box" style="display:none;border:1px solid var(--border);border-radius:8px;padding:24px 32px;max-height:480px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px;margin-bottom:12px"></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--border)">
+            <button class="btn btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">Cancelar</button>
+            <button class="btn btn-primary" onclick="legalSave()">💾 Guardar borrador</button>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
+            💡 El borrador no es visible para los usuarios. Una vez guardado, revisalo y publicalo cuando esté listo.
+        </p>
+    </div>`;
+}
+
+function legalTogglePreviewEditor() {
+    const preview  = document.getElementById('le-preview-box');
+    const textarea = document.getElementById('le-content');
+    const btn      = document.getElementById('le-preview-btn');
+    if (!preview || !textarea) return;
+    const showing = preview.style.display !== 'none';
+    if (showing) {
+        preview.style.display  = 'none';
+        textarea.style.display = '';
+        if (btn) btn.textContent = '👁 Vista previa';
+    } else {
+        preview.innerHTML      = textarea.value;
+        preview.style.display  = 'block';
+        textarea.style.display = 'none';
+        if (btn) btn.textContent = '✏️ Editar HTML';
+    }
+}
+
+async function legalSave() {
+    const errEl   = document.getElementById('legal-editor-error');
+    const version = document.getElementById('le-version')?.value?.trim();
+    const title   = document.getElementById('le-title')?.value?.trim();
+    const htmlVal = document.getElementById('le-content')?.value?.trim();
+    const summary = document.getElementById('le-summary')?.value?.trim();
+    const date    = document.getElementById('le-date')?.value;
+    const req     = document.getElementById('le-requires')?.checked;
+
+    if (!version || !title || !htmlVal) {
+        if (errEl) { errEl.textContent = 'Completá los campos Versión, Título y Contenido HTML.'; errEl.style.display = ''; }
+        return;
+    }
+    if (errEl) errEl.style.display = 'none';
+
+    const saveBtn = document.querySelector('#legal-detail-panel .btn-primary');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando...'; }
+
+    try {
+        const body = { version, title, html_content: htmlVal, summary_of_changes: summary || null, requires_acceptance: !!req, effective_date: date || null };
+        if (legalEditorMode === 'create') {
+            await apiFetch('/legal/admin/documents', 'POST', { ...body, type: legalEditorType });
+        } else {
+            await apiFetch(`/legal/admin/documents/${legalEditorDocId}`, 'PUT', body);
+        }
+        await renderLegal();
+        document.getElementById('content')?.scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar borrador'; }
+        if (errEl)   { errEl.textContent = e.message; errEl.style.display = ''; }
+    }
+}
+
+// ── Ver estadísticas de aceptación ──
 async function legalViewStats(id, label) {
     const panel = document.getElementById('legal-detail-panel');
     if (!panel) return;
@@ -1919,42 +2134,55 @@ async function legalViewStats(id, label) {
     try {
         const data = await apiFetch(`/legal/admin/documents/${id}/stats`);
         const pct  = data.total_users > 0 ? Math.round(data.accepted_count / data.total_users * 100) : 0;
-        const barW = Math.max(pct, 2);
+        const pend = data.total_users - data.accepted_count;
         const rows = (data.acceptances || []).map(a => `
             <tr>
                 <td>${escHtml(a.email)}</td>
                 <td>${escHtml(a.nombre || '—')}</td>
-                <td>${fmtDate(a.accepted_at)}</td>
+                <td style="font-size:12px">${fmtDate(a.accepted_at)}</td>
             </tr>`).join('');
         panel.innerHTML = `
         <div class="card section-gap">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h3>📊 Estadísticas — ${escHtml(label)}</h3>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+                <h3 style="font-size:15px;font-weight:600">📊 Aceptaciones — ${escHtml(label)}</h3>
                 <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cerrar</button>
             </div>
-            <div class="stats-grid" style="margin-bottom:20px">
-                <div class="stat-card"><div class="stat-label">Usuarios elegibles</div><div class="stat-value">${data.total_users}</div></div>
-                <div class="stat-card"><div class="stat-label">Aceptaron</div><div class="stat-value" style="color:#16a34a">${data.accepted_count}</div></div>
-                <div class="stat-card ${pct < 80 ? 'stat-card-warning' : ''}"><div class="stat-label">% aceptación</div><div class="stat-value">${pct}%</div></div>
-                <div class="stat-card"><div class="stat-label">Pendientes</div><div class="stat-value" style="color:#f59e0b">${data.total_users - data.accepted_count}</div></div>
+            <div class="stats-grid" style="margin-bottom:16px">
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-body"><div class="stat-value">${data.total_users}</div><div class="stat-label">Usuarios elegibles</div></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-body"><div class="stat-value" style="color:#16a34a">${data.accepted_count}</div><div class="stat-label">Aceptaron</div></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-body"><div class="stat-value" style="color:${pct >= 80 ? '#16a34a' : '#f59e0b'}">${pct}%</div><div class="stat-label">Tasa de aceptación</div></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏳</div>
+                    <div class="stat-body"><div class="stat-value" style="${pend > 0 ? 'color:#f59e0b' : ''}">${pend}</div><div class="stat-label">Pendientes</div></div>
+                </div>
             </div>
-            <div style="background:#f3f4f6;border-radius:6px;height:18px;margin-bottom:20px;overflow:hidden">
-                <div style="width:${barW}%;background:#16a34a;height:100%;border-radius:6px;transition:width 0.5s"></div>
+            <div style="background:#f3f4f6;border-radius:6px;height:14px;margin-bottom:20px;overflow:hidden">
+                <div style="width:${Math.max(pct,0)}%;background:#16a34a;height:100%;border-radius:6px;transition:width 0.6s"></div>
             </div>
             ${rows
-                ? `<div class="table-wrapper" style="max-height:280px;overflow-y:auto">
-                    <table style="font-size:12px">
-                        <thead><tr><th>Email</th><th>Nombre</th><th>Aceptado el</th></tr></thead>
+                ? `<div class="table-wrapper" style="max-height:300px;overflow-y:auto">
+                    <table>
+                        <thead><tr><th>Email</th><th>Nombre</th><th>Fecha de aceptación</th></tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
                    </div>`
-                : '<p style="color:var(--text-muted);font-size:13px">Sin aceptaciones todavía.</p>'}
+                : '<div class="empty-state" style="padding:24px"><div class="empty-icon">📋</div><p>Sin aceptaciones todavía.</p></div>'}
         </div>`;
     } catch (e) {
         panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
 
+// ── Vista previa de documento publicado ──
 async function legalPreview(id) {
     const panel = document.getElementById('legal-detail-panel');
     if (!panel) return;
@@ -1963,152 +2191,33 @@ async function legalPreview(id) {
     try {
         const data = await apiFetch(`/legal/admin/documents/${id}`);
         const doc  = data.document;
-        const typeLabel = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
+        const TYPE_LABEL = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
         panel.innerHTML = `
         <div class="card section-gap">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h3>👁 Vista previa — ${escHtml(typeLabel[doc.type] || doc.type)} v${escHtml(doc.version)}</h3>
+                <div>
+                    <h3 style="font-size:15px;font-weight:600">👁 Vista previa — ${escHtml(TYPE_LABEL[doc.type] || doc.type)} v${escHtml(doc.version)}</h3>
+                    <p style="font-size:12px;color:var(--text-muted);margin-top:2px">${doc.is_current ? '✅ Publicado' : '⏳ Borrador'} · Vigente desde ${doc.effective_date ? fmtDate(doc.effective_date) : '—'}</p>
+                </div>
                 <div style="display:flex;gap:8px">
                     ${!doc.is_current ? `<button class="btn btn-sm btn-secondary" onclick="legalEdit(${doc.id})">✏️ Editar</button>` : ''}
                     <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cerrar</button>
                 </div>
             </div>
-            <div style="border:1px solid var(--border);border-radius:8px;padding:24px;max-height:500px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.7;font-size:14px">
+            ${doc.summary_of_changes
+                ? `<div class="alert alert-info" style="margin-bottom:16px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>`
+                : ''}
+            <div style="border:1px solid var(--border);border-radius:8px;padding:28px 36px;max-height:560px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px">
                 ${doc.html_content}
             </div>
-            ${doc.summary_of_changes ? `<div style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:6px;font-size:13px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>` : ''}
         </div>`;
     } catch (e) {
         panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
 
-function legalCreate(type) {
-    legalEditorMode  = 'create';
-    legalEditorDocId = null;
-    const typeLabel  = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
-    const panel = document.getElementById('legal-detail-panel');
-    if (!panel) return;
-    panel.innerHTML = legalEditorHTML(null, type, typeLabel[type]);
-    legalScrollToPanel();
-}
-
-async function legalEdit(id) {
-    const panel = document.getElementById('legal-detail-panel');
-    if (!panel) return;
-    panel.innerHTML = '<div class="loading">Cargando...</div>';
-    legalScrollToPanel();
-    try {
-        const data = await apiFetch(`/legal/admin/documents/${id}`);
-        const doc  = data.document;
-        const typeLabel = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
-        legalEditorMode  = 'edit';
-        legalEditorDocId = id;
-        panel.innerHTML  = legalEditorHTML(doc, doc.type, typeLabel[doc.type]);
-    } catch (e) {
-        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
-    }
-}
-
-function legalEditorHTML(doc, type, typeLabel) {
-    const isEdit = !!doc;
-    const today  = new Date().toISOString().slice(0, 10);
-    return `
-    <div class="card section-gap">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h3>${isEdit ? '✏️ Editar borrador' : '+ Nueva versión'} — ${escHtml(typeLabel)}</h3>
-            <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cancelar</button>
-        </div>
-        <div id="legal-editor-error" class="alert alert-error" style="display:none;margin-bottom:12px"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
-            <div class="form-group">
-                <label>Versión *</label>
-                <input id="le-version" type="text" value="${isEdit ? escHtml(doc.version) : ''}" placeholder="ej: 1.1" />
-            </div>
-            <div class="form-group">
-                <label>Título *</label>
-                <input id="le-title" type="text" value="${isEdit ? escHtml(doc.title) : escHtml(typeLabel)}" />
-            </div>
-            <div class="form-group">
-                <label>Fecha de vigencia</label>
-                <input id="le-date" type="date" value="${isEdit && doc.effective_date ? doc.effective_date.slice(0,10) : today}" />
-            </div>
-        </div>
-        <div class="form-group" style="margin-bottom:12px">
-            <label>Resumen de cambios (visible para usuarios en la notificación)</label>
-            <input id="le-summary" type="text" value="${isEdit && doc.summary_of_changes ? escHtml(doc.summary_of_changes) : ''}" placeholder="ej: Actualizamos la sección de pagos y datos personales." />
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-            <input type="checkbox" id="le-requires" ${(!isEdit || doc.requires_acceptance) ? 'checked' : ''} />
-            <label for="le-requires" style="margin:0;font-weight:400;cursor:pointer">Requiere aceptación explícita de los usuarios</label>
-        </div>
-        <div class="form-group">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <label style="margin:0">Contenido HTML *</label>
-                <div style="display:flex;gap:6px">
-                    <button class="btn btn-sm btn-secondary" onclick="legalTogglePreviewEditor()">👁 Preview</button>
-                </div>
-            </div>
-            <textarea id="le-content" rows="18" style="font-family:monospace;font-size:12px;width:100%;resize:vertical">${isEdit ? escHtml(doc.html_content) : ''}</textarea>
-        </div>
-        <div id="le-preview-box" style="display:none;border:1px solid var(--border);border-radius:8px;padding:24px;max-height:400px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.7;font-size:14px;margin-bottom:12px"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
-            <button class="btn btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">Cancelar</button>
-            <button class="btn btn-primary" onclick="legalSave()">💾 Guardar borrador</button>
-        </div>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:8px">Los borradores no son visibles para los usuarios. Publicá cuando esté listo.</p>
-    </div>`;
-}
-
-function legalTogglePreviewEditor() {
-    const preview = document.getElementById('le-preview-box');
-    const textarea = document.getElementById('le-content');
-    if (!preview || !textarea) return;
-    const isHidden = preview.style.display === 'none';
-    if (isHidden) {
-        preview.innerHTML = textarea.value;
-        preview.style.display = 'block';
-        textarea.style.display = 'none';
-    } else {
-        preview.style.display = 'none';
-        textarea.style.display = '';
-    }
-}
-
-async function legalSave() {
-    const errEl = document.getElementById('legal-editor-error');
-    const version = document.getElementById('le-version')?.value?.trim();
-    const title   = document.getElementById('le-title')?.value?.trim();
-    const content = document.getElementById('le-content')?.value?.trim();
-    const summary = document.getElementById('le-summary')?.value?.trim();
-    const date    = document.getElementById('le-date')?.value;
-    const req     = document.getElementById('le-requires')?.checked;
-
-    if (!version || !title || !content) {
-        if (errEl) { errEl.textContent = 'Completá Versión, Título y Contenido HTML.'; errEl.style.display = ''; }
-        return;
-    }
-    if (errEl) errEl.style.display = 'none';
-
-    try {
-        if (legalEditorMode === 'create') {
-            // Necesitamos el type — lo guardamos en el botón de la función que llama legalCreate
-            const typeInput = document.querySelector('#legal-detail-panel [data-legal-type]');
-            const type = typeInput?.dataset?.legalType || (title.toLowerCase().includes('privacidad') ? 'pyp' : 'tyc');
-            await apiFetch('/legal/admin/documents', 'POST', { type, version, title, html_content: content, summary_of_changes: summary || null, requires_acceptance: req, effective_date: date || null });
-        } else {
-            await apiFetch(`/legal/admin/documents/${legalEditorDocId}`, 'PUT', { version, title, html_content: content, summary_of_changes: summary || null, requires_acceptance: req, effective_date: date || null });
-        }
-        await renderLegal();
-        // Scroll al inicio para mostrar la tabla actualizada
-        document.getElementById('content')?.scrollIntoView({ behavior: 'smooth' });
-    } catch (e) {
-        if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
-    }
-}
-
 async function legalPublish(id) {
-    if (!confirm('¿Publicar este documento?\n\nSe notificará por email y notificación in-app a todos los usuarios activos que no lo aceptaron.\nEsta acción no se puede deshacer.')) return;
+    if (!confirm('¿Publicar este documento?\n\nTodos los usuarios activos que no lo hayan aceptado recibirán una notificación in-app y un email.\nEsta acción no se puede deshacer.')) return;
     try {
         const data = await apiFetch(`/legal/admin/documents/${id}/publish`, 'PUT');
         alert(`✅ Publicado correctamente.\n${data.notified} usuario(s) notificado(s).`);
@@ -2119,7 +2228,7 @@ async function legalPublish(id) {
 }
 
 async function legalDelete(id) {
-    if (!confirm('¿Eliminar este borrador? Esta acción no se puede deshacer.')) return;
+    if (!confirm('¿Eliminar este borrador?\n\nEsta acción no se puede deshacer.')) return;
     try {
         await apiFetch(`/legal/admin/documents/${id}`, 'DELETE');
         renderLegal();
@@ -2127,17 +2236,3 @@ async function legalDelete(id) {
         alert('Error al eliminar: ' + e.message);
     }
 }
-
-// Patch legalCreate para pasar el type al editor via data attribute
-const _origLegalCreate = legalCreate;
-window.legalCreate = function(type) {
-    _origLegalCreate(type);
-    // Inyectar data-legal-type en un elemento hidden para que legalSave lo lea
-    const panel = document.getElementById('legal-detail-panel');
-    if (panel) {
-        const hidden = document.createElement('input');
-        hidden.type  = 'hidden';
-        hidden.dataset.legalType = type;
-        panel.appendChild(hidden);
-    }
-};
