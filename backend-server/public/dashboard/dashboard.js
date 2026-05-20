@@ -1813,8 +1813,12 @@ async function renderMetrics() {
         </div>
 
         <div class="card section-gap">
-            <h3 style="margin-bottom:16px;font-size:15px;font-weight:600">Distribución de usuarios por estado</h3>
-            ${statusBars || '<p style="color:var(--text-muted);font-size:13px">Sin datos aún.</p>'}
+            <div class="card-header">
+                <h3>Distribución de usuarios por estado</h3>
+            </div>
+            <div class="card-body">
+                ${statusBars || '<p style="color:var(--text-muted);font-size:13px">Sin datos aún.</p>'}
+            </div>
         </div>`;
 
     } catch (e) {
@@ -1920,16 +1924,16 @@ async function renderLegal() {
         </div>
 
         <div class="card section-gap">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h3 style="font-size:15px;font-weight:600">📄 Términos y Condiciones</h3>
+            <div class="card-header">
+                <h3>📄 Términos y Condiciones</h3>
                 <button class="btn btn-sm btn-primary" onclick="legalCreate('tyc')">+ Nueva versión</button>
             </div>
             ${docTable('tyc')}
         </div>
 
         <div class="card section-gap">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h3 style="font-size:15px;font-weight:600">🔒 Política de Privacidad</h3>
+            <div class="card-header">
+                <h3>🔒 Política de Privacidad</h3>
                 <button class="btn btn-sm btn-primary" onclick="legalCreate('pyp')">+ Nueva versión</button>
             </div>
             ${docTable('pyp')}
@@ -2022,55 +2026,56 @@ function legalEditorHTML(prefill, type, typeLabel, mode) {
     const title = mode === 'edit' ? `✏️ Editar borrador — ${escHtml(typeLabel)}` : `+ Nueva versión — ${escHtml(typeLabel)}`;
     return `
     <div class="card section-gap">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-            <h3 style="font-size:15px;font-weight:600">${title}</h3>
+        <div class="card-header">
+            <h3>${title}</h3>
             <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cancelar</button>
         </div>
+        <div class="card-body">
+            <div id="legal-editor-error" class="alert alert-error" style="display:none;margin-bottom:16px"></div>
 
-        <div id="legal-editor-error" class="alert alert-error" style="display:none;margin-bottom:16px"></div>
-
-        <div style="display:grid;grid-template-columns:160px 1fr 180px;gap:12px;margin-bottom:12px">
-            <div class="form-group" style="margin:0">
-                <label>Versión *</label>
-                <input id="le-version" type="text" value="${escHtml(prefill.version)}" placeholder="ej: 1.1" />
+            <div style="display:grid;grid-template-columns:160px 1fr 180px;gap:12px;margin-bottom:12px">
+                <div class="form-group" style="margin:0">
+                    <label>Versión *</label>
+                    <input id="le-version" type="text" value="${escHtml(prefill.version)}" placeholder="ej: 1.1" />
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Título *</label>
+                    <input id="le-title" type="text" value="${escHtml(prefill.title)}" />
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Vigencia desde</label>
+                    <input id="le-date" type="date" value="${escHtml(prefill.date)}" />
+                </div>
             </div>
-            <div class="form-group" style="margin:0">
-                <label>Título *</label>
-                <input id="le-title" type="text" value="${escHtml(prefill.title)}" />
+
+            <div class="form-group">
+                <label>Resumen de cambios <span style="color:var(--text-muted);font-weight:400">(se muestra a usuarios en la notificación — dejá en blanco si no aplica)</span></label>
+                <input id="le-summary" type="text" value="${escHtml(prefill.summary)}" placeholder="ej: Actualizamos la cláusula de pagos y retención de datos." />
             </div>
-            <div class="form-group" style="margin:0">
-                <label>Vigencia desde</label>
-                <input id="le-date" type="date" value="${escHtml(prefill.date)}" />
+
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+                <input type="checkbox" id="le-requires" ${prefill.requires ? 'checked' : ''} />
+                <label for="le-requires" style="margin:0;font-weight:400;cursor:pointer;font-size:13px">Requiere aceptación explícita de los usuarios al publicar</label>
             </div>
-        </div>
 
-        <div class="form-group">
-            <label>Resumen de cambios <span style="color:var(--text-muted);font-weight:400">(se muestra a usuarios en la notificación — dejá en blanco si no aplica)</span></label>
-            <input id="le-summary" type="text" value="${escHtml(prefill.summary)}" placeholder="ej: Actualizamos la cláusula de pagos y retención de datos." />
-        </div>
-
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-            <input type="checkbox" id="le-requires" ${prefill.requires ? 'checked' : ''} />
-            <label for="le-requires" style="margin:0;font-weight:400;cursor:pointer;font-size:13px">Requiere aceptación explícita de los usuarios al publicar</label>
-        </div>
-
-        <div class="form-group" style="margin-bottom:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <label style="margin:0">Contenido HTML *</label>
-                <button class="btn btn-sm btn-secondary" id="le-preview-btn" onclick="legalTogglePreviewEditor()">👁 Vista previa</button>
+            <div class="form-group" style="margin-bottom:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <label style="margin:0">Contenido HTML *</label>
+                    <button class="btn btn-sm btn-secondary" id="le-preview-btn" onclick="legalTogglePreviewEditor()">👁 Vista previa</button>
+                </div>
+                <textarea id="le-content" rows="20" style="font-family:'Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.5;width:100%;resize:vertical;background:#f9fafb">${escHtml(prefill.html_content)}</textarea>
             </div>
-            <textarea id="le-content" rows="20" style="font-family:'Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.5;width:100%;resize:vertical;background:#f9fafb">${escHtml(prefill.html_content)}</textarea>
-        </div>
 
-        <div id="le-preview-box" style="display:none;border:1px solid var(--border);border-radius:8px;padding:24px 32px;max-height:480px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px;margin-bottom:12px"></div>
+            <div id="le-preview-box" style="display:none;border:1px solid var(--border);border-radius:8px;padding:24px 32px;max-height:480px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px;margin-bottom:12px"></div>
 
-        <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--border)">
-            <button class="btn btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">Cancelar</button>
-            <button class="btn btn-primary" onclick="legalSave()">💾 Guardar borrador</button>
+            <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:16px;border-top:1px solid var(--border)">
+                <button class="btn btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">Cancelar</button>
+                <button class="btn btn-primary" onclick="legalSave()">💾 Guardar borrador</button>
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
+                💡 El borrador no es visible para los usuarios. Una vez guardado, revisalo y publicalo cuando esté listo.
+            </p>
         </div>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
-            💡 El borrador no es visible para los usuarios. Una vez guardado, revisalo y publicalo cuando esté listo.
-        </p>
     </div>`;
 }
 
@@ -2143,30 +2148,32 @@ async function legalViewStats(id, label) {
             </tr>`).join('');
         panel.innerHTML = `
         <div class="card section-gap">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-                <h3 style="font-size:15px;font-weight:600">📊 Aceptaciones — ${escHtml(label)}</h3>
+            <div class="card-header">
+                <h3>📊 Aceptaciones — ${escHtml(label)}</h3>
                 <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cerrar</button>
             </div>
-            <div class="stats-grid" style="margin-bottom:16px">
-                <div class="stat-card">
-                    <div class="stat-icon">👥</div>
-                    <div class="stat-body"><div class="stat-value">${data.total_users}</div><div class="stat-label">Usuarios elegibles</div></div>
+            <div class="card-body">
+                <div class="stats-grid" style="margin-bottom:16px">
+                    <div class="stat-card">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-body"><div class="stat-value">${data.total_users}</div><div class="stat-label">Usuarios elegibles</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-body"><div class="stat-value" style="color:#16a34a">${data.accepted_count}</div><div class="stat-label">Aceptaron</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-body"><div class="stat-value" style="color:${pct >= 80 ? '#16a34a' : '#f59e0b'}">${pct}%</div><div class="stat-label">Tasa de aceptación</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⏳</div>
+                        <div class="stat-body"><div class="stat-value" style="${pend > 0 ? 'color:#f59e0b' : ''}">${pend}</div><div class="stat-label">Pendientes</div></div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-icon">✅</div>
-                    <div class="stat-body"><div class="stat-value" style="color:#16a34a">${data.accepted_count}</div><div class="stat-label">Aceptaron</div></div>
+                <div style="background:#f3f4f6;border-radius:6px;height:14px;margin-bottom:20px;overflow:hidden">
+                    <div style="width:${Math.max(pct,0)}%;background:#16a34a;height:100%;border-radius:6px;transition:width 0.6s"></div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-icon">📈</div>
-                    <div class="stat-body"><div class="stat-value" style="color:${pct >= 80 ? '#16a34a' : '#f59e0b'}">${pct}%</div><div class="stat-label">Tasa de aceptación</div></div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">⏳</div>
-                    <div class="stat-body"><div class="stat-value" style="${pend > 0 ? 'color:#f59e0b' : ''}">${pend}</div><div class="stat-label">Pendientes</div></div>
-                </div>
-            </div>
-            <div style="background:#f3f4f6;border-radius:6px;height:14px;margin-bottom:20px;overflow:hidden">
-                <div style="width:${Math.max(pct,0)}%;background:#16a34a;height:100%;border-radius:6px;transition:width 0.6s"></div>
             </div>
             ${rows
                 ? `<div class="table-wrapper" style="max-height:300px;overflow-y:auto">
@@ -2194,9 +2201,9 @@ async function legalPreview(id) {
         const TYPE_LABEL = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
         panel.innerHTML = `
         <div class="card section-gap">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div class="card-header">
                 <div>
-                    <h3 style="font-size:15px;font-weight:600">👁 Vista previa — ${escHtml(TYPE_LABEL[doc.type] || doc.type)} v${escHtml(doc.version)}</h3>
+                    <h3>👁 Vista previa — ${escHtml(TYPE_LABEL[doc.type] || doc.type)} v${escHtml(doc.version)}</h3>
                     <p style="font-size:12px;color:var(--text-muted);margin-top:2px">${doc.is_current ? '✅ Publicado' : '⏳ Borrador'} · Vigente desde ${doc.effective_date ? fmtDate(doc.effective_date) : '—'}</p>
                 </div>
                 <div style="display:flex;gap:8px">
@@ -2204,11 +2211,13 @@ async function legalPreview(id) {
                     <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cerrar</button>
                 </div>
             </div>
-            ${doc.summary_of_changes
-                ? `<div class="alert alert-info" style="margin-bottom:16px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>`
-                : ''}
-            <div style="border:1px solid var(--border);border-radius:8px;padding:28px 36px;max-height:560px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px">
-                ${doc.html_content}
+            <div class="card-body">
+                ${doc.summary_of_changes
+                    ? `<div class="alert alert-info" style="margin-bottom:16px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>`
+                    : ''}
+                <div style="border:1px solid var(--border);border-radius:8px;padding:28px 36px;max-height:560px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px">
+                    ${doc.html_content}
+                </div>
             </div>
         </div>`;
     } catch (e) {
