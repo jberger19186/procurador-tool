@@ -96,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSubscriptionStatusBanner(); // Banner de estado de suscripción (v2.1)
     checkQuotaAlert();  // Mostrar banner si cuota >= 80%
     window.electronAPI.getPromoStatus().then(ps => { if (ps) checkPromoAlert(ps); }).catch(() => {});
+    initChatWidget();   // Chat widget del asistente IA
     addLog('info', 'Sistema iniciado correctamente ✅');
 });
 
@@ -547,12 +548,39 @@ function setupAsistente() {
     faqSearch?.parentNode?.replaceChild(newSearch, faqSearch);
     newSearch?.addEventListener('input', e => renderFaq(e.target.value));
 
-    // "Abrir soporte" → Mi Cuenta tab Soporte
+    // "Abrir chat" → abre el widget de chat flotante
     const newBtn = btnSop?.cloneNode(true);
     btnSop?.parentNode?.replaceChild(newBtn, btnSop);
     newBtn?.addEventListener('click', () => {
         closeModal('modalAsistente');
-        // Abrir Mi Cuenta en la pestaña Soporte
+        openChatWindow();
+    });
+}
+
+// ============ CHAT WIDGET — ASISTENTE IA ============
+
+function initChatWidget() {
+    const chatBubbleBtn  = document.getElementById('chatBubbleBtn');
+    const chatMinimizeBtn = document.getElementById('chatMinimizeBtn');
+    const chatCloseBtn   = document.getElementById('chatCloseBtn');
+    const chatTicketBtn  = document.getElementById('chatTicketBtn');
+    const chatSendBtn    = document.getElementById('chatSendBtn');
+    const chatInput      = document.getElementById('chatInput');
+
+    if (!chatBubbleBtn) return;
+
+    chatBubbleBtn.addEventListener('click', openChatWindow);
+
+    chatMinimizeBtn?.addEventListener('click', () => {
+        document.getElementById('chatWindow').style.display = 'none';
+        chatBubbleBtn.style.display = 'flex';
+    });
+
+    chatCloseBtn?.addEventListener('click', closeChatWidget);
+
+    // Ticket → abre Mi Cuenta > Soporte
+    chatTicketBtn?.addEventListener('click', () => {
+        closeChatWidget();
         const modalCuenta = document.getElementById('modalCuenta');
         if (modalCuenta) {
             modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
@@ -564,6 +592,89 @@ function setupAsistente() {
         openModal('modalCuenta');
         loadAccountData();
     });
+
+    chatSendBtn?.addEventListener('click', sendChatMessage);
+    chatInput?.addEventListener('keydown', e => { if (e.key === 'Enter') sendChatMessage(); });
+}
+
+function openChatWindow() {
+    const chatWidget    = document.getElementById('chatWidget');
+    const chatBubbleBtn = document.getElementById('chatBubbleBtn');
+    const chatWindow    = document.getElementById('chatWindow');
+    const chatMessages  = document.getElementById('chatMessages');
+
+    if (!chatWidget) return;
+    chatWidget.classList.remove('chat-widget--hidden');
+    chatBubbleBtn.style.display = 'none';
+    chatWindow.style.display    = 'flex';
+
+    // Saludo inicial la primera vez
+    if (chatMessages && chatMessages.children.length === 0) {
+        addChatMsg('bot', '¡Hola! Soy el asistente de Procurador SCW 🤖\n\n¿En qué puedo ayudarte? Podés escribir tu consulta o buscarla en las preguntas frecuentes.');
+    }
+    document.getElementById('chatInput')?.focus();
+}
+
+function closeChatWidget() {
+    const chatWidget = document.getElementById('chatWidget');
+    chatWidget?.classList.add('chat-widget--hidden');
+    document.getElementById('chatWindow').style.display    = 'none';
+    document.getElementById('chatBubbleBtn').style.display = 'none';
+    // Limpiar historial al cerrar completamente
+    const msgs = document.getElementById('chatMessages');
+    if (msgs) msgs.innerHTML = '';
+}
+
+function addChatMsg(from, text) {
+    const msgs = document.getElementById('chatMessages');
+    if (!msgs) return;
+    const div = document.createElement('div');
+    div.className = `chat-message chat-message--${from}`;
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    return div;
+}
+
+function getBotResponse(input) {
+    const q = input.toLowerCase().trim();
+
+    // Buscar match en FAQ
+    for (const f of FAQ_ITEMS) {
+        const words = f.q.toLowerCase().split(/\s+/).filter(w => w.length > 4);
+        if (words.some(w => q.includes(w))) return f.a;
+    }
+
+    // Intents adicionales por keywords
+    if (/procur|expedi|scw/.test(q))                         return FAQ_ITEMS[0].a;
+    if (/login|clave|contrase|password|credencial/.test(q))   return FAQ_ITEMS[1].a;
+    if (/colg|trabó|bloqueó|detuvo|cuelg/.test(q))           return FAQ_ITEMS[2].a;
+    if (/plan|cambiar|upgrade|precio/.test(q))                return FAQ_ITEMS[3].a;
+    if (/descarg|archivo|excel|carpeta/.test(q))              return FAQ_ITEMS[4].a;
+    if (/monitor|parte|novel/.test(q))                        return FAQ_ITEMS[5].a;
+    if (/informe|report|lote/.test(q))                        return FAQ_ITEMS[6].a;
+    if (/candado|concurrencia|activo|ejecuci/.test(q))        return FAQ_ITEMS[7].a;
+    if (/extensi[oó]n|store|chrome/.test(q))                  return FAQ_ITEMS[8].a;
+    if (/navegador|browser|abiert/.test(q))                   return FAQ_ITEMS[9].a;
+
+    return 'No encontré una respuesta específica para esa consulta. Podés abrir un ticket de soporte con el botón 🎫 y te respondemos a la brevedad.';
+}
+
+function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    const text  = input?.value?.trim();
+    if (!text) return;
+
+    input.value = '';
+    addChatMsg('user', text);
+
+    // Indicador "escribiendo..."
+    const typing = addChatMsg('typing', '⋯ escribiendo');
+
+    setTimeout(() => {
+        typing?.remove();
+        addChatMsg('bot', getBotResponse(text));
+    }, 700);
 }
 
 // ============ MENÚ DROPDOWN EJECUTAR ============
