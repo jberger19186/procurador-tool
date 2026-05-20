@@ -688,6 +688,9 @@
     .foot-brand-name b { color:var(--amber); }
     .foot-desc { font-size:11.5px; color:var(--text-3); margin-top:3px; }
     .foot-meta { font-size:11.5px; color:var(--text-3); text-align:right; line-height:1.7; }
+    .foot-legal { display:flex; gap:16px; font-size:11.5px; margin-top:6px; }
+    .foot-legal a { color:var(--text-3); text-decoration:none; transition:color 0.13s; }
+    .foot-legal a:hover { color:var(--amber); }
 
     /* ─── RESPONSIVE ──────────────────────────────────────────────── */
     @media(max-width:960px) {
@@ -1421,9 +1424,13 @@
       <div class="foot-desc">Sistema de automatización para el Poder Judicial de la Nación</div>
     </div>
     <div class="foot-meta">
-      Versión 2.0.27 · Electron 28 · Windows 10 / 11<br>
+      Versión 2.7.0 · Electron 28 · Windows 10 / 11<br>
       Poder Judicial de la Nación · Argentina<br>
       © 2025 Procurador SCW. Todos los derechos reservados.
+      <div class="foot-legal">
+        <a href="https://api.procuradortool.com/terminos/" target="_blank">Términos y Condiciones</a>
+        <a href="https://api.procuradortool.com/privacidad/" target="_blank">Política de Privacidad</a>
+      </div>
     </div>
   </div>
 </footer>
