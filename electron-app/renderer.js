@@ -1647,12 +1647,14 @@ async function loadAccountData() {
 
         const a = result.account;
 
-        document.getElementById('ci-email').textContent = a.email || '—';
-        document.getElementById('ci-cuit').textContent  = a.cuit  || '(sin CUIT)';
+        const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+        setTxt('ci-email',  a.email || '—');
+        setTxt('ci-cuit',   a.cuit  || '(sin CUIT)');
 
         // Plan display name (new format from API) or backward compat
         const planName = (typeof a.plan === 'object' ? a.plan?.displayName || a.plan?.name : a.plan) || '—';
-        document.getElementById('ci-plan').textContent = planName;
+        setTxt('ci-plan', planName);
 
         const statusMap = {
             active:    '🟢 Activo',
@@ -1660,13 +1662,13 @@ async function loadAccountData() {
             expired:   '🟠 Vencido',
             suspended: '⚫ Suspendido'
         };
-        document.getElementById('ci-status').textContent = statusMap[a.status] || a.status || '—';
+        setTxt('ci-status', statusMap[a.status] || a.status || '—');
 
-        document.getElementById('ci-expira').textContent = a.expiresAt
+        setTxt('ci-expira', a.expiresAt
             ? new Date(a.expiresAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-            : '—';
+            : '—');
 
-        document.getElementById('ci-device').textContent = a.machineBound ? 'Vinculado ✅' : 'No vinculado';
+        setTxt('ci-device', a.machineBound ? 'Vinculado ✅' : 'No vinculado');
 
         // Período (new field)
         const periodoEl = document.getElementById('ci-periodo');
@@ -1877,11 +1879,7 @@ async function checkSubscriptionStatusBanner() {
         if (showBtn && btn) {
             btn.style.display = 'inline-block';
             btn.onclick = () => {
-                if (window.electronAPI?.openExternal) {
-                    window.electronAPI.openExternal(PORTAL);
-                } else {
-                    require('electron').shell.openExternal(PORTAL);
-                }
+                window.electronAPI.openExternalUrl(PORTAL);
             };
         } else if (btn) {
             btn.style.display = 'none';
