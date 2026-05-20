@@ -2200,8 +2200,9 @@ async function legalPreview(id) {
         const doc  = data.document;
         const TYPE_LABEL = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
 
-        // Encapsulamos el HTML del documento en un iframe (srcdoc) para que su CSS
-        // quede completamente aislado y no afecte el sidebar, topbar ni las tablas del dashboard.
+        // Encapsulamos el HTML del documento en un iframe para que su CSS quede
+        // completamente aislado y no afecte el sidebar, topbar ni las tablas del dashboard.
+        // Asignamos srcdoc como propiedad JS (no atributo HTML) para evitar problemas de escaping.
         const docHtml = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2231,13 +2232,25 @@ a{color:#3b82f6}blockquote{border-left:3px solid #e5e7eb;margin:1em 0;padding-le
                     ? `<div class="alert alert-info" style="margin-bottom:16px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>`
                     : ''}
                 <iframe
-                    srcdoc="${escHtml(docHtml)}"
-                    style="width:100%;min-height:400px;border:1px solid var(--border);border-radius:8px;display:block"
+                    id="legal-preview-frame"
+                    style="width:100%;min-height:300px;border:1px solid #e5e7eb;border-radius:8px;display:block"
                     frameborder="0"
-                    onload="try{var h=this.contentDocument.body.scrollHeight;this.style.height=(h+32)+'px'}catch(e){this.style.height='500px'}"
                 ></iframe>
             </div>
         </div>`;
+
+        // Asignar srcdoc como propiedad JS para que el navegador lo interprete
+        // directamente como HTML sin ningún escaping adicional de atributo HTML.
+        const frame = document.getElementById('legal-preview-frame');
+        frame.srcdoc = docHtml;
+        frame.onload = function() {
+            try {
+                const h = this.contentDocument.body.scrollHeight;
+                if (h > 0) this.style.height = (h + 32) + 'px';
+            } catch(e) {
+                this.style.height = '500px';
+            }
+        };
     } catch (e) {
         panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
