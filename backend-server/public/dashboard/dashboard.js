@@ -2202,16 +2202,14 @@ async function legalPreview(id) {
         panel.innerHTML = `
         <div class="card section-gap">
             <div class="card-header">
-                <div>
-                    <h3>👁 Vista previa — ${escHtml(TYPE_LABEL[doc.type] || doc.type)} v${escHtml(doc.version)}</h3>
-                    <p style="font-size:12px;color:var(--text-muted);margin-top:2px">${doc.is_current ? '✅ Publicado' : '⏳ Borrador'} · Vigente desde ${doc.effective_date ? fmtDate(doc.effective_date) : '—'}</p>
-                </div>
+                <h3>👁 ${escHtml(TYPE_LABEL[doc.type] || doc.type)} v${escHtml(doc.version)}</h3>
                 <div style="display:flex;gap:8px">
                     ${!doc.is_current ? `<button class="btn btn-sm btn-secondary" onclick="legalEdit(${doc.id})">✏️ Editar</button>` : ''}
                     <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">✕ Cerrar</button>
                 </div>
             </div>
             <div class="card-body">
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${doc.is_current ? '✅ Publicado' : '⏳ Borrador'} · Vigente desde ${doc.effective_date ? fmtDate(doc.effective_date) : '—'}</p>
                 ${doc.summary_of_changes
                     ? `<div class="alert alert-info" style="margin-bottom:16px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>`
                     : ''}
