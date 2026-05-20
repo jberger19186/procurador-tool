@@ -15,7 +15,10 @@
 <!-- ===== BANNER ESTADO DE SUSCRIPCIÓN ===== -->
 <div id="subscription-status-banner" style="display:none">
     <span id="subscription-status-text"></span>
-    <button id="subscription-status-btn" style="display:none">Ver en portal</button>
+    <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
+        <button id="subscription-status-btn" style="display:none">Ver en portal</button>
+        <button id="subscription-status-close" title="Cerrar" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px;border-radius:4px;transition:color 0.13s" onmouseenter="this.style.color='#fff'" onmouseleave="this.style.color='rgba(255,255,255,0.7)'">&times;</button>
+    </div>
 </div>
 
 <!-- ===== BANNER CUOTA ===== -->

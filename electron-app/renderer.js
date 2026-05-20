@@ -517,25 +517,24 @@ function setupAsistente() {
         faqList.innerHTML = filtered.length === 0
             ? '<p style="padding:16px;color:var(--text-3);font-size:12.5px;text-align:center">Sin resultados. Intentá con otras palabras.</p>'
             : filtered.map((f, i) => `
-                <div class="faq-item" data-idx="${i}" style="border-bottom:1px solid var(--border)">
-                    <button class="faq-question" style="width:100%;text-align:left;padding:12px 16px;background:none;border:none;cursor:pointer;font-size:12.5px;font-weight:500;color:var(--text-1);display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <div class="faq-item" data-idx="${i}">
+                    <div class="faq-question">
                         <span>${escHtml(f.q)}</span>
-                        <span style="font-size:10px;color:var(--text-3);flex-shrink:0">▸</span>
-                    </button>
-                    <div class="faq-answer" style="display:none;padding:0 16px 12px;font-size:12px;color:var(--text-2);line-height:1.5">${escHtml(f.a)}</div>
+                        <span class="faq-question-arrow">▸</span>
+                    </div>
+                    <div class="faq-answer">${escHtml(f.a)}</div>
                 </div>`
             ).join('');
 
-        // Toggle expand
-        faqList.querySelectorAll('.faq-question').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const ans = btn.nextElementSibling;
-                const arrow = btn.querySelector('span:last-child');
-                const open = ans.style.display !== 'none';
-                // close all others
-                faqList.querySelectorAll('.faq-answer').forEach(a => a.style.display = 'none');
-                faqList.querySelectorAll('.faq-question span:last-child').forEach(a => a.textContent = '▸');
-                if (!open) { ans.style.display = ''; arrow.textContent = '▾'; }
+        // Toggle expand — usa clase CSS .open en .faq-item
+        faqList.querySelectorAll('.faq-question').forEach(div => {
+            div.addEventListener('click', () => {
+                const item = div.closest('.faq-item');
+                const isOpen = item.classList.contains('open');
+                // cierra todos
+                faqList.querySelectorAll('.faq-item').forEach(it => it.classList.remove('open'));
+                // abre el clickeado si estaba cerrado
+                if (!isOpen) item.classList.add('open');
             });
         });
     }
@@ -2060,7 +2059,14 @@ async function checkSubscriptionStatusBanner() {
     const banner  = document.getElementById('subscription-status-banner');
     const textEl  = document.getElementById('subscription-status-text');
     const btn     = document.getElementById('subscription-status-btn');
+    const closeBtn = document.getElementById('subscription-status-close');
     if (!banner || !textEl) return;
+
+    // × para cerrar — solo aplica una vez (evita duplicar listeners con múltiples llamadas)
+    if (closeBtn && !closeBtn.dataset.wired) {
+        closeBtn.dataset.wired = '1';
+        closeBtn.addEventListener('click', () => { banner.style.display = 'none'; });
+    }
 
     const PORTAL = 'https://api.procuradortool.com/usuarios/';
 
