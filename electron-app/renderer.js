@@ -521,8 +521,24 @@ function toggleExpandConsole() {
 }
 
 // ============ MODALES ============
+function _updateBannerVisibility() {
+    const anyModalOpen = document.querySelector('.modal.active') !== null;
+    ['subscription-status-banner', 'quota-banner', 'promo-banner'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (anyModalOpen) {
+            el.dataset.hiddenByModal = el.style.display !== 'none' ? '1' : '0';
+            el.style.display = 'none';
+        } else if (el.dataset.hiddenByModal === '1') {
+            el.style.display = 'flex';
+            delete el.dataset.hiddenByModal;
+        }
+    });
+}
+
 function openModal(modalId) {
     document.getElementById(modalId).classList.add('active');
+    _updateBannerVisibility();
 
     // Cargar estadísticas si se abre el modal de stats
     if (modalId === 'modalStats') {
@@ -532,6 +548,7 @@ function openModal(modalId) {
 
 function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('active');
+    _updateBannerVisibility();
 }
 
 // ============ CONFIGURAR LISTENERS DE MODALES ============
@@ -1832,7 +1849,7 @@ async function checkSubscriptionStatusBanner() {
     const btn     = document.getElementById('subscription-status-btn');
     if (!banner || !textEl) return;
 
-    const PORTAL = 'https://procuradortool.com/usuarios/';
+    const PORTAL = 'https://api.procuradortool.com/usuarios/';
 
     try {
         const result = await window.electronAPI.getAccount();
