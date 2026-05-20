@@ -608,23 +608,27 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ---
 
 ## 📋 Pendientes — Prioridad actual
-> Última actualización: 2026-04-29. Sin usuarios reales en producción — priorizar lo comercial antes que la infraestructura.
-> Regla: Bloques 6 y 7 son obligatorios **antes de abrir el registro público**, no antes. Bloques 1 a 3 se pueden avanzar esta semana.
+> Última actualización: 2026-05-20. Sin usuarios reales en producción — priorizar lo comercial antes que la infraestructura.
+> Regla: Bloques 6 y 7 son obligatorios **antes de abrir el registro público**, no antes.
 
 ---
 
 ### 🥇 BLOQUE 1 — Identidad de Marca & Landing
 - ⬜ Identidad de marca consolidada: copy unificado, tono consistente en todos los emails transaccionales
 - ⬜ Consistencia de nombre en instalador `.exe`, extensión Chrome Store y emails
-- ⬜ Landing: completar sección Planes con precios reales
-- ⬜ Términos y Condiciones de Uso + Política de Privacidad
+- ✅ Landing: sección Planes con precios de promos (Extensión USD 1/mes, Combo Beta USD 9,99/mes) + "Próximamente" para planes permanentes
+- ✅ Términos y Condiciones de Uso — `/terminos/index.html` publicado y enlazado desde footer landing y formulario de registro
+- ✅ Política de Privacidad — `/privacidad/index.html` publicado y enlazado desde footer landing y formulario de registro
+- ✅ Aviso PJN (credenciales nunca pasan por servidores) — sección "Privacidad & seguridad" en landing
+- ✅ Planes y precios de promos visibles en landing y en flujo de registro (cards dinámicas)
+- ✅ Alertas de promo en Electron: `checkPromoAlert()` muestra banner para usuarios en plan promo (vencimiento, extensión de fecha)
 
 ---
 
 ### 🥈 BLOQUE 2 — Planes & Precios
-- ⬜ Definir precios finales BASIC / PRO / ENTERPRISE
-- ⬜ Cerrar propuesta de valor por plan
-- ⬜ Publicar precios en landing y en flujo de registro/pago
+- ⬜ **Definir precios finales BASIC / PRO / ENTERPRISE** ← decisión comercial, desbloquea todo lo demás
+- ⬜ Publicar precios en landing (reemplazar `— / mes` en las cards de planes permanentes)
+- ⬜ Actualizar flujo de registro para habilitar los planes permanentes una vez definidos los precios
 
 ---
 
@@ -874,22 +878,23 @@ Sección Sistema del sidebar:
 - Estructura: Navbar · Hero · Problema · App Showcase · Funciones · Extensión · Cómo funciona · Seguridad/Privacidad · Planes · CTA · Footer
 - ⬜ **Agregar sección Planes con precios reales** (BASIC / PRO / ENTERPRISE / promos) — pendiente definir precios
 
-#### 3.2 Términos Legales — PENDIENTE
-- ⬜ Términos y Condiciones de Uso
-- ⬜ Política de Privacidad
-- ⬜ Aviso de que las credenciales del PJN nunca pasan por los servidores
+#### 3.2 Términos Legales ✅ COMPLETADO (2026-05-20)
+- ✅ Términos y Condiciones de Uso — `/terminos/index.html` publicado
+- ✅ Política de Privacidad — `/privacidad/index.html` publicado
+- ✅ Aviso PJN (credenciales nunca pasan por servidores) — en sección "Privacidad & seguridad" de la landing
+- ✅ Links desde footer de la landing y desde checkbox en formulario de registro
 
 #### 3.3 Estrategia de Venta y Planes — PARCIALMENTE HECHO
 - ✅ Planes definidos en DB: EXTENSION_PROMO (USD 1/mes) · COMBO_PROMO (USD 9.99/mes) · BASIC · PRO · ENTERPRISE
-- ⬜ **Definir y publicar precios de BASIC / PRO / ENTERPRISE**
-- ⬜ Mostrar planes y precios en landing y en el flujo de registro
+- ✅ Planes de promo visibles en landing (con precios) y en flujo de registro (cards dinámicas)
+- ✅ Planes permanentes visibles en landing como "Próximamente" (sin precio hasta definirlos)
+- ⬜ **Definir y publicar precios de BASIC / PRO / ENTERPRISE** ← única tarea pendiente en este bloque
 - Registro en: `https://api.procuradortool.com/register/`
 
-#### 3.4 Registro y Recolección de Datos — PARCIALMENTE HECHO
+#### 3.4 Registro y Recolección de Datos ✅ COMPLETADO
 - ✅ Registro público con verificación de email
 - ✅ Flujo de activación manual por admin
-- ⬜ Alertas de promo en Electron al registrarse
-- ⬜ Ver plan pendiente: `C:\Users\JONATHAN\.claude\plans\cozy-cuddling-badger.md`
+- ✅ Alertas de promo en Electron: `checkPromoAlert()` muestra banner de promo (vencimiento, extensión de fecha)
 
 #### 3.5 Identidad de Marca ✅ COMPLETADO
 - Nombre: **Procurador SCW** / **ProcuradorTool**
