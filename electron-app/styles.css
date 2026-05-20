@@ -750,7 +750,7 @@ body {
 #quota-banner, #promo-banner, #subscription-status-banner {
   display: none;
   position: fixed;
-  top: 0; left: 0; right: 0;
+  top: 48px; left: 0; right: 0;
   z-index: 9997;
   color: #fff;
   padding: 8px 18px;

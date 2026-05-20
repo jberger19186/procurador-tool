@@ -1691,6 +1691,29 @@ async function loadAccountData() {
         loadingEl.style.display = 'none';
         infoEl.style.display    = '';
 
+        // Aviso de método de pago faltante en sección Cuenta
+        const trialBannerEl = document.getElementById('cuenta-trial-banner');
+        if (trialBannerEl) {
+            if (!a.paymentProvider && a.registrationStatus === 'active') {
+                trialBannerEl.style.display = '';
+                trialBannerEl.innerHTML = `
+                    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                        <span style="font-size:20px">⚠️</span>
+                        <div style="flex:1">
+                            <div style="font-weight:600;color:#856404;font-size:13px">Sin método de pago configurado</div>
+                            <div style="color:#6c5700;font-size:12px;margin-top:2px">Configurá tu método de pago en el portal para evitar interrupciones en el servicio.</div>
+                        </div>
+                        <button onclick="window.electronAPI.openExternalUrl('https://api.procuradortool.com/usuarios/')"
+                            style="background:#ffc107;border:none;color:#333;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
+                            Ir al portal
+                        </button>
+                    </div>`;
+            } else {
+                trialBannerEl.style.display = 'none';
+                trialBannerEl.innerHTML = '';
+            }
+        }
+
         // Verificar cuota después de cargar datos de cuenta
         checkQuotaAlert();
 
