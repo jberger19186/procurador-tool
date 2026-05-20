@@ -105,6 +105,7 @@ app.use('/tickets', require('./routes/tickets'));
 app.use('/monitor', require('./routes/monitor'));
 app.use('/license', require('./routes/license'));
 app.use('/users', require('./routes/users'));
+app.use('/legal', require('./routes/legal'));
 
 // Página guiada de actualización de extensión
 app.get('/descargar', (req, res) => {

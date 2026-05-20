@@ -159,14 +159,16 @@ function navigate(page, id) {
         tickets: 'Tickets de soporte',
         'ticket-detail': 'Detalle de ticket',
         scripts: 'Scripts',
-        plans: 'Planes de suscripción'
+        plans: 'Planes de suscripción',
+        metrics: 'Métricas del sistema',
+        legal: 'Documentos legales'
     };
     document.getElementById('topbar-title').textContent = titles[page] || page;
 
     const content = document.getElementById('content');
     content.innerHTML = '<div class="loading">Cargando...</div>';
 
-    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans };
+    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal };
     if (pages[page]) pages[page]();
 }
 
@@ -1721,5 +1723,209 @@ async function loadAdjustmentHistory(userId) {
         </div>`;
     } catch (e) {
         if (histEl) histEl.innerHTML = `<div style="font-size:12px;color:#ef4444">${e.message}</div>`;
+    }
+}
+
+// ───── MÉTRICAS ─────
+async function renderMetrics() {
+    const content = document.getElementById('content');
+    try {
+        const data = await apiFetch('/admin/stats/overview');
+        const s = data.stats;
+
+        // Usage logs por subsistema (últimos 30 días)
+        let logsHtml = '';
+        try {
+            const logs = await apiFetch('/admin/stats/usage');
+            if (logs && logs.usage) {
+                const subsysLabel = { procuracion:'Procuración', informe:'Informe', monitoreo:'Monitor', batch:'Por lote', novedades:'Novedades' };
+                logsHtml = `
+                <div class="card section-gap">
+                    <h3 style="margin-bottom:16px">Uso por subsistema — últimos 30 días</h3>
+                    <div class="stats-grid">
+                        ${logs.usage.map(u => `
+                        <div class="stat-card">
+                            <div class="stat-label">${subsysLabel[u.subsystem] || u.subsystem}</div>
+                            <div class="stat-value">${u.count}</div>
+                            <div class="stat-sub">ejecuciones</div>
+                        </div>`).join('')}
+                    </div>
+                </div>`;
+            }
+        } catch (_) { /* endpoint opcional */ }
+
+        content.innerHTML = `
+        <div class="page-header"><h2>Métricas del sistema</h2></div>
+
+        <div class="card section-gap">
+            <h3 style="margin-bottom:16px">Usuarios</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total registrados</div>
+                    <div class="stat-value">${s.totalUsers ?? '—'}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Activos</div>
+                    <div class="stat-value" style="color:#16a34a">${s.activeUsers ?? '—'}</div>
+                </div>
+                <div class="stat-card ${(s.pendingUsers ?? 0) > 0 ? 'stat-card-warning' : ''}">
+                    <div class="stat-label">Pendientes de activación</div>
+                    <div class="stat-value">${s.pendingUsers ?? '—'}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Suspendidos</div>
+                    <div class="stat-value" style="color:#f59e0b">${s.suspendedUsers ?? '—'}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Cancelados / Rechazados</div>
+                    <div class="stat-value" style="color:#ef4444">${(s.cancelledUsers ?? 0) + (s.rejectedUsers ?? 0)}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card section-gap">
+            <h3 style="margin-bottom:16px">Suscripciones</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Suscripciones activas</div>
+                    <div class="stat-value" style="color:#16a34a">${s.activeSubscriptions ?? '—'}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Tickets abiertos</div>
+                    <div class="stat-value">${s.openTickets ?? '—'}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Scripts activos</div>
+                    <div class="stat-value">${s.activeScripts ?? '—'}</div>
+                </div>
+            </div>
+        </div>
+
+        ${logsHtml}
+
+        <p style="font-size:12px;color:var(--text-muted);margin-top:8px">
+            Datos en tiempo real desde <code>/admin/stats/overview</code>
+        </p>`;
+    } catch (e) {
+        content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+}
+
+// ───── LEGAL ─────
+async function renderLegal() {
+    const content = document.getElementById('content');
+    try {
+        const data = await apiFetch('/legal/admin/documents');
+        const docs  = data.documents || [];
+
+        const typeLabel = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
+        const typeIcon  = { tyc: '📄', pyp: '🔒' };
+
+        const rows = docs.map(d => `
+        <tr>
+            <td>${typeIcon[d.type] || '📄'} ${typeLabel[d.type] || d.type}</td>
+            <td><span class="badge">${d.version}</span></td>
+            <td><span class="status-badge ${d.is_current ? 'status-active' : 'status-suspended'}">${d.is_current ? '✅ Publicado' : '⏳ Borrador'}</span></td>
+            <td>${d.requires_acceptance ? 'Sí' : 'No'}</td>
+            <td>${d.acceptance_count ?? 0} usuarios</td>
+            <td>${d.effective_date ? fmtDate(d.effective_date) : '—'}</td>
+            <td>${fmtDate(d.created_at)}</td>
+            <td>
+                <button class="btn btn-sm btn-secondary" onclick="legalViewStats(${d.id}, '${escHtml(typeLabel[d.type] || d.type)} v${d.version}')">Ver stats</button>
+                ${!d.is_current ? `<button class="btn btn-sm btn-primary" onclick="legalPublish(${d.id})">Publicar</button>` : ''}
+            </td>
+        </tr>`).join('');
+
+        content.innerHTML = `
+        <div class="page-header">
+            <h2>Documentos legales</h2>
+        </div>
+
+        <div class="card section-gap">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h3>Versiones de T&C y Política de Privacidad</h3>
+                <div style="display:flex;gap:8px">
+                    <a href="/terminos/" target="_blank" class="btn btn-sm btn-secondary">Ver T&C →</a>
+                    <a href="/privacidad/" target="_blank" class="btn btn-sm btn-secondary">Ver PyP →</a>
+                </div>
+            </div>
+            ${docs.length === 0
+                ? '<p style="color:var(--text-muted)">No hay documentos cargados.</p>'
+                : `<div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>Documento</th><th>Versión</th><th>Estado</th><th>Requiere aceptación</th><th>Aceptaciones</th><th>Vigencia</th><th>Creado</th><th>Acciones</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                   </div>`
+            }
+        </div>
+
+        <div id="legal-stats-panel" style="display:none"></div>`;
+
+    } catch (e) {
+        content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+}
+
+async function legalViewStats(id, label) {
+    const panel = document.getElementById('legal-stats-panel');
+    if (!panel) return;
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="loading">Cargando estadísticas...</div>';
+    try {
+        const data = await apiFetch(`/legal/admin/documents/${id}/stats`);
+        const pct  = data.total_users > 0 ? Math.round(data.accepted_count / data.total_users * 100) : 0;
+        const rows = (data.acceptances || []).map(a => `
+            <tr>
+                <td>${a.email}</td>
+                <td>${a.nombre || '—'}</td>
+                <td>${fmtDate(a.accepted_at)}</td>
+            </tr>`).join('');
+
+        panel.innerHTML = `
+        <div class="card section-gap">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h3>Stats — ${label}</h3>
+                <button class="btn btn-sm btn-secondary" onclick="document.getElementById('legal-stats-panel').style.display='none'">✕ Cerrar</button>
+            </div>
+            <div class="stats-grid" style="margin-bottom:20px">
+                <div class="stat-card">
+                    <div class="stat-label">Usuarios elegibles</div>
+                    <div class="stat-value">${data.total_users}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Aceptaron</div>
+                    <div class="stat-value" style="color:#16a34a">${data.accepted_count}</div>
+                </div>
+                <div class="stat-card ${pct < 80 ? 'stat-card-warning' : ''}">
+                    <div class="stat-label">% aceptación</div>
+                    <div class="stat-value">${pct}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Pendientes</div>
+                    <div class="stat-value" style="color:#f59e0b">${data.total_users - data.accepted_count}</div>
+                </div>
+            </div>
+            ${rows ? `
+            <div class="table-wrapper" style="max-height:300px;overflow-y:auto">
+                <table style="font-size:12px">
+                    <thead><tr><th>Email</th><th>Nombre</th><th>Aceptado el</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>` : '<p style="color:var(--text-muted);font-size:13px">Sin aceptaciones todavía.</p>'}
+        </div>`;
+    } catch (e) {
+        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+}
+
+async function legalPublish(id) {
+    if (!confirm('¿Publicar este documento? Se notificará a todos los usuarios activos que no lo aceptaron.')) return;
+    try {
+        const data = await apiFetch(`/legal/admin/documents/${id}/publish`, 'PUT');
+        alert(`✅ Publicado. ${data.notified} usuario(s) notificado(s).`);
+        renderLegal();
+    } catch (e) {
+        alert('Error al publicar: ' + e.message);
     }
 }
