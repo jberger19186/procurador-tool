@@ -161,7 +161,7 @@ function navigate(page, id) {
         scripts: 'Scripts',
         plans: 'Planes de suscripción',
         metrics: 'Métricas del sistema',
-        legal: 'Documentos legales'
+        legal: 'Legal'
     };
     document.getElementById('topbar-title').textContent = titles[page] || page;
 
@@ -1916,7 +1916,7 @@ async function renderLegal() {
 
         content.innerHTML = `
         <div class="page-header">
-            <div><h2>Documentos legales</h2><p>Gestión de versiones de T&C y Política de Privacidad</p></div>
+            <div><h2>Documentos legales</h2><p>Gestión de versiones de T&amp;C y Política de Privacidad</p></div>
             <div style="display:flex;gap:8px">
                 <a href="/terminos/"  target="_blank" class="btn btn-sm btn-secondary">Ver T&C público →</a>
                 <a href="/privacidad/" target="_blank" class="btn btn-sm btn-secondary">Ver PyP público →</a>
@@ -2213,7 +2213,7 @@ async function legalPreview(id) {
                 ${doc.summary_of_changes
                     ? `<div class="alert alert-info" style="margin-bottom:16px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>`
                     : ''}
-                <div style="border:1px solid var(--border);border-radius:8px;padding:28px 36px;max-height:560px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px">
+                <div class="legal-preview-content" style="border:1px solid var(--border);border-radius:8px;padding:28px 36px;max-height:560px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px">
                     ${doc.html_content}
                 </div>
             </div>
