@@ -1,24 +1,32 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-04-29
+> Última actualización: 2026-05-20
 
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.5.5** (publicada en GitHub Releases)
-> Última sesión: 2026-04-29
+> Versión app Electron: **2.7.0** (instalador en `electron-app/dist/` — publicar con `$env:GH_TOKEN="<token>"; npm run release`)
+> Última sesión: 2026-05-20
 
 ### Últimas funcionalidades implementadas (listas en producción)
-- ✅ Sistema de notificaciones in-app completo (v2.5.x): modal al iniciar con badge, tab 🔔 en Mi Cuenta, mark-as-read por ítem y global, scroll fino
-- ✅ Panel admin — historial de eventos: detalles específicos por tipo (notification_sent, plan_changed, suspended, usage_adjusted, reactivated, activated, rejected), ícono 🗑️ en hover para eliminar notificaciones del historial (borra evento + notificación del usuario)
+- ✅ **v2.7.0** — QA pre-comercialización completado (159/165 tests PASS, 6 SKIP por diseño):
+  - Fix endpoint `GET /client/notifications` y `POST /client/notifications/:id/read` (faltaba en backend — el badge nunca cargaba)
+  - Fix `loadNotifications()` en renderer.js: badge rojo sidebar + tab badge + panel de notificaciones completo
+  - Fix botones "Ver tour" (`#btnSidebarTour`) y "Asistente IA" (`#btnSidebarAsistente") — no tenían listeners
+  - Sidebar: `.sidebar-bottom` con `position: sticky; bottom: 0` — user chip siempre visible sin importar el alto de ventana
+  - Banners: botón × para cerrar en `#subscription-status-banner`
+  - Asistente IA: campo de búsqueda con estilo acorde al modal (border amber, focus ring)
+  - FAQ accordion: eliminados todos los inline styles, usa clases CSS propias con animación de flecha
+  - Ventana por defecto: 820px de alto (era 700px — cortaba el sidebar)
+- ✅ Sistema de notificaciones in-app (v2.5.x): modal al iniciar con badge, tab 🔔 en Mi Cuenta, mark-as-read por ítem y global, scroll fino
+- ✅ Panel admin — historial de eventos: detalles específicos por tipo, ícono 🗑️ en hover para eliminar notificaciones del historial
 - ✅ User chip: carga inmediata con datos locales sin "Cargando..." para cuentas pending_activation
-- ✅ Fix rutas API notificaciones: `/client/notifications` (era `/notifications` — bug que impedía que aparecieran)
-- ✅ Panel admin — hash routing: F5 / actualizar página conserva el usuario abierto (`#user-detail/ID`)
-- ✅ Modal notificaciones: X alineada a la derecha, botón Cerrar, scroll fino, tamaño X igual al de Mi Cuenta
+- ✅ Panel admin — hash routing: F5 conserva el usuario abierto (`#user-detail/ID`)
 
 ### Próximo paso concreto
-**Bloque 1 — Identidad de Marca & Landing:** copy unificado + sección Planes con precios + Términos y Condiciones
+**Publicar release v2.7.0 en GitHub:** `$env:GH_TOKEN="<token>"; npm run release` desde `electron-app/`
+**Luego → Bloque 1:** copy unificado + sección Planes con precios + Términos y Condiciones
 
 ---
 
@@ -282,18 +290,20 @@ El renderer **nunca** accede directamente a módulos de Node.js.
 ## Endpoints críticos del backend
 
 ```
-POST   /auth/login                     — Autenticación usuario
-POST   /auth/register                  — Registro (redirige a /register/)
-GET    /auth/plan-availability         — Planes disponibles (público)
-POST   /client/verify-session          — Heartbeat de sesión
-GET    /client/scripts/available       — Scripts descargables
-GET    /client/scripts/check/:name     — Check versión/hash
-GET    /client/scripts/download/:name  — Descarga script cifrado
-POST   /client/scripts/log-execution   — Registrar ejecución
-POST   /license/execution/start        — Adquirir lock
-POST   /license/execution/heartbeat    — Refrescar lock
-POST   /license/execution/end          — Liberar lock
-POST   /auth/extension-login           — Login desde extensión
+POST   /auth/login                       — Autenticación usuario
+POST   /auth/register                    — Registro (redirige a /register/)
+GET    /auth/plan-availability           — Planes disponibles (público)
+POST   /client/verify-session            — Heartbeat de sesión
+GET    /client/scripts/available         — Scripts descargables
+GET    /client/scripts/check/:name       — Check versión/hash
+GET    /client/scripts/download/:name    — Descarga script cifrado
+POST   /client/scripts/log-execution     — Registrar ejecución
+POST   /license/execution/start          — Adquirir lock
+POST   /license/execution/heartbeat      — Refrescar lock
+POST   /license/execution/end            — Liberar lock
+POST   /auth/extension-login             — Login desde extensión
+GET    /client/notifications             — Notificaciones in-app del usuario (últimas 50)
+POST   /client/notifications/:id/read    — Marcar notificación como leída (id='all' = todas)
 ```
 
 ---
@@ -659,7 +669,9 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 - ⬜ Backups programados PostgreSQL + procedimiento de restauración documentado
 - ⬜ Hardening: mover claves RSA y AES a variables de entorno (sacar de `keys/`)
 - ⬜ Análisis de seguridad profundo (Electron + backend)
-- ⬜ Smoke tests / canary tests para endpoints críticos
+- ✅ Suite QA completa ejecutada (2026-05-20): 159/165 PASS, 0 FAIL — ver `tests/QA_RESULTS.md`
+- ✅ Suite de tests automatizados en `tests/` (pytest + Playwright) con módulos M1–M14
+- ⬜ Smoke tests / canary tests para endpoints críticos (CI pre-deploy)
 - ⬜ Documentación técnica completa (endpoints, esquema DB, runbook de operaciones)
 
 ---
