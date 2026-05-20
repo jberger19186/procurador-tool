@@ -86,6 +86,10 @@ app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dashboard')
 // Servir página de registro público
 app.use('/register', express.static(path.join(__dirname, 'public', 'register')));
 
+// Servir páginas legales
+app.use('/terminos', express.static(path.join(__dirname, 'public', 'terminos')));
+app.use('/privacidad', express.static(path.join(__dirname, 'public', 'privacidad')));
+
 // ── Distribución de extensión Chrome: eliminada (migrado a Chrome Web Store v1.3.2)
 // Las rutas /extension/updates.xml y /extension/latest.crx fueron removidas.
 // La extensión se distribuye exclusivamente desde:
