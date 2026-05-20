@@ -1789,6 +1789,21 @@ function renderSubsystemUsageBars(usage) {
 const PROMO_STORAGE_KEY = 'psc_promo_dismissed_until';
 const PROMO_END_DATE_KEY = 'psc_promo_last_end_date';
 
+// Prioridad de banners: subscription-status > quota > promo
+// Solo uno visible a la vez para evitar solapamiento
+const BANNER_IDS = ['subscription-status-banner', 'quota-banner', 'promo-banner'];
+function showSingleBanner(winnerId) {
+    BANNER_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (id !== winnerId) el.style.display = 'none';
+    });
+}
+function hideBanner(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
+
 function checkPromoAlert(promoStatus) {
     if (!promoStatus || !promoStatus.isPromo) return;
 
@@ -1828,6 +1843,11 @@ function checkPromoAlert(promoStatus) {
     }
 
     if (!msg) return;
+    // Solo mostrar promo si no hay un banner de mayor prioridad activo
+    const subBanner = document.getElementById('subscription-status-banner');
+    const quotaBanner = document.getElementById('quota-banner');
+    if ((subBanner && subBanner.style.display !== 'none') ||
+        (quotaBanner && quotaBanner.style.display !== 'none')) return;
 
     banner.style.background = bgColor;
     textEl.textContent = msg;
@@ -1914,6 +1934,8 @@ async function checkSubscriptionStatusBanner() {
             return;
         }
 
+        // Suscripción tiene prioridad máxima — ocultar otros banners
+        showSingleBanner('subscription-status-banner');
         banner.style.background = color;
         textEl.textContent = msg;
         if (showBtn && btn) {
@@ -1964,6 +1986,10 @@ async function checkQuotaAlert() {
 
         const label        = labels[worstKey] || worstKey;
         const isExhausted  = worstPct >= 100;
+        // Solo mostrar quota si no hay banner de suscripción activo
+        const subBannerEl = document.getElementById('subscription-status-banner');
+        if (subBannerEl && subBannerEl.style.display !== 'none') return;
+        showSingleBanner('quota-banner');
         banner.style.background = isExhausted ? '#7f1d1d' : '#78350f';
         textEl.textContent = isExhausted
             ? `⛔ Agotaste tus ejecuciones de ${label} para este período. Contactá soporte o actualizá tu plan.`

@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, Menu, ipcMain, clipboard, safeStorage } = require('electron');
+﻿const { app, BrowserWindow, Menu, ipcMain, clipboard, safeStorage, shell } = require('electron');
 
 // Ignorar EPIPE (broken pipe) al correr desde terminal — no es un error real
 process.stdout.on('error', (err) => { if (err.code !== 'EPIPE') throw err; });
