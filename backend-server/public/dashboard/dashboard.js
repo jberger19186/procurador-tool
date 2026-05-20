@@ -2199,6 +2199,23 @@ async function legalPreview(id) {
         const data = await apiFetch(`/legal/admin/documents/${id}`);
         const doc  = data.document;
         const TYPE_LABEL = { tyc: 'Términos y Condiciones', pyp: 'Política de Privacidad' };
+
+        // Encapsulamos el HTML del documento en un iframe (srcdoc) para que su CSS
+        // quede completamente aislado y no afecte el sidebar, topbar ni las tablas del dashboard.
+        const docHtml = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,serif;line-height:1.8;font-size:14px;padding:28px 36px;color:#1f2937}
+h1,h2,h3,h4{font-weight:700;margin-top:1.4em;margin-bottom:0.5em}
+h1{font-size:22px}h2{font-size:18px}h3{font-size:15px}
+p{margin:0.75em 0}
+ul,ol{margin:0.75em 0 0.75em 1.5em}li{margin-bottom:0.3em}
+table{width:100%;border-collapse:collapse;margin:1em 0;font-size:13px;font-family:system-ui,sans-serif}
+th{background:#f9fafb;padding:10px 14px;font-weight:600;text-align:left;border:1px solid #e5e7eb;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280}
+td{padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top}
+a{color:#3b82f6}blockquote{border-left:3px solid #e5e7eb;margin:1em 0;padding-left:1em;color:#6b7280}
+</style></head><body>${doc.html_content}</body></html>`;
+
         panel.innerHTML = `
         <div class="card section-gap">
             <div class="card-header">
@@ -2213,9 +2230,12 @@ async function legalPreview(id) {
                 ${doc.summary_of_changes
                     ? `<div class="alert alert-info" style="margin-bottom:16px"><strong>Cambios en esta versión:</strong> ${escHtml(doc.summary_of_changes)}</div>`
                     : ''}
-                <div class="legal-preview-content" style="border:1px solid var(--border);border-radius:8px;padding:28px 36px;max-height:560px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px">
-                    ${doc.html_content}
-                </div>
+                <iframe
+                    srcdoc="${escHtml(docHtml)}"
+                    style="width:100%;min-height:400px;border:1px solid var(--border);border-radius:8px;display:block"
+                    frameborder="0"
+                    onload="try{var h=this.contentDocument.body.scrollHeight;this.style.height=(h+32)+'px'}catch(e){this.style.height='500px'}"
+                ></iframe>
             </div>
         </div>`;
     } catch (e) {
