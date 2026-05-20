@@ -1720,11 +1720,13 @@ async function loadAccountData() {
                             <div style="font-weight:600;color:#856404;font-size:13px">Sin método de pago configurado</div>
                             <div style="color:#6c5700;font-size:12px;margin-top:2px">Configurá tu método de pago en el portal para evitar interrupciones en el servicio.</div>
                         </div>
-                        <button onclick="window.electronAPI.openExternalUrl('https://api.procuradortool.com/usuarios/')"
+                        <button id="btn-ir-portal-cuenta"
                             style="background:#ffc107;border:none;color:#333;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
                             Ir al portal
                         </button>
                     </div>`;
+                // Listener programático — inline onclick no funciona en Electron con CSP
+                document.getElementById('btn-ir-portal-cuenta')?.addEventListener('click', () => openPortal());
             } else {
                 trialBannerEl.style.display = 'none';
                 trialBannerEl.innerHTML = '';
@@ -1802,6 +1804,21 @@ function showSingleBanner(winnerId) {
 function hideBanner(id) {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
+}
+
+// Abre el portal web con auto-login (token en hash para no exponerlo en logs del servidor)
+// Oculta el banner de suscripción al abrir el portal
+async function openPortal() {
+    const PORTAL_BASE = 'https://api.procuradortool.com/usuarios/';
+    try {
+        const token = await window.electronAPI.getAuthToken();
+        const url = token ? `${PORTAL_BASE}#sso=${token}` : PORTAL_BASE;
+        await window.electronAPI.openExternalUrl(url);
+        // Ocultar el banner — ya fue atendido
+        hideBanner('subscription-status-banner');
+    } catch (_) {
+        window.electronAPI.openExternalUrl(PORTAL_BASE);
+    }
 }
 
 function checkPromoAlert(promoStatus) {
@@ -1940,9 +1957,7 @@ async function checkSubscriptionStatusBanner() {
         textEl.textContent = msg;
         if (showBtn && btn) {
             btn.style.display = 'inline-block';
-            btn.onclick = () => {
-                window.electronAPI.openExternalUrl(PORTAL);
-            };
+            btn.onclick = () => openPortal();
         } else if (btn) {
             btn.style.display = 'none';
         }

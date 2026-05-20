@@ -624,6 +624,11 @@ ipcMain.handle('open-external-url', async (_event, url) => {
     }
 });
 
+// Retornar el token JWT actual (para auto-login en portal web)
+ipcMain.handle('get-auth-token', () => {
+    return authManager?.backendClient?.token || null;
+});
+
 // Generar PDF de instrucciones
 ipcMain.handle('generate-extension-pdf', async (_event, { path: extPath, version }) => {
     try {

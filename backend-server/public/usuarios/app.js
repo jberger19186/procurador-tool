@@ -1581,6 +1581,20 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('login-email').focus();
     });
 
+    // Auto-login desde Electron (token en hash #sso=...)
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#sso=')) {
+        const ssoToken = hash.slice(5);
+        if (ssoToken) {
+            saveToken(ssoToken);
+            // Limpiar el hash para no exponerlo en el historial del navegador
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+            state.token = ssoToken;
+            initDashboard();
+            return;
+        }
+    }
+
     // Check if already logged in
     const token = getToken();
     if (token) {

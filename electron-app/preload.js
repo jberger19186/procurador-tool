@@ -144,6 +144,7 @@ try {
         setExtensionEnabled:    (v) => ipcRenderer.invoke('set-extension-enabled', v),
         openChromeExtensions:   () => ipcRenderer.invoke('open-chrome-extensions'),
         openExternalUrl:        (url) => ipcRenderer.invoke('open-external-url', url),
+        getAuthToken:           () => ipcRenderer.invoke('get-auth-token'),
         openUrlInChrome:        (url) => ipcRenderer.invoke('open-url-in-chrome', url),
 
         // ============ SEGURIDAD / NAVEGADOR ============
