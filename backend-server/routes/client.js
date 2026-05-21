@@ -719,4 +719,96 @@ router.post('/notifications/:id/read', authenticateToken, async (req, res) => {
     }
 });
 
+// ─── POST /client/ai/chat ─────────────────────────────────────────────────────
+// Chat híbrido: llama a Claude Haiku como fallback cuando el FAQ local no matchea.
+// Rate limit: 20 mensajes por usuario por hora (en memoria).
+const aiChatRateLimits = new Map(); // userId → { count, resetAt }
+
+const AI_SYSTEM_PROMPT = `Sos el asistente de soporte de Procurador SCW, una plataforma SaaS de automatización judicial para abogados y procuradores argentinos.
+
+Tu rol es ayudar a los usuarios con dudas sobre:
+- Procuración de expedientes en el SCW del PJN
+- Generación de informes de estado de expedientes
+- Monitor de partes (seguimiento automático de partes en el PJN)
+- Extensión de Chrome para autocompletar datos en portales del PJN
+- Gestión de cuenta, plan y suscripción
+
+Reglas de comportamiento:
+- Respondé siempre en español rioplatense (vos, hacé, ingresá).
+- Sé conciso y directo. Máximo 3 párrafos cortos por respuesta.
+- Si la consulta excede tu conocimiento o requiere acceso a datos del usuario, indicá que abra un ticket de soporte.
+- Nunca inventes funcionalidades que no existan. Si no sabés algo, decilo.
+- No respondas sobre temas ajenos al producto (política, finanzas, etc.).
+- Las credenciales del PJN nunca pasan por los servidores de Procurador; se guardan solo en Chrome del usuario.`;
+
+router.post('/ai/chat', authenticateToken, async (req, res) => {
+    const { message } = req.body;
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        return res.status(400).json({ success: false, error: 'Mensaje vacío' });
+    }
+    if (message.length > 500) {
+        return res.status(400).json({ success: false, error: 'Mensaje demasiado largo (máx. 500 caracteres)' });
+    }
+
+    // Rate limit por usuario: 20 mensajes/hora
+    const userId = req.user.id;
+    const now = Date.now();
+    const rl = aiChatRateLimits.get(userId) || { count: 0, resetAt: now + 3600000 };
+    if (now > rl.resetAt) { rl.count = 0; rl.resetAt = now + 3600000; }
+    if (rl.count >= 20) {
+        return res.status(429).json({ success: false, error: 'Límite de consultas alcanzado. Intentá de nuevo en una hora.' });
+    }
+    rl.count++;
+    aiChatRateLimits.set(userId, rl);
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+        return res.status(503).json({ success: false, error: 'Servicio de IA no disponible en este momento.' });
+    }
+
+    try {
+        const https = require('https');
+        const payload = JSON.stringify({
+            model: 'claude-haiku-4-5',
+            max_tokens: 300,
+            system: AI_SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: message.trim() }]
+        });
+
+        const response = await new Promise((resolve, reject) => {
+            const req2 = https.request({
+                hostname: 'api.anthropic.com',
+                path: '/v1/messages',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'Content-Length': Buffer.byteLength(payload)
+                }
+            }, (r) => {
+                let data = '';
+                r.on('data', chunk => data += chunk);
+                r.on('end', () => {
+                    try { resolve({ status: r.statusCode, body: JSON.parse(data) }); }
+                    catch (e) { reject(new Error('Invalid JSON from Anthropic')); }
+                });
+            });
+            req2.on('error', reject);
+            req2.write(payload);
+            req2.end();
+        });
+
+        if (response.status !== 200 || !response.body.content?.[0]?.text) {
+            console.error('Anthropic API error:', response.body);
+            return res.status(502).json({ success: false, error: 'Error al consultar el servicio de IA.' });
+        }
+
+        return res.json({ success: true, reply: response.body.content[0].text });
+    } catch (error) {
+        console.error('AI chat error:', error);
+        return res.status(500).json({ success: false, error: 'Error interno al procesar la consulta.' });
+    }
+});
+
 module.exports = router;

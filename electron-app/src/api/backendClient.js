@@ -316,6 +316,18 @@ class BackendClient {
     }
 
     /**
+     * Chat con el asistente IA (Claude Haiku fallback)
+     */
+    async aiChat(message) {
+        try {
+            const response = await this.client.post('/client/ai/chat', { message });
+            return { success: true, reply: response.data.reply };
+        } catch (error) {
+            return { success: false, error: error.response?.data?.error || error.message };
+        }
+    }
+
+    /**
      * Adquirir lock de ejecución multi-dispositivo
      */
     async startExecution(scriptName) {

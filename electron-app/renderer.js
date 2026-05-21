@@ -483,16 +483,57 @@ async function updateUserChip() {
 
 // ============ ASISTENTE IA ============
 const FAQ_ITEMS = [
-    { q: '¿Cómo procuro mis expedientes?', a: 'Hacé click en "Procurar" en el sidebar o en el botón ▶ Procurar. El sistema accede automáticamente al SCW del PJN con tus credenciales guardadas en Chrome.' },
-    { q: '¿Qué significa que el login falló?', a: 'El sistema no pudo ingresar al PJN. Verificá que Chrome tenga guardada la contraseña del SCW (botón "Agregar contraseña SCW" en Configuración > Seguridad).' },
-    { q: '¿Por qué se colgó el proceso?', a: 'Podés detenerlo con el botón "Detener". Si se repite, revisá que el Chrome del PJN no tenga otras pestañas bloqueando el acceso.' },
-    { q: '¿Cómo cambio de plan?', a: 'Abrí "Mi Cuenta" (chip de usuario en la barra lateral) y vas a ver las opciones de plan disponibles.' },
-    { q: '¿Dónde están los archivos descargados?', a: 'En la sección "Abrir descargas" del sidebar, o directamente en la carpeta de descargas configurada en Configuración > General.' },
-    { q: '¿Qué es el Monitor de partes?', a: 'Controlá automáticamente si aparecen nuevos expedientes vinculados a determinadas partes. Configurá las partes en la sección Monitor.' },
-    { q: '¿Cómo genero un informe?', a: 'Click en "Informe" en el sidebar. Podés procesar un expediente individual o un lote desde un archivo Excel.' },
-    { q: '¿Por qué no puedo ejecutar? Dice que hay un proceso activo', a: 'El sistema tiene un candado anti-concurrencia. Asegurate de no tener otra instancia abierta. Si el problema persiste, reiniciá la app.' },
-    { q: '¿Cómo actualizo la extensión de Chrome?', a: 'La extensión se actualiza automáticamente desde la Chrome Web Store. Podés verificar la versión actual en Configuración > Extensión.' },
-    { q: '¿Necesito dejar el navegador abierto?', a: 'No. El sistema abre y cierra Chrome automáticamente en segundo plano durante la procuración.' },
+    // --- PROCURACIÓN ---
+    { cat: 'procuracion', q: '¿Cómo procuro mis expedientes?', a: 'Hacé click en "Procurar" en el sidebar o en el botón ▶ Procurar. El sistema accede automáticamente al SCW del PJN con tus credenciales guardadas en Chrome.' },
+    { cat: 'procuracion', q: '¿Puedo procurar solo algunos expedientes?', a: 'Sí. En la sección Procuración podés seleccionar expedientes individuales antes de ejecutar, o usar "Procurar seleccionados" para procurar un subconjunto.' },
+    { cat: 'procuracion', q: '¿Cuánto tarda la procuración?', a: 'Depende de la cantidad de expedientes y la velocidad del PJN. Con conexión normal, cada expediente tarda entre 5 y 15 segundos.' },
+    { cat: 'procuracion', q: '¿Puedo usar la computadora mientras procura?', a: 'Sí, pero evitá usar Chrome durante la ejecución. El sistema opera Chrome en segundo plano; interrupirlo puede causar errores.' },
+    { cat: 'procuracion', q: '¿Puedo procurar con fecha personalizada?', a: 'Sí. Usá el botón "Procurar con fecha…" para seleccionar un rango de fechas distinto al predeterminado.' },
+    // --- INFORME ---
+    { cat: 'informe', q: '¿Cómo genero un informe?', a: 'Click en "Informe" en el sidebar. Podés procesar un expediente individual ingresando el número o un lote cargando un archivo Excel con la lista.' },
+    { cat: 'informe', q: '¿Qué formato debe tener el Excel para informe en lote?', a: 'Una columna con encabezado "expediente" y los números en el formato estándar del PJN (ej: 12345/2023). Descargá la plantilla desde la sección Informe.' },
+    { cat: 'informe', q: '¿El informe genera un PDF?', a: 'El informe genera un archivo Excel con el estado de cada expediente. El PDF de cada movimiento se descarga por separado si el sistema lo detecta disponible.' },
+    { cat: 'informe', q: '¿Puedo detener un informe a mitad?', a: 'Sí, con el botón "Detener". Los expedientes ya procesados se guardan; el informe quedará parcial hasta ese punto.' },
+    // --- MONITOR ---
+    { cat: 'monitor', q: '¿Qué es el Monitor de partes?', a: 'Controlá automáticamente si aparecen nuevos expedientes vinculados a determinadas partes (personas o empresas). Configurá las partes en la sección Monitor.' },
+    { cat: 'monitor', q: '¿Cómo agrego una parte al monitor?', a: 'En la sección Monitor, hacé click en "+ Agregar parte", ingresá el nombre o CUIT/CUIL y guardá. El sistema buscará expedientes vinculados en cada ejecución.' },
+    { cat: 'monitor', q: '¿Con qué frecuencia se actualiza el monitor?', a: 'El monitor se actualiza cada vez que ejecutás la sección Monitor manualmente, o si configuraste una frecuencia automática en Configuración.' },
+    { cat: 'monitor', q: '¿Cuántas partes puedo monitorear?', a: 'Depende de tu plan: COMBO_PROMO permite 3 partes activas, PRO permite 10, ENTERPRISE ilimitadas.' },
+    // --- EXTENSIÓN ---
+    { cat: 'extension', q: '¿Cómo instalo la extensión de Chrome?', a: 'Buscá "Procurador SCW" en la Chrome Web Store o pedile el enlace directo al soporte. Hacé click en "Agregar a Chrome" y aceptá los permisos.' },
+    { cat: 'extension', q: '¿Cómo actualizo la extensión?', a: 'La extensión se actualiza automáticamente desde la Chrome Web Store. También podés ir a chrome://extensions y hacer click en el ícono de actualizar.' },
+    { cat: 'extension', q: '¿Para qué sirve la extensión?', a: 'La extensión autocompleta el número de expediente (jurisdicción, número y año) en los módulos del PJN: SCW, Escritos, Notificaciones y DEOX, evitando la escritura manual.' },
+    { cat: 'extension', q: '¿La extensión funciona sin la app Electron?', a: 'Sí. Con el plan EXTENSION_PROMO tenés acceso solo a la extensión sin necesitar instalar la app de escritorio.' },
+    { cat: 'extension', q: '¿Chrome muestra un aviso al instalar la extensión?', a: 'Es normal para extensiones nuevas. Hacé click en "Continuar a la instalación". No indica ningún riesgo — la extensión está aprobada por Google.' },
+    // --- CUENTA Y PLAN ---
+    { cat: 'cuenta', q: '¿Cómo cambio de plan?', a: 'Abrí el portal web en api.procuradortool.com/usuarios/, ingresá a "Mi Plan" y hacé click en "Ver planes disponibles". Los cambios se aplican de inmediato o al inicio del próximo ciclo.' },
+    { cat: 'cuenta', q: '¿Puedo usar la app en más de una computadora?', a: 'No. La licencia está vinculada a un dispositivo. Para cambiar de equipo, contactá al soporte.' },
+    { cat: 'cuenta', q: '¿Cómo cancelo mi suscripción?', a: 'Ingresá al portal web en api.procuradortool.com/usuarios/, sección "Facturación", y hacé click en "Cancelar suscripción". Conservás el acceso hasta fin del período pago.' },
+    { cat: 'cuenta', q: '¿Dónde veo cuántas ejecuciones me quedan?', a: 'En la sección "Mi Cuenta" de la app (ícono de usuario en la barra lateral) o en el portal web, sección "Mi Plan".' },
+    { cat: 'cuenta', q: '¿Qué pasa cuando se vence el trial?', a: 'Al agotar las 20 ejecuciones de prueba, la cuenta queda pendiente de activación. El admin revisa y activa (o rechaza) manualmente.' },
+    // --- ERRORES FRECUENTES ---
+    { cat: 'errores', q: '¿Qué significa que el login al PJN falló?', a: 'El sistema no pudo ingresar al SCW. Verificá que Chrome tenga guardada la contraseña (botón "Agregar contraseña SCW" en la app). Si la contraseña del PJN cambió, actualizala en Chrome primero.' },
+    { cat: 'errores', q: '¿Por qué se colgó el proceso?', a: 'Podés detenerlo con el botón "Detener". Si se repite, revisá que Chrome no tenga otras pestañas abiertas del PJN bloqueando el acceso y que tu sesión PJN esté vigente.' },
+    { cat: 'errores', q: '¿Por qué dice "proceso activo en otro dispositivo"?', a: 'El sistema tiene un candado anti-concurrencia. Asegurate de no tener otra instancia de la app abierta. Si el error persiste después de cerrar todo, esperá 2 minutos y reintentá.' },
+    { cat: 'errores', q: '¿Dónde están los archivos descargados?', a: 'En la carpeta configurada en Configuración > General > Carpeta de descargas. También podés acceder desde "Abrir descargas" en el sidebar.' },
+    { cat: 'errores', q: '¿Necesito dejar Chrome abierto?', a: 'No. El sistema abre y cierra Chrome automáticamente en segundo plano. No interferís con el proceso salvo que abras ventanas del PJN manualmente.' },
+    { cat: 'errores', q: '¿Qué hago si la app no arranca?', a: 'Cerrá Chrome completamente si estaba abierto, esperá 10 segundos y volvé a abrir la app. Si el problema persiste, usá el botón de soporte para abrir un ticket.' },
+    // --- PRIVACIDAD Y SEGURIDAD ---
+    { cat: 'privacidad', q: '¿Mis credenciales del PJN pasan por sus servidores?', a: 'No. Las contraseñas del PJN se almacenan exclusivamente en el gestor de contraseñas de tu Chrome y nunca salen de tu equipo. Procurador solo coordina la automatización.' },
+    { cat: 'privacidad', q: '¿Cómo se protegen mis datos?', a: 'Los scripts de automatización están cifrados con AES-256 y se firman digitalmente. La comunicación con el servidor usa HTTPS/TLS. Tu sesión se valida con token JWT de corta duración.' },
+    { cat: 'privacidad', q: '¿Procurador guarda mis expedientes?', a: 'No se almacena el contenido de los expedientes en los servidores. Los archivos de resultado (Excel, PDF) quedan únicamente en tu equipo.' },
+    { cat: 'privacidad', q: '¿Puedo eliminar mi cuenta?', a: 'Sí. Cancelá tu suscripción desde el portal web y luego contactá al soporte solicitando la eliminación completa de datos. Cumplimos con las normativas de protección de datos.' },
+];
+
+const FAQ_CATS = [
+    { id: 'todas',      label: 'Todas' },
+    { id: 'procuracion', label: 'Procuración' },
+    { id: 'informe',    label: 'Informe' },
+    { id: 'monitor',    label: 'Monitor' },
+    { id: 'extension',  label: 'Extensión' },
+    { id: 'cuenta',     label: 'Cuenta' },
+    { id: 'errores',    label: 'Errores' },
+    { id: 'privacidad', label: 'Privacidad' },
 ];
 
 let asistenteMsgs = [];
@@ -503,21 +544,41 @@ function openAsistente() {
 }
 
 function setupAsistente() {
-    const faqList   = document.getElementById('faqList');
-    const faqSearch = document.getElementById('faqSearch');
-    const btnSop    = document.getElementById('btnAsistenteSoporte');
+    const faqList    = document.getElementById('faqList');
+    const faqSearch  = document.getElementById('faqSearch');
+    const faqPills   = document.getElementById('faqPills');
+    const btnSop     = document.getElementById('btnAsistenteSoporte');
 
     if (!faqList) return;
 
+    let activeCat = 'todas';
+
+    // Renderizar pills de categoría
+    if (faqPills) {
+        faqPills.innerHTML = FAQ_CATS.map(c => `
+            <button class="faq-pill${c.id === 'todas' ? ' active' : ''}" data-cat="${c.id}">
+                ${escHtml(c.label)}
+            </button>`
+        ).join('');
+
+        faqPills.querySelectorAll('.faq-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                activeCat = btn.dataset.cat;
+                faqPills.querySelectorAll('.faq-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderFaq(document.getElementById('faqSearch')?.value || '');
+            });
+        });
+    }
+
     function renderFaq(filter = '') {
         const q = filter.toLowerCase().trim();
-        const filtered = q
-            ? FAQ_ITEMS.filter(f => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q))
-            : FAQ_ITEMS;
+        let items = activeCat === 'todas' ? FAQ_ITEMS : FAQ_ITEMS.filter(f => f.cat === activeCat);
+        if (q) items = items.filter(f => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q));
 
-        faqList.innerHTML = filtered.length === 0
+        faqList.innerHTML = items.length === 0
             ? '<p style="padding:16px;color:var(--text-3);font-size:12.5px;text-align:center">Sin resultados. Intentá con otras palabras.</p>'
-            : filtered.map((f, i) => `
+            : items.map((f, i) => `
                 <div class="faq-item" data-idx="${i}">
                     <div class="faq-question">
                         <span>${escHtml(f.q)}</span>
@@ -532,9 +593,7 @@ function setupAsistente() {
             div.addEventListener('click', () => {
                 const item = div.closest('.faq-item');
                 const isOpen = item.classList.contains('open');
-                // cierra todos
                 faqList.querySelectorAll('.faq-item').forEach(it => it.classList.remove('open'));
-                // abre el clickeado si estaba cerrado
                 if (!isOpen) item.classList.add('open');
             });
         });
@@ -639,28 +698,44 @@ function addChatMsg(from, text) {
 function getBotResponse(input) {
     const q = input.toLowerCase().trim();
 
-    // Buscar match en FAQ
+    // Buscar match semántico en FAQ (palabras largas de la pregunta)
     for (const f of FAQ_ITEMS) {
         const words = f.q.toLowerCase().split(/\s+/).filter(w => w.length > 4);
         if (words.some(w => q.includes(w))) return f.a;
     }
 
-    // Intents adicionales por keywords
-    if (/procur|expedi|scw/.test(q))                         return FAQ_ITEMS[0].a;
-    if (/login|clave|contrase|password|credencial/.test(q))   return FAQ_ITEMS[1].a;
-    if (/colg|trabó|bloqueó|detuvo|cuelg/.test(q))           return FAQ_ITEMS[2].a;
-    if (/plan|cambiar|upgrade|precio/.test(q))                return FAQ_ITEMS[3].a;
-    if (/descarg|archivo|excel|carpeta/.test(q))              return FAQ_ITEMS[4].a;
-    if (/monitor|parte|novel/.test(q))                        return FAQ_ITEMS[5].a;
-    if (/informe|report|lote/.test(q))                        return FAQ_ITEMS[6].a;
-    if (/candado|concurrencia|activo|ejecuci/.test(q))        return FAQ_ITEMS[7].a;
-    if (/extensi[oó]n|store|chrome/.test(q))                  return FAQ_ITEMS[8].a;
-    if (/navegador|browser|abiert/.test(q))                   return FAQ_ITEMS[9].a;
+    // Helper: devuelve la respuesta del primer FAQ que matchea la categoría dada
+    const byCat = cat => FAQ_ITEMS.find(f => f.cat === cat)?.a || '';
 
-    return 'No encontré una respuesta específica para esa consulta. Podés abrir un ticket de soporte con el botón 🎫 y te respondemos a la brevedad.';
+    // Intents por keyword → categoría o respuesta directa
+    if (/procur|expedi|scw|jurisdicci/.test(q))                return byCat('procuracion');
+    if (/login|clave|contrase|password|credencial/.test(q))    return FAQ_ITEMS.find(f => f.cat === 'errores' && /login/.test(f.q.toLowerCase()))?.a || byCat('errores');
+    if (/colg|trabó|bloqueó|detuvo|cuelg|tarda/.test(q))      return FAQ_ITEMS.find(f => /colgó/.test(f.q))?.a || byCat('errores');
+    if (/plan|cambiar|upgrade|precio|suscri/.test(q))          return FAQ_ITEMS.find(f => f.cat === 'cuenta' && /plan/.test(f.q.toLowerCase()))?.a || byCat('cuenta');
+    if (/descarg|archivo|excel|carpeta/.test(q))               return FAQ_ITEMS.find(f => /descargados/.test(f.q))?.a || '';
+    if (/monitor|parte|novel/.test(q))                         return byCat('monitor');
+    if (/informe|report|lote/.test(q))                         return byCat('informe');
+    if (/candado|concurrencia|activo.*otro|otro.*activo/.test(q)) return FAQ_ITEMS.find(f => /activo.*dispositivo|dispositivo.*activo/.test(f.q.toLowerCase()))?.a || byCat('errores');
+    if (/extensi[oó]n|store|chrome web/.test(q))               return byCat('extension');
+    if (/navegador|browser|cerrar chrome/.test(q))             return FAQ_ITEMS.find(f => /dejar.*abierto|navegador/i.test(f.q))?.a || byCat('errores');
+    if (/privacidad|contraseña.*pjn|pjn.*contrase|seguridad|cifr/.test(q)) return byCat('privacidad');
+    if (/ejecuci|cuántas|cuotas|restante/.test(q))            return FAQ_ITEMS.find(f => /cuántas ejecuciones/i.test(f.q))?.a || byCat('cuenta');
+
+    return null; // null = sin match local → llamar a la API
 }
 
-function sendChatMessage() {
+// Llama al endpoint de IA del backend como fallback
+async function getAIResponse(message) {
+    try {
+        const resp = await window.electronAPI.aiChat(message);
+        if (resp?.success && resp.reply) return resp.reply;
+        return resp?.error || 'No pude obtener una respuesta del asistente. Abrí un ticket con el botón 🎫.';
+    } catch (e) {
+        return 'No pude obtener una respuesta del asistente. Abrí un ticket con el botón 🎫.';
+    }
+}
+
+async function sendChatMessage() {
     const input = document.getElementById('chatInput');
     const text  = input?.value?.trim();
     if (!text) return;
@@ -671,10 +746,20 @@ function sendChatMessage() {
     // Indicador "escribiendo..."
     const typing = addChatMsg('typing', '⋯ escribiendo');
 
-    setTimeout(() => {
+    // Intentar match local primero
+    const localAnswer = getBotResponse(text);
+
+    if (localAnswer) {
+        setTimeout(() => {
+            typing?.remove();
+            addChatMsg('bot', localAnswer);
+        }, 500);
+    } else {
+        // Fallback a Claude Haiku via backend
+        const aiReply = await getAIResponse(text);
         typing?.remove();
-        addChatMsg('bot', getBotResponse(text));
-    }, 700);
+        addChatMsg('bot', aiReply);
+    }
 }
 
 // ============ MENÚ DROPDOWN EJECUTAR ============

@@ -1992,6 +1992,15 @@ ipcMain.handle('mark-notification-read', async (event, id) => {
     }
 });
 
+// ─── Asistente IA ─────────────────────────────────────────────────────────────
+ipcMain.handle('ai-chat', async (event, message) => {
+    try {
+        return await authManager.backendClient.aiChat(message);
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
 // ============ MONITOR DE PARTES ============
 
 // ─── Generador de visor HTML para resultados del monitor ──────────────────────

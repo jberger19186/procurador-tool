@@ -120,6 +120,9 @@ try {
         getNotifications: () => ipcRenderer.invoke('get-notifications'),
         markNotificationRead: (id) => ipcRenderer.invoke('mark-notification-read', id),
 
+        // ─── Asistente IA ─────────────────────────────────────────────────────
+        aiChat: (message) => ipcRenderer.invoke('ai-chat', message),
+
         // ============ MONITOR DE PARTES ============
         runMonitoreo: (opts) => ipcRenderer.invoke('run-monitoreo', opts),
         monitorGetPartes: () => ipcRenderer.invoke('monitor-get-partes'),
