@@ -128,53 +128,95 @@ router.get('/plans', async (req, res) => {
 });
 
 // ─── POST /usuarios/api/ai-chat ────────────────────────────────────────────────
-// Chat con IA usando Anthropic API. Recibe { messages: [{role, content}] }
+// Chat con IA usando Anthropic Claude Haiku. Recibe { messages: [{role, content}] }
+// Rate limit: 20 mensajes por usuario por hora (en memoria compartida con /client/ai/chat)
+const webChatRateLimits = new Map(); // userId → { count, resetAt }
+
+const WEB_SYSTEM_PROMPT = `Sos el asistente de soporte de Procurador SCW, una plataforma SaaS de automatización judicial para abogados y procuradores argentinos.
+
+Tu rol es ayudar a los usuarios con dudas sobre:
+- Procuración de expedientes en el SCW del PJN
+- Generación de informes de estado de expedientes
+- Monitor de partes (seguimiento automático de partes en el PJN)
+- Extensión de Chrome para autocompletar datos en portales del PJN
+- Gestión de cuenta, plan y suscripción
+
+Reglas de comportamiento:
+- Respondé siempre en español rioplatense (vos, hacé, ingresá).
+- Sé conciso y directo. Máximo 3 párrafos cortos por respuesta.
+- Si la consulta excede tu conocimiento o requiere acceso a datos del usuario, indicá que abra un ticket de soporte.
+- Nunca inventes funcionalidades que no existan. Si no sabés algo, decilo.
+- No respondas sobre temas ajenos al producto (política, finanzas, etc.).
+- Las credenciales del PJN nunca pasan por los servidores de Procurador; se guardan solo en Chrome del usuario.`;
+
 router.post('/ai-chat', authenticateToken, async (req, res) => {
     const { messages } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'El campo messages es requerido y debe ser un array' });
     }
+    if (messages.length > 20) {
+        return res.status(400).json({ error: 'Demasiados mensajes en el historial.' });
+    }
+
+    // Rate limit por usuario: 20 mensajes/hora
+    const userId = req.user.id;
+    const now = Date.now();
+    const rl = webChatRateLimits.get(userId) || { count: 0, resetAt: now + 3600000 };
+    if (now > rl.resetAt) { rl.count = 0; rl.resetAt = now + 3600000; }
+    if (rl.count >= 20) {
+        return res.status(429).json({ error: 'Límite de consultas alcanzado. Intentá de nuevo en una hora.' });
+    }
+    rl.count++;
+    webChatRateLimits.set(userId, rl);
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
         return res.json({
-            reply: 'El asistente IA no está configurado aún. Para consultas contactá a soporte en la sección Soporte.'
+            reply: 'El asistente IA no está disponible en este momento. Para consultas, usá la sección Soporte.'
         });
     }
 
-    const SYSTEM_PROMPT = 'Sos el asistente virtual de Procurador SCW, una herramienta de automatización legal para el Poder Judicial de la Nación de Argentina. Ayudás a los usuarios con dudas sobre el sistema, planes, facturación y soporte técnico. Respondé siempre en español, de forma concisa y amable.';
-
     try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 1024,
-                system: SYSTEM_PROMPT,
-                messages: messages.map(m => ({
-                    role: m.role,
-                    content: m.content
-                }))
-            })
+        const https = require('https');
+        const payload = JSON.stringify({
+            model: 'claude-haiku-4-5',
+            max_tokens: 400,
+            system: WEB_SYSTEM_PROMPT,
+            messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content }))
         });
 
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error('Error Anthropic API:', response.status, errText);
+        const response = await new Promise((resolve, reject) => {
+            const req2 = https.request({
+                hostname: 'api.anthropic.com',
+                path: '/v1/messages',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'Content-Length': Buffer.byteLength(payload)
+                }
+            }, (r) => {
+                let data = '';
+                r.on('data', chunk => data += chunk);
+                r.on('end', () => {
+                    try { resolve({ status: r.statusCode, body: JSON.parse(data) }); }
+                    catch (e) { reject(new Error('Invalid JSON from Anthropic')); }
+                });
+            });
+            req2.on('error', reject);
+            req2.write(payload);
+            req2.end();
+        });
+
+        if (response.status !== 200 || !response.body.content?.[0]?.text) {
+            console.error('Error Anthropic API:', response.status, response.body);
             return res.status(502).json({ error: 'Error al contactar el servicio de IA. Intentá nuevamente.' });
         }
 
-        const data = await response.json();
-        const reply = data.content?.[0]?.text || 'No se pudo obtener una respuesta.';
-
-        res.json({ success: true, reply });
+        res.json({ success: true, reply: response.body.content[0].text });
     } catch (error) {
         console.error('Error en ai-chat:', error);
         res.status(500).json({ error: 'Error del servidor al procesar la solicitud de IA.' });
