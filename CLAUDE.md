@@ -1,31 +1,34 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-20
+> Última actualización: 2026-05-21
 
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.0** (instalador en `electron-app/dist/` — publicar con `$env:GH_TOKEN="<token>"; npm run release`)
-> Última sesión: 2026-05-20
+> Versión app Electron: **2.7.2** — publicada en GitHub Releases (auto-updater activo)
+> Última sesión: 2026-05-21
 
 ### Últimas funcionalidades implementadas (listas en producción)
-- ✅ **v2.7.0** — QA pre-comercialización completado (159/165 tests PASS, 6 SKIP por diseño):
-  - Fix endpoint `GET /client/notifications` y `POST /client/notifications/:id/read` (faltaba en backend — el badge nunca cargaba)
-  - Fix `loadNotifications()` en renderer.js: badge rojo sidebar + tab badge + panel de notificaciones completo
-  - Fix botones "Ver tour" (`#btnSidebarTour`) y "Asistente IA" (`#btnSidebarAsistente") — no tenían listeners
-  - Sidebar: `.sidebar-bottom` con `position: sticky; bottom: 0` — user chip siempre visible sin importar el alto de ventana
-  - Banners: botón × para cerrar en `#subscription-status-banner`
-  - Asistente IA: campo de búsqueda con estilo acorde al modal (border amber, focus ring)
-  - FAQ accordion: eliminados todos los inline styles, usa clases CSS propias con animación de flecha
-  - Ventana por defecto: 820px de alto (era 700px — cortaba el sidebar)
-- ✅ Sistema de notificaciones in-app (v2.5.x): modal al iniciar con badge, tab 🔔 en Mi Cuenta, mark-as-read por ítem y global, scroll fino
-- ✅ Panel admin — historial de eventos: detalles específicos por tipo, ícono 🗑️ en hover para eliminar notificaciones del historial
-- ✅ User chip: carga inmediata con datos locales sin "Cargando..." para cuentas pending_activation
-- ✅ Panel admin — hash routing: F5 conserva el usuario abierto (`#user-detail/ID`)
+- ✅ **v2.7.2** — Asistente IA expandido + endpoint IA híbrido (sesión 2026-05-21):
+  - `FAQ_ITEMS`: 10 → **34 preguntas** distribuidas en 7 categorías (procuracion · informe · monitor · extension · cuenta · errores · privacidad)
+  - Modal Asistente: **pills de filtro por categoría** (`#faqPills`, generadas por JS desde `FAQ_CATS`)
+  - `setupAsistente()`: filtra simultáneamente por pill activa + texto de búsqueda
+  - `getBotResponse()`: retorna `null` si no hay match local (señal al chat para llamar a la API)
+  - `POST /client/ai/chat`: endpoint activo en backend — llama a Claude Haiku, rate limit 20 msg/hora/usuario, system prompt dedicado en `AI_SYSTEM_PROMPT`
+  - Chat widget: ahora async — match local primero (500ms), fallback a API si no matchea
+  - IPC channel `ai-chat` wired: `preload.js` → `main.js` → `backendClient.aiChat()`
+  - ⚠️ **ANTHROPIC_API_KEY pendiente** de agregar al `.env` del servidor para activar el fallback IA
+- ✅ **v2.7.1** — Sección Métricas y Legal en panel admin + chat widget:
+  - Panel admin: cards de distribución y Legal usan `.card-header` + `.card-body` (fix padding)
+  - Vista previa Legal: iframe sandboxed (CSS isolation, sin leakage al dashboard)
+  - Botón "Abrir chat" del Asistente abre el chat widget flotante (no la tab Soporte)
+- ✅ **v2.7.0** — QA pre-comercialización: 159/165 tests PASS, 6 SKIP por diseño
+- ✅ Sistema de notificaciones in-app (v2.5.x): badge, mark-as-read, panel completo
+- ✅ Panel admin — historial de eventos, hash routing (`#user-detail/ID`)
 
 ### Próximo paso concreto
-**Publicar release v2.7.0 en GitHub:** `$env:GH_TOKEN="<token>"; npm run release` desde `electron-app/`
+**Activar IA real:** agregar `ANTHROPIC_API_KEY=sk-ant-...` al `.env` del servidor + `pm2 restart procurador-api --update-env`
 **Luego → Bloque 1:** copy unificado + sección Planes con precios + Términos y Condiciones
 
 ---
@@ -67,7 +70,10 @@ ProcuradorTool/
 ├── extension-app/             ← extensión Chrome (MV3) — distribución Chrome Web Store
 ├── database/
 │   └── schema.sql             ← schema completo de producción (pg_dump --schema-only)
-└── docs/                      ← documentación del proyecto
+└── docs/
+    ├── manual-de-usuario.md           ← guía para el usuario final (instalación, secciones, FAQ)
+    └── internal/
+        └── sistema-estados-flujos.md  ← referencia interna: estados, flujos IA, errores, IPC, deploy
 ```
 
 > **Nota sobre extensiones:** `extension-app/` es la **única** versión activa (la que se publica en Chrome Web Store).
@@ -95,6 +101,7 @@ ProcuradorTool/
 | **GitHub** | Repositorio privado + GitHub Releases (distribución instalador) | jberger19186@gmail.com |
 | **Brevo** (ex Sendinblue) | SMTP transaccional — emails que salen con @procuradortool.com | jberger19186@gmail.com |
 | **Chrome Web Store** | Distribución extensión Chrome (v1.3.2) | jberger19186@gmail.com / Publisher: Jonathan Berger |
+| **Anthropic** | API de Claude Haiku para el chat IA del Asistente — ⚠️ pendiente agregar ANTHROPIC_API_KEY al .env del servidor | console.anthropic.com |
 | **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-06-29) | sin cuenta — corre en el servidor |
 | **Azure Trusted Signing** | Code Signing del instalador .exe — ⬜ pendiente contratar | — |
 | **MercadoPago / Stripe** | Pagos y suscripciones recurrentes — ⬜ pendiente integrar | — |
@@ -304,6 +311,7 @@ POST   /license/execution/end            — Liberar lock
 POST   /auth/extension-login             — Login desde extensión
 GET    /client/notifications             — Notificaciones in-app del usuario (últimas 50)
 POST   /client/notifications/:id/read    — Marcar notificación como leída (id='all' = todas)
+POST   /client/ai/chat                   — Chat con asistente IA (fallback Claude Haiku, rate limit 20/hora/usuario)
 ```
 
 ---
@@ -663,9 +671,11 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ---
 
 ### 5️⃣ BLOQUE 5 — Soporte & FAQs & Chat & Tickets
-- ⬜ IA real en chat widget: integrar Intercom / Crisp / Tidio (no construir desde cero — SaaS en horas)
+- ✅ FAQs expandidas: 10 → 34 preguntas en 7 categorías con filtro por pills (v2.7.2)
+- ✅ Endpoint `POST /client/ai/chat` activo con Claude Haiku + rate limit + system prompt (v2.7.2)
+- ✅ `docs/manual-de-usuario.md` publicado en el repo
+- ⚠️ **Falta activar:** agregar `ANTHROPIC_API_KEY` al `.env` del servidor (el endpoint responde 503 sin ella)
 - ⬜ Sistema de tickets mejorado: notificaciones email al usuario cuando admin responde, plantillas, filtros y prioridades
-- ⬜ Documentación de ayuda para usuarios finales (base de conocimiento vinculada al Asistente IA)
 
 ---
 
@@ -908,12 +918,14 @@ Sección Sistema del sidebar:
 
 - ✅ Sistema de tickets básico (crear, responder, estados)
 - ✅ Notificaciones in-app admin → usuario (v2.5.x)
-- ⬜ **IA real en chat widget** ← **prioridad alta** — conectar endpoint al chat flotante de la app Electron (ver ítem 1.6 — placeholder listo)
+- ✅ **Asistente IA híbrido** (v2.7.2): 34 FAQs con filtro por categoría, chat widget async, endpoint `POST /client/ai/chat` con Claude Haiku como fallback
+  - ⚠️ Pendiente: agregar `ANTHROPIC_API_KEY` al `.env` del servidor para activar el fallback (`pm2 restart procurador-api --update-env`)
+  - Costo estimado: ~USD 1.60/mes para 200 usuarios × 20 queries/mes (Claude Haiku)
+- ✅ Documentación de ayuda publicada: `docs/manual-de-usuario.md` + `docs/internal/sistema-estados-flujos.md`
 - ⬜ Mejoras al sistema de tickets:
   - Notificaciones al usuario cuando el admin responde un ticket (email)
   - Respuestas predefinidas / plantillas para casos frecuentes
   - Filtros y prioridades en el panel admin
-- ⬜ Documentación de ayuda para usuarios finales (base de conocimiento vinculada al Asistente IA)
 
 ---
 
