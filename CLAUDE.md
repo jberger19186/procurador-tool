@@ -28,8 +28,8 @@
 - ✅ Panel admin — historial de eventos, hash routing (`#user-detail/ID`)
 
 ### Próximo paso concreto
-**Activar IA real:** agregar `ANTHROPIC_API_KEY=sk-ant-...` al `.env` del servidor + `pm2 restart procurador-api --update-env`
-**Luego → Bloque 1:** copy unificado + sección Planes con precios + Términos y Condiciones
+**→ Bloque 2:** definir precios BASIC / PRO / ENTERPRISE y publicarlos en la landing
+**→ Bloque 3:** iniciar trámite de Code Signing (Azure Trusted Signing) — tiene tiempos externos
 
 ---
 
@@ -101,7 +101,7 @@ ProcuradorTool/
 | **GitHub** | Repositorio privado + GitHub Releases (distribución instalador) | jberger19186@gmail.com |
 | **Brevo** (ex Sendinblue) | SMTP transaccional — emails que salen con @procuradortool.com | jberger19186@gmail.com |
 | **Chrome Web Store** | Distribución extensión Chrome (v1.3.2) | jberger19186@gmail.com / Publisher: Jonathan Berger |
-| **Anthropic** | API de Claude Haiku para el chat IA del Asistente — ⚠️ pendiente agregar ANTHROPIC_API_KEY al .env del servidor | console.anthropic.com |
+| **Anthropic** | API de Claude Haiku para el chat IA del Asistente — ✅ activa en producción | console.anthropic.com |
 | **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-06-29) | sin cuenta — corre en el servidor |
 | **Azure Trusted Signing** | Code Signing del instalador .exe — ⬜ pendiente contratar | — |
 | **MercadoPago / Stripe** | Pagos y suscripciones recurrentes — ⬜ pendiente integrar | — |
@@ -674,7 +674,7 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 - ✅ FAQs expandidas: 10 → 34 preguntas en 7 categorías con filtro por pills (v2.7.2)
 - ✅ Endpoint `POST /client/ai/chat` activo con Claude Haiku + rate limit + system prompt (v2.7.2)
 - ✅ `docs/manual-de-usuario.md` publicado en el repo
-- ⚠️ **Falta activar:** agregar `ANTHROPIC_API_KEY` al `.env` del servidor (el endpoint responde 503 sin ella)
+- ✅ `ANTHROPIC_API_KEY` configurada en servidor — fallback IA activo en producción (Claude Haiku)
 - ⬜ Sistema de tickets mejorado: notificaciones email al usuario cuando admin responde, plantillas, filtros y prioridades
 
 ---
@@ -919,7 +919,7 @@ Sección Sistema del sidebar:
 - ✅ Sistema de tickets básico (crear, responder, estados)
 - ✅ Notificaciones in-app admin → usuario (v2.5.x)
 - ✅ **Asistente IA híbrido** (v2.7.2): 34 FAQs con filtro por categoría, chat widget async, endpoint `POST /client/ai/chat` con Claude Haiku como fallback
-  - ⚠️ Pendiente: agregar `ANTHROPIC_API_KEY` al `.env` del servidor para activar el fallback (`pm2 restart procurador-api --update-env`)
+  - ✅ `ANTHROPIC_API_KEY` activa en el servidor — fallback IA en producción
   - Costo estimado: ~USD 1.60/mes para 200 usuarios × 20 queries/mes (Claude Haiku)
 - ✅ Documentación de ayuda publicada: `docs/manual-de-usuario.md` + `docs/internal/sistema-estados-flujos.md`
 - ⬜ Mejoras al sistema de tickets:
