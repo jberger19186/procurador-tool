@@ -607,12 +607,12 @@ function setupAsistente() {
     faqSearch?.parentNode?.replaceChild(newSearch, faqSearch);
     newSearch?.addEventListener('input', e => renderFaq(e.target.value));
 
-    // "Abrir chat" → abre el widget de chat flotante
+    // "Abrir chat" → abre el portal web en la sección Asistente IA (con auto-login)
     const newBtn = btnSop?.cloneNode(true);
     btnSop?.parentNode?.replaceChild(newBtn, btnSop);
     newBtn?.addEventListener('click', () => {
         closeModal('modalAsistente');
-        openChatWindow();
+        openPortalSection('ia');
     });
 }
 
@@ -637,19 +637,10 @@ function initChatWidget() {
 
     chatCloseBtn?.addEventListener('click', closeChatWidget);
 
-    // Ticket → abre Mi Cuenta > Soporte
+    // Ticket 🎫 → abre el portal web en la sección nuevo-ticket
     chatTicketBtn?.addEventListener('click', () => {
         closeChatWidget();
-        const modalCuenta = document.getElementById('modalCuenta');
-        if (modalCuenta) {
-            modalCuenta.querySelectorAll('.cuenta-tab').forEach(t => t.classList.remove('active'));
-            const tabSop = modalCuenta.querySelector('.cuenta-tab[data-tab="soporte"]');
-            if (tabSop) tabSop.classList.add('active');
-            document.getElementById('cuenta-plan').style.display    = 'none';
-            document.getElementById('cuenta-soporte').style.display = '';
-        }
-        openModal('modalCuenta');
-        loadAccountData();
+        openPortalSection('nuevo-ticket');
     });
 
     chatSendBtn?.addEventListener('click', sendChatMessage);
@@ -1912,17 +1903,26 @@ function setupCuentaModal() {
             document.getElementById('cuenta-plan').style.display    = tabName === 'plan'    ? '' : 'none';
             document.getElementById('cuenta-soporte').style.display = tabName === 'soporte' ? '' : 'none';
             document.getElementById('cuenta-notif').style.display   = tabName === 'notif'   ? '' : 'none';
-            if (tabName === 'plan')    loadAccountData();
-            if (tabName === 'soporte') loadTicketList();
-            if (tabName === 'notif')   loadNotifications();
+            if (tabName === 'plan')  loadAccountData();
+            if (tabName === 'notif') loadNotifications();
+            // soporte: no carga tickets — redirige al portal web
         });
     });
 
-    document.getElementById('btnNuevoTicket').addEventListener('click', () => showSoporteView('nuevo'));
-    document.getElementById('btnBackTickets').addEventListener('click', () => showSoporteView('lista'));
-    document.getElementById('btnBackTicketsDetalle').addEventListener('click', () => showSoporteView('lista'));
-    document.getElementById('btnEnviarTicket').addEventListener('click', submitNewTicket);
-    document.getElementById('btnEnviarReply').addEventListener('click', submitTicketReply);
+    // Tab Soporte → portal web (tickets y nuevo ticket se gestionan desde el portal)
+    document.getElementById('btnNuevoTicket')?.addEventListener('click', () => {
+        closeModal('modalCuenta');
+        openPortalSection('nuevo-ticket');
+    });
+    document.getElementById('btnIrPortalSoporte')?.addEventListener('click', () => {
+        closeModal('modalCuenta');
+        openPortalSection('soporte');
+    });
+    // Listeners legacy (vistas internas — mantenidas pero no accesibles desde la UI)
+    document.getElementById('btnBackTickets')?.addEventListener('click', () => showSoporteView('lista'));
+    document.getElementById('btnBackTicketsDetalle')?.addEventListener('click', () => showSoporteView('lista'));
+    document.getElementById('btnEnviarTicket')?.addEventListener('click', submitNewTicket);
+    document.getElementById('btnEnviarReply')?.addEventListener('click', submitTicketReply);
 
     document.getElementById('btnMarkAllReadCuenta')?.addEventListener('click', async () => {
         try {
@@ -2180,13 +2180,20 @@ function hideBanner(id) {
 // Abre el portal web con auto-login (token en hash para no exponerlo en logs del servidor)
 // Oculta el banner de suscripción al abrir el portal
 async function openPortal() {
+    await openPortalSection(null);
+    hideBanner('subscription-status-banner');
+}
+
+// Abre el portal web en una sección específica con auto-login.
+// Secciones válidas: 'ia', 'soporte', 'nuevo-ticket', 'perfil', 'plan', 'facturacion', null (home)
+// URL generada: /usuarios/?goto=<section>#sso=<token>
+async function openPortalSection(section) {
     const PORTAL_BASE = 'https://api.procuradortool.com/usuarios/';
     try {
         const token = await window.electronAPI.getAuthToken();
-        const url = token ? `${PORTAL_BASE}#sso=${token}` : PORTAL_BASE;
+        const query = section ? `?goto=${encodeURIComponent(section)}` : '';
+        const url   = token ? `${PORTAL_BASE}${query}#sso=${token}` : PORTAL_BASE;
         await window.electronAPI.openExternalUrl(url);
-        // Ocultar el banner — ya fue atendido
-        hideBanner('subscription-status-banner');
     } catch (_) {
         window.electronAPI.openExternalUrl(PORTAL_BASE);
     }

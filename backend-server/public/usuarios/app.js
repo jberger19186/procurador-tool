@@ -1581,16 +1581,25 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('login-email').focus();
     });
 
-    // Auto-login desde Electron (token en hash #sso=...)
+    // Auto-login desde Electron (token en hash #sso=..., sección en ?goto=...)
     const hash = window.location.hash;
     if (hash && hash.startsWith('#sso=')) {
         const ssoToken = hash.slice(5);
         if (ssoToken) {
             saveToken(ssoToken);
-            // Limpiar el hash para no exponerlo en el historial del navegador
-            history.replaceState(null, '', window.location.pathname + window.location.search);
+            // Leer sección de destino antes de limpiar la URL
+            const gotoSection = new URLSearchParams(window.location.search).get('goto') || null;
+            // Limpiar hash y query para no exponerlos en el historial del navegador
+            history.replaceState(null, '', window.location.pathname);
             state.token = ssoToken;
-            initDashboard();
+            await initDashboard();
+            // Navegar a la sección solicitada después del dashboard
+            if (gotoSection === 'nuevo-ticket') {
+                navigateTo('soporte');
+                setTimeout(() => openNewTicketModal(), 300);
+            } else if (gotoSection) {
+                navigateTo(gotoSection);
+            }
             return;
         }
     }
