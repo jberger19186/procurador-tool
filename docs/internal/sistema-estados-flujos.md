@@ -82,68 +82,79 @@
 
 ## 4. Flujos del asistente IA
 
-### Flujo 1 — Match local (FAQ)
+> **v2.7.3:** El chat y el soporte se redirigen al portal web. El chat widget interno en Electron queda preservado en código pero no accesible desde la UI.
+
+### Flujo 1 — FAQ local (Electron)
 
 ```
-Usuario escribe consulta en el chat widget
+Usuario abre modal Asistente IA (🤖 en sidebar)
         │
         ▼
-getBotResponse(input)
+Modal con 34 FAQs, filtro por pills (7 categorías) + búsqueda de texto
         │
-        ├── Busca match semántico en FAQ_ITEMS (34 items, 7 categorías)
-        │   Palabras clave > 4 letras de cada pregunta
-        │   │
-        │   ├── Match encontrado ─────────────────▶ Responde en 500ms
-        │   │
-        │   └── Sin match → intents por regex
-        │           │
-        │           ├── Match regex ─────────────▶ Responde en 500ms
-        │           │
-        │           └── Sin match → devuelve null
+        ├── Usuario encuentra respuesta ────────────▶ Listo
         │
-        └── null → getAIResponse(message)
+        └── Presiona "💬 ¿Seguís con dudas? Abrir chat"
+                │
+                ▼
+        openPortalSection('ia')
+                │
+                ▼
+        Abre navegador en /usuarios/?goto=ia#sso=TOKEN
+        (auto-login + navega a sección Asistente IA del portal web)
 ```
 
-### Flujo 2 — Fallback IA (Claude Haiku)
+### Flujo 2 — Chat IA en portal web (conversacional)
 
 ```
-getAIResponse(message)
+Usuario en portal web → sección "Asistente IA"
         │
         ▼
-POST /client/ai/chat
+Chat con historial de conversación (últimos 10 mensajes)
         │
-        ├── Autenticado: Sí (JWT)
+        ▼
+POST /usuarios/api/ai-chat  { messages: [...] }
+        │
         ├── Rate limit: < 20/hora por usuario
-        ├── ANTHROPIC_API_KEY: configurada
+        ├── ANTHROPIC_API_KEY: configurada ✅
         │
         ▼
 api.anthropic.com/v1/messages
   model: claude-haiku-4-5
-  max_tokens: 300
-  system: AI_SYSTEM_PROMPT
+  max_tokens: 400
+  system: WEB_SYSTEM_PROMPT (idéntico al de Electron)
         │
         ▼
-Respuesta → usuario (sin delay artificial)
+Respuesta con contexto conversacional completo
 ```
 
-### Flujo 3 — Escalada a ticket
+### Flujo 3 — Chat IA fallback en Electron (interno, no accesible)
 
 ```
-Usuario presiona 🎫 en el chat
+[Preservado en código para uso futuro]
+getBotResponse(input) → null → getAIResponse() → POST /client/ai/chat → Claude Haiku
+El chat widget (#chatWidget) existe en el DOM pero openChatWindow() no se llama desde la UI
+```
+
+### Flujo 4 — Escalada a ticket
+
+```
+Usuario presiona 🎫 en chat widget  ─OR─  "+ Nuevo ticket" en tab Soporte
         │
         ▼
-closeModal (si asistente modal abierto)
-navigateTo('soporte')
+openPortalSection('nuevo-ticket')
         │
         ▼
-Usuario completa formulario de ticket
-POST /tickets
+Abre navegador en /usuarios/?goto=nuevo-ticket#sso=TOKEN
         │
         ▼
-Admin responde en dashboard /dashboard/
+Portal: auto-login → navigateTo('soporte') → openNewTicketModal() (setTimeout 300ms)
         │
         ▼
-Notificación in-app al usuario (notifications)
+Usuario completa formulario → POST /tickets
+        │
+        ▼
+Admin responde en /dashboard/ → notificación in-app al usuario
 ```
 
 ---
