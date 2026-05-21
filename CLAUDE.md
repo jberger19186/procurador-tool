@@ -6,10 +6,17 @@
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.2** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.3** — publicada en GitHub Releases (auto-updater activo)
 > Última sesión: 2026-05-21
 
 ### Últimas funcionalidades implementadas (listas en producción)
+- ✅ **v2.7.3** — Soporte y chat redirigen al portal web con SSO (sesión 2026-05-21):
+  - Botón "Abrir chat" del Asistente IA → abre `/usuarios/?goto=ia#sso=TOKEN` (portal web, sección IA)
+  - Tab Soporte en Mi Cuenta → reemplazado por dos botones: "Ver mis tickets" y "+ Nuevo ticket", ambos abren el portal web
+  - Botón 🎫 del chat widget → `goto=nuevo-ticket` (abre portal + modal de nuevo ticket)
+  - Chat widget interno preservado en código pero no accesible desde la UI (para uso futuro)
+  - Portal web: SSO handler extendido para leer `?goto=` y navegar a la sección tras auto-login
+  - `openPortalSection(section)` — nueva función helper en renderer.js (extiende `openPortal()`)
 - ✅ **v2.7.2** — Asistente IA expandido + endpoints IA en Electron y portal web (sesión 2026-05-21):
   - `FAQ_ITEMS`: 10 → **34 preguntas** en 7 categorías, pills de filtro, `getBotResponse()` retorna `null` sin match → llama API
   - `POST /client/ai/chat`: Electron → Claude Haiku, match local primero (gratis), fallback a API si no matchea
@@ -284,6 +291,20 @@ Autenticación: POST /auth/extension-login
 Verificar flujos disponibles: canUseFlow() en auth.js (consulta la DB)
 FLOW_ALIASES: { 'notif' → 'notificaciones' }  ← importante, las keys internas difieren de la DB
 ```
+
+### Navegación al portal web con auto-login (SSO)
+```javascript
+// renderer.js — openPortalSection(section)
+// Secciones válidas: 'ia', 'soporte', 'nuevo-ticket', 'perfil', 'plan', 'facturacion', null
+// URL: /usuarios/?goto=<section>#sso=<token>
+// El portal lee el hash #sso= → auto-login → navega a ?goto= → abre sección/modal
+
+openPortal()           // home del portal (sin sección)
+openPortalSection('ia')           // sección Asistente IA
+openPortalSection('soporte')      // sección Soporte
+openPortalSection('nuevo-ticket') // sección Soporte + abre modal nuevo ticket
+```
+Usado por: botón "Abrir chat" del Asistente IA · "Ver mis tickets" · "+ Nuevo ticket" · 🎫 del chat widget · banners de suscripción.
 
 ### IPC Electron (Main ↔ Renderer)
 Toda comunicación entre el proceso principal y la UI pasa por `preload.js` (context isolation).

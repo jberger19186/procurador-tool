@@ -1,5 +1,5 @@
 # Manual de usuario — Procurador SCW
-**Versión 2.7** · Para abogados y procuradores  
+**Versión 2.7.3** · Para abogados y procuradores  
 Última actualización: 2026-05-21
 
 ---
@@ -124,15 +124,19 @@ Desde acá también accedés al portal web de usuario para gestionar facturació
 ---
 
 ### Soporte / Tickets
-Creá consultas de soporte directamente desde la app.
+Los tickets de soporte se gestionan desde el **portal web de usuario**, que se abre automáticamente con tu sesión activa.
 
 **Cómo abrir un ticket:**
-1. Hacé click en **Soporte** en el sidebar
-2. Hacé click en **+ Nuevo ticket**
-3. Completá el asunto y la descripción
-4. Hacé click en **Enviar**
+1. Hacé click en **Soporte** en la barra superior de Mi Cuenta
+2. Hacé click en **+ Nuevo ticket** — el portal web se abre directo al formulario de nuevo ticket
+3. Completá categoría, título y descripción en el portal web
+4. Hacé click en **Enviar ticket**
 
-El equipo de soporte responde dentro de las 24 horas hábiles. Las respuestas aparecen en la misma sección.
+**Cómo ver tus tickets:**
+1. En Mi Cuenta, tab Soporte, hacé click en **🌐 Ver mis tickets**
+2. Se abre el portal web en la sección Soporte con el historial completo
+
+El equipo de soporte responde dentro de las 24 horas hábiles. Las respuestas aparecen en el portal web.
 
 ---
 
@@ -142,7 +146,7 @@ Respondé dudas frecuentes sin abrir un ticket.
 **Cómo usar:**
 1. Hacé click en el ícono 🤖 en el sidebar
 2. Buscá tu pregunta usando las categorías (Procuración, Informe, Monitor, etc.) o el buscador de texto
-3. Si no encontrás la respuesta, hacé click en **💬 Abrir chat** para consultar al asistente en tiempo real
+3. Si no encontrás la respuesta, hacé click en **💬 ¿Seguís con dudas? Abrir chat** — el portal web se abre automáticamente en la sección Asistente IA con tu sesión activa
 
 **Categorías disponibles:**
 - **Procuración** — cómo procurar, opciones disponibles
