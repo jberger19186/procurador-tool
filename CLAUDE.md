@@ -10,15 +10,12 @@
 > Última sesión: 2026-05-21
 
 ### Últimas funcionalidades implementadas (listas en producción)
-- ✅ **v2.7.2** — Asistente IA expandido + endpoint IA híbrido (sesión 2026-05-21):
-  - `FAQ_ITEMS`: 10 → **34 preguntas** distribuidas en 7 categorías (procuracion · informe · monitor · extension · cuenta · errores · privacidad)
-  - Modal Asistente: **pills de filtro por categoría** (`#faqPills`, generadas por JS desde `FAQ_CATS`)
-  - `setupAsistente()`: filtra simultáneamente por pill activa + texto de búsqueda
-  - `getBotResponse()`: retorna `null` si no hay match local (señal al chat para llamar a la API)
-  - `POST /client/ai/chat`: endpoint activo en backend — llama a Claude Haiku, rate limit 20 msg/hora/usuario, system prompt dedicado en `AI_SYSTEM_PROMPT`
-  - Chat widget: ahora async — match local primero (500ms), fallback a API si no matchea
-  - IPC channel `ai-chat` wired: `preload.js` → `main.js` → `backendClient.aiChat()`
-  - ⚠️ **ANTHROPIC_API_KEY pendiente** de agregar al `.env` del servidor para activar el fallback IA
+- ✅ **v2.7.2** — Asistente IA expandido + endpoints IA en Electron y portal web (sesión 2026-05-21):
+  - `FAQ_ITEMS`: 10 → **34 preguntas** en 7 categorías, pills de filtro, `getBotResponse()` retorna `null` sin match → llama API
+  - `POST /client/ai/chat`: Electron → Claude Haiku, match local primero (gratis), fallback a API si no matchea
+  - `POST /usuarios/api/ai-chat`: portal web → mismo Claude Haiku, historial conversacional, system prompt sincronizado
+  - IPC `ai-chat` wired: `preload.js` → `main.js` → `backendClient.aiChat()`
+  - `ANTHROPIC_API_KEY` activa en servidor — ambos endpoints funcionales en producción
 - ✅ **v2.7.1** — Sección Métricas y Legal en panel admin + chat widget:
   - Panel admin: cards de distribución y Legal usan `.card-header` + `.card-body` (fix padding)
   - Vista previa Legal: iframe sandboxed (CSS isolation, sin leakage al dashboard)
@@ -311,7 +308,8 @@ POST   /license/execution/end            — Liberar lock
 POST   /auth/extension-login             — Login desde extensión
 GET    /client/notifications             — Notificaciones in-app del usuario (últimas 50)
 POST   /client/notifications/:id/read    — Marcar notificación como leída (id='all' = todas)
-POST   /client/ai/chat                   — Chat con asistente IA (fallback Claude Haiku, rate limit 20/hora/usuario)
+POST   /client/ai/chat                   — Chat con asistente IA desde Electron (fallback Claude Haiku, rate limit 20/hora/usuario)
+POST   /usuarios/api/ai-chat             — Chat con asistente IA desde portal web (historial conversacional, mismo rate limit)
 ```
 
 ---
@@ -918,8 +916,10 @@ Sección Sistema del sidebar:
 
 - ✅ Sistema de tickets básico (crear, responder, estados)
 - ✅ Notificaciones in-app admin → usuario (v2.5.x)
-- ✅ **Asistente IA híbrido** (v2.7.2): 34 FAQs con filtro por categoría, chat widget async, endpoint `POST /client/ai/chat` con Claude Haiku como fallback
-  - ✅ `ANTHROPIC_API_KEY` activa en el servidor — fallback IA en producción
+- ✅ **Asistente IA — App Electron** (v2.7.2): 34 FAQs con filtro por categoría + chat widget async con fallback `POST /client/ai/chat` → Claude Haiku
+- ✅ **Asistente IA — Portal web** (`/usuarios/`): chat con historial de conversación → `POST /usuarios/api/ai-chat` → Claude Haiku (mismo system prompt, rate limit 20/hora, historial últimos 10 mensajes)
+  - ✅ `ANTHROPIC_API_KEY` activa en el servidor — ambos endpoints en producción
+  - Diferencia: Electron usa FAQ local como primera línea (gratis, sin latencia); portal web va directo a la API (chat conversacional con historial)
   - Costo estimado: ~USD 1.60/mes para 200 usuarios × 20 queries/mes (Claude Haiku)
 - ✅ Documentación de ayuda publicada: `docs/manual-de-usuario.md` + `docs/internal/sistema-estados-flujos.md`
 - ⬜ Mejoras al sistema de tickets:
