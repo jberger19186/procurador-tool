@@ -157,6 +157,69 @@ Usuario completa formulario → POST /tickets
 Admin responde en /dashboard/ → notificación in-app al usuario
 ```
 
+### Flujo 5 — Notificación email cuando admin responde un ticket
+
+> Implementado en Fase 4 Ítem 1 (sesión 2026-05-22). Feature flag `EMAIL_TICKET_REPLY_ENABLED=true`.
+
+```
+Admin escribe respuesta en /dashboard/ → ticket #N
+        │
+        ▼
+POST /admin/tickets/:id/comment { message }
+        │
+        ├── INSERT en ticket_comments (author_role='admin')
+        ├── UPDATE support_tickets SET status='in_progress' (si estaba 'open')
+        ├── Log: "💬 Admin X respondió ticket #N"
+        │
+        ▼
+[ASYNC fire-and-forget — no bloquea respuesta HTTP]
+sendTicketReplyEmail(email, nombre, ticketId, title, preview)
+        │
+        ├── Si EMAIL_TICKET_REPLY_ENABLED != 'true' → log [skip], return
+        │
+        ├── Construye HTML con:
+        │     - Wrapper <!DOCTYPE><meta charset="utf-8"> (auto en sendEmail)
+        │     - Preview de 200 chars (HTML-escaped, con ellipsis)
+        │     - Botón → https://api.procuradortool.com/usuarios/?goto=soporte
+        │
+        ▼
+nodemailer.sendMail (subject con textEncoding: 'base64')
+        │
+        ▼
+SMTP → email entregado al usuario
+        │
+        ▼
+Usuario hace click en "Ver respuesta completa"
+        │
+        ▼
+Browser navega a /usuarios/?goto=soporte
+        │
+        ├── app.js DOMContentLoaded:
+        │     - Lee ?goto=soporte → sessionStorage.pending_goto = 'soporte'
+        │     - history.replaceState para limpiar URL
+        │     - Si tiene token → initDashboard()
+        │     - Si NO tiene token → muestra login-page
+        │
+        ▼
+Usuario hace login normal (email + password)
+        │
+        ▼
+doLogin success → initDashboard()
+        │
+        ├── loadAccount() → carga datos
+        ├── refreshNotifBadge()
+        ├── Lee sessionStorage.pending_goto = 'soporte'
+        ├── sessionStorage.removeItem('pending_goto') (consume)
+        │
+        ▼
+navigateTo('soporte') → renderSoporte() → ve el ticket #N actualizado
+```
+
+**Diseño anti-forward del email:**
+- No usa SSO token (decisión 2026-05-22): si el email se reenvía/intercepta, nadie puede acceder a la cuenta
+- El usuario siempre debe loguearse con su contraseña
+- El `?goto=` no es sensible — solo indica destino, no autentica
+
 ---
 
 ## 5. Errores frecuentes y resolución

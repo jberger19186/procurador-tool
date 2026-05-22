@@ -138,6 +138,21 @@ Los tickets de soporte se gestionan desde el **portal web de usuario**, que se a
 
 El equipo de soporte responde dentro de las 24 horas hábiles. Las respuestas aparecen en el portal web.
 
+### Notificaciones por email
+
+Cada vez que el equipo de soporte responde tu ticket, vas a recibir un **email automático** en la casilla con la que te registraste. El email contiene:
+- El número del ticket (`#16`, `#17`, etc.)
+- El título del ticket
+- Un preview de la respuesta (primeros 200 caracteres)
+- Un botón **"Ver respuesta completa"** que te lleva al portal web
+
+Al hacer click en ese botón:
+1. Se abre el portal web (`api.procuradortool.com/usuarios/`)
+2. Ingresás con tu email y contraseña
+3. Sos redirigido automáticamente a la sección **Soporte** donde podés ver el ticket completo
+
+> **Identificación de tickets:** cada ticket tiene un número único (ejemplo: `#16`) que se muestra tanto en el email como en la lista del portal. Ese número es la forma de identificar tu ticket en comunicaciones con soporte.
+
 ---
 
 ### Asistente IA 🤖

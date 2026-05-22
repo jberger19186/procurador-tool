@@ -954,13 +954,18 @@ Sección Sistema del sidebar:
   - Funciones: `renderAyuda()`, `renderAyudaFaq()`, `getManualHTML()`, `AYUDA_FAQ_ITEMS`, `AYUDA_FAQ_CATS`
   - `goto=ayuda` soportado vía el handler SSO genérico existente
 - ✅ Documentación de ayuda publicada: `docs/manual-de-usuario.md` + `docs/internal/sistema-estados-flujos.md`
-- ✅ **Email de respuesta admin→usuario** (Fase 4 Ítem 1, sesión 2026-05-22):
+- ✅ **Email de respuesta admin→usuario** (Fase 4 Ítem 1 — sesión 2026-05-22, tag `fase4-item1`):
   - Cuando un admin agrega comentario en `POST /admin/tickets/:id/comment` → email automático al usuario
-  - Asunto: `Procurador SCW — Respuesta a tu ticket #X`
-  - Contenido: preview de 200 chars + botón "Ver respuesta completa" con SSO (24h validez)
-  - Feature flag `EMAIL_TICKET_REPLY_ENABLED=true` en .env del server
-  - Función: `sendTicketReplyEmail()` en `utils/mailer.js`
-  - El envío no bloquea la respuesta HTTP (async fire-and-forget con catch)
+  - **Asunto**: `Procurador SCW — Respuesta a tu ticket #X`
+  - **Contenido**: preview de 200 chars + botón "Ver respuesta completa" hacia el portal
+  - **Login**: el botón lleva al login normal del portal (`?goto=soporte`) — sin SSO por seguridad anti-forward
+  - **Persistencia post-login**: `sessionStorage.pending_goto` sobrevive al ciclo de login y `initDashboard()` lo consume para navegar a la sección correcta
+  - **Feature flag**: `EMAIL_TICKET_REPLY_ENABLED=true` en `.env` del server
+  - **Función**: `sendTicketReplyEmail()` en `utils/mailer.js`
+  - **No bloqueante**: envío async fire-and-forget con catch (no rompe el flujo HTTP)
+  - **UTF-8 garantizado**: wrapper automático de `<!DOCTYPE><meta charset>` en `sendEmail()` + `textEncoding: 'base64'` en nodemailer — beneficia todos los emails del sistema
+  - **PORTAL_URL** corregido a `https://api.procuradortool.com/usuarios/` (antes apuntaba mal a la landing)
+  - **UX**: badge `#ID` ahora visible en la lista y detalle de tickets del portal (consistencia con el email)
 - ⬜ Mejoras al sistema de tickets (Fase 4 — pendientes):
   - Prioridad asignada por IA (Ítem 2)
   - Proyectar comentario con IA (Ítem 3)
