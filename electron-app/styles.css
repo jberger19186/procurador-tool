@@ -819,7 +819,8 @@ body {
 }
 .modal-header h3 {
   font-size: 14px; font-weight: 600;
-  color: var(--text-1); flex: 1;
+  color: var(--text-1); flex: none;
+  white-space: nowrap;
 }
 .modal-close {
   width: 26px; height: 26px;
