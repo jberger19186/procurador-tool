@@ -1,11 +1,12 @@
-﻿--
+could not change directory to "/root": Permission denied
+--
 -- PostgreSQL database dump
 --
 
-\restrict WUp7My2XYfGOikshQlXF6rd4T0iCn5eZeaG5g7IHMiKLpXFmwLtRwJFjeSylskF
+\restrict 9BUpypMXcHl0gMJpXiCSQTnDEFJVvYcnzYT0G8MBbbdE3Xd1osZaAO6dQcrQARd
 
--- Dumped from database version 14.22 (Ubuntu 14.22-0ubuntu0.22.04.1)
--- Dumped by pg_dump version 14.22 (Ubuntu 14.22-0ubuntu0.22.04.1)
+-- Dumped from database version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
+-- Dumped by pg_dump version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -94,6 +95,98 @@ ALTER SEQUENCE public.active_executions_id_seq OWNED BY public.active_executions
 
 
 --
+-- Name: admin_events; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.admin_events (
+    id integer NOT NULL,
+    admin_id integer,
+    user_id integer,
+    action character varying(50) NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb,
+    created_at timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.admin_events OWNER TO postgres;
+
+--
+-- Name: admin_events_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.admin_events_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.admin_events_id_seq OWNER TO postgres;
+
+--
+-- Name: admin_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.admin_events_id_seq OWNED BY public.admin_events.id;
+
+
+--
+-- Name: analytics_events; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.analytics_events (
+    id integer NOT NULL,
+    event character varying(100) NOT NULL,
+    label character varying(200),
+    session_id character varying(64),
+    user_id integer,
+    ip_hash character varying(64),
+    referrer text,
+    user_agent text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.analytics_events OWNER TO postgres;
+
+--
+-- Name: analytics_events_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.analytics_events_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.analytics_events_id_seq OWNER TO postgres;
+
+--
+-- Name: analytics_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.analytics_events_id_seq OWNED BY public.analytics_events.id;
+
+
+--
+-- Name: app_settings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.app_settings (
+    key character varying(100) NOT NULL,
+    value text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.app_settings OWNER TO postgres;
+
+--
 -- Name: encrypted_scripts; Type: TABLE; Schema: public; Owner: procurador_user
 --
 
@@ -153,6 +246,50 @@ ALTER TABLE public.encrypted_scripts_id_seq OWNER TO procurador_user;
 --
 
 ALTER SEQUENCE public.encrypted_scripts_id_seq OWNED BY public.encrypted_scripts.id;
+
+
+--
+-- Name: legal_documents; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.legal_documents (
+    id integer NOT NULL,
+    type character varying(10) NOT NULL,
+    version character varying(20) NOT NULL,
+    title character varying(255) NOT NULL,
+    html_content text NOT NULL,
+    summary_of_changes text,
+    is_current boolean DEFAULT false,
+    requires_acceptance boolean DEFAULT true,
+    effective_date date,
+    created_at timestamp with time zone DEFAULT now(),
+    created_by integer,
+    CONSTRAINT legal_documents_type_check CHECK (((type)::text = ANY ((ARRAY['tyc'::character varying, 'pyp'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.legal_documents OWNER TO postgres;
+
+--
+-- Name: legal_documents_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.legal_documents_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.legal_documents_id_seq OWNER TO postgres;
+
+--
+-- Name: legal_documents_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.legal_documents_id_seq OWNED BY public.legal_documents.id;
 
 
 --
@@ -283,6 +420,44 @@ ALTER SEQUENCE public.monitor_partes_id_seq OWNED BY public.monitor_partes.id;
 
 
 --
+-- Name: notifications; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.notifications (
+    id integer NOT NULL,
+    user_id integer,
+    type character varying(50) NOT NULL,
+    message text NOT NULL,
+    read boolean DEFAULT false,
+    created_at timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.notifications OWNER TO postgres;
+
+--
+-- Name: notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.notifications_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.notifications_id_seq OWNER TO postgres;
+
+--
+-- Name: notifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.notifications_id_seq OWNED BY public.notifications.id;
+
+
+--
 -- Name: plans; Type: TABLE; Schema: public; Owner: procurador_user
 --
 
@@ -311,6 +486,7 @@ CREATE TABLE public.plans (
     promo_max_users integer,
     promo_used_count integer DEFAULT 0,
     promo_alert_days integer DEFAULT 15,
+    plan_expiry_date timestamp without time zone,
     CONSTRAINT plans_plan_type_check CHECK (((plan_type)::text = ANY ((ARRAY['electron'::character varying, 'extension'::character varying, 'combo'::character varying])::text[]))),
     CONSTRAINT plans_promo_type_check CHECK (((promo_type)::text = ANY ((ARRAY['date'::character varying, 'quota'::character varying])::text[])))
 );
@@ -365,25 +541,25 @@ CREATE TABLE public.subscriptions (
     monitor_partes_bonus integer DEFAULT 0,
     batch_usage integer DEFAULT 0,
     batch_bonus integer DEFAULT 0,
-    suspension_cause character varying(20) DEFAULT NULL,
-    suspended_at timestamp without time zone DEFAULT NULL,
+    suspension_cause character varying(20) DEFAULT NULL::character varying,
+    suspended_at timestamp without time zone,
     suspended_by integer,
     billing_paused boolean DEFAULT false,
-    suspension_reason text DEFAULT NULL,
-    plan_expiry_date timestamp without time zone DEFAULT NULL,
+    suspension_reason text,
+    plan_expiry_date timestamp without time zone,
     plan_changes_this_cycle integer DEFAULT 0,
-    next_billing_date timestamp without time zone DEFAULT NULL,
-    payment_provider character varying(30) DEFAULT NULL,
-    cancel_at timestamp without time zone DEFAULT NULL,
-    scheduled_plan jsonb DEFAULT NULL,
-    plan_change_history jsonb DEFAULT '[]',
-    reactivation_request jsonb DEFAULT NULL,
-    payment_grace_ends_at timestamp without time zone DEFAULT NULL,
+    next_billing_date timestamp without time zone,
+    payment_provider character varying(30) DEFAULT NULL::character varying,
+    cancel_at timestamp without time zone,
+    scheduled_plan jsonb,
+    plan_change_history jsonb DEFAULT '[]'::jsonb,
+    reactivation_request jsonb,
+    payment_grace_ends_at timestamp without time zone,
     CONSTRAINT check_plan_valid CHECK (((plan)::text = ANY ((ARRAY['BASIC'::character varying, 'PRO'::character varying, 'ENTERPRISE'::character varying, 'EXTENSION_PROMO'::character varying, 'COMBO_PROMO'::character varying])::text[]))),
-    CONSTRAINT check_status_valid CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'cancelled'::character varying, 'suspended'::character varying, 'suspended_admin'::character varying, 'suspended_plan_expired'::character varying])::text[]))),
-    CONSTRAINT check_suspension_cause_valid CHECK (((suspension_cause)::text = ANY ((ARRAY['payment'::character varying, 'admin'::character varying, 'plan_expired'::character varying])::text[]))),
+    CONSTRAINT check_status_valid CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying, 'suspended_admin'::character varying, 'suspended_plan_expired'::character varying, 'cancelled'::character varying])::text[]))),
     CONSTRAINT check_usage_count_positive CHECK ((usage_count >= 0)),
-    CONSTRAINT check_usage_limit_positive CHECK ((usage_limit > 0))
+    CONSTRAINT check_usage_limit_positive CHECK ((usage_limit > 0)),
+    CONSTRAINT subscriptions_suspension_cause_check CHECK (((suspension_cause)::text = ANY ((ARRAY['payment'::character varying, 'admin'::character varying, 'plan_expired'::character varying])::text[])))
 );
 
 
@@ -450,8 +626,13 @@ CREATE TABLE public.support_tickets (
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     updated_at timestamp without time zone DEFAULT now() NOT NULL,
     resolved_at timestamp without time zone,
+    priority_source character varying(20),
+    priority_notes text,
+    priority_set_at timestamp without time zone,
+    priority_set_by integer,
     CONSTRAINT support_tickets_category_check CHECK (((category)::text = ANY ((ARRAY['technical'::character varying, 'billing'::character varying, 'commercial'::character varying])::text[]))),
     CONSTRAINT support_tickets_priority_check CHECK (((priority)::text = ANY ((ARRAY['low'::character varying, 'medium'::character varying, 'high'::character varying, 'urgent'::character varying])::text[]))),
+    CONSTRAINT support_tickets_priority_source_check CHECK (((priority_source IS NULL) OR ((priority_source)::text = ANY ((ARRAY['manual'::character varying, 'ai'::character varying, 'ai_overridden'::character varying])::text[])))),
     CONSTRAINT support_tickets_status_check CHECK (((status)::text = ANY ((ARRAY['open'::character varying, 'in_progress'::character varying, 'resolved'::character varying, 'closed'::character varying])::text[])))
 );
 
@@ -545,7 +726,7 @@ CREATE TABLE public.usage_adjustments (
     reason text,
     ticket_id integer,
     created_at timestamp without time zone DEFAULT now(),
-    CONSTRAINT usage_adjustments_subsystem_check CHECK (((subsystem)::text = ANY (ARRAY[('proc'::character varying)::text, ('batch'::character varying)::text, ('informe'::character varying)::text, ('monitor_novedades'::character varying)::text, ('monitor_partes'::character varying)::text])))
+    CONSTRAINT usage_adjustments_subsystem_check CHECK (((subsystem)::text = ANY ((ARRAY['global'::character varying, 'proc'::character varying, 'batch'::character varying, 'informe'::character varying, 'monitor_novedades'::character varying, 'monitor_partes'::character varying])::text[])))
 );
 
 
@@ -583,7 +764,9 @@ CREATE TABLE public.usage_logs (
     script_name character varying(100),
     execution_date timestamp without time zone DEFAULT now(),
     success boolean,
-    error_message text
+    error_message text,
+    subsystem character varying(50),
+    expedientes_count integer
 );
 
 
@@ -619,6 +802,127 @@ ALTER SEQUENCE public.usage_logs_id_seq OWNED BY public.usage_logs.id;
 
 
 --
+-- Name: user_events; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_events (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    event_type character varying(50) NOT NULL,
+    performed_by integer,
+    old_value jsonb,
+    new_value jsonb,
+    reason text,
+    created_at timestamp with time zone DEFAULT now(),
+    payload jsonb DEFAULT '{}'::jsonb
+);
+
+
+ALTER TABLE public.user_events OWNER TO postgres;
+
+--
+-- Name: user_events_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.user_events_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.user_events_id_seq OWNER TO postgres;
+
+--
+-- Name: user_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.user_events_id_seq OWNED BY public.user_events.id;
+
+
+--
+-- Name: user_legal_acceptances; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_legal_acceptances (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    document_id integer NOT NULL,
+    accepted_at timestamp with time zone DEFAULT now(),
+    ip_hash character varying(16)
+);
+
+
+ALTER TABLE public.user_legal_acceptances OWNER TO postgres;
+
+--
+-- Name: user_legal_acceptances_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.user_legal_acceptances_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.user_legal_acceptances_id_seq OWNER TO postgres;
+
+--
+-- Name: user_legal_acceptances_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.user_legal_acceptances_id_seq OWNED BY public.user_legal_acceptances.id;
+
+
+--
+-- Name: user_notifications; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_notifications (
+    id integer NOT NULL,
+    user_id integer,
+    title character varying(200) NOT NULL,
+    message text NOT NULL,
+    type character varying(20) DEFAULT 'info'::character varying NOT NULL,
+    action_url text,
+    read_at timestamp with time zone,
+    created_by integer,
+    created_at timestamp with time zone DEFAULT now(),
+    expires_at timestamp with time zone,
+    CONSTRAINT user_notifications_type_check CHECK (((type)::text = ANY ((ARRAY['info'::character varying, 'warning'::character varying, 'error'::character varying, 'success'::character varying, 'legal_update'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.user_notifications OWNER TO postgres;
+
+--
+-- Name: user_notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.user_notifications_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.user_notifications_id_seq OWNER TO postgres;
+
+--
+-- Name: user_notifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.user_notifications_id_seq OWNED BY public.user_notifications.id;
+
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: procurador_user
 --
 
@@ -635,16 +939,17 @@ CREATE TABLE public.users (
     nombre character varying(100),
     apellido character varying(100),
     domicilio jsonb,
-    registration_status character varying(20) DEFAULT 'active'::character varying,
+    registration_status character varying(30) DEFAULT 'active'::character varying,
     toc_accepted_at timestamp without time zone,
     email_verified boolean DEFAULT false,
     email_verify_token character varying(64),
     email_verify_expires timestamp without time zone,
     password_reset_token character varying(128),
     password_reset_expires timestamp without time zone,
+    legal_pending_since timestamp with time zone,
+    legal_suspended boolean DEFAULT false,
     CONSTRAINT check_role_valid CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'admin'::character varying])::text[]))),
-    CONSTRAINT users_registration_status_check CHECK (((registration_status)::text = ANY ((ARRAY['pending_email'::character varying, 'pending_activation'::character varying, 'active'::character varying, 'rejected'::character varying, 'suspended'::character varying, 'suspended_admin'::character varying, 'suspended_plan_expired'::character varying, 'cancelled'::character varying])::text[]))),
-    CONSTRAINT users_cuit_unique UNIQUE (cuit)
+    CONSTRAINT users_registration_status_check CHECK (((registration_status)::text = ANY (ARRAY[('pending_email'::character varying)::text, ('pending_activation'::character varying)::text, ('active'::character varying)::text, ('rejected'::character varying)::text, ('suspended'::character varying)::text, ('suspended_admin'::character varying)::text, ('suspended_plan_expired'::character varying)::text, ('cancelled'::character varying)::text])))
 );
 
 
@@ -694,61 +999,6 @@ ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
 
 
 --
--- Name: user_events; Type: TABLE; Schema: public; Owner: procurador_user
---
-
-CREATE TABLE public.user_events (
-    id SERIAL PRIMARY KEY,
-    user_id integer REFERENCES public.users(id) ON DELETE SET NULL,
-    event_type character varying(50) NOT NULL,
-    payload jsonb DEFAULT '{}',
-    created_at timestamp without time zone DEFAULT now()
-);
-
-CREATE INDEX idx_user_events_user_id ON public.user_events(user_id);
-CREATE INDEX idx_user_events_event_type ON public.user_events(event_type);
-
-ALTER TABLE public.user_events OWNER TO procurador_user;
-
-
---
--- Name: admin_events; Type: TABLE; Schema: public; Owner: procurador_user
---
-
-CREATE TABLE public.admin_events (
-    id SERIAL PRIMARY KEY,
-    admin_id integer REFERENCES public.users(id) ON DELETE SET NULL,
-    user_id integer REFERENCES public.users(id) ON DELETE SET NULL,
-    action character varying(50) NOT NULL,
-    payload jsonb DEFAULT '{}',
-    created_at timestamp without time zone DEFAULT now()
-);
-
-CREATE INDEX idx_admin_events_user_id ON public.admin_events(user_id);
-CREATE INDEX idx_admin_events_admin_id ON public.admin_events(admin_id);
-
-ALTER TABLE public.admin_events OWNER TO procurador_user;
-
-
---
--- Name: notifications; Type: TABLE; Schema: public; Owner: procurador_user
---
-
-CREATE TABLE public.notifications (
-    id SERIAL PRIMARY KEY,
-    user_id integer REFERENCES public.users(id) ON DELETE CASCADE,
-    type character varying(50) NOT NULL,
-    message text NOT NULL,
-    read boolean DEFAULT false,
-    created_at timestamp without time zone DEFAULT now()
-);
-
-CREATE INDEX idx_notifications_user_id ON public.notifications(user_id, read);
-
-ALTER TABLE public.notifications OWNER TO procurador_user;
-
-
---
 -- Name: active_executions id; Type: DEFAULT; Schema: public; Owner: procurador_user
 --
 
@@ -756,10 +1006,31 @@ ALTER TABLE ONLY public.active_executions ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: admin_events id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.admin_events ALTER COLUMN id SET DEFAULT nextval('public.admin_events_id_seq'::regclass);
+
+
+--
+-- Name: analytics_events id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.analytics_events ALTER COLUMN id SET DEFAULT nextval('public.analytics_events_id_seq'::regclass);
+
+
+--
 -- Name: encrypted_scripts id; Type: DEFAULT; Schema: public; Owner: procurador_user
 --
 
 ALTER TABLE ONLY public.encrypted_scripts ALTER COLUMN id SET DEFAULT nextval('public.encrypted_scripts_id_seq'::regclass);
+
+
+--
+-- Name: legal_documents id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.legal_documents ALTER COLUMN id SET DEFAULT nextval('public.legal_documents_id_seq'::regclass);
 
 
 --
@@ -781,6 +1052,13 @@ ALTER TABLE ONLY public.monitor_expedientes ALTER COLUMN id SET DEFAULT nextval(
 --
 
 ALTER TABLE ONLY public.monitor_partes ALTER COLUMN id SET DEFAULT nextval('public.monitor_partes_id_seq'::regclass);
+
+
+--
+-- Name: notifications id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications ALTER COLUMN id SET DEFAULT nextval('public.notifications_id_seq'::regclass);
 
 
 --
@@ -826,6 +1104,27 @@ ALTER TABLE ONLY public.usage_logs ALTER COLUMN id SET DEFAULT nextval('public.u
 
 
 --
+-- Name: user_events id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_events ALTER COLUMN id SET DEFAULT nextval('public.user_events_id_seq'::regclass);
+
+
+--
+-- Name: user_legal_acceptances id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_legal_acceptances ALTER COLUMN id SET DEFAULT nextval('public.user_legal_acceptances_id_seq'::regclass);
+
+
+--
+-- Name: user_notifications id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_notifications ALTER COLUMN id SET DEFAULT nextval('public.user_notifications_id_seq'::regclass);
+
+
+--
 -- Name: users id; Type: DEFAULT; Schema: public; Owner: procurador_user
 --
 
@@ -838,6 +1137,30 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 
 ALTER TABLE ONLY public.active_executions
     ADD CONSTRAINT active_executions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: admin_events admin_events_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.admin_events
+    ADD CONSTRAINT admin_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: analytics_events analytics_events_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.analytics_events
+    ADD CONSTRAINT analytics_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: app_settings app_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.app_settings
+    ADD CONSTRAINT app_settings_pkey PRIMARY KEY (key);
 
 
 --
@@ -862,6 +1185,14 @@ ALTER TABLE ONLY public.encrypted_scripts
 
 ALTER TABLE ONLY public.encrypted_scripts
     ADD CONSTRAINT encrypted_scripts_script_name_key UNIQUE (script_name);
+
+
+--
+-- Name: legal_documents legal_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.legal_documents
+    ADD CONSTRAINT legal_documents_pkey PRIMARY KEY (id);
 
 
 --
@@ -902,6 +1233,14 @@ ALTER TABLE ONLY public.monitor_partes
 
 ALTER TABLE ONLY public.monitor_partes
     ADD CONSTRAINT monitor_partes_user_id_nombre_parte_jurisdiccion_codigo_key UNIQUE (user_id, nombre_parte, jurisdiccion_codigo);
+
+
+--
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
 
 
 --
@@ -977,6 +1316,38 @@ ALTER TABLE ONLY public.usage_logs
 
 
 --
+-- Name: user_events user_events_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_events
+    ADD CONSTRAINT user_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_legal_acceptances user_legal_acceptances_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_legal_acceptances
+    ADD CONSTRAINT user_legal_acceptances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_legal_acceptances user_legal_acceptances_user_id_document_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_legal_acceptances
+    ADD CONSTRAINT user_legal_acceptances_user_id_document_id_key UNIQUE (user_id, document_id);
+
+
+--
+-- Name: user_notifications user_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_notifications
+    ADD CONSTRAINT user_notifications_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: procurador_user
 --
 
@@ -990,6 +1361,27 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: analytics_events_created_desc_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX analytics_events_created_desc_idx ON public.analytics_events USING btree (created_at DESC);
+
+
+--
+-- Name: analytics_events_event_created_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX analytics_events_event_created_idx ON public.analytics_events USING btree (event, created_at);
+
+
+--
+-- Name: analytics_events_session_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX analytics_events_session_idx ON public.analytics_events USING btree (session_id);
 
 
 --
@@ -1021,10 +1413,52 @@ CREATE INDEX idx_adj_user ON public.usage_adjustments USING btree (user_id);
 
 
 --
+-- Name: idx_admin_events_admin_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_admin_events_admin_id ON public.admin_events USING btree (admin_id);
+
+
+--
+-- Name: idx_admin_events_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_admin_events_user_id ON public.admin_events USING btree (user_id);
+
+
+--
 -- Name: idx_comments_ticket; Type: INDEX; Schema: public; Owner: procurador_user
 --
 
 CREATE INDEX idx_comments_ticket ON public.ticket_comments USING btree (ticket_id);
+
+
+--
+-- Name: idx_legal_accept_doc; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_legal_accept_doc ON public.user_legal_acceptances USING btree (document_id);
+
+
+--
+-- Name: idx_legal_accept_user; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_legal_accept_user ON public.user_legal_acceptances USING btree (user_id);
+
+
+--
+-- Name: idx_legal_docs_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_legal_docs_created ON public.legal_documents USING btree (created_at DESC);
+
+
+--
+-- Name: idx_legal_docs_type_current; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_legal_docs_type_current ON public.legal_documents USING btree (type, is_current);
 
 
 --
@@ -1067,6 +1501,13 @@ CREATE INDEX idx_monitor_partes_activo ON public.monitor_partes USING btree (use
 --
 
 CREATE INDEX idx_monitor_partes_user ON public.monitor_partes USING btree (user_id);
+
+
+--
+-- Name: idx_notifications_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_user_id ON public.notifications USING btree (user_id, read);
 
 
 --
@@ -1133,6 +1574,13 @@ CREATE INDEX idx_tickets_priority ON public.support_tickets USING btree (priorit
 
 
 --
+-- Name: idx_tickets_priority_source; Type: INDEX; Schema: public; Owner: procurador_user
+--
+
+CREATE INDEX idx_tickets_priority_source ON public.support_tickets USING btree (priority_source) WHERE ((priority_source IS NULL) OR ((priority_source)::text = 'ai'::text));
+
+
+--
 -- Name: idx_tickets_status; Type: INDEX; Schema: public; Owner: procurador_user
 --
 
@@ -1182,10 +1630,59 @@ CREATE INDEX idx_user_email ON public.users USING btree (email);
 
 
 --
+-- Name: idx_user_events_event_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_user_events_event_type ON public.user_events USING btree (event_type);
+
+
+--
+-- Name: idx_user_events_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_user_events_user_id ON public.user_events USING btree (user_id);
+
+
+--
 -- Name: idx_user_machine_id; Type: INDEX; Schema: public; Owner: procurador_user
 --
 
 CREATE INDEX idx_user_machine_id ON public.users USING btree (machine_id);
+
+
+--
+-- Name: user_events_created_at_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_events_created_at_idx ON public.user_events USING btree (created_at DESC);
+
+
+--
+-- Name: user_events_user_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_events_user_id_idx ON public.user_events USING btree (user_id);
+
+
+--
+-- Name: user_notifications_unread_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_notifications_unread_idx ON public.user_notifications USING btree (user_id, read_at) WHERE (read_at IS NULL);
+
+
+--
+-- Name: user_notifications_user_id_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX user_notifications_user_id_idx ON public.user_notifications USING btree (user_id);
+
+
+--
+-- Name: users_cuit_unique; Type: INDEX; Schema: public; Owner: procurador_user
+--
+
+CREATE UNIQUE INDEX users_cuit_unique ON public.users USING btree (cuit) WHERE ((cuit IS NOT NULL) AND ((cuit)::text <> ''::text) AND ((cuit)::text !~~ 'TEST-%'::text));
 
 
 --
@@ -1239,6 +1736,38 @@ ALTER TABLE ONLY public.active_executions
 
 
 --
+-- Name: admin_events admin_events_admin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.admin_events
+    ADD CONSTRAINT admin_events_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: admin_events admin_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.admin_events
+    ADD CONSTRAINT admin_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: analytics_events analytics_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.analytics_events
+    ADD CONSTRAINT analytics_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: legal_documents legal_documents_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.legal_documents
+    ADD CONSTRAINT legal_documents_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
 -- Name: monitor_consultas_log monitor_consultas_log_parte_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: procurador_user
 --
 
@@ -1271,11 +1800,35 @@ ALTER TABLE ONLY public.monitor_partes
 
 
 --
+-- Name: notifications notifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: subscriptions subscriptions_suspended_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: procurador_user
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_suspended_by_fkey FOREIGN KEY (suspended_by) REFERENCES public.users(id);
+
+
+--
 -- Name: subscriptions subscriptions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: procurador_user
 --
 
 ALTER TABLE ONLY public.subscriptions
     ADD CONSTRAINT subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: support_tickets support_tickets_priority_set_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: procurador_user
+--
+
+ALTER TABLE ONLY public.support_tickets
+    ADD CONSTRAINT support_tickets_priority_set_by_fkey FOREIGN KEY (priority_set_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -1327,8 +1880,161 @@ ALTER TABLE ONLY public.usage_logs
 
 
 --
+-- Name: user_events user_events_performed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_events
+    ADD CONSTRAINT user_events_performed_by_fkey FOREIGN KEY (performed_by) REFERENCES public.users(id);
+
+
+--
+-- Name: user_events user_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_events
+    ADD CONSTRAINT user_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_legal_acceptances user_legal_acceptances_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_legal_acceptances
+    ADD CONSTRAINT user_legal_acceptances_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.legal_documents(id);
+
+
+--
+-- Name: user_legal_acceptances user_legal_acceptances_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_legal_acceptances
+    ADD CONSTRAINT user_legal_acceptances_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_notifications user_notifications_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_notifications
+    ADD CONSTRAINT user_notifications_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: user_notifications user_notifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_notifications
+    ADD CONSTRAINT user_notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: TABLE admin_events; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.admin_events TO procurador_user;
+
+
+--
+-- Name: SEQUENCE admin_events_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.admin_events_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE analytics_events; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.analytics_events TO procurador_user;
+
+
+--
+-- Name: SEQUENCE analytics_events_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.analytics_events_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE app_settings; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,UPDATE ON TABLE public.app_settings TO procurador_user;
+
+
+--
+-- Name: TABLE legal_documents; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.legal_documents TO procurador_user;
+
+
+--
+-- Name: SEQUENCE legal_documents_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.legal_documents_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE notifications; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.notifications TO procurador_user;
+
+
+--
+-- Name: SEQUENCE notifications_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.notifications_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE user_events; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.user_events TO procurador_user;
+
+
+--
+-- Name: SEQUENCE user_events_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.user_events_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE user_legal_acceptances; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_legal_acceptances TO procurador_user;
+
+
+--
+-- Name: SEQUENCE user_legal_acceptances_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.user_legal_acceptances_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE user_notifications; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_notifications TO procurador_user;
+
+
+--
+-- Name: SEQUENCE user_notifications_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.user_notifications_id_seq TO procurador_user;
+
+
+--
 -- PostgreSQL database dump complete
 --
 
-\unrestrict WUp7My2XYfGOikshQlXF6rd4T0iCn5eZeaG5g7IHMiKLpXFmwLtRwJFjeSylskF
+\unrestrict 9BUpypMXcHl0gMJpXiCSQTnDEFJVvYcnzYT0G8MBbbdE3Xd1osZaAO6dQcrQARd
 

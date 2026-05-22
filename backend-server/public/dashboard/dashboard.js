@@ -541,7 +541,7 @@ async function renderUserDetail(userId) {
                         <td>${catBadge(t.category)}</td>
                         <td>${t.title}</td>
                         <td>${ticketStatusBadge(t.status)}</td>
-                        <td>${priorityBadge(t.priority)}</td>
+                        <td>${priorityBadge(t.priority, t.priority_source, t.priority_notes)}</td>
                         <td>${fmtDate(t.created_at)}</td>
                         <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
                     </tr>`).join('')}
@@ -729,10 +729,16 @@ async function renderTickets() {
 
         const data = await apiFetch(url);
         const tickets = data.tickets;
+        const pendingAi = tickets.filter(t => (!t.priority_source || t.priority_source === 'ai') && t.status !== 'closed').length;
 
         document.getElementById('content').innerHTML = `
         <div class="page-header">
             <div><h2>Tickets de soporte</h2><p>${tickets.length} tickets encontrados</p></div>
+            <div>
+                <button class="btn btn-primary btn-sm" id="btn-ai-pri" onclick="runAiPrioritize()" title="Clasifica con IA todos los tickets sin override manual (incluye los con source='ai' para refrescar)">
+                    🤖 Establecer prioridad por IA (${pendingAi})
+                </button>
+            </div>
         </div>
         <div class="filter-bar">
             <select id="f-status" onchange="applyTicketFilters()">
@@ -770,7 +776,7 @@ async function renderTickets() {
                         <td>${catBadge(t.category)}</td>
                         <td>${t.title}</td>
                         <td>${ticketStatusBadge(t.status)}</td>
-                        <td>${priorityBadge(t.priority)}</td>
+                        <td>${priorityBadge(t.priority, t.priority_source, t.priority_notes)}</td>
                         <td>${t.benefit_applied ? '<span class="badge badge-green">✓</span>' : '—'}</td>
                         <td style="font-size:12px">${fmtDate(t.created_at)}</td>
                         <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
@@ -871,13 +877,18 @@ async function renderTicketDetail(ticketId) {
                             </select>
                         </div>
                         <div>
-                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Prioridad</label>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">
+                                Prioridad
+                                ${t.priority_source ? `<span class="badge badge-${t.priority_source === 'manual' ? 'gray' : t.priority_source === 'ai' ? 'blue' : 'yellow'}" style="margin-left:6px;font-size:9px">${t.priority_source === 'ai' ? '🤖 IA' : t.priority_source === 'ai_overridden' ? '🤖✏️ Override admin' : '👤 Manual'}</span>` : ''}
+                            </label>
                             <select id="ticket-priority" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
                                 <option value="low"    ${t.priority === 'low'    ? 'selected' : ''}>Baja</option>
                                 <option value="medium" ${t.priority === 'medium' ? 'selected' : ''}>Media</option>
                                 <option value="high"   ${t.priority === 'high'   ? 'selected' : ''}>Alta</option>
                                 <option value="urgent" ${t.priority === 'urgent' ? 'selected' : ''}>Urgente</option>
                             </select>
+                            ${t.priority_notes ? `<div style="margin-top:6px;padding:6px 9px;background:#f9fafb;border-left:2px solid #6366f1;border-radius:4px;font-size:11px;color:var(--text-muted);line-height:1.4"><strong>Razonamiento IA:</strong> ${escHtml(t.priority_notes)}</div>` : ''}
+                            ${t.priority_source && t.priority_source !== 'manual' ? `<button class="btn btn-sm btn-secondary" style="width:100%;margin-top:6px;font-size:11px" onclick="resetTicketPriority(${t.id})">🔄 Resetear (volver a IA)</button>` : ''}
                         </div>
                         <button class="btn btn-primary" onclick="updateTicketMeta(${t.id})">Guardar cambios</button>
                     </div>
@@ -1119,10 +1130,13 @@ function ticketStatusBadge(s) {
     const l = { open: 'Abierto', in_progress: 'En progreso', resolved: 'Resuelto', closed: 'Cerrado' };
     return `<span class="badge ${m[s] || 'badge-gray'}">${l[s] || s}</span>`;
 }
-function priorityBadge(p) {
+function priorityBadge(p, source, notes) {
     const m = { low: 'badge-gray', medium: 'badge-blue', high: 'badge-yellow', urgent: 'badge-red' };
     const l = { low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' };
-    return `<span class="badge ${m[p] || 'badge-gray'}">${l[p] || p}</span>`;
+    // Ícono según fuente: 🤖 IA, 🤖✏️ IA-override, 👤 manual, ' ' sin fuente
+    const srcIcon = { ai: '🤖 ', ai_overridden: '🤖✏️ ', manual: '👤 ' }[source] || '';
+    const tooltip = notes ? ` title="${String(notes).replace(/"/g, '&quot;')}"` : '';
+    return `<span class="badge ${m[p] || 'badge-gray'}"${tooltip}>${srcIcon}${l[p] || p}</span>`;
 }
 function catBadge(c) {
     const m = { technical: 'badge-blue', billing: 'badge-purple', commercial: 'badge-green' };
@@ -2276,3 +2290,46 @@ async function legalDelete(id) {
         alert('Error al eliminar: ' + e.message);
     }
 }
+
+// ───── Resetear prioridad → vuelve a permitir IA ─────
+window.resetTicketPriority = async function(ticketId) {
+    if (!confirm('¿Resetear la prioridad de este ticket?\n\nVolverá a permitir que la IA la gestione en próximas ejecuciones.')) return;
+    try {
+        await apiFetch(`/admin/tickets/${ticketId}/reset-priority`, 'POST', {});
+        navigate('ticket-detail', ticketId); // recargar el detalle
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+};
+
+// ───── AI Prioritize (Fase 4 Ítem 2) ─────
+window.runAiPrioritize = async function() {
+    const btn = document.getElementById('btn-ai-pri');
+    if (!btn) return;
+    const originalText = btn.innerHTML;
+
+    if (!confirm('¿Procesar tickets pendientes con IA?\n\nSe enviará a Claude Haiku para clasificar prioridad de todos los tickets sin override manual (incluye los marcados \'ai\' para refrescar).\n\nLímite: 100 tickets/hora por admin.')) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Procesando con IA...';
+
+    try {
+        const result = await apiFetch('/admin/tickets/ai-prioritize', 'POST', {});
+        let msg = `✓ Procesados: ${result.processed}`;
+        if (result.failed > 0) {
+            msg += `\n✗ Fallaron: ${result.failed}`;
+            if (result.errors?.length) {
+                msg += '\n\nErrores:\n' + result.errors.slice(0, 5).map(e => `  #${e.ticket_id}: ${e.error}`).join('\n');
+            }
+        }
+        if (result.processed === 0 && result.failed === 0) {
+            msg = 'No hay tickets para procesar (todos tienen prioridad manual o no hay tickets abiertos).';
+        }
+        alert(msg);
+        renderTickets(); // Refrescar tabla
+    } catch (e) {
+        alert('Error: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+};

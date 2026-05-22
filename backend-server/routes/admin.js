@@ -1078,6 +1078,7 @@ router.get('/tickets', authenticateAdmin, async (req, res) => {
     try {
         let query = `
             SELECT t.id, t.category, t.title, t.status, t.priority,
+                   t.priority_source, t.priority_notes, t.priority_set_at, t.priority_set_by,
                    t.benefit_type, t.benefit_applied,
                    t.created_at, t.updated_at, t.resolved_at,
                    u.email AS user_email, u.id AS user_id
@@ -1184,7 +1185,9 @@ router.put('/tickets/:id/status', authenticateAdmin, async (req, res) => {
     }
 });
 
-// Cambiar prioridad del ticket
+// Cambiar prioridad del ticket (manual por admin)
+// Si la prioridad anterior fue puesta por IA, marca como 'ai_overridden' para
+// que futuras re-ejecuciones de IA no la sobreescriban
 router.put('/tickets/:id/priority', authenticateAdmin, async (req, res) => {
     const { id } = req.params;
     const { priority } = req.body;
@@ -1196,12 +1199,48 @@ router.put('/tickets/:id/priority', authenticateAdmin, async (req, res) => {
     }
 
     try {
-        await db.query('UPDATE support_tickets SET priority = $1 WHERE id = $2', [priority, id]);
-        console.log(`🎫 Ticket #${id} → prioridad '${priority}' por admin: ${req.user.id}`);
-        res.json({ success: true, message: `Prioridad actualizada a '${priority}'` });
+        const cur = await db.query('SELECT priority_source FROM support_tickets WHERE id = $1', [id]);
+        if (cur.rows.length === 0) {
+            return res.status(404).json({ error: 'Ticket no encontrado' });
+        }
+
+        // Si venía de IA → marcamos 'ai_overridden' para protegerla en re-runs
+        // Si era NULL o 'manual' → 'manual'
+        const newSource = cur.rows[0].priority_source === 'ai' ? 'ai_overridden' : 'manual';
+
+        await db.query(`
+            UPDATE support_tickets
+            SET priority = $1,
+                priority_source = $2,
+                priority_set_at = NOW(),
+                priority_set_by = $3
+            WHERE id = $4
+        `, [priority, newSource, req.user.id, id]);
+
+        console.log(`🎫 Ticket #${id} → prioridad '${priority}' (source=${newSource}) por admin: ${req.user.id}`);
+        res.json({ success: true, message: `Prioridad actualizada a '${priority}'`, priority_source: newSource });
     } catch (error) {
         console.error('Error actualizando prioridad:', error);
         res.status(500).json({ error: 'Error actualizando prioridad' });
+    }
+});
+
+// Resetear prioridad — vuelve a permitir que la IA la gestione
+router.post('/tickets/:id/reset-priority', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const db = req.app.get('db');
+    try {
+        const result = await db.query(`
+            UPDATE support_tickets
+            SET priority_source = NULL, priority_notes = NULL, priority_set_at = NULL, priority_set_by = NULL
+            WHERE id = $1 RETURNING id
+        `, [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Ticket no encontrado' });
+        console.log(`🔄 Ticket #${id} → prioridad reseteada por admin: ${req.user.id}`);
+        res.json({ success: true, message: 'Prioridad reseteada — próxima ejecución de IA la actualizará' });
+    } catch (error) {
+        console.error('Error reseteando prioridad:', error);
+        res.status(500).json({ error: 'Error reseteando prioridad' });
     }
 });
 
@@ -1685,6 +1724,225 @@ router.get('/monitor/stats', authenticateAdmin, async (req, res) => {
     } catch (error) {
         console.error('Error en GET /admin/monitor/stats:', error);
         res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ============================================================================
+// IA: priorización masiva de tickets (Fase 4 Ítem 2)
+// ============================================================================
+
+const https = require('https');
+
+// Rate limiter en memoria: máximo 100 tickets procesados/hora por admin
+const aiPriorityRateLimits = new Map(); // adminId → { count, resetAt }
+
+function checkAiPriorityRateLimit(adminId, count) {
+    const now = Date.now();
+    const entry = aiPriorityRateLimits.get(adminId);
+    if (!entry || now > entry.resetAt) {
+        aiPriorityRateLimits.set(adminId, { count, resetAt: now + 3600000 });
+        return { ok: true, remaining: 100 - count };
+    }
+    if (entry.count + count > 100) {
+        return { ok: false, remaining: Math.max(0, 100 - entry.count), resetIn: Math.ceil((entry.resetAt - now) / 60000) };
+    }
+    entry.count += count;
+    return { ok: true, remaining: 100 - entry.count };
+}
+
+const AI_PRIORITY_SYSTEM_PROMPT = `Sos un asistente que clasifica tickets de soporte de Procurador SCW por prioridad.
+
+CONTEXTO DEL SISTEMA:
+Procurador SCW es una herramienta de automatización judicial para abogados argentinos. Automatiza tres operaciones en el sistema PJN: (1) procuración de expedientes, (2) generación de informes, (3) monitor de partes. Usa Puppeteer con el Chrome del usuario. Las credenciales del PJN viven solo en Chrome (no en servidor). Sistema de planes: EXTENSION_PROMO (USD 1/mes), COMBO_PROMO (USD 9.99/mes), BASIC, PRO, ENTERPRISE.
+
+CRITERIOS DE PRIORIDAD:
+
+🟢 low (Baja):
+- Consultas comerciales (cambio de plan, precios, planes futuros)
+- Preguntas de "cómo usar X" sin bloqueo
+- Sugerencias o feedback
+- Dudas sobre facturación general (no urgente)
+
+🟡 medium (Media):
+- Funcionalidad parcial: algo funciona mal pero no bloquea el trabajo
+- Errores intermitentes no críticos
+- Consultas sobre límites del plan
+- Pedidos de mejora con cierta urgencia
+
+🔴 high (Alta):
+- Login al PJN falla sistemáticamente
+- Proceso no arranca o se cuelga
+- Pérdida parcial de datos / resultados incorrectos
+- Plan PRO o ENTERPRISE con problemas operativos
+- Problema bloqueante reproducible
+
+🚨 urgent (Urgente):
+- Servicio completamente caído desde la perspectiva del usuario
+- Pérdida total de datos o resultados corruptos
+- Error de cobro / pago duplicado / cargo no autorizado
+- Suspensión incorrecta de cuenta
+- Cualquier issue de seguridad reportado por el usuario
+
+FORMATO DE RESPUESTA (JSON estricto, sin texto adicional):
+{
+  "priority": "low" | "medium" | "high" | "urgent",
+  "notes": "breve razonamiento en 1-2 frases (máx 200 chars)"
+}
+
+Sé conservador: ante duda entre dos niveles, elegí el menor. La sobre-priorización satura al equipo de soporte.`;
+
+async function classifyTicketWithHaiku(ticket) {
+    return new Promise((resolve, reject) => {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) return reject(new Error('ANTHROPIC_API_KEY no configurada'));
+
+        const userPrompt = `Clasificá este ticket:
+
+CATEGORÍA: ${ticket.category}
+PLAN DEL USUARIO: ${ticket.plan_name || 'desconocido'}
+TÍTULO: ${ticket.title}
+DESCRIPCIÓN:
+${ticket.description}`;
+
+        const body = JSON.stringify({
+            model: 'claude-haiku-4-5',
+            max_tokens: 300,
+            system: AI_PRIORITY_SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: userPrompt }],
+        });
+
+        const req = https.request({
+            hostname: 'api.anthropic.com',
+            path: '/v1/messages',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'Content-Length': Buffer.byteLength(body),
+            },
+            timeout: 30000,
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode !== 200) {
+                    return reject(new Error(`Anthropic API ${res.statusCode}: ${data.substring(0, 200)}`));
+                }
+                try {
+                    const parsed = JSON.parse(data);
+                    const text = parsed.content?.[0]?.text || '';
+                    // El modelo a veces envuelve en ```json...```
+                    const jsonMatch = text.match(/\{[\s\S]*\}/);
+                    if (!jsonMatch) return reject(new Error('Respuesta IA sin JSON válido'));
+                    const result = JSON.parse(jsonMatch[0]);
+                    if (!['low','medium','high','urgent'].includes(result.priority)) {
+                        return reject(new Error(`Priority inválido: ${result.priority}`));
+                    }
+                    resolve({ priority: result.priority, notes: String(result.notes || '').substring(0, 500) });
+                } catch (e) {
+                    reject(new Error(`Parse error: ${e.message}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('Timeout llamando a Anthropic')); });
+        req.write(body);
+        req.end();
+    });
+}
+
+// POST /admin/tickets/ai-prioritize
+// Body: { ticket_ids?: [int] } — si vacío, procesa tickets sin priority_source o con source='ai'
+router.post('/tickets/ai-prioritize', authenticateAdmin, async (req, res) => {
+    if (process.env.ANTHROPIC_API_KEY === undefined) {
+        return res.status(503).json({ error: 'Servicio de IA no disponible — ANTHROPIC_API_KEY no configurada' });
+    }
+    const db = req.app.get('db');
+    const { ticket_ids } = req.body || {};
+
+    try {
+        // Seleccionar tickets a procesar (excluye siempre 'ai_overridden' y 'manual')
+        let tickets;
+        if (Array.isArray(ticket_ids) && ticket_ids.length > 0) {
+            const ids = ticket_ids.map(Number).filter(n => Number.isInteger(n));
+            if (ids.length === 0) return res.status(400).json({ error: 'ticket_ids inválido' });
+            const result = await db.query(`
+                SELECT t.id, t.category, t.title, t.description, t.priority_source,
+                       p.name AS plan_name
+                FROM support_tickets t
+                JOIN users u ON u.id = t.user_id
+                LEFT JOIN subscriptions s ON s.user_id = u.id
+                LEFT JOIN plans p ON p.id = s.plan_id
+                WHERE t.id = ANY($1::int[])
+                  AND (t.priority_source IS NULL OR t.priority_source = 'ai')
+            `, [ids]);
+            tickets = result.rows;
+        } else {
+            // Default: todos los sin source o con 'ai' (status != 'closed' para no procesar cerrados)
+            const result = await db.query(`
+                SELECT t.id, t.category, t.title, t.description, t.priority_source,
+                       p.name AS plan_name
+                FROM support_tickets t
+                JOIN users u ON u.id = t.user_id
+                LEFT JOIN subscriptions s ON s.user_id = u.id
+                LEFT JOIN plans p ON p.id = s.plan_id
+                WHERE (t.priority_source IS NULL OR t.priority_source = 'ai')
+                  AND t.status != 'closed'
+                LIMIT 100
+            `);
+            tickets = result.rows;
+        }
+
+        if (tickets.length === 0) {
+            return res.json({ success: true, message: 'No hay tickets para procesar', processed: 0, failed: 0 });
+        }
+
+        // Rate limit check
+        const rateCheck = checkAiPriorityRateLimit(req.user.id, tickets.length);
+        if (!rateCheck.ok) {
+            return res.status(429).json({
+                error: `Rate limit alcanzado (100 tickets/hora). Restantes: ${rateCheck.remaining}. Reintentar en ~${rateCheck.resetIn} min.`,
+                remaining: rateCheck.remaining,
+            });
+        }
+
+        // Procesar en paralelo (max 5 concurrent para no saturar Anthropic ni la DB)
+        const results = { processed: 0, failed: 0, errors: [] };
+        const CONCURRENCY = 5;
+        for (let i = 0; i < tickets.length; i += CONCURRENCY) {
+            const batch = tickets.slice(i, i + CONCURRENCY);
+            await Promise.all(batch.map(async (ticket) => {
+                try {
+                    const cls = await classifyTicketWithHaiku(ticket);
+                    await db.query(`
+                        UPDATE support_tickets
+                        SET priority = $1,
+                            priority_source = 'ai',
+                            priority_notes = $2,
+                            priority_set_at = NOW(),
+                            priority_set_by = NULL
+                        WHERE id = $3
+                    `, [cls.priority, cls.notes, ticket.id]);
+                    results.processed++;
+                } catch (err) {
+                    results.failed++;
+                    results.errors.push({ ticket_id: ticket.id, error: err.message });
+                    console.error(`❌ AI priority falló ticket #${ticket.id}:`, err.message);
+                }
+            }));
+        }
+
+        console.log(`🤖 AI prioritize: ${results.processed} OK, ${results.failed} fallaron (admin ${req.user.id})`);
+        res.json({
+            success: true,
+            processed: results.processed,
+            failed: results.failed,
+            errors: results.errors.slice(0, 10), // máximo 10 errores en la respuesta
+        });
+    } catch (error) {
+        console.error('Error en ai-prioritize:', error);
+        res.status(500).json({ error: 'Error procesando tickets', detail: error.message });
     }
 });
 
