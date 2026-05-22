@@ -1480,3 +1480,10 @@ body {
   transition: background 0.13s;
 }
 .chat-send-btn:hover { background: var(--accent-hover); }
+
+/* Scrollbar fino — igual que Mi Plan */
+.thin-scroll { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.thin-scroll::-webkit-scrollbar { width: 4px; }
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
+.thin-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+.thin-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-3); }

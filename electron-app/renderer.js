@@ -1918,6 +1918,10 @@ function setupCuentaModal() {
         closeModal('modalCuenta');
         openPortalSection('soporte');
     });
+    document.getElementById('btnVerWebMiCuenta')?.addEventListener('click', () => {
+        closeModal('modalCuenta');
+        openPortalSection('plan');
+    });
     // Listeners legacy (vistas internas — mantenidas pero no accesibles desde la UI)
     document.getElementById('btnBackTickets')?.addEventListener('click', () => showSoporteView('lista'));
     document.getElementById('btnBackTicketsDetalle')?.addEventListener('click', () => showSoporteView('lista'));
