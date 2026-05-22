@@ -922,6 +922,7 @@ function renderTicketsList() {
                 <div class="ticket-item-body">
                     <div class="ticket-item-title">${escapeHtml(t.title)}</div>
                     <div class="ticket-item-meta">
+                        <span class="ticket-id-badge">#${t.id}</span>
                         <span>${categoryLabels[t.category] || t.category}</span>
                         <span>📅 ${formatDate(t.created_at)}</span>
                     </div>
@@ -982,7 +983,7 @@ function renderTicketDetail(ticket) {
         <div class="card" style="margin-bottom:20px">
             <div class="card-header">
                 <div>
-                    <h3>${escapeHtml(ticket.title)}</h3>
+                    <h3><span class="ticket-id-badge" style="margin-right:8px;font-size:13px;vertical-align:middle">#${ticket.id}</span>${escapeHtml(ticket.title)}</h3>
                     <div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
                         <span class="${statusClass}">${statusLabel}</span>
                         <span style="font-size:12px;color:var(--text-muted)">${categoryLabels[ticket.category] || ticket.category}</span>

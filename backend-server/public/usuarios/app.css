@@ -816,6 +816,18 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
 
 .ticket-item-status { flex-shrink: 0; }
 
+.ticket-id-badge {
+    display: inline-block;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    letter-spacing: 0.02em;
+}
+
 .ticket-detail-back {
     display: flex;
     align-items: center;
