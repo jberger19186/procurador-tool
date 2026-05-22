@@ -61,6 +61,12 @@ electron-app/cache/
 # ─── Backend específico ─────────────────────────────────────
 backend-server/uploads/
 
+# ─── Backups de base de datos — NUNCA commitear ─────────────
+database/backup_*.sql
+database/*.dump
+database/*.bak
+procurador_db_backup*.sql
+
 # ─── Python ─────────────────────────────────────────────────
 __pycache__/
 *.pyc
