@@ -266,6 +266,67 @@ async function sendBillingReminderEmail(email, nombre, nextBillingDate) {
     </div>`);
 }
 
+/**
+ * Email al usuario cuando soporte (admin) responde un ticket.
+ * @param {string} email — email del usuario
+ * @param {string} nombre — nombre del usuario
+ * @param {number} ticketId — ID del ticket
+ * @param {string} ticketTitle — título del ticket
+ * @param {string} commentPreview — preview de la respuesta (max 200 chars)
+ * @param {string} ssoToken — JWT del usuario para auto-login (24h validez)
+ */
+async function sendTicketReplyEmail(email, nombre, ticketId, ticketTitle, commentPreview, ssoToken) {
+    if (process.env.EMAIL_TICKET_REPLY_ENABLED !== 'true') {
+        logger.info(`📧 [skip] EMAIL_TICKET_REPLY_ENABLED=false — no se envía reply a ${email}`);
+        return;
+    }
+
+    const portalUrl = `${PORTAL_URL}?goto=soporte#sso=${encodeURIComponent(ssoToken)}`;
+    const truncatedTitle = ticketTitle.length > 60 ? ticketTitle.substring(0, 60) + '…' : ticketTitle;
+    const escapedPreview = String(commentPreview || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .substring(0, 200);
+    const previewWithEllipsis = (commentPreview && commentPreview.length > 200) ? escapedPreview + '…' : escapedPreview;
+
+    await sendEmail(
+        email,
+        `Procurador SCW — Respuesta a tu ticket #${ticketId}`,
+        `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+          <h2 style="color:#d97706;margin-bottom:8px">🎫 Procurador SCW</h2>
+          <p style="color:#1a1a1a;font-size:15px">Hola <strong>${nombre || 'usuario'}</strong>,</p>
+          <p style="color:#1a1a1a;font-size:15px">El equipo de soporte respondió tu ticket:</p>
+
+          <div style="background:#fffbeb;border-left:3px solid #d97706;border-radius:6px;padding:14px 18px;margin:18px 0">
+            <div style="font-size:12px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">
+              Ticket #${ticketId}
+            </div>
+            <div style="font-size:14px;color:#1a1a1a;font-weight:500;margin-bottom:10px">
+              ${truncatedTitle}
+            </div>
+            <div style="font-size:13.5px;color:#4a4a4a;line-height:1.55;font-style:italic;border-top:1px solid #fde68a;padding-top:10px;white-space:pre-wrap">
+              ${previewWithEllipsis}
+            </div>
+          </div>
+
+          <div style="text-align:center;margin:28px 0">
+            <a href="${portalUrl}"
+               style="background:#d97706;color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;display:inline-block">
+              Ver respuesta completa →
+            </a>
+          </div>
+
+          <p style="color:#6b7280;font-size:12px;margin-top:24px;border-top:1px solid #e5e7eb;padding-top:14px">
+            Este link te lleva directo a tu ticket en el portal web. Si el link expira (24 horas), podés ingresar normalmente con tu email y contraseña.
+          </p>
+          <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:8px">
+            Procurador SCW — soporte@procuradortool.com
+          </p>
+        </div>
+        `
+    );
+}
+
 async function sendAdminReactivationRequest(nombre, apellido, email, suspensionReason, userMessage) {
     const to = process.env.ALERT_EMAIL_TO;
     if (!to) return;
@@ -298,4 +359,5 @@ module.exports = {
     sendReactivationResultEmail,
     sendBillingReminderEmail,
     sendAdminReactivationRequest,
+    sendTicketReplyEmail,
 };

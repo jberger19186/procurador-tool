@@ -954,10 +954,17 @@ Sección Sistema del sidebar:
   - Funciones: `renderAyuda()`, `renderAyudaFaq()`, `getManualHTML()`, `AYUDA_FAQ_ITEMS`, `AYUDA_FAQ_CATS`
   - `goto=ayuda` soportado vía el handler SSO genérico existente
 - ✅ Documentación de ayuda publicada: `docs/manual-de-usuario.md` + `docs/internal/sistema-estados-flujos.md`
-- ⬜ Mejoras al sistema de tickets:
-  - Notificaciones al usuario cuando el admin responde un ticket (email)
-  - Respuestas predefinidas / plantillas para casos frecuentes
-  - Filtros y prioridades en el panel admin
+- ✅ **Email de respuesta admin→usuario** (Fase 4 Ítem 1, sesión 2026-05-22):
+  - Cuando un admin agrega comentario en `POST /admin/tickets/:id/comment` → email automático al usuario
+  - Asunto: `Procurador SCW — Respuesta a tu ticket #X`
+  - Contenido: preview de 200 chars + botón "Ver respuesta completa" con SSO (24h validez)
+  - Feature flag `EMAIL_TICKET_REPLY_ENABLED=true` en .env del server
+  - Función: `sendTicketReplyEmail()` en `utils/mailer.js`
+  - El envío no bloquea la respuesta HTTP (async fire-and-forget con catch)
+- ⬜ Mejoras al sistema de tickets (Fase 4 — pendientes):
+  - Prioridad asignada por IA (Ítem 2)
+  - Proyectar comentario con IA (Ítem 3)
+  - Base de Conocimiento (Ítem 4)
 
 ---
 

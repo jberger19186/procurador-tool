@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { getCacheStats, clearCache } = require('../utils/scriptEncryption');
 const { adminLimiter } = require('../middleware/rateLimiter');
+const { sendTicketReplyEmail } = require('../utils/mailer');
 
 // Aplicar rate limiter a todas las rutas de admin
 router.use(adminLimiter);
@@ -1215,10 +1216,17 @@ router.post('/tickets/:id/comment', authenticateAdmin, async (req, res) => {
     }
 
     try {
-        const ticketCheck = await db.query('SELECT id FROM support_tickets WHERE id = $1', [id]);
+        // Traer ticket + datos del usuario para envío de email
+        const ticketCheck = await db.query(`
+            SELECT t.id, t.title, t.user_id, u.email, u.nombre, u.role
+            FROM support_tickets t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.id = $1
+        `, [id]);
         if (ticketCheck.rows.length === 0) {
             return res.status(404).json({ error: 'Ticket no encontrado' });
         }
+        const ticket = ticketCheck.rows[0];
 
         const result = await db.query(`
             INSERT INTO ticket_comments (ticket_id, author_id, author_role, message)
@@ -1233,6 +1241,30 @@ router.post('/tickets/:id/comment', authenticateAdmin, async (req, res) => {
         `, [id]);
 
         console.log(`💬 Admin ${req.user.id} respondió ticket #${id}`);
+
+        // Notificación por email al usuario (no bloquea la respuesta HTTP)
+        // Feature flag EMAIL_TICKET_REPLY_ENABLED en .env controla activación
+        try {
+            const ssoToken = jwt.sign(
+                { id: ticket.user_id, role: ticket.role || 'user' },
+                process.env.JWT_SECRET,
+                { expiresIn: '24h' }
+            );
+            sendTicketReplyEmail(
+                ticket.email,
+                ticket.nombre,
+                ticket.id,
+                ticket.title,
+                message.trim(),
+                ssoToken
+            ).catch(err => {
+                console.error(`⚠️ Error enviando email de respuesta a ticket #${id}:`, err.message);
+            });
+        } catch (mailErr) {
+            console.error(`⚠️ Error preparando email de respuesta:`, mailErr.message);
+            // No interrumpe la respuesta — el comentario ya se guardó OK
+        }
+
         res.status(201).json({ success: true, comment: result.rows[0] });
     } catch (error) {
         console.error('Error respondiendo ticket:', error);
