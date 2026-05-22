@@ -1139,7 +1139,7 @@ router.get('/tickets/:id', authenticateAdmin, async (req, res) => {
         }
 
         const commentsResult = await db.query(`
-            SELECT tc.id, tc.author_role, tc.message, tc.created_at,
+            SELECT tc.id, tc.author_role, tc.message, tc.visibility, tc.created_at,
                    u.email AS author_email
             FROM ticket_comments tc
             JOIN users u ON tc.author_id = u.id
@@ -1298,17 +1298,21 @@ router.post('/tickets/:id/reset-priority', authenticateAdmin, async (req, res) =
 // Responder como admin (agregar comentario)
 router.post('/tickets/:id/comment', authenticateAdmin, async (req, res) => {
     const { id } = req.params;
-    const { message } = req.body;
+    const { message, visibility = 'external' } = req.body;
     const db = req.app.get('db');
 
     if (!message || !message.trim()) {
         return res.status(400).json({ error: 'El mensaje no puede estar vacío' });
     }
+    if (!['external', 'internal'].includes(visibility)) {
+        return res.status(400).json({ error: "visibility debe ser 'external' o 'internal'" });
+    }
 
     try {
         // Traer ticket + datos del usuario para envío de email
         const ticketCheck = await db.query(`
-            SELECT t.id, t.title, t.user_id, u.email, u.nombre, u.role
+            SELECT t.id, t.title, t.user_id, t.status AS ticket_status,
+                   u.email, u.nombre, u.role
             FROM support_tickets t
             JOIN users u ON u.id = t.user_id
             WHERE t.id = $1
@@ -1319,35 +1323,38 @@ router.post('/tickets/:id/comment', authenticateAdmin, async (req, res) => {
         const ticket = ticketCheck.rows[0];
 
         const result = await db.query(`
-            INSERT INTO ticket_comments (ticket_id, author_id, author_role, message)
-            VALUES ($1, $2, 'admin', $3)
-            RETURNING id, author_role, message, created_at
-        `, [id, req.user.id, message.trim()]);
+            INSERT INTO ticket_comments (ticket_id, author_id, author_role, message, visibility)
+            VALUES ($1, $2, 'admin', $3, $4)
+            RETURNING id, author_role, message, visibility, created_at
+        `, [id, req.user.id, message.trim(), visibility]);
 
-        // Cambia estado a in_progress si estaba abierto
-        await db.query(`
-            UPDATE support_tickets SET status = 'in_progress'
-            WHERE id = $1 AND status = 'open'
-        `, [id]);
+        // Cambia estado a in_progress si estaba abierto Y la respuesta es externa
+        // (las notas internas no cambian el estado del ticket — son solo para admin)
+        if (visibility === 'external' && ticket.ticket_status === 'open') {
+            await db.query(`UPDATE support_tickets SET status = 'in_progress' WHERE id = $1`, [id]);
+        }
 
-        console.log(`💬 Admin ${req.user.id} respondió ticket #${id}`);
+        console.log(`💬 Admin ${req.user.id} respondió ticket #${id} [visibility=${visibility}]`);
 
-        // Notificación por email al usuario (no bloquea la respuesta HTTP)
+        // Notificación por email al usuario SOLO si la respuesta es externa
         // Feature flag EMAIL_TICKET_REPLY_ENABLED en .env controla activación
-        // El link lleva al login normal y luego redirige a Soporte (sin SSO por seguridad anti-forward)
-        try {
-            sendTicketReplyEmail(
-                ticket.email,
-                ticket.nombre,
-                ticket.id,
-                ticket.title,
-                message.trim()
-            ).catch(err => {
-                console.error(`⚠️ Error enviando email de respuesta a ticket #${id}:`, err.message);
-            });
-        } catch (mailErr) {
-            console.error(`⚠️ Error preparando email de respuesta:`, mailErr.message);
-            // No interrumpe la respuesta — el comentario ya se guardó OK
+        if (visibility === 'external') {
+            try {
+                sendTicketReplyEmail(
+                    ticket.email,
+                    ticket.nombre,
+                    ticket.id,
+                    ticket.title,
+                    message.trim()
+                ).catch(err => {
+                    console.error(`⚠️ Error enviando email de respuesta a ticket #${id}:`, err.message);
+                });
+            } catch (mailErr) {
+                console.error(`⚠️ Error preparando email de respuesta:`, mailErr.message);
+                // No interrumpe la respuesta — el comentario ya se guardó OK
+            }
+        } else {
+            console.log(`📝 Nota interna en ticket #${id} — no se envía email al usuario`);
         }
 
         res.status(201).json({ success: true, comment: result.rows[0] });
@@ -1994,6 +2001,199 @@ router.post('/tickets/ai-prioritize', authenticateAdmin, async (req, res) => {
     } catch (error) {
         console.error('Error en ai-prioritize:', error);
         res.status(500).json({ error: 'Error procesando tickets', detail: error.message });
+    }
+});
+
+// ============================================================================
+// IA: sugerir respuesta para un ticket (Fase 4 Ítem 3)
+// ============================================================================
+
+// Rate limit: 30 sugerencias/hora por admin
+const aiSuggestRateLimits = new Map();
+function checkAiSuggestRateLimit(adminId) {
+    const now = Date.now();
+    const entry = aiSuggestRateLimits.get(adminId);
+    if (!entry || now > entry.resetAt) {
+        aiSuggestRateLimits.set(adminId, { count: 1, resetAt: now + 3600000 });
+        return { ok: true, remaining: 29 };
+    }
+    if (entry.count >= 30) {
+        return { ok: false, remaining: 0, resetIn: Math.ceil((entry.resetAt - now) / 60000) };
+    }
+    entry.count++;
+    return { ok: true, remaining: 30 - entry.count };
+}
+
+const AI_REPLY_SYSTEM_PROMPT = `Sos el asistente del equipo de soporte de Procurador SCW.
+Tu rol es PROYECTAR (sugerir) una respuesta que el admin revisará, editará y enviará al usuario.
+
+CONTEXTO DEL SISTEMA:
+Procurador SCW es una herramienta de automatización judicial para abogados argentinos. Automatiza tres operaciones en el PJN: (1) procuración de expedientes, (2) generación de informes, (3) monitor de partes. Usa Puppeteer con el Chrome del usuario; las credenciales del PJN viven solo en Chrome. Sistema de planes: EXTENSION_PROMO (USD 1/mes), COMBO_PROMO (USD 9.99/mes), BASIC, PRO, ENTERPRISE.
+
+REGLAS DE LA RESPUESTA:
+1. Tono cercano pero profesional. Español rioplatense ("vos", "tenés", "podés", "configurá").
+2. Concisa: 2-4 párrafos máximo, sin saludos largos.
+3. Si la solución es clara → dala paso a paso, numerada.
+4. Si necesitás info adicional del usuario → pedila específica (qué dato, dónde lo encuentra).
+5. Si no podés resolverlo → reconocelo y derivá a soporte técnico humano sin disculpas excesivas.
+6. NUNCA inventes funcionalidades. Si no estás seguro → sugerí escalada a un ticket técnico.
+7. NUNCA exageres ofreciendo reembolsos o cambios de plan sin razón concreta.
+8. SI hay notas internas en la conversación → tomalas en cuenta como contexto privado del equipo (no las menciones al usuario).
+
+FORMATO:
+Devolvé SOLO el texto de la respuesta (sin saludo "Hola [nombre]" si ya hay historial — el admin lo agrega). Sin marcadores markdown que no se renderizan en email plano.`;
+
+router.post('/tickets/:id/ai-suggest-reply', authenticateAdmin, async (req, res) => {
+    if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(503).json({ error: 'Servicio de IA no disponible — ANTHROPIC_API_KEY no configurada' });
+    }
+    const { id } = req.params;
+    const db = req.app.get('db');
+
+    const rate = checkAiSuggestRateLimit(req.user.id);
+    if (!rate.ok) {
+        return res.status(429).json({ error: `Rate limit alcanzado (30/hora). Reintentar en ~${rate.resetIn} min` });
+    }
+
+    try {
+        // Contexto completo del ticket
+        const ticketResult = await db.query(`
+            SELECT t.id, t.category, t.title, t.description, t.priority,
+                   u.email, u.nombre,
+                   p.name AS plan_name, p.display_name AS plan_display
+            FROM support_tickets t
+            JOIN users u ON u.id = t.user_id
+            LEFT JOIN subscriptions s ON s.user_id = u.id
+            LEFT JOIN plans p ON p.id = s.plan_id
+            WHERE t.id = $1
+        `, [id]);
+        if (ticketResult.rows.length === 0) return res.status(404).json({ error: 'Ticket no encontrado' });
+        const t = ticketResult.rows[0];
+
+        // Historial COMPLETO (internas + externas) — la IA usa el todo como contexto
+        const commentsResult = await db.query(`
+            SELECT author_role, message, visibility, created_at
+            FROM ticket_comments
+            WHERE ticket_id = $1
+            ORDER BY created_at ASC
+        `, [id]);
+
+        // Armar el prompt user con contexto
+        const conversationText = commentsResult.rows.map(c => {
+            const role = c.author_role === 'admin' ? 'SOPORTE' : 'USUARIO';
+            const visMark = c.visibility === 'internal' ? ' [NOTA INTERNA — no fue al usuario]' : '';
+            return `[${role}${visMark}]: ${c.message}`;
+        }).join('\n\n');
+
+        const userPrompt = `TICKET #${t.id} (categoría: ${t.category}, prioridad: ${t.priority})
+USUARIO: ${t.nombre || t.email} · Plan: ${t.plan_display || t.plan_name || 'desconocido'}
+
+TÍTULO: ${t.title}
+
+DESCRIPCIÓN INICIAL:
+${t.description}
+
+${conversationText ? `HISTORIAL DE CONVERSACIÓN:\n${conversationText}\n` : ''}
+Generá una respuesta concisa que el admin enviará al usuario.`;
+
+        // Llamada a Anthropic
+        const body = JSON.stringify({
+            model: 'claude-haiku-4-5',
+            max_tokens: 600,
+            system: AI_REPLY_SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: userPrompt }],
+        });
+
+        const suggestion = await new Promise((resolve, reject) => {
+            const reqAI = https.request({
+                hostname: 'api.anthropic.com',
+                path: '/v1/messages',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01',
+                    'Content-Length': Buffer.byteLength(body),
+                },
+                timeout: 30000,
+            }, (rAI) => {
+                let data = '';
+                rAI.on('data', chunk => data += chunk);
+                rAI.on('end', () => {
+                    if (rAI.statusCode !== 200) return reject(new Error(`Anthropic ${rAI.statusCode}: ${data.substring(0, 200)}`));
+                    try {
+                        const parsed = JSON.parse(data);
+                        resolve(parsed.content?.[0]?.text?.trim() || '');
+                    } catch (e) { reject(e); }
+                });
+            });
+            reqAI.on('error', reject);
+            reqAI.on('timeout', () => { reqAI.destroy(); reject(new Error('Timeout')); });
+            reqAI.write(body);
+            reqAI.end();
+        });
+
+        if (!suggestion) {
+            return res.status(502).json({ error: 'IA devolvió respuesta vacía' });
+        }
+
+        // Telemetría: registrar la sugerencia (action='suggested', se actualiza después si se envía/descarta)
+        const logResult = await db.query(`
+            INSERT INTO ai_assistance_logs (ticket_id, admin_id, suggested_text, action)
+            VALUES ($1, $2, $3, 'suggested')
+            RETURNING id
+        `, [id, req.user.id, suggestion]);
+
+        console.log(`🤖 AI sugirió respuesta para ticket #${id} (log_id=${logResult.rows[0].id}, ${suggestion.length} chars)`);
+
+        res.json({
+            success: true,
+            suggestion,
+            log_id: logResult.rows[0].id,
+        });
+    } catch (error) {
+        console.error('Error en ai-suggest-reply:', error);
+        res.status(500).json({ error: 'Error generando sugerencia', detail: error.message });
+    }
+});
+
+// PATCH /admin/ai-suggest-logs/:id — actualiza el log cuando admin envía/descarta
+// Body: { action: 'sent_as_is'|'sent_edited'|'discarded', final_text?: string }
+router.patch('/ai-suggest-logs/:id', authenticateAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { action, final_text } = req.body;
+    const db = req.app.get('db');
+
+    if (!['sent_as_is', 'sent_edited', 'discarded'].includes(action)) {
+        return res.status(400).json({ error: 'action inválido' });
+    }
+
+    try {
+        // Calcular edit_distance simple (cantidad de chars distintos, no Levenshtein real)
+        let editDistance = null;
+        if (final_text !== undefined) {
+            const cur = await db.query(`SELECT suggested_text FROM ai_assistance_logs WHERE id = $1`, [id]);
+            if (cur.rows[0]) {
+                const orig = cur.rows[0].suggested_text || '';
+                // Distancia aproximada: diferencia de length + chars distintos en posiciones comunes
+                editDistance = Math.abs(orig.length - (final_text || '').length);
+                const minLen = Math.min(orig.length, (final_text || '').length);
+                for (let i = 0; i < minLen; i++) {
+                    if (orig[i] !== (final_text || '')[i]) editDistance++;
+                }
+            }
+        }
+
+        await db.query(`
+            UPDATE ai_assistance_logs
+            SET action = $1, final_text = $2, edit_distance = $3, resolved_at = NOW()
+            WHERE id = $4
+        `, [action, final_text || null, editDistance, id]);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error actualizando ai_log:', error);
+        res.status(500).json({ error: 'Error actualizando log' });
     }
 });
 

@@ -838,23 +838,42 @@ async function renderTicketDetail(ticketId) {
                     <div class="card-body">
                         <div class="comment-thread" id="comment-thread">
                             ${comments.length === 0 ? '<p style="color:var(--text-muted);font-size:13px">Sin respuestas aún.</p>' :
-                            comments.map(c => `
-                            <div class="comment ${c.author_role}">
-                                <div class="comment-avatar">${c.author_role === 'admin' ? '👑' : '👤'}</div>
+                            comments.map(c => {
+                                const isInternal = c.visibility === 'internal';
+                                const bgStyle = isInternal ? 'background:#fef9c3;border-left:3px solid #ca8a04;padding:10px;border-radius:6px;margin-bottom:8px' : '';
+                                return `
+                            <div class="comment ${c.author_role}" style="${bgStyle}">
+                                <div class="comment-avatar">${isInternal ? '🔒' : (c.author_role === 'admin' ? '👑' : '👤')}</div>
                                 <div class="comment-body">
                                     <div class="comment-meta">
+                                        ${isInternal ? '<span class="badge badge-yellow" style="font-weight:700">🔒 NOTA INTERNA</span> ' : ''}
                                         <strong>${c.author_email}</strong>
-                                        <span class="badge badge-${c.author_role === 'admin' ? 'yellow' : 'blue'}" style="margin-left:6px">${c.author_role === 'admin' ? 'Admin' : 'Usuario'}</span>
+                                        ${!isInternal ? `<span class="badge badge-${c.author_role === 'admin' ? 'yellow' : 'blue'}" style="margin-left:6px">${c.author_role === 'admin' ? 'Admin' : 'Usuario'}</span>` : ''}
                                         · ${fmtDate(c.created_at)}
+                                        ${isInternal ? '<br><span style="font-size:11px;color:#854d0e;font-style:italic">Solo visible para administradores · No se envió email al usuario</span>' : ''}
                                     </div>
                                     <div class="comment-text">${escHtml(c.message)}</div>
                                 </div>
-                            </div>`).join('')}
+                            </div>`;
+                            }).join('')}
                         </div>
                         ${t.status !== 'closed' ? `
-                        <div style="margin-top:16px">
-                            <textarea id="reply-msg" placeholder="Escribir respuesta..." rows="3" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit"></textarea>
-                            <div style="margin-top:8px;text-align:right">
+                        <div style="margin-top:16px;padding:14px;background:#f9fafb;border:1px solid var(--border);border-radius:8px">
+                            <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+                                <label style="font-size:12px;font-weight:600">Tipo:</label>
+                                <select id="reply-visibility" onchange="updateReplyMode()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff">
+                                    <option value="external">📤 Externa — Va al usuario (email + portal)</option>
+                                    <option value="internal">🔒 Interna — Nota privada de admin</option>
+                                </select>
+                            </div>
+                            <textarea id="reply-msg" placeholder="Escribir respuesta..." rows="4" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box"></textarea>
+                            <div id="ai-suggest-hint" style="display:none;margin-top:6px;padding:6px 10px;background:#eff6ff;border-left:2px solid #3b82f6;font-size:11px;color:#1e40af;border-radius:4px">
+                                💡 Esta sugerencia fue generada por IA — revisala y editala antes de enviar.
+                            </div>
+                            <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+                                <button class="btn btn-sm btn-secondary" id="btn-ai-suggest" onclick="aiSuggestReply(${t.id})" title="Claude genera una sugerencia de respuesta basada en el contexto del ticket">
+                                    🤖 Proyectar con IA
+                                </button>
                                 <button class="btn btn-primary" onclick="replyTicket(${t.id})">Responder</button>
                             </div>
                         </div>` : '<p style="color:var(--text-muted);font-size:13px;margin-top:12px">Ticket cerrado — no se pueden agregar respuestas.</p>'}
@@ -903,6 +922,38 @@ async function renderTicketDetail(ticketId) {
                     </div>
                 </div>
 
+                <!-- AJUSTE MANUAL DE USOS (Fase 4 Ítem 3) -->
+                <div class="card section-gap">
+                    <div class="card-header"><h3>🎯 Ajuste manual de usos</h3></div>
+                    <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Subsistema</label>
+                            <select id="tk-adj-sub" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+                                <option value="proc">Procuración</option>
+                                <option value="batch">Procurar Batch</option>
+                                <option value="informe">Informes</option>
+                                <option value="monitor_novedades">Monitor Novedades</option>
+                                <option value="monitor_partes">Monitor Partes</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;gap:8px">
+                            <div style="flex:1">
+                                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad (+/-)</label>
+                                <input type="number" id="tk-adj-amount" value="10" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo</label>
+                            <input type="text" id="tk-adj-reason" placeholder="Motivo del ajuste..." style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="applyTicketUsageAdjustment(${t.user_id}, ${t.id})">Aplicar ajuste</button>
+                        <div style="margin-top:8px">
+                            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Historial reciente del usuario</div>
+                            <div id="tk-adj-history" style="font-size:12px;color:var(--text-muted)">Cargando...</div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card">
                     <div class="card-header"><h3>🎁 Beneficio comercial</h3></div>
                     <div class="card-body">
@@ -929,6 +980,10 @@ async function renderTicketDetail(ticketId) {
                 </div>
             </div>
         </div>`;
+        // Cargar historial de ajustes del usuario (no bloqueante)
+        if (window.loadTicketAdjustmentHistory) {
+            setTimeout(() => loadTicketAdjustmentHistory(t.user_id), 100);
+        }
     } catch (e) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
@@ -946,11 +1001,114 @@ window.updateBenefitValue = function() {
     }
 };
 
+// ───── Ajuste manual de usos desde un ticket (Fase 4 Ítem 3) ─────
+window.applyTicketUsageAdjustment = async function(userId, ticketId) {
+    const sub    = document.getElementById('tk-adj-sub').value;
+    const amount = parseInt(document.getElementById('tk-adj-amount').value);
+    const reason = document.getElementById('tk-adj-reason').value.trim();
+    if (!amount || isNaN(amount)) { alert('Cantidad inválida'); return; }
+    if (!reason) { alert('El motivo es obligatorio'); return; }
+    if (!confirm(`¿Aplicar ajuste de ${amount > 0 ? '+' : ''}${amount} usos en ${sub}?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`)) return;
+    try {
+        await apiFetch(`/admin/subscriptions/${userId}/adjust`, 'POST', {
+            subsystem: sub, amount, reason, ticket_id: ticketId
+        });
+        document.getElementById('tk-adj-reason').value = '';
+        loadTicketAdjustmentHistory(userId);
+        alert('Ajuste aplicado correctamente.');
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+};
+
+window.loadTicketAdjustmentHistory = async function(userId) {
+    const el = document.getElementById('tk-adj-history');
+    if (!el) return;
+    try {
+        const data = await apiFetch(`/admin/subscriptions/${userId}/adjustments`);
+        const adjs = (data.adjustments || []).slice(0, 5);
+        if (adjs.length === 0) {
+            el.innerHTML = '<em style="color:var(--text-muted)">Sin ajustes previos.</em>';
+            return;
+        }
+        el.innerHTML = adjs.map(a => {
+            const sign = a.amount > 0 ? '+' : '';
+            const subLbl = { proc:'proc', batch:'batch', informe:'inf', monitor_novedades:'mon-nov', monitor_partes:'mon-par' }[a.subsystem] || a.subsystem;
+            const ticketLbl = a.ticket_id ? ` <span class="badge badge-blue" style="font-size:9px">#${a.ticket_id}</span>` : '';
+            return `<div style="padding:4px 0;border-bottom:1px solid #f3f4f6;font-size:11px">
+                <strong style="color:${a.amount > 0 ? '#15803d' : '#991b1b'}">${sign}${a.amount}</strong> ${subLbl}${ticketLbl}
+                <span style="color:var(--text-muted)"> · ${fmtDate(a.created_at)}</span>
+                ${a.reason ? `<br><span style="color:var(--text-muted);font-style:italic">${escHtml(a.reason).substring(0,80)}</span>` : ''}
+            </div>`;
+        }).join('');
+    } catch (e) {
+        el.innerHTML = '<em style="color:var(--text-muted)">Error cargando historial</em>';
+    }
+};
+
+// Variable global para trackear si el texto actual viene de una sugerencia IA
+let _currentAiLogId = null;
+let _currentAiSuggestion = '';
+
+window.updateReplyMode = function() {
+    const vis = document.getElementById('reply-visibility')?.value;
+    const btnAi = document.getElementById('btn-ai-suggest');
+    const textarea = document.getElementById('reply-msg');
+    if (!btnAi || !textarea) return;
+    if (vis === 'internal') {
+        btnAi.disabled = true;
+        btnAi.title = 'Solo disponible para respuestas externas (al usuario)';
+        btnAi.style.opacity = '0.5';
+        textarea.style.background = '#fef9c3';
+        textarea.placeholder = 'Escribir nota interna (no se envía al usuario)...';
+    } else {
+        btnAi.disabled = false;
+        btnAi.title = 'Claude genera una sugerencia basada en el contexto del ticket';
+        btnAi.style.opacity = '1';
+        textarea.style.background = '';
+        textarea.placeholder = 'Escribir respuesta...';
+    }
+};
+
+window.aiSuggestReply = async function(ticketId) {
+    const btn = document.getElementById('btn-ai-suggest');
+    const textarea = document.getElementById('reply-msg');
+    const hint = document.getElementById('ai-suggest-hint');
+    if (!btn || !textarea) return;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Generando...';
+    try {
+        const data = await apiFetch(`/admin/tickets/${ticketId}/ai-suggest-reply`, 'POST', {});
+        if (data?.suggestion) {
+            textarea.value = data.suggestion;
+            _currentAiLogId = data.log_id;
+            _currentAiSuggestion = data.suggestion;
+            if (hint) hint.style.display = 'block';
+            textarea.focus();
+        }
+    } catch (e) {
+        alert('Error generando sugerencia: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+};
+
 window.replyTicket = async function(id) {
     const msg = document.getElementById('reply-msg').value.trim();
     if (!msg) return;
+    const visibility = document.getElementById('reply-visibility')?.value || 'external';
     try {
-        await apiFetch(`/admin/tickets/${id}/comment`, 'POST', { message: msg });
+        await apiFetch(`/admin/tickets/${id}/comment`, 'POST', { message: msg, visibility });
+        // Telemetría IA: si esta respuesta viene de una sugerencia, registrar el outcome
+        if (_currentAiLogId && visibility === 'external') {
+            const action = msg === _currentAiSuggestion ? 'sent_as_is' : 'sent_edited';
+            apiFetch(`/admin/ai-suggest-logs/${_currentAiLogId}`, 'PATCH', { action, final_text: msg })
+                .catch(() => {}); // no crítico
+            _currentAiLogId = null;
+            _currentAiSuggestion = '';
+        }
         navigate('ticket-detail', id);
     } catch (e) { showAlert(document.getElementById('td-alert'), e.message); }
 };

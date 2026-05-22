@@ -97,12 +97,14 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Ticket no encontrado' });
         }
 
+        // IMPORTANTE: filtrar comentarios internos — usuarios NUNCA los ven
         const commentsResult = await db.query(`
             SELECT tc.id, tc.author_role, tc.message, tc.created_at,
                    u.email AS author_email
             FROM ticket_comments tc
             JOIN users u ON tc.author_id = u.id
             WHERE tc.ticket_id = $1
+              AND tc.visibility = 'external'
             ORDER BY tc.created_at ASC
         `, [id]);
 

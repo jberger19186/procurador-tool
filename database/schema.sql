@@ -3,7 +3,7 @@ could not change directory to "/root": Permission denied
 -- PostgreSQL database dump
 --
 
-\restrict 9BUpypMXcHl0gMJpXiCSQTnDEFJVvYcnzYT0G8MBbbdE3Xd1osZaAO6dQcrQARd
+\restrict G0eLQl8sSqoOkHg8vOo5h9EvdyezAzSDfEfOhWFLeS8umAgYPxpS9A6H6jFkbIh
 
 -- Dumped from database version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
 -- Dumped by pg_dump version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
@@ -130,6 +130,47 @@ ALTER TABLE public.admin_events_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.admin_events_id_seq OWNED BY public.admin_events.id;
+
+
+--
+-- Name: ai_assistance_logs; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.ai_assistance_logs (
+    id integer NOT NULL,
+    ticket_id integer,
+    admin_id integer,
+    suggested_text text NOT NULL,
+    final_text text,
+    edit_distance integer,
+    action character varying(20) NOT NULL,
+    generated_at timestamp without time zone DEFAULT now() NOT NULL,
+    resolved_at timestamp without time zone
+);
+
+
+ALTER TABLE public.ai_assistance_logs OWNER TO postgres;
+
+--
+-- Name: ai_assistance_logs_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.ai_assistance_logs_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.ai_assistance_logs_id_seq OWNER TO postgres;
+
+--
+-- Name: ai_assistance_logs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.ai_assistance_logs_id_seq OWNED BY public.ai_assistance_logs.id;
 
 
 --
@@ -672,7 +713,9 @@ CREATE TABLE public.ticket_comments (
     author_role character varying(10) NOT NULL,
     message text NOT NULL,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
-    CONSTRAINT ticket_comments_author_role_check CHECK (((author_role)::text = ANY ((ARRAY['user'::character varying, 'admin'::character varying])::text[])))
+    visibility character varying(20) DEFAULT 'external'::character varying NOT NULL,
+    CONSTRAINT ticket_comments_author_role_check CHECK (((author_role)::text = ANY ((ARRAY['user'::character varying, 'admin'::character varying])::text[]))),
+    CONSTRAINT ticket_comments_visibility_check CHECK (((visibility)::text = ANY ((ARRAY['external'::character varying, 'internal'::character varying])::text[])))
 );
 
 
@@ -1013,6 +1056,13 @@ ALTER TABLE ONLY public.admin_events ALTER COLUMN id SET DEFAULT nextval('public
 
 
 --
+-- Name: ai_assistance_logs id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.ai_assistance_logs ALTER COLUMN id SET DEFAULT nextval('public.ai_assistance_logs_id_seq'::regclass);
+
+
+--
 -- Name: analytics_events id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -1145,6 +1195,14 @@ ALTER TABLE ONLY public.active_executions
 
 ALTER TABLE ONLY public.admin_events
     ADD CONSTRAINT admin_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ai_assistance_logs ai_assistance_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.ai_assistance_logs
+    ADD CONSTRAINT ai_assistance_logs_pkey PRIMARY KEY (id);
 
 
 --
@@ -1427,10 +1485,31 @@ CREATE INDEX idx_admin_events_user_id ON public.admin_events USING btree (user_i
 
 
 --
+-- Name: idx_ai_logs_admin; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_ai_logs_admin ON public.ai_assistance_logs USING btree (admin_id, generated_at);
+
+
+--
+-- Name: idx_ai_logs_ticket; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_ai_logs_ticket ON public.ai_assistance_logs USING btree (ticket_id);
+
+
+--
 -- Name: idx_comments_ticket; Type: INDEX; Schema: public; Owner: procurador_user
 --
 
 CREATE INDEX idx_comments_ticket ON public.ticket_comments USING btree (ticket_id);
+
+
+--
+-- Name: idx_comments_visibility; Type: INDEX; Schema: public; Owner: procurador_user
+--
+
+CREATE INDEX idx_comments_visibility ON public.ticket_comments USING btree (ticket_id, visibility);
 
 
 --
@@ -1752,6 +1831,22 @@ ALTER TABLE ONLY public.admin_events
 
 
 --
+-- Name: ai_assistance_logs ai_assistance_logs_admin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.ai_assistance_logs
+    ADD CONSTRAINT ai_assistance_logs_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: ai_assistance_logs ai_assistance_logs_ticket_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.ai_assistance_logs
+    ADD CONSTRAINT ai_assistance_logs_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.support_tickets(id) ON DELETE CASCADE;
+
+
+--
 -- Name: analytics_events analytics_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -2036,5 +2131,5 @@ GRANT SELECT,USAGE ON SEQUENCE public.user_notifications_id_seq TO procurador_us
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 9BUpypMXcHl0gMJpXiCSQTnDEFJVvYcnzYT0G8MBbbdE3Xd1osZaAO6dQcrQARd
+\unrestrict G0eLQl8sSqoOkHg8vOo5h9EvdyezAzSDfEfOhWFLeS8umAgYPxpS9A6H6jFkbIh
 

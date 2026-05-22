@@ -982,8 +982,27 @@ Sección Sistema del sidebar:
     * Botón global "🤖 Establecer prioridad por IA (N)" en header de Tickets
   - **System prompt**: `AI_PRIORITY_SYSTEM_PROMPT` con contexto Procurador SCW y criterios L/M/H/U conservadores
   - **Modelo**: `claude-haiku-4-5`, max_tokens 300
+- ✅ **Visibilidad + IA suggest + Ajustes manuales en tickets** (Fase 4 Ítem 3 — sesión 2026-05-22, tag `fase4-item3`):
+  - **DB**: `ticket_comments` +`visibility` (`'external'` default | `'internal'`) · tabla nueva `ai_assistance_logs` (telemetría)
+  - **Visibilidad de comentarios**:
+    * `POST /admin/tickets/:id/comment` acepta `visibility: 'external'|'internal'`
+    * Internas: NO envían email, NO cambian status del ticket, NO se devuelven en `GET /tickets/:id` (endpoint user)
+    * Admin endpoint sí las devuelve con campo `visibility`
+    * UI: hilo con fondo amarillo + label "🔒 NOTA INTERNA" para internas
+    * Compositor con dropdown "Externa / Interna" (default externa)
+  - **Proyectar con IA**: `POST /admin/tickets/:id/ai-suggest-reply`
+    * Modelo: Claude Haiku 4.5, max_tokens 600
+    * Rate limit: 30 sugerencias/hora/admin
+    * Contexto: ticket + plan + historial completo (internas + externas) — la IA ve notas internas como contexto privado pero genera respuesta externa
+    * AI_REPLY_SYSTEM_PROMPT con tono rioplatense + reglas anti-hallucination
+    * Solo habilitado en modo Externa (deshabilitado si tipo=Interna)
+    * Pre-carga la sugerencia en el textarea — admin edita y envía manualmente (nunca auto-envía)
+    * Telemetría: `PATCH /admin/ai-suggest-logs/:id` registra `action` ('sent_as_is'/'sent_edited'/'discarded') + `edit_distance`
+  - **Ajuste manual de usos desde ticket**: card nueva en detalle del ticket
+    * Reusa endpoint existente `POST /admin/subscriptions/:userId/adjust` con `ticket_id` auto-rellenado
+    * Diferente de "Beneficio comercial": múltiples ajustes permitidos, reversibles, granular por subsistema
+    * Muestra historial reciente de ajustes del usuario (últimos 5)
 - ⬜ Mejoras al sistema de tickets (Fase 4 — pendientes):
-  - Proyectar comentario con IA (Ítem 3)
   - Base de Conocimiento (Ítem 4)
 
 ---
