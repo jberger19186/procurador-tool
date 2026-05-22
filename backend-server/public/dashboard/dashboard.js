@@ -876,10 +876,12 @@ async function renderTicketDetail(ticketId) {
                                 <option value="closed" ${t.status === 'closed' ? 'selected' : ''}>Cerrado</option>
                             </select>
                         </div>
-                        <div>
+                        <div data-initial-priority="${t.priority}">
                             <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">
                                 Prioridad
-                                ${t.priority_source ? `<span class="badge badge-${t.priority_source === 'manual' ? 'gray' : t.priority_source === 'ai' ? 'blue' : 'yellow'}" style="margin-left:6px;font-size:9px">${t.priority_source === 'ai' ? '🤖 IA' : t.priority_source === 'ai_overridden' ? '🤖✏️ Override admin' : '👤 Manual'}</span>` : ''}
+                                <span id="ai-mode-badge" class="badge badge-${(!t.priority_source || t.priority_source === 'ai') ? 'blue' : 'gray'}" style="margin-left:6px;font-size:9px">
+                                    ${(!t.priority_source || t.priority_source === 'ai') ? '🤖 IA gestiona' : '👤 Admin gestiona'}
+                                </span>
                             </label>
                             <select id="ticket-priority" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
                                 <option value="low"    ${t.priority === 'low'    ? 'selected' : ''}>Baja</option>
@@ -887,8 +889,14 @@ async function renderTicketDetail(ticketId) {
                                 <option value="high"   ${t.priority === 'high'   ? 'selected' : ''}>Alta</option>
                                 <option value="urgent" ${t.priority === 'urgent' ? 'selected' : ''}>Urgente</option>
                             </select>
-                            ${t.priority_notes ? `<div style="margin-top:6px;padding:6px 9px;background:#f9fafb;border-left:2px solid #6366f1;border-radius:4px;font-size:11px;color:var(--text-muted);line-height:1.4"><strong>Razonamiento IA:</strong> ${escHtml(t.priority_notes)}</div>` : ''}
-                            ${t.priority_source && t.priority_source !== 'manual' ? `<button class="btn btn-sm btn-secondary" style="width:100%;margin-top:6px;font-size:11px" onclick="resetTicketPriority(${t.id})">🔄 Resetear (volver a IA)</button>` : ''}
+                            <label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 10px;background:#f9fafb;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px">
+                                <input type="checkbox" id="ai-managed-toggle" ${(!t.priority_source || t.priority_source === 'ai') ? 'checked' : ''}
+                                    onchange="updateAiModeBadge()" style="width:16px;height:16px;cursor:pointer">
+                                <span><strong>🤖 IA gestiona esta prioridad</strong><br>
+                                    <span style="color:var(--text-muted);font-size:11px">Tildado: se re-clasifica con cada batch · Destildado: fijo manual</span>
+                                </span>
+                            </label>
+                            ${t.priority_notes ? `<div style="margin-top:6px;padding:6px 9px;background:#f9fafb;border-left:2px solid #6366f1;border-radius:4px;font-size:11px;color:var(--text-muted);line-height:1.4"><strong>💬 Razonamiento IA:</strong> ${escHtml(t.priority_notes)}</div>` : ''}
                         </div>
                         <button class="btn btn-primary" onclick="updateTicketMeta(${t.id})">Guardar cambios</button>
                     </div>
@@ -946,13 +954,23 @@ window.replyTicket = async function(id) {
     } catch (e) { showAlert(document.getElementById('td-alert'), e.message); }
 };
 
+// Refresca el badge de modo según el toggle (sin guardar todavía)
+window.updateAiModeBadge = function() {
+    const checked = document.getElementById('ai-managed-toggle')?.checked;
+    const badge = document.getElementById('ai-mode-badge');
+    if (!badge) return;
+    badge.textContent = checked ? '🤖 IA gestiona' : '👤 Admin gestiona';
+    badge.className = `badge badge-${checked ? 'blue' : 'gray'}`;
+};
+
 window.updateTicketMeta = async function(id) {
-    const status   = document.getElementById('ticket-status').value;
-    const priority = document.getElementById('ticket-priority').value;
+    const status     = document.getElementById('ticket-status').value;
+    const priority   = document.getElementById('ticket-priority').value;
+    const aiManaged  = document.getElementById('ai-managed-toggle')?.checked ?? false;
     try {
         await Promise.all([
             apiFetch(`/admin/tickets/${id}/status`,   'PUT', { status }),
-            apiFetch(`/admin/tickets/${id}/priority`, 'PUT', { priority })
+            apiFetch(`/admin/tickets/${id}/priority`, 'PUT', { priority, ai_managed: aiManaged })
         ]);
         showAlert(document.getElementById('td-alert'), 'Ticket actualizado.', 'success');
         setTimeout(() => navigate('ticket-detail', id), 1000);
@@ -1133,9 +1151,14 @@ function ticketStatusBadge(s) {
 function priorityBadge(p, source, notes) {
     const m = { low: 'badge-gray', medium: 'badge-blue', high: 'badge-yellow', urgent: 'badge-red' };
     const l = { low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' };
-    // Ícono según fuente: 🤖 IA, 🤖✏️ IA-override, 👤 manual, ' ' sin fuente
-    const srcIcon = { ai: '🤖 ', ai_overridden: '🤖✏️ ', manual: '👤 ' }[source] || '';
-    const tooltip = notes ? ` title="${String(notes).replace(/"/g, '&quot;')}"` : '';
+    // Ícono unificado: 🤖 si IA gestiona (ai o NULL), 👤 si admin gestiona (manual o ai_overridden)
+    // NULL = pendiente de IA (sin ícono específico para no saturar la tabla)
+    let srcIcon = '';
+    if (source === 'ai') srcIcon = '🤖 ';
+    else if (source === 'manual' || source === 'ai_overridden') srcIcon = '👤 ';
+    const tooltip = notes
+        ? ` title="${String(notes).replace(/"/g, '&quot;')}"`
+        : (source === 'manual' || source === 'ai_overridden' ? ' title="Fijo manual — IA no la actualiza"' : '');
     return `<span class="badge ${m[p] || 'badge-gray'}"${tooltip}>${srcIcon}${l[p] || p}</span>`;
 }
 function catBadge(c) {
@@ -2291,16 +2314,8 @@ async function legalDelete(id) {
     }
 }
 
-// ───── Resetear prioridad → vuelve a permitir IA ─────
-window.resetTicketPriority = async function(ticketId) {
-    if (!confirm('¿Resetear la prioridad de este ticket?\n\nVolverá a permitir que la IA la gestione en próximas ejecuciones.')) return;
-    try {
-        await apiFetch(`/admin/tickets/${ticketId}/reset-priority`, 'POST', {});
-        navigate('ticket-detail', ticketId); // recargar el detalle
-    } catch (e) {
-        alert('Error: ' + e.message);
-    }
-};
+// resetTicketPriority quedó deprecado en favor del toggle 'IA gestiona'
+// (el endpoint POST /reset-priority sigue existiendo para uso programático)
 
 // ───── AI Prioritize (Fase 4 Ítem 2) ─────
 window.runAiPrioritize = async function() {

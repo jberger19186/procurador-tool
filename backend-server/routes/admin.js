@@ -1185,12 +1185,20 @@ router.put('/tickets/:id/status', authenticateAdmin, async (req, res) => {
     }
 });
 
-// Cambiar prioridad del ticket (manual por admin)
-// Si la prioridad anterior fue puesta por IA, marca como 'ai_overridden' para
-// que futuras re-ejecuciones de IA no la sobreescriban
+// Cambiar prioridad del ticket — modelo con toggle ai_managed
+// Body: { priority, ai_managed?: boolean }
+//
+// Lógica:
+//   - ai_managed=true  + prioridad cambió      → source=NULL (próximo IA-run la procesa)
+//   - ai_managed=true  + prioridad no cambió   → source NO se toca (NULL o 'ai')
+//   - ai_managed=false                         → source='manual' (locked, IA nunca toca)
+//
+// Backward compat:
+//   - Si ai_managed no se envía, usa lógica vieja:
+//     source previo 'ai' → 'ai_overridden'; otro → 'manual'
 router.put('/tickets/:id/priority', authenticateAdmin, async (req, res) => {
     const { id } = req.params;
-    const { priority } = req.body;
+    const { priority, ai_managed } = req.body;
     const db = req.app.get('db');
 
     const validPriorities = ['low', 'medium', 'high', 'urgent'];
@@ -1199,26 +1207,69 @@ router.put('/tickets/:id/priority', authenticateAdmin, async (req, res) => {
     }
 
     try {
-        const cur = await db.query('SELECT priority_source FROM support_tickets WHERE id = $1', [id]);
+        const cur = await db.query(
+            'SELECT priority, priority_source FROM support_tickets WHERE id = $1',
+            [id]
+        );
         if (cur.rows.length === 0) {
             return res.status(404).json({ error: 'Ticket no encontrado' });
         }
 
-        // Si venía de IA → marcamos 'ai_overridden' para protegerla en re-runs
-        // Si era NULL o 'manual' → 'manual'
-        const newSource = cur.rows[0].priority_source === 'ai' ? 'ai_overridden' : 'manual';
+        const prevPriority = cur.rows[0].priority;
+        const prevSource   = cur.rows[0].priority_source;
+        const priorityChanged = priority !== prevPriority;
 
+        let newSource;
+        if (typeof ai_managed === 'boolean') {
+            // Modo nuevo (toggle explícito)
+            if (ai_managed) {
+                // IA gestiona:
+                //   - Si prevSource era 'manual' o 'ai_overridden' → reset a NULL (transición de locked a unlocked)
+                //   - Si prioridad cambió → reset a NULL (próximo IA-run lo procesa con nuevo punto de partida)
+                //   - Si ya era 'ai' o NULL y no cambió → preservar
+                if (prevSource === 'manual' || prevSource === 'ai_overridden' || priorityChanged) {
+                    newSource = null;
+                } else {
+                    newSource = prevSource; // 'ai' o NULL → preservar
+                }
+            } else {
+                // Admin gestiona: fijo manual
+                newSource = 'manual';
+            }
+        } else {
+            // Modo legacy (sin ai_managed)
+            newSource = prevSource === 'ai' ? 'ai_overridden' : 'manual';
+        }
+
+        // Si source no cambia Y prioridad no cambia → no hagas nada (idempotente)
+        if (newSource === prevSource && !priorityChanged) {
+            return res.json({
+                success: true,
+                message: 'Sin cambios',
+                priority_source: prevSource,
+                noop: true
+            });
+        }
+
+        // Limpiar notes/set_by si pasamos de 'ai' a otro source (ya no aplica el razonamiento)
+        const clearNotes = (prevSource === 'ai' && newSource !== 'ai');
         await db.query(`
             UPDATE support_tickets
             SET priority = $1,
                 priority_source = $2,
                 priority_set_at = NOW(),
                 priority_set_by = $3
+                ${clearNotes ? ', priority_notes = NULL' : ''}
             WHERE id = $4
         `, [priority, newSource, req.user.id, id]);
 
-        console.log(`🎫 Ticket #${id} → prioridad '${priority}' (source=${newSource}) por admin: ${req.user.id}`);
-        res.json({ success: true, message: `Prioridad actualizada a '${priority}'`, priority_source: newSource });
+        console.log(`🎫 Ticket #${id} → prioridad '${priority}' (source=${newSource ?? 'NULL'}) por admin: ${req.user.id}`);
+        res.json({
+            success: true,
+            message: 'Prioridad actualizada',
+            priority,
+            priority_source: newSource
+        });
     } catch (error) {
         console.error('Error actualizando prioridad:', error);
         res.status(500).json({ error: 'Error actualizando prioridad' });
