@@ -966,8 +966,23 @@ Sección Sistema del sidebar:
   - **UTF-8 garantizado**: wrapper automático de `<!DOCTYPE><meta charset>` en `sendEmail()` + `textEncoding: 'base64'` en nodemailer — beneficia todos los emails del sistema
   - **PORTAL_URL** corregido a `https://api.procuradortool.com/usuarios/` (antes apuntaba mal a la landing)
   - **UX**: badge `#ID` ahora visible en la lista y detalle de tickets del portal (consistencia con el email)
+- ✅ **Prioridad IA en tickets** (Fase 4 Ítem 2 — sesión 2026-05-22, tag `fase4-item2`):
+  - **Modelo**: `support_tickets` +`priority_source`, +`priority_notes`, +`priority_set_at`, +`priority_set_by` (migración `20260522_add_ticket_priority_source.sql`)
+  - **Estados de source**: `NULL` (sin clasif, IA puede procesarlo) · `'ai'` (IA clasificó) · `'manual'` (admin bloqueó) · `'ai_overridden'` (legacy, equivalente a manual)
+  - **Endpoint nuevo**: `POST /admin/tickets/ai-prioritize { ticket_ids?: [] }` — clasifica con Claude Haiku (rate limit 100/h/admin, paralelismo 5)
+  - **Endpoint actualizado**: `PUT /admin/tickets/:id/priority` ahora acepta `ai_managed: boolean`
+    * `ai_managed=true` + priority cambió → source=NULL
+    * `ai_managed=true` + prevSource era manual/ai_overridden → source=NULL (transición)
+    * `ai_managed=true` + ya era ai/NULL sin cambios → preservar (noop)
+    * `ai_managed=false` → source='manual'
+  - **Endpoint helper**: `POST /admin/tickets/:id/reset-priority` (limpia source, accesible vía API)
+  - **UI**:
+    * Tabla: badge con ícono 🤖 (IA) / 👤 (admin) / borde punteado "sin clasif." (NULL)
+    * Detalle: toggle "🤖 IA gestiona esta prioridad" + mini-badge dinámico + razonamiento IA visible si existe
+    * Botón global "🤖 Establecer prioridad por IA (N)" en header de Tickets
+  - **System prompt**: `AI_PRIORITY_SYSTEM_PROMPT` con contexto Procurador SCW y criterios L/M/H/U conservadores
+  - **Modelo**: `claude-haiku-4-5`, max_tokens 300
 - ⬜ Mejoras al sistema de tickets (Fase 4 — pendientes):
-  - Prioridad asignada por IA (Ítem 2)
   - Proyectar comentario con IA (Ítem 3)
   - Base de Conocimiento (Ítem 4)
 

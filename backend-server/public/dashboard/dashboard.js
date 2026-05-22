@@ -897,6 +897,7 @@ async function renderTicketDetail(ticketId) {
                                 </span>
                             </label>
                             ${t.priority_notes ? `<div style="margin-top:6px;padding:6px 9px;background:#f9fafb;border-left:2px solid #6366f1;border-radius:4px;font-size:11px;color:var(--text-muted);line-height:1.4"><strong>💬 Razonamiento IA:</strong> ${escHtml(t.priority_notes)}</div>` : ''}
+                            ${!t.priority_source ? `<div style="margin-top:6px;padding:6px 9px;background:#fef9c3;border-left:2px solid #ca8a04;border-radius:4px;font-size:11px;color:#854d0e;line-height:1.4"><strong>⏳ Sin clasificar:</strong> valor placeholder. La IA lo actualizará en el próximo batch (botón "🤖 Establecer prioridad por IA" en la tabla).</div>` : ''}
                         </div>
                         <button class="btn btn-primary" onclick="updateTicketMeta(${t.id})">Guardar cambios</button>
                     </div>
@@ -1151,8 +1152,14 @@ function ticketStatusBadge(s) {
 function priorityBadge(p, source, notes) {
     const m = { low: 'badge-gray', medium: 'badge-blue', high: 'badge-yellow', urgent: 'badge-red' };
     const l = { low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' };
-    // Ícono unificado: 🤖 si IA gestiona (ai o NULL), 👤 si admin gestiona (manual o ai_overridden)
-    // NULL = pendiente de IA (sin ícono específico para no saturar la tabla)
+
+    // Sin source = ticket recién creado, esperando análisis IA
+    // Visual: borde punteado + opacidad reducida + texto "sin clasif."
+    if (!source) {
+        return `<span class="badge badge-gray" style="opacity:0.7;border:1px dashed #9ca3af;font-style:italic" title="Pendiente de clasificación por IA — placeholder hasta el próximo batch">${l[p] || p} · sin clasif.</span>`;
+    }
+
+    // Ícono unificado: 🤖 si IA gestiona, 👤 si admin gestiona
     let srcIcon = '';
     if (source === 'ai') srcIcon = '🤖 ';
     else if (source === 'manual' || source === 'ai_overridden') srcIcon = '👤 ';

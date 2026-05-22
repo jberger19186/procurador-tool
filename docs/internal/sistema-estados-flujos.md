@@ -220,6 +220,89 @@ navigateTo('soporte') → renderSoporte() → ve el ticket #N actualizado
 - El usuario siempre debe loguearse con su contraseña
 - El `?goto=` no es sensible — solo indica destino, no autentica
 
+### Flujo 6 — Prioridad IA en tickets
+
+> Implementado en Fase 4 Ítem 2 (sesión 2026-05-22). Modelo: Claude Haiku 4.5.
+
+#### Estados de `priority_source`
+
+```
+┌──────────────┬──────────────────────────────────────────────────────────────┐
+│ NULL         │ Sin clasificar — ticket recién creado o reseteado.           │
+│              │ priority='medium' es placeholder. IA puede procesarlo.       │
+├──────────────┼──────────────────────────────────────────────────────────────┤
+│ 'ai'         │ IA lo clasificó. Razonamiento en priority_notes.             │
+│              │ IA puede re-procesarlo en batches futuros (refresh).         │
+├──────────────┼──────────────────────────────────────────────────────────────┤
+│ 'manual'     │ Admin lo fijó manualmente (toggle OFF).                      │
+│              │ IA NUNCA lo toca. Único cambio: admin edita o tildea toggle. │
+├──────────────┼──────────────────────────────────────────────────────────────┤
+│'ai_overridden│ Legacy — admin editó prioridad puesta por IA antes del       │
+│              │ refactor del toggle. Funcionalmente equivalente a 'manual'.  │
+└──────────────┴──────────────────────────────────────────────────────────────┘
+```
+
+#### Transiciones (PUT /admin/tickets/:id/priority)
+
+```
+INPUT: priority (low/medium/high/urgent) + ai_managed (boolean)
+
+Si ai_managed === true:
+  ├── prevSource es 'manual' o 'ai_overridden' → newSource = NULL (admin destildó)
+  ├── priorityChanged → newSource = NULL (admin puso nuevo valor, IA lo re-procesa)
+  └── ya era 'ai' o NULL sin cambios → preservar (noop, sin escritura)
+
+Si ai_managed === false:
+  └── newSource = 'manual' (admin gestiona, lockea de IA)
+
+Si ai_managed no se envía (legacy):
+  ├── prevSource === 'ai' → newSource = 'ai_overridden'
+  └── otro → newSource = 'manual'
+```
+
+#### Batch IA (POST /admin/tickets/ai-prioritize)
+
+```
+Admin click "🤖 Establecer prioridad por IA (N)" en tabla
+        │
+        ▼
+POST /admin/tickets/ai-prioritize  { ticket_ids?: [] }
+        │
+        ├── Query: WHERE (source IS NULL OR source = 'ai') AND status != 'closed'
+        ├── Rate limit: 100 tickets/hora/admin (in-memory Map)
+        ├── Paralelismo: 5 concurrent calls a Anthropic
+        │
+        ▼
+Por cada ticket:
+        │
+        ├── Construye contexto: category + plan_name + title + description
+        ├── POST api.anthropic.com/v1/messages
+        │     model: claude-haiku-4-5
+        │     max_tokens: 300
+        │     system: AI_PRIORITY_SYSTEM_PROMPT (criterios L/M/H/U conservadores)
+        │
+        ├── Parse JSON estricto: { priority: 'low'|'medium'|'high'|'urgent', notes: '...' }
+        │
+        └── UPDATE support_tickets
+              SET priority = $1, priority_source = 'ai',
+                  priority_notes = $2, priority_set_at = NOW(),
+                  priority_set_by = NULL
+              WHERE id = $3
+        │
+        ▼
+Response: { processed: N, failed: M, errors: [...] }
+```
+
+#### UI: ciclo de vida visual del badge
+
+```
+┌─ Estado ─────────────────┬─ Badge en tabla ─────────────────────┬─ Detalle ────────────┐
+│ Recién creado (NULL)     │ Media · sin clasif.  (gris punteado) │ Toggle ON + aviso ⏳ │
+│ IA clasificó ('ai')      │ 🤖 Alta              (color sólido)  │ Toggle ON + 💬 notes │
+│ Admin destildó ('manual')│ 👤 Urgente           (color sólido)  │ Toggle OFF           │
+└──────────────────────────┴──────────────────────────────────────┴──────────────────────┘
+```
+
 ---
 
 ## 5. Errores frecuentes y resolución
