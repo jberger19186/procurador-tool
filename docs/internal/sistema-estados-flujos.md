@@ -303,6 +303,111 @@ Response: { processed: N, failed: M, errors: [...] }
 └──────────────────────────┴──────────────────────────────────────┴──────────────────────┘
 ```
 
+### Flujo 7 — Visibilidad de comentarios + IA suggest + Ajustes manuales
+
+> Implementado en Fase 4 Ítem 3 (sesión 2026-05-22). Tres features integradas en el detalle del ticket admin.
+
+#### A. Visibilidad de comentarios (external | internal)
+
+```
+COMPOSITOR EN DETALLE TICKET ADMIN:
+┌─────────────────────────────────────────┐
+│ Tipo: [▼ 📤 Externa | 🔒 Interna]      │  ← default: external
+│ [textarea]                              │
+│ [🤖 Proyectar IA*] [Responder]         │  *deshabilitado si interna
+└─────────────────────────────────────────┘
+
+ADMIN ENVÍA con visibility='external':
+  POST /admin/tickets/:id/comment { message, visibility: 'external' }
+    ├── INSERT con visibility='external'
+    ├── UPDATE status='in_progress' si estaba 'open'
+    ├── sendTicketReplyEmail() (si EMAIL_TICKET_REPLY_ENABLED)
+    └── Visible para user en GET /tickets/:id
+
+ADMIN ENVÍA con visibility='internal':
+  POST /admin/tickets/:id/comment { message, visibility: 'internal' }
+    ├── INSERT con visibility='internal'
+    ├── status NO cambia (notas internas son discusión, no respuesta)
+    ├── Email NO se envía (log: "📝 Nota interna en ticket #N")
+    └── INVISIBLE en GET /tickets/:id (filtro WHERE visibility='external')
+
+VISUALIZACIÓN EN EL HILO:
+  📤 Externa: fondo blanco, badge azul/amarillo según rol
+  🔒 Interna: fondo amarillo (#fef9c3), borde izquierdo amber, label "🔒 NOTA INTERNA"
+             + texto "Solo visible para administradores"
+```
+
+#### B. Proyectar respuesta con IA
+
+```
+Admin en compositor (modo Externa) click "🤖 Proyectar con IA"
+        │
+        ▼
+POST /admin/tickets/:id/ai-suggest-reply
+        │
+        ├── Rate limit: 30 sugerencias/hora por admin
+        ├── Contexto enviado a Claude Haiku:
+        │     - Ticket: id, category, priority, title, description
+        │     - Usuario: nombre + plan (display_name)
+        │     - Historial COMPLETO (externas + internas marcadas como tal)
+        │       → la IA "ve" notas internas como contexto privado
+        │       pero genera respuesta externa
+        │     - AI_REPLY_SYSTEM_PROMPT: rioplatense, conciso, anti-hallucination
+        │
+        ▼
+Claude Haiku genera sugerencia
+        │
+        ├── INSERT ai_assistance_logs (action='suggested')
+        └── Response: { suggestion, log_id }
+        │
+        ▼
+Frontend pre-carga textarea + muestra hint azul
+        │
+        ▼
+Admin edita (o no) y click "Responder"
+        │
+        ├── POST comment normal (con visibility='external')
+        │
+        ├── Telemetría async: PATCH /admin/ai-suggest-logs/:log_id
+        │     { action: 'sent_as_is' | 'sent_edited', final_text }
+        │     → calcula edit_distance (chars distintos)
+        │
+        └── Permite medir si el prompt funciona (si edit_distance promedio alto → ajustar)
+```
+
+#### C. Ajuste manual de usos desde ticket
+
+```
+CARD EN COLUMNA DERECHA DEL DETALLE TICKET:
+┌──────────────────────────────────────────┐
+│ 🎯 Ajuste manual de usos                 │
+│ Subsistema: [▼ proc/batch/inf/...]      │
+│ Cantidad: [+10 / -5]                     │
+│ Motivo: [...]                            │
+│ [Aplicar ajuste]                         │
+│                                          │
+│ Historial reciente del usuario:          │
+│  +10 proc · 22/05 · "Compensación X"    │
+│  -5 inf   · 18/05 · "Error operativo"   │
+└──────────────────────────────────────────┘
+
+Admin completa form → click "Aplicar ajuste"
+        │
+        ▼
+POST /admin/subscriptions/:userId/adjust
+  body: { subsystem, amount, reason, ticket_id: currentTicketId }
+        │
+        ├── UPDATE subscriptions SET <subsystem>_bonus += amount
+        ├── INSERT usage_adjustments (con ticket_id vinculado)
+        │
+        ▼
+Refresca historial reciente en el card (últimos 5 ajustes del usuario)
+```
+
+**Diferencia con "🎁 Beneficio comercial"** (que ya existía):
+- Beneficio: 1 por ticket, lockea el ticket, tipos discount/plan_upgrade/usage_reset
+- Ajuste manual: múltiples permitidos, reversibles, granular por subsistema
+
 ---
 
 ## 5. Errores frecuentes y resolución

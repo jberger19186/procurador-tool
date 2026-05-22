@@ -938,8 +938,11 @@ Sección Sistema del sidebar:
 
 ---
 
-### FASE 4 — SOPORTE (en curso)
+### FASE 4 — SOPORTE ✅ CERRADA (sesión 2026-05-22, tag `fase4-completa`)
 **Objetivo:** atención al usuario eficiente con asistencia IA.
+
+> Items 1+2+3 completados cubren el 80% del valor de soporte.
+> Items 4 (KB) + 3.5 (borradores masivos) diferidos a iteración futura — diseño guardado en `docs/internal/mejoras-futuras.md`.
 
 - ✅ Sistema de tickets básico (crear, responder, estados)
 - ✅ Notificaciones in-app admin → usuario (v2.5.x)
@@ -1002,8 +1005,10 @@ Sección Sistema del sidebar:
     * Reusa endpoint existente `POST /admin/subscriptions/:userId/adjust` con `ticket_id` auto-rellenado
     * Diferente de "Beneficio comercial": múltiples ajustes permitidos, reversibles, granular por subsistema
     * Muestra historial reciente de ajustes del usuario (últimos 5)
-- ⬜ Mejoras al sistema de tickets (Fase 4 — pendientes):
-  - Base de Conocimiento (Ítem 4)
+- 📌 **Diferidos a iteración futura** (diseño completo en `docs/internal/mejoras-futuras.md`):
+  - **Base de Conocimiento (Ítem 4)** — postergado hasta tener 20-30 tickets cerrados reales
+  - **Borradores masivos con IA (Ítem 3.5)** — postergado hasta tener KB poblada + volumen > 20 tickets/día
+  - Decisión 2026-05-22: cerrar Fase 4 con Items 1+2+3 que cubren el 80% del valor
 
 ---
 
