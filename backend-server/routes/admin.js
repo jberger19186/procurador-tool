@@ -1244,19 +1244,14 @@ router.post('/tickets/:id/comment', authenticateAdmin, async (req, res) => {
 
         // Notificación por email al usuario (no bloquea la respuesta HTTP)
         // Feature flag EMAIL_TICKET_REPLY_ENABLED en .env controla activación
+        // El link lleva al login normal y luego redirige a Soporte (sin SSO por seguridad anti-forward)
         try {
-            const ssoToken = jwt.sign(
-                { id: ticket.user_id, role: ticket.role || 'user' },
-                process.env.JWT_SECRET,
-                { expiresIn: '24h' }
-            );
             sendTicketReplyEmail(
                 ticket.email,
                 ticket.nombre,
                 ticket.id,
                 ticket.title,
-                message.trim(),
-                ssoToken
+                message.trim()
             ).catch(err => {
                 console.error(`⚠️ Error enviando email de respuesta a ticket #${id}:`, err.message);
             });

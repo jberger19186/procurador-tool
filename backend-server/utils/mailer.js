@@ -32,12 +32,24 @@ async function sendEmail(to, subject, html) {
     const t = getTransporter();
     if (!t) return;
 
+    // Envolver con <!DOCTYPE> + meta charset para asegurar UTF-8 en todos los clientes (Gmail, Outlook, etc.)
+    const fullHtml = html.trim().startsWith('<!DOCTYPE') ? html : `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${subject.replace(/<[^>]+>/g, '')}</title>
+</head>
+<body>${html}</body>
+</html>`;
+
     try {
         const info = await t.sendMail({
             from: process.env.SMTP_FROM || '"Procurador SCW" <noreply@procuradortool.com>',
             to,
             subject,
-            html,
+            html: fullHtml,
+            textEncoding: 'base64',  // Asegura que caracteres no-ASCII en el subject viajen bien
         });
         logger.info(`📧 Email enviado a ${to}: ${subject} (id: ${info.messageId})`);
     } catch (err) {
@@ -161,7 +173,7 @@ async function sendPromoExpirationWarning(email, nombre, planName, daysLeft, pro
     );
 }
 
-const PORTAL_URL = 'https://procuradortool.com/usuarios/';
+const PORTAL_URL = 'https://api.procuradortool.com/usuarios/';
 
 function dateAR(d) {
     return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -273,15 +285,15 @@ async function sendBillingReminderEmail(email, nombre, nextBillingDate) {
  * @param {number} ticketId — ID del ticket
  * @param {string} ticketTitle — título del ticket
  * @param {string} commentPreview — preview de la respuesta (max 200 chars)
- * @param {string} ssoToken — JWT del usuario para auto-login (24h validez)
  */
-async function sendTicketReplyEmail(email, nombre, ticketId, ticketTitle, commentPreview, ssoToken) {
+async function sendTicketReplyEmail(email, nombre, ticketId, ticketTitle, commentPreview) {
     if (process.env.EMAIL_TICKET_REPLY_ENABLED !== 'true') {
         logger.info(`📧 [skip] EMAIL_TICKET_REPLY_ENABLED=false — no se envía reply a ${email}`);
         return;
     }
 
-    const portalUrl = `${PORTAL_URL}?goto=soporte#sso=${encodeURIComponent(ssoToken)}`;
+    // Link al portal con goto=soporte — el usuario hace login normal y luego es redirigido a Soporte
+    const portalUrl = `${PORTAL_URL}?goto=soporte`;
     const truncatedTitle = ticketTitle.length > 60 ? ticketTitle.substring(0, 60) + '…' : ticketTitle;
     const escapedPreview = String(commentPreview || '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -317,7 +329,7 @@ async function sendTicketReplyEmail(email, nombre, ticketId, ticketTitle, commen
           </div>
 
           <p style="color:#6b7280;font-size:12px;margin-top:24px;border-top:1px solid #e5e7eb;padding-top:14px">
-            Este link te lleva directo a tu ticket en el portal web. Si el link expira (24 horas), podés ingresar normalmente con tu email y contraseña.
+            El botón te lleva al portal web — ingresá con tu email y contraseña, y serás redirigido directamente a tu ticket.
           </p>
           <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:8px">
             Procurador SCW — soporte@procuradortool.com

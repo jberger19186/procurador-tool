@@ -219,6 +219,19 @@ async function initDashboard() {
     refreshNotifBadge();
     setInterval(refreshNotifBadge, 120000); // cada 2 min
 
+    // Consumir pending_goto (de SSO o de ?goto= persistido en sessionStorage)
+    const pendingGoto = sessionStorage.getItem('pending_goto');
+    if (pendingGoto) {
+        sessionStorage.removeItem('pending_goto');
+        if (pendingGoto === 'nuevo-ticket') {
+            navigateTo('soporte');
+            setTimeout(() => openNewTicketModal(), 300);
+            return;
+        }
+        navigateTo(pendingGoto);
+        return;
+    }
+
     navigateTo('plan');
 }
 
@@ -1857,27 +1870,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('login-email').focus();
     });
 
-    // Auto-login desde Electron (token en hash #sso=..., sección en ?goto=...)
+    // Capturar ?goto= de la URL (de links externos como emails) antes de cualquier flujo
+    // Se persiste en sessionStorage para sobrevivir al ciclo de login normal
+    const incomingGoto = new URLSearchParams(window.location.search).get('goto');
+    if (incomingGoto) {
+        sessionStorage.setItem('pending_goto', incomingGoto);
+    }
+
+    // Auto-login desde Electron (token en hash #sso=..., sección ya capturada arriba)
     const hash = window.location.hash;
     if (hash && hash.startsWith('#sso=')) {
         const ssoToken = hash.slice(5);
         if (ssoToken) {
             saveToken(ssoToken);
-            // Leer sección de destino antes de limpiar la URL
-            const gotoSection = new URLSearchParams(window.location.search).get('goto') || null;
             // Limpiar hash y query para no exponerlos en el historial del navegador
             history.replaceState(null, '', window.location.pathname);
             state.token = ssoToken;
             await initDashboard();
-            // Navegar a la sección solicitada después del dashboard
-            if (gotoSection === 'nuevo-ticket') {
-                navigateTo('soporte');
-                setTimeout(() => openNewTicketModal(), 300);
-            } else if (gotoSection) {
-                navigateTo(gotoSection);
-            }
+            // initDashboard() ya consume pending_goto y navega
             return;
         }
+    }
+
+    // Si solo había ?goto= sin SSO, limpiar la URL (el pending_goto ya está en sessionStorage)
+    if (incomingGoto && !hash.startsWith('#sso=')) {
+        history.replaceState(null, '', window.location.pathname);
     }
 
     // Check if already logged in
