@@ -1183,3 +1183,188 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     .modal { border-radius: 12px; }
     .plan-days-number { font-size: 36px; }
 }
+
+/* ===== SECCIÓN AYUDA ===== */
+
+.ayuda-search-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+    margin-bottom: 12px;
+    transition: border-color .2s;
+}
+.ayuda-search-input:focus { border-color: var(--accent); background: #fff; }
+
+.ayuda-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.ayuda-pill {
+    padding: 4px 13px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .18s;
+    font-weight: 500;
+}
+.ayuda-pill:hover { border-color: var(--accent); color: var(--accent); }
+.ayuda-pill.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.ayuda-faq-list { display: flex; flex-direction: column; gap: 0; }
+
+.ayuda-faq-item {
+    border-bottom: 1px solid var(--border);
+}
+.ayuda-faq-item:last-child { border-bottom: none; }
+
+.ayuda-faq-q {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    user-select: none;
+    transition: color .15s;
+}
+.ayuda-faq-q:hover { color: var(--accent); }
+
+.ayuda-faq-arrow {
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: transform .2s;
+}
+.ayuda-faq-item.open .ayuda-faq-arrow { transform: rotate(90deg); }
+
+.ayuda-faq-a {
+    display: none;
+    padding: 0 4px 13px;
+    font-size: 13.5px;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+.ayuda-faq-item.open .ayuda-faq-a { display: block; }
+
+.ayuda-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 24px 0;
+}
+
+/* Manual de usuario */
+.ayuda-manual-body {
+    border-top: 1px solid var(--border);
+}
+
+.ayuda-manual-content {
+    padding: 24px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.manual-section {
+    margin-bottom: 28px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+}
+.manual-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+.manual-section h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 10px;
+}
+
+.manual-section h4 {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 10px 0 6px;
+}
+
+.manual-section p {
+    font-size: 13.5px;
+    color: var(--text-muted);
+    line-height: 1.65;
+    margin-bottom: 8px;
+}
+.manual-section p:last-child { margin-bottom: 0; }
+
+.manual-section ol,
+.manual-section ul {
+    padding-left: 20px;
+    font-size: 13.5px;
+    color: var(--text-muted);
+    line-height: 1.65;
+}
+.manual-section li { margin-bottom: 4px; }
+
+.manual-section code {
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 12px;
+    font-family: 'Cascadia Code', Consolas, monospace;
+    color: var(--accent);
+}
+
+.manual-note {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #78350f !important;
+    font-size: 13px !important;
+}
+
+.manual-section a {
+    color: var(--accent);
+    text-decoration: none;
+}
+.manual-section a:hover { text-decoration: underline; }
+
+.manual-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 8px;
+}
+.manual-table th {
+    background: var(--bg);
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text);
+    border-bottom: 2px solid var(--border);
+}
+.manual-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    vertical-align: top;
+}
+.manual-table tr:last-child td { border-bottom: none; }

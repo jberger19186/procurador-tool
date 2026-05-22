@@ -398,6 +398,7 @@ function navigateTo(section) {
         case 'soporte': renderSoporte(); break;
         case 'notificaciones': renderNotificaciones(); break;
         case 'ia': renderIA(); break;
+        case 'ayuda': renderAyuda(); break;
         case 'reactivacion': renderReactivacion(); break;
     }
 }
@@ -1305,6 +1306,281 @@ async function submitReactivacionRequest() {
     }
 }
 
+// ─── SECTION: AYUDA ──────────────────────────────────────────────────────────
+
+const AYUDA_FAQ_ITEMS = [
+    // --- PROCURACIÓN ---
+    { cat: 'procuracion', q: '¿Cómo procuro mis expedientes?', a: 'Hacé click en "Procurar" en el sidebar o en el botón ▶ Procurar. El sistema accede automáticamente al SCW del PJN con tus credenciales guardadas en Chrome.' },
+    { cat: 'procuracion', q: '¿Puedo procurar solo algunos expedientes?', a: 'Sí. En la sección Procuración podés seleccionar expedientes individuales antes de ejecutar, o usar "Procurar seleccionados" para procurar un subconjunto.' },
+    { cat: 'procuracion', q: '¿Cuánto tarda la procuración?', a: 'Depende de la cantidad de expedientes y la velocidad del PJN. Con conexión normal, cada expediente tarda entre 5 y 15 segundos.' },
+    { cat: 'procuracion', q: '¿Puedo usar la computadora mientras procura?', a: 'Sí, pero evitá usar Chrome durante la ejecución. El sistema opera Chrome en segundo plano; interrumpirlo puede causar errores.' },
+    { cat: 'procuracion', q: '¿Puedo procurar con fecha personalizada?', a: 'Sí. Usá el botón "Procurar con fecha…" para seleccionar un rango de fechas distinto al predeterminado.' },
+    // --- INFORME ---
+    { cat: 'informe', q: '¿Cómo genero un informe?', a: 'Click en "Informe" en el sidebar. Podés procesar un expediente individual ingresando el número o un lote cargando un archivo Excel con la lista.' },
+    { cat: 'informe', q: '¿Qué formato debe tener el Excel para informe en lote?', a: 'Una columna con encabezado "expediente" y los números en el formato estándar del PJN (ej: 12345/2023). Descargá la plantilla desde la sección Informe.' },
+    { cat: 'informe', q: '¿El informe genera un PDF?', a: 'El informe genera un archivo Excel con el estado de cada expediente. El PDF de cada movimiento se descarga por separado si el sistema lo detecta disponible.' },
+    { cat: 'informe', q: '¿Puedo detener un informe a mitad?', a: 'Sí, con el botón "Detener". Los expedientes ya procesados se guardan; el informe quedará parcial hasta ese punto.' },
+    // --- MONITOR ---
+    { cat: 'monitor', q: '¿Qué es el Monitor de partes?', a: 'Controlá automáticamente si aparecen nuevos expedientes vinculados a determinadas partes (personas o empresas). Configurá las partes en la sección Monitor.' },
+    { cat: 'monitor', q: '¿Cómo agrego una parte al monitor?', a: 'En la sección Monitor, hacé click en "+ Agregar parte", ingresá el nombre o CUIT/CUIL y guardá. El sistema buscará expedientes vinculados en cada ejecución.' },
+    { cat: 'monitor', q: '¿Con qué frecuencia se actualiza el monitor?', a: 'El monitor se actualiza cada vez que ejecutás la sección Monitor manualmente, o si configuraste una frecuencia automática en Configuración.' },
+    { cat: 'monitor', q: '¿Cuántas partes puedo monitorear?', a: 'Depende de tu plan: COMBO_PROMO permite 3 partes activas, PRO permite 10, ENTERPRISE ilimitadas.' },
+    // --- EXTENSIÓN ---
+    { cat: 'extension', q: '¿Cómo instalo la extensión de Chrome?', a: 'Buscá "Procurador SCW" en la Chrome Web Store o pedile el enlace directo al soporte. Hacé click en "Agregar a Chrome" y aceptá los permisos.' },
+    { cat: 'extension', q: '¿Cómo actualizo la extensión?', a: 'La extensión se actualiza automáticamente desde la Chrome Web Store. También podés ir a chrome://extensions y hacer click en el ícono de actualizar.' },
+    { cat: 'extension', q: '¿Para qué sirve la extensión?', a: 'La extensión autocompleta el número de expediente (jurisdicción, número y año) en los módulos del PJN: SCW, Escritos, Notificaciones y DEOX, evitando la escritura manual.' },
+    { cat: 'extension', q: '¿La extensión funciona sin la app Electron?', a: 'Sí. Con el plan EXTENSION_PROMO tenés acceso solo a la extensión sin necesitar instalar la app de escritorio.' },
+    { cat: 'extension', q: '¿Chrome muestra un aviso al instalar la extensión?', a: 'Es normal para extensiones nuevas. Hacé click en "Continuar a la instalación". No indica ningún riesgo — la extensión está aprobada por Google.' },
+    // --- CUENTA Y PLAN ---
+    { cat: 'cuenta', q: '¿Cómo cambio de plan?', a: 'Ingresá a "Mi Plan" en el panel lateral y hacé click en "Ver planes disponibles". Los cambios se aplican de inmediato o al inicio del próximo ciclo.' },
+    { cat: 'cuenta', q: '¿Puedo usar la app en más de una computadora?', a: 'No. La licencia está vinculada a un dispositivo. Para cambiar de equipo, contactá al soporte.' },
+    { cat: 'cuenta', q: '¿Cómo cancelo mi suscripción?', a: 'En la sección "Facturación" de este portal, hacé click en "Cancelar suscripción". Conservás el acceso hasta fin del período pago.' },
+    { cat: 'cuenta', q: '¿Dónde veo cuántas ejecuciones me quedan?', a: 'En la sección "Mi Plan" de este portal o en la sección "Mi Cuenta" de la app Electron.' },
+    { cat: 'cuenta', q: '¿Qué pasa cuando se vence el trial?', a: 'Al agotar las 20 ejecuciones de prueba, la cuenta queda pendiente de activación. El admin revisa y activa (o rechaza) manualmente.' },
+    // --- ERRORES FRECUENTES ---
+    { cat: 'errores', q: '¿Qué significa que el login al PJN falló?', a: 'El sistema no pudo ingresar al SCW. Verificá que Chrome tenga guardada la contraseña (botón "Agregar contraseña SCW" en la app). Si la contraseña del PJN cambió, actualizala en Chrome primero.' },
+    { cat: 'errores', q: '¿Por qué se colgó el proceso?', a: 'Podés detenerlo con el botón "Detener". Si se repite, revisá que Chrome no tenga otras pestañas abiertas del PJN bloqueando el acceso y que tu sesión PJN esté vigente.' },
+    { cat: 'errores', q: '¿Por qué dice "proceso activo en otro dispositivo"?', a: 'El sistema tiene un candado anti-concurrencia. Asegurate de no tener otra instancia de la app abierta. Si el error persiste después de cerrar todo, esperá 2 minutos y reintentá.' },
+    { cat: 'errores', q: '¿Dónde están los archivos descargados?', a: 'En la carpeta configurada en Configuración > General > Carpeta de descargas. También podés acceder desde "Abrir descargas" en el sidebar.' },
+    { cat: 'errores', q: '¿Necesito dejar Chrome abierto?', a: 'No. El sistema abre y cierra Chrome automáticamente en segundo plano. No interferís con el proceso salvo que abras ventanas del PJN manualmente.' },
+    { cat: 'errores', q: '¿Qué hago si la app no arranca?', a: 'Cerrá Chrome completamente si estaba abierto, esperá 10 segundos y volvé a abrir la app. Si el problema persiste, usá el botón de soporte para abrir un ticket.' },
+    // --- PRIVACIDAD Y SEGURIDAD ---
+    { cat: 'privacidad', q: '¿Mis credenciales del PJN pasan por sus servidores?', a: 'No. Las contraseñas del PJN se almacenan exclusivamente en el gestor de contraseñas de tu Chrome y nunca salen de tu equipo. Procurador solo coordina la automatización.' },
+    { cat: 'privacidad', q: '¿Cómo se protegen mis datos?', a: 'Los scripts de automatización están cifrados con AES-256 y se firman digitalmente. La comunicación con el servidor usa HTTPS/TLS. Tu sesión se valida con token JWT de corta duración.' },
+    { cat: 'privacidad', q: '¿Procurador guarda mis expedientes?', a: 'No se almacena el contenido de los expedientes en los servidores. Los archivos de resultado (Excel, PDF) quedan únicamente en tu equipo.' },
+    { cat: 'privacidad', q: '¿Puedo eliminar mi cuenta?', a: 'Sí. Cancelá tu suscripción desde el portal web y luego contactá al soporte solicitando la eliminación completa de datos. Cumplimos con las normativas de protección de datos.' },
+];
+
+const AYUDA_FAQ_CATS = [
+    { id: 'todas',       label: 'Todas' },
+    { id: 'procuracion', label: 'Procuración' },
+    { id: 'informe',     label: 'Informe' },
+    { id: 'monitor',     label: 'Monitor' },
+    { id: 'extension',   label: 'Extensión' },
+    { id: 'cuenta',      label: 'Cuenta' },
+    { id: 'errores',     label: 'Errores' },
+    { id: 'privacidad',  label: 'Privacidad' },
+];
+
+let ayudaActiveCat = 'todas';
+let ayudaManualOpen = false;
+
+function renderAyuda() {
+    // --- Pills ---
+    const pillsEl = document.getElementById('ayuda-pills');
+    if (pillsEl && !pillsEl.dataset.initialized) {
+        pillsEl.dataset.initialized = '1';
+        pillsEl.innerHTML = AYUDA_FAQ_CATS.map(c =>
+            `<button class="ayuda-pill${c.id === 'todas' ? ' active' : ''}" data-cat="${c.id}">${escapeHtml(c.label)}</button>`
+        ).join('');
+        pillsEl.querySelectorAll('.ayuda-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                ayudaActiveCat = btn.dataset.cat;
+                pillsEl.querySelectorAll('.ayuda-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderAyudaFaq(document.getElementById('ayuda-search')?.value || '');
+            });
+        });
+    }
+
+    // --- Search ---
+    const searchEl = document.getElementById('ayuda-search');
+    if (searchEl && !searchEl.dataset.initialized) {
+        searchEl.dataset.initialized = '1';
+        searchEl.addEventListener('input', () => renderAyudaFaq(searchEl.value));
+    }
+
+    // --- Manual toggle ---
+    const toggleEl = document.getElementById('ayuda-manual-toggle');
+    const manualBody = document.getElementById('ayuda-manual-body');
+    const manualBtn = document.getElementById('ayuda-manual-btn');
+    if (toggleEl && !toggleEl.dataset.initialized) {
+        toggleEl.dataset.initialized = '1';
+        toggleEl.addEventListener('click', () => {
+            ayudaManualOpen = !ayudaManualOpen;
+            manualBody.style.display = ayudaManualOpen ? 'block' : 'none';
+            manualBtn.textContent = ayudaManualOpen ? 'Ocultar manual' : 'Ver manual';
+            if (ayudaManualOpen) {
+                document.getElementById('ayuda-manual-content').innerHTML = getManualHTML();
+            }
+        });
+    }
+
+    // Render FAQ with current state
+    renderAyudaFaq(searchEl?.value || '');
+
+    // Restore manual state
+    if (manualBody) {
+        manualBody.style.display = ayudaManualOpen ? 'block' : 'none';
+        if (manualBtn) manualBtn.textContent = ayudaManualOpen ? 'Ocultar manual' : 'Ver manual';
+        if (ayudaManualOpen) {
+            document.getElementById('ayuda-manual-content').innerHTML = getManualHTML();
+        }
+    }
+}
+
+function renderAyudaFaq(filter) {
+    const faqEl = document.getElementById('ayuda-faq-list');
+    if (!faqEl) return;
+    const q = (filter || '').toLowerCase().trim();
+    let items = ayudaActiveCat === 'todas' ? AYUDA_FAQ_ITEMS : AYUDA_FAQ_ITEMS.filter(f => f.cat === ayudaActiveCat);
+    if (q) items = items.filter(f => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q));
+
+    if (!items.length) {
+        faqEl.innerHTML = '<p class="ayuda-empty">Sin resultados. Intentá con otras palabras.</p>';
+        return;
+    }
+
+    faqEl.innerHTML = items.map((f, i) => `
+        <div class="ayuda-faq-item" data-idx="${i}">
+            <div class="ayuda-faq-q">
+                <span>${escapeHtml(f.q)}</span>
+                <span class="ayuda-faq-arrow">▸</span>
+            </div>
+            <div class="ayuda-faq-a">${escapeHtml(f.a)}</div>
+        </div>`
+    ).join('');
+
+    faqEl.querySelectorAll('.ayuda-faq-q').forEach(div => {
+        div.addEventListener('click', () => {
+            const item = div.closest('.ayuda-faq-item');
+            const isOpen = item.classList.contains('open');
+            faqEl.querySelectorAll('.ayuda-faq-item').forEach(it => it.classList.remove('open'));
+            if (!isOpen) item.classList.add('open');
+        });
+    });
+}
+
+function getManualHTML() {
+    return `
+    <div class="manual-section">
+        <h2>¿Qué es Procurador SCW?</h2>
+        <p>Procurador SCW es una herramienta de automatización judicial que te permite procurar expedientes, generar informes y monitorear partes en el Sistema de Consulta Web del Poder Judicial de la Nación (PJN), sin escribir nada a mano.</p>
+        <p><strong>Requisito fundamental:</strong> necesitás tener credenciales propias en el SCW del PJN. La herramienta trabaja con tu sesión — nunca modifica ni accede a datos que vos no puedas ver.</p>
+    </div>
+
+    <div class="manual-section">
+        <h2>Componentes del sistema</h2>
+        <table class="manual-table">
+            <thead><tr><th>Componente</th><th>Qué hace</th><th>Cómo se accede</th></tr></thead>
+            <tbody>
+                <tr><td><strong>App de escritorio</strong></td><td>Procuración automática, informes, monitor de partes</td><td>Instalador .exe</td></tr>
+                <tr><td><strong>Extensión de Chrome</strong></td><td>Autocompleta número de expediente en portales PJN</td><td>Chrome Web Store</td></tr>
+                <tr><td><strong>Portal web</strong></td><td>Gestión de cuenta, plan y soporte</td><td>Este portal</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="manual-section">
+        <h2>Instalación de la app de escritorio</h2>
+        <ol>
+            <li><strong>Descargá el instalador</strong> — Bajá el archivo <code>Procurador-SCW-Setup-X.X.X.exe</code> desde el enlace que te enviamos al activar tu cuenta (sección Mi Plan &gt; Descargas).</li>
+            <li><strong>Instalá</strong> — Ejecutá el instalador y aceptá las opciones predeterminadas. Si Windows muestra un aviso de seguridad, hacé click en "Más información" → "Ejecutar de todas formas".</li>
+            <li><strong>Primer inicio de sesión</strong> — Ingresá tu email y contraseña de Procurador (no las del PJN). La app te guiará por la configuración inicial.</li>
+        </ol>
+    </div>
+
+    <div class="manual-section">
+        <h2>Configuración inicial (Onboarding)</h2>
+        <ol>
+            <li><strong>Verificar conexión al servidor</strong> — La app verifica conectividad. Si falla, revisá tu internet.</li>
+            <li><strong>Login</strong> — Ingresá tu email y contraseña de Procurador.</li>
+            <li><strong>Configurar Chrome con perfil dedicado</strong> — El sistema lo configura automáticamente para no interferir con tu navegación habitual.</li>
+            <li><strong>Conectar al SCW del PJN</strong> — La app abre Chrome y te lleva al portal del PJN. Iniciá sesión con tus credenciales del PJN manualmente, una única vez. Chrome las recordará.</li>
+            <li><strong>Verificar contraseña guardada</strong> — El sistema confirma que Chrome tiene las credenciales. Si no las recuerda, usá el botón "Agregar contraseña SCW" en Configuración.</li>
+        </ol>
+    </div>
+
+    <div class="manual-section">
+        <h2>Procuración</h2>
+        <p>Accede automáticamente al SCW del PJN y procura todos tus expedientes.</p>
+        <ol>
+            <li>Hacé click en <strong>▶ Procurar</strong> en el sidebar.</li>
+            <li>El sistema abre Chrome en segundo plano e inicia el proceso.</li>
+            <li>Ves el progreso en tiempo real en el panel de logs.</li>
+            <li>Al finalizar, los resultados quedan en la carpeta de descargas.</li>
+        </ol>
+        <p><strong>Opciones disponibles:</strong> Procurar todos · Procurar seleccionados · Procurar con fecha personalizada.</p>
+        <p class="manual-note">⚠️ No uses Chrome manualmente mientras el sistema está ejecutando.</p>
+    </div>
+
+    <div class="manual-section">
+        <h2>Informe</h2>
+        <p>Genera un informe detallado del estado de uno o varios expedientes.</p>
+        <h4>Informe individual:</h4>
+        <ol>
+            <li>Ingresá el número de expediente en el campo de búsqueda.</li>
+            <li>Hacé click en <strong>Generar informe</strong>.</li>
+            <li>El resultado se descarga como archivo Excel.</li>
+        </ol>
+        <h4>Informe en lote:</h4>
+        <ol>
+            <li>Preparar un Excel con una columna llamada <code>expediente</code> y los números en cada fila.</li>
+            <li>Hacé click en <strong>Cargar archivo</strong> y seleccioná tu Excel.</li>
+            <li>Hacé click en <strong>Procesar lote</strong> — el sistema genera un Excel con el estado de todos.</li>
+        </ol>
+        <p>Podés descargar una <strong>plantilla de ejemplo</strong> desde el botón correspondiente en la sección Informe.</p>
+    </div>
+
+    <div class="manual-section">
+        <h2>Monitor de partes</h2>
+        <p>Vigila automáticamente si aparecen nuevos expedientes vinculados a personas o empresas.</p>
+        <h4>Agregar una parte:</h4>
+        <ol>
+            <li>Hacé click en <strong>+ Agregar parte</strong>.</li>
+            <li>Ingresá el nombre o CUIT/CUIL de la parte.</li>
+            <li>Hacé click en <strong>Guardar</strong>.</li>
+        </ol>
+        <h4>Ejecutar el monitor:</h4>
+        <ol>
+            <li>Hacé click en <strong>▶ Ejecutar monitor</strong>.</li>
+            <li>Las novedades aparecen en el panel de resultados.</li>
+        </ol>
+        <p><strong>Límite de partes según plan:</strong> COMBO_PROMO: 3 · PRO: 10 · ENTERPRISE: ilimitadas.</p>
+    </div>
+
+    <div class="manual-section">
+        <h2>Extensión de Chrome</h2>
+        <p>Instalación: buscá <strong>"Procurador SCW"</strong> en la <a href="https://chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme" target="_blank" rel="noopener">Chrome Web Store</a> y hacé click en "Agregar a Chrome".</p>
+        <p>La extensión se activa automáticamente al navegar a los portales del PJN y autocompleta el número de expediente.</p>
+        <p><strong>Portales compatibles:</strong> scw.pjn.gov.ar · escritos.pjn.gov.ar · notif.pjn.gov.ar · deox.pjn.gov.ar</p>
+    </div>
+
+    <div class="manual-section">
+        <h2>Errores frecuentes</h2>
+        <table class="manual-table">
+            <thead><tr><th>Error</th><th>Causa</th><th>Solución</th></tr></thead>
+            <tbody>
+                <tr><td>Login al PJN falló</td><td>Chrome sin contraseña PJN guardada</td><td>Botón "Agregar contraseña SCW" en Configuración</td></tr>
+                <tr><td>Proceso colgado / timeout</td><td>PJN lento o caído</td><td>Reintentar en 5 min; verificar el portal PJN</td></tr>
+                <tr><td>Proceso activo en otro dispositivo</td><td>Otra instancia activa</td><td>Cerrar otras ventanas; esperar 2 min</td></tr>
+                <tr><td>La app no arranca</td><td>Chrome bloqueado</td><td>Cerrar Chrome completamente y volver a abrir la app</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="manual-section">
+        <h2>Privacidad y seguridad</h2>
+        <ul>
+            <li><strong>Credenciales PJN:</strong> se almacenan solo en tu Chrome, nunca en servidores de Procurador.</li>
+            <li><strong>Scripts de automatización:</strong> cifrados con AES-256 y firmados digitalmente.</li>
+            <li><strong>Comunicaciones:</strong> todas usan HTTPS/TLS.</li>
+            <li><strong>Datos de expedientes:</strong> los resultados quedan únicamente en tu equipo.</li>
+            <li><strong>Sesión:</strong> duración de 2 horas, se renueva automáticamente mientras estés activo.</li>
+        </ul>
+    </div>
+
+    <div class="manual-section">
+        <h2>Soporte</h2>
+        <p>Si tenés algún problema no cubierto acá:</p>
+        <ul>
+            <li><strong>Asistente IA:</strong> consultá en la sección "Asistente IA" del panel lateral.</li>
+            <li><strong>Ticket de soporte:</strong> abrí un ticket en la sección "Soporte" — respondemos en menos de 24 horas hábiles.</li>
+            <li><strong>Email:</strong> soporte@procuradortool.com</li>
+        </ul>
+    </div>`;
+}
+
 // ─── SECTION: IA CHAT ─────────────────────────────────────────────────────────
 function renderIA() {
     // Render existing messages if any
@@ -1529,7 +1805,7 @@ function autoResizeTextarea(el) {
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // Login form
     document.getElementById('login-form').addEventListener('submit', (e) => {
         e.preventDefault();

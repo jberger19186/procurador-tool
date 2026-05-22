@@ -10,6 +10,12 @@
 > Última sesión: 2026-05-21
 
 ### Últimas funcionalidades implementadas (listas en producción)
+- ✅ **Sección "Ayuda" en portal web** (sesión 2026-05-21, sin bump de versión — cambio solo en archivos estáticos):
+  - Nueva sección "📚 Ayuda" en el sidebar del portal (`/usuarios/`), separada de "Asistente IA"
+  - FAQ accordion con las mismas 34 preguntas y 7 categorías que la app Electron (pills de filtro + buscador por texto)
+  - Manual de usuario inline: toggle "Ver manual / Ocultar manual" que renderiza el manual completo como HTML dentro del portal (sin PDF, sin nueva pestaña)
+  - `goto=ayuda` funciona vía el handler SSO genérico ya existente
+  - Funciones: `renderAyuda()`, `renderAyudaFaq()`, `getManualHTML()`, `AYUDA_FAQ_ITEMS`, `AYUDA_FAQ_CATS`
 - ✅ **v2.7.3** — Soporte y chat redirigen al portal web con SSO (sesión 2026-05-21):
   - Botón "Abrir chat" del Asistente IA → abre `/usuarios/?goto=ia#sso=TOKEN` (portal web, sección IA)
   - Tab Soporte en Mi Cuenta → reemplazado por dos botones: "Ver mis tickets" y "+ Nuevo ticket", ambos abren el portal web
@@ -295,7 +301,7 @@ FLOW_ALIASES: { 'notif' → 'notificaciones' }  ← importante, las keys interna
 ### Navegación al portal web con auto-login (SSO)
 ```javascript
 // renderer.js — openPortalSection(section)
-// Secciones válidas: 'ia', 'soporte', 'nuevo-ticket', 'perfil', 'plan', 'facturacion', null
+// Secciones válidas: 'ia', 'soporte', 'nuevo-ticket', 'perfil', 'plan', 'facturacion', 'ayuda', null
 // URL: /usuarios/?goto=<section>#sso=<token>
 // El portal lee el hash #sso= → auto-login → navega a ?goto= → abre sección/modal
 
@@ -942,6 +948,11 @@ Sección Sistema del sidebar:
   - ✅ `ANTHROPIC_API_KEY` activa en el servidor — ambos endpoints en producción
   - Diferencia: Electron usa FAQ local como primera línea (gratis, sin latencia); portal web va directo a la API (chat conversacional con historial)
   - Costo estimado: ~USD 1.60/mes para 200 usuarios × 20 queries/mes (Claude Haiku)
+- ✅ **Sección "Ayuda" — Portal web** (`/usuarios/`): FAQ accordion + manual inline, sin requerir app Electron
+  - 34 preguntas en 7 categorías con pills de filtro y buscador por texto (mismo contenido que app Electron)
+  - Manual de usuario completo renderizado como HTML inline dentro del portal (toggle, scrollable, tablas, código)
+  - Funciones: `renderAyuda()`, `renderAyudaFaq()`, `getManualHTML()`, `AYUDA_FAQ_ITEMS`, `AYUDA_FAQ_CATS`
+  - `goto=ayuda` soportado vía el handler SSO genérico existente
 - ✅ Documentación de ayuda publicada: `docs/manual-de-usuario.md` + `docs/internal/sistema-estados-flujos.md`
 - ⬜ Mejoras al sistema de tickets:
   - Notificaciones al usuario cuando el admin responde un ticket (email)

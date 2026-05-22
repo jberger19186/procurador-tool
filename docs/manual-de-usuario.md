@@ -190,7 +190,12 @@ Accedé en: **`https://api.procuradortool.com/usuarios/`**
 | **Mi Plan** | Plan activo, días restantes, uso por subsistema |
 | **Facturación** | Fecha de próximo cobro, método de pago, cancelación |
 | **Soporte** | Tus tickets de soporte con historial de respuestas |
+| **Asistente IA** | Chat conversacional con historial de mensajes |
+| **Ayuda** | Preguntas frecuentes y manual de usuario completo |
 | **Reactivar cuenta** | Solo visible si tu cuenta está suspendida |
+
+### Sección Ayuda
+La sección **Ayuda** del portal web incluye las mismas 34 preguntas frecuentes de la app Electron, con filtro por categorías (Procuración, Informe, Monitor, Extensión, Cuenta, Errores, Privacidad) y buscador por texto. También podés acceder al **Manual de usuario completo** en línea haciendo click en "📖 Ver manual" — se despliega directamente en la página sin necesidad de descargar ningún archivo.
 
 ---
 

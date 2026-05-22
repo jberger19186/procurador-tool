@@ -88,6 +88,10 @@
                 <span class="nav-icon">🤖</span>
                 Asistente IA
             </button>
+            <button class="nav-item" data-section="ayuda">
+                <span class="nav-icon">📚</span>
+                Ayuda
+            </button>
             <button class="nav-item" id="nav-reactivacion" data-section="reactivacion" style="display:none">
                 <span class="nav-icon">🔓</span>
                 Reactivar cuenta
@@ -329,6 +333,35 @@
                     </div>
                     <div class="card-body" id="notifications-list-container">
                         <div class="empty-state"><p>Cargando notificaciones...</p></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== SECCIÓN: AYUDA ===== -->
+            <section class="section" id="section-ayuda">
+                <div class="section-title">Ayuda</div>
+                <div class="section-subtitle">Preguntas frecuentes y manual de usuario</div>
+
+                <!-- FAQ -->
+                <div class="card" style="margin-bottom:20px">
+                    <div class="card-header">
+                        <h3>Preguntas frecuentes</h3>
+                    </div>
+                    <div class="card-body" style="padding-bottom:8px">
+                        <input type="search" id="ayuda-search" class="ayuda-search-input" placeholder="🔍 Buscar en las preguntas frecuentes...">
+                        <div class="ayuda-pills" id="ayuda-pills"></div>
+                        <div id="ayuda-faq-list" class="ayuda-faq-list"></div>
+                    </div>
+                </div>
+
+                <!-- Manual de usuario -->
+                <div class="card">
+                    <div class="card-header" style="cursor:pointer;user-select:none" id="ayuda-manual-toggle">
+                        <h3>📖 Manual de usuario</h3>
+                        <button class="btn btn-outline btn-sm" id="ayuda-manual-btn">Ver manual</button>
+                    </div>
+                    <div id="ayuda-manual-body" class="ayuda-manual-body" style="display:none">
+                        <div class="ayuda-manual-content" id="ayuda-manual-content"></div>
                     </div>
                 </div>
             </section>
