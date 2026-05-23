@@ -2197,4 +2197,48 @@ router.patch('/ai-suggest-logs/:id', authenticateAdmin, async (req, res) => {
     }
 });
 
+// ─── GET /admin/settings ─────────────────────────────────────────────────────
+// Devuelve todos los valores de app_settings
+router.get('/settings', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const result = await db.query(`SELECT key, value, updated_at FROM app_settings ORDER BY key`);
+        const settings = {};
+        result.rows.forEach(r => { settings[r.key] = { value: r.value, updated_at: r.updated_at }; });
+        res.json({ success: true, settings });
+    } catch (error) {
+        console.error('Error obteniendo settings:', error);
+        res.status(500).json({ error: 'Error obteniendo configuración' });
+    }
+});
+
+// ─── PUT /admin/settings/:key ─────────────────────────────────────────────────
+// Actualiza (o inserta) un valor en app_settings
+router.put('/settings/:key', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { key } = req.params;
+    const { value } = req.body;
+
+    const ALLOWED_KEYS = ['allow_public_register'];
+    if (!ALLOWED_KEYS.includes(key)) {
+        return res.status(400).json({ error: `Clave '${key}' no permitida` });
+    }
+    if (value === undefined || value === null) {
+        return res.status(400).json({ error: 'Se requiere el campo value' });
+    }
+
+    try {
+        await db.query(`
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+        `, [key, String(value)]);
+        console.log(`[admin] setting actualizado: ${key} = ${value}`);
+        res.json({ success: true, key, value: String(value) });
+    } catch (error) {
+        console.error('Error actualizando setting:', error);
+        res.status(500).json({ error: 'Error actualizando configuración' });
+    }
+});
+
 module.exports = router;

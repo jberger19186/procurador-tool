@@ -221,9 +221,33 @@ async function renderOverview() {
             openTickets = tData.count;
         } catch (_) {}
 
+        // App settings
+        let allowRegister = true;
+        try {
+            const sData = await apiFetch('/admin/settings');
+            allowRegister = sData.settings?.allow_public_register?.value === 'true';
+        } catch (_) {}
+
         document.getElementById('content').innerHTML = `
         <div class="page-header">
             <div><h2>Resumen del sistema</h2><p>Estado actual de la plataforma</p></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+            <div class="card-header"><h3>⚙️ Configuración rápida</h3></div>
+            <div class="card-body" style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:12px">
+                    <span style="font-size:13px;font-weight:600;color:var(--text)">Registro público</span>
+                    <button id="toggle-register-btn"
+                        onclick="toggleRegister()"
+                        class="btn btn-sm ${allowRegister ? 'btn-success' : 'btn-danger'}"
+                        style="min-width:110px">
+                        ${allowRegister ? '✅ Habilitado' : '🔴 Deshabilitado'}
+                    </button>
+                    <span style="font-size:11px;color:var(--text-muted)">
+                        ${allowRegister ? 'Nuevos usuarios pueden registrarse' : 'El formulario de registro está bloqueado'}
+                    </span>
+                </div>
+            </div>
         </div>
         <div class="stats-grid">
             <div class="stat-card">
@@ -264,6 +288,29 @@ async function renderOverview() {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
 }
+
+// ───── TOGGLE REGISTRO ─────
+window.toggleRegister = async function() {
+    const btn = document.getElementById('toggle-register-btn');
+    if (!btn) return;
+    const currentlyEnabled = btn.textContent.trim().startsWith('✅');
+    const newValue = !currentlyEnabled;
+    if (!confirm(`¿${newValue ? 'Habilitar' : 'Deshabilitar'} el registro público?`)) return;
+    try {
+        btn.disabled = true;
+        btn.textContent = 'Guardando...';
+        await apiFetch('/admin/settings/allow_public_register', 'PUT', { value: String(newValue) });
+        btn.textContent = newValue ? '✅ Habilitado' : '🔴 Deshabilitado';
+        btn.className = `btn btn-sm ${newValue ? 'btn-success' : 'btn-danger'}`;
+        const hint = btn.nextElementSibling;
+        if (hint) hint.textContent = newValue ? 'Nuevos usuarios pueden registrarse' : 'El formulario de registro está bloqueado';
+    } catch (e) {
+        alert('Error al cambiar el estado: ' + e.message);
+        btn.textContent = currentlyEnabled ? '✅ Habilitado' : '🔴 Deshabilitado';
+    } finally {
+        btn.disabled = false;
+    }
+};
 
 // ───── USUARIOS ─────
 async function renderUsers() {

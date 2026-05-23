@@ -89,15 +89,30 @@ router.get('/plan-availability', async (req, res) => {
 
 // ─── POST /auth/register ──────────────────────────────────────────────────────
 router.post('/register', registerLimiter, async (req, res) => {
-    if (process.env.ALLOW_PUBLIC_REGISTER !== 'true') {
-        return res.status(403).json({ error: 'Registro no habilitado' });
+    // Verificar si el registro está habilitado (DB tiene prioridad sobre env var)
+    const db = req.app.get('db');
+    try {
+        const settingResult = await db.query(
+            `SELECT value FROM app_settings WHERE key = 'allow_public_register'`
+        );
+        const dbValue = settingResult.rows[0]?.value;
+        const registroHabilitado = dbValue !== undefined
+            ? dbValue === 'true'
+            : process.env.ALLOW_PUBLIC_REGISTER === 'true';
+        if (!registroHabilitado) {
+            return res.status(403).json({ error: 'Registro no habilitado' });
+        }
+    } catch (err) {
+        // Si falla la consulta, caer en env var como fallback
+        if (process.env.ALLOW_PUBLIC_REGISTER !== 'true') {
+            return res.status(403).json({ error: 'Registro no habilitado' });
+        }
     }
 
     const {
         nombre, apellido, email, password, cuit,
         domicilio, plan_name, toc_accepted
     } = req.body;
-    const db = req.app.get('db');
 
     try {
         // Validaciones básicas
