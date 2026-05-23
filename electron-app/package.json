@@ -1,6 +1,6 @@
 {
   "name": "procurador-electron",
-  "version": "2.7.9",
+  "version": "2.7.10",
   "description": "Sistema de Automatización de Consultas SCW PJN - Versión Protegida",
   "main": "main.js",
   "scripts": {
@@ -43,6 +43,7 @@
     "eslint": "^8.55.0",
     "png-to-ico": "^3.0.1",
     "prettier": "^3.1.0",
+    "rcedit": "^4.0.1",
     "rimraf": "^5.0.5"
   },
   "build": {
@@ -50,6 +51,7 @@
     "productName": "Procurador SCW",
     "copyright": "Copyright © 2025",
     "asar": true,
+    "afterPack": "scripts/afterPack.js",
     "win": {
       "icon": "build/icon.ico",
       "target": [
