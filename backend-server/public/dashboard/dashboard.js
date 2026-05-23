@@ -1408,10 +1408,12 @@ function renderSubsystemBar(label, used, limit, bonus) {
 // ───── USUARIOS PENDIENTES ─────
 async function renderPendingUsers() {
     try {
-        const [pendingData, reactData] = await Promise.all([
+        const [pendingData, reactData, settingsData] = await Promise.all([
             apiFetch('/admin/users/pending'),
             apiFetch('/admin/users/reactivation-requests').catch(() => ({ users: [] })),
+            apiFetch('/admin/settings').catch(() => ({ settings: {} })),
         ]);
+        const allowRegister = settingsData.settings?.allow_public_register?.value === 'true';
         const users = pendingData.users;
         const trialUsers = users.filter(u => u.registration_status === 'pending_activation');
         const emailUsers = users.filter(u => u.registration_status === 'pending_email');
@@ -1470,6 +1472,21 @@ async function renderPendingUsers() {
             <div><h2>Usuarios pendientes</h2><p>${trialUsers.length} en trial · ${emailUsers.length} sin verificar · ${reactUsers.length} solicitud${reactUsers.length !== 1 ? 'es' : ''} reactivación</p></div>
         </div>
         <div id="pending-alert"></div>
+        <div class="card" style="margin-bottom:16px">
+            <div class="card-header"><h3>⚙️ Configuración rápida</h3></div>
+            <div class="card-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:600;color:var(--text)">Registro público</span>
+                <button id="toggle-register-btn"
+                    onclick="toggleRegister()"
+                    class="btn btn-sm ${allowRegister ? 'btn-success' : 'btn-danger'}"
+                    style="min-width:110px">
+                    ${allowRegister ? '✅ Habilitado' : '🔴 Deshabilitado'}
+                </button>
+                <span style="font-size:11px;color:var(--text-muted)">
+                    ${allowRegister ? 'Nuevos usuarios pueden registrarse' : 'El formulario de registro está bloqueado'}
+                </span>
+            </div>
+        </div>
 
         <div class="card" style="margin-bottom:20px">
             <div class="card-header"><h3>🧪 En trial — pendientes de decisión (${trialUsers.length})</h3></div>

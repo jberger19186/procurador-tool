@@ -36,6 +36,24 @@ function isPromoAvailable(plan) {
     return true;
 }
 
+// ─── GET /auth/register-status ───────────────────────────────────────────────
+// Devuelve si el registro público está abierto (lee app_settings, fallback a env)
+router.get('/register-status', async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const result = await db.query(
+            `SELECT value FROM app_settings WHERE key = 'allow_public_register'`
+        );
+        const dbValue = result.rows[0]?.value;
+        const open = dbValue !== undefined
+            ? dbValue === 'true'
+            : process.env.ALLOW_PUBLIC_REGISTER === 'true';
+        return res.json({ open });
+    } catch {
+        return res.json({ open: process.env.ALLOW_PUBLIC_REGISTER === 'true' });
+    }
+});
+
 // ─── GET /auth/plan-availability ─────────────────────────────────────────────
 // Devuelve disponibilidad de cada plan para registro (público, sin auth)
 router.get('/plan-availability', async (req, res) => {
