@@ -64,12 +64,21 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 - ⬜ **Paso 5:** Extensión Chrome Store — descripción menciona suite Procurador TOOL (sin tocar código)
 - ⬜ **Paso 6:** Cierre Bloque 1 — tag + commit + docs
 
-### 🥈 BLOQUE 2 — Planes & Precios ← PARCIALMENTE RESUELTO
-- ✅ Precios de referencia publicados en landing (indexados a UMA)
-- ⬜ **Decisión pendiente:** confirmar precios definitivos BASIC / PRO / ENTERPRISE antes de activar (`active=true` en DB)
-- ⬜ Habilitar planes permanentes en flujo de registro cuando estén listos
+### 🥈 BLOQUE 2 — Planes & Precios ⏸️ DIFERIDO (precios fijados, activación pendiente)
+- ✅ Precios fijados en DB y landing, indexados a UMA CSJN:
+  - BASIC → $31.875 ARS/mes (1/3 UMA)
+  - PRO → $63.751 ARS/mes (2/3 UMA)
+  - ENTERPRISE → $95.626 ARS/mes (1 UMA)
+- ✅ Promos fijadas: EXTENSION_PROMO $1.500 · COMBO_PROMO $15.000 ARS
+- ⏸️ **Activación diferida:** `active=true` en DB para BASIC/PRO/ENTERPRISE → ejecutar cuando se habilite la venta pública
+- ⏸️ Habilitar planes permanentes en flujo de registro → ídem
 
-> **Nota UMA:** valor de referencia $95.626 ARS (acordada CSJN vigente a 2026-05-23). Al actualizarse, editar 4 lugares en `landing/index.html` (3 precios + nota UMA) y 2 filas en DB.
+> **Cuándo activar:** antes del lanzamiento público, ejecutar en producción:
+> ```sql
+> UPDATE plans SET active = true WHERE name IN ('BASIC', 'PRO', 'ENTERPRISE');
+> ```
+
+> **Nota UMA:** valor de referencia $95.626 ARS (CSJN vigente a 2026-05-23). Al actualizarse, editar 4 lugares en `landing/index.html` (3 precios + nota UMA) y 2 filas en DB.
 
 ### 🥉 BLOQUE 3 — Code Signing ← TIEMPOS EXTERNOS
 - ⬜ Cuenta Azure + Azure Trusted Signing (~USD 9/mes)
@@ -348,8 +357,8 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 ## 🎯 ORDEN SUGERIDO POST-FASE 4
 
 ```
-1. BLOQUE 2 (decisión comercial: precios BASIC/PRO/ENTERPRISE)
-     ↓ desbloquea
+1. BLOQUE 1 (branding: logo, emails, instalador) ← EN CURSO
+     ↓
 2. FASE 5 / BLOQUE 4 (cobranza + facturación) ← detalle arriba
      ↓ requiere antes de ir a producción
 3. BLOQUE 6 (seguridad: backups programados, hardening secretos)
@@ -358,9 +367,8 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
      ↓
 5. BLOQUE 3 (code signing — paralelo, tiene tiempos externos)
      ↓
-6. BLOQUE 1 (consistencia copy/branding)
-     ↓
 LANZAMIENTO PÚBLICO
+  → activar BASIC/PRO/ENTERPRISE en DB (Bloque 2 ⏸️)
 ```
 
 ---

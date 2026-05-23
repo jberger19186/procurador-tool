@@ -856,10 +856,10 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 
 ---
 
-### 🥈 BLOQUE 2 — Planes & Precios
-- ⬜ **Definir precios finales BASIC / PRO / ENTERPRISE** ← decisión comercial, desbloquea todo lo demás
-- ⬜ Publicar precios en landing (reemplazar `— / mes` en las cards de planes permanentes)
-- ⬜ Actualizar flujo de registro para habilitar los planes permanentes una vez definidos los precios
+### 🥈 BLOQUE 2 — Planes & Precios ⏸️ DIFERIDO
+- ✅ Precios fijados en DB y landing (indexados a UMA CSJN): BASIC $31.875 · PRO $63.751 · ENTERPRISE $95.626 ARS/mes
+- ✅ Promos: EXTENSION_PROMO $1.500 · COMBO_PROMO $15.000 ARS/mes
+- ⏸️ Activar planes permanentes → diferido al lanzamiento público (`UPDATE plans SET active=true WHERE name IN ('BASIC','PRO','ENTERPRISE')`)
 
 ---
 
