@@ -88,7 +88,7 @@ function createOnboardingWindow() {
             contextIsolation: true,
             sandbox: true
         },
-        icon: path.join(__dirname, 'build', 'icon.ico'),
+        icon: path.join(__dirname, 'assets', 'icon.ico'),
         show: false,
         title: 'Configuración inicial — Procurador SCW'
     });
@@ -168,7 +168,7 @@ function createMainWindow() {
             contextIsolation: true,
             sandbox: true
         },
-        icon: path.join(__dirname, 'build', 'icon.ico'),
+        icon: path.join(__dirname, 'assets', 'icon.ico'),
         backgroundColor: '#f7f7f5',
         show: false,
         center: true,

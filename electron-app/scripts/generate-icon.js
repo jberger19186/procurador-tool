@@ -72,5 +72,12 @@ body { width:${size}px;height:${size}px;display:flex;align-items:center;
     // Limpiar temporales
     tmpFiles.forEach(f => fs.unlinkSync(f));
 
+    // Copiar a assets/ (incluido en el paquete de la app — build/ está excluido)
+    const assetsDir = path.join(__dirname, '..', 'assets');
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.copyFileSync(pngPath, path.join(assetsDir, 'icon.png'));
+    fs.copyFileSync(icoPath, path.join(assetsDir, 'icon.ico'));
+    console.log(`✅ Copiados a assets/ (usados por main.js en runtime)`);
+
     console.log('\n→ Próximo paso: npm run release');
 })();
