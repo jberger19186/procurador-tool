@@ -1,6 +1,6 @@
 /**
  * generate-icon.js
- * Genera build/icon.png (512x512) a partir del emoji ⚖️
+ * Genera build/icon.png (512x512) y build/icon.ico a partir del emoji ⚖️
  * Uso: node scripts/generate-icon.js
  */
 
@@ -9,7 +9,8 @@ const path = require('path');
 const fs = require('fs');
 
 (async () => {
-    const outPath = path.join(__dirname, '..', 'build', 'icon.png');
+    const pngPath = path.join(__dirname, '..', 'build', 'icon.png');
+    const icoPath = path.join(__dirname, '..', 'build', 'icon.ico');
 
     const html = `<!DOCTYPE html>
 <html>
@@ -44,8 +45,6 @@ const fs = require('fs');
     const page = await browser.newPage();
     await page.setViewport({ width: 512, height: 512, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    // Esperar que el emoji cargue
     await new Promise(r => setTimeout(r, 500));
 
     const screenshot = await page.screenshot({
@@ -56,9 +55,13 @@ const fs = require('fs');
 
     await browser.close();
 
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, screenshot);
+    fs.mkdirSync(path.dirname(pngPath), { recursive: true });
+    fs.writeFileSync(pngPath, screenshot);
+    console.log(`✅ PNG generado: ${pngPath}`);
 
-    console.log(`✅ Ícono generado: ${outPath}`);
-    console.log('   Próximo paso: npm run build:win  (electron-builder convierte a .ico automáticamente)');
+    // Generar .ico con múltiples tamaños (requerido por electron-builder en Windows)
+    const { default: pngToIco } = await import('png-to-ico');
+    const icoBuf = await pngToIco(pngPath);
+    fs.writeFileSync(icoPath, icoBuf);
+    console.log(`✅ ICO generado: ${icoPath}`);
 })();
