@@ -1,7 +1,7 @@
 # Próximos pasos — Handoff para sesiones nuevas
 
 > **Documento de continuidad.** Después de `/clear`, leer este archivo + CLAUDE.md da el contexto suficiente para retomar.
-> Última actualización: 2026-05-23 (Bloque 1 — branding + pricing landing)
+> Última actualización: 2026-05-23 (Bloque 1 — branding + pricing + toggle registro)
 
 ---
 
@@ -18,11 +18,12 @@
 
 ### Tags Git relevantes (rollback points)
 ```
-fase4-completa     ← último estable
-fase4-item3        ← cierre Item 3 (visibilidad + AI suggest + ajustes)
-fase4-item2        ← cierre Item 2 (prioridad IA)
-fase4-item1        ← cierre Item 1 (email respuesta)
-pre-fase4          ← snapshot inicial Fase 4
+bloque1-branding-ars-toggle  ← último estable (Bloque 1 en curso)
+fase4-completa               ← cierre Fase 4 soporte
+fase4-item3                  ← cierre Item 3 (visibilidad + AI suggest + ajustes)
+fase4-item2                  ← cierre Item 2 (prioridad IA)
+fase4-item1                  ← cierre Item 1 (email respuesta)
+pre-fase4                    ← snapshot inicial Fase 4
 ```
 
 ### Backups disponibles
@@ -51,6 +52,12 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 - ✅ Precios planes permanentes indexados a UMA CSJN ($95.626): Básico $31.875 · Pro $63.751 · Enterprise $95.626
 - ✅ DB migrada: `price_usd → NULL`, `price_ars` seteado (migración `20260522_promo_prices_to_ars.sql`)
 - ✅ Backend refactorizado para usar `price_ars` en auth/users/usuarios/register/dashboard
+- ✅ **Toggle registro** — reconectado de punta a punta (estaba roto: DB existía pero sin endpoints ni UI)
+  - `GET /auth/register-status` — endpoint nuevo (antes faltaba → 404 → form siempre cerrado)
+  - `GET /admin/settings` + `PUT /admin/settings/:key` — endpoints admin nuevos
+  - Dashboard admin: card "⚙️ Configuración rápida" en Resumen **y** en Usuarios pendientes
+  - Fuente de verdad: `app_settings WHERE key = 'allow_public_register'` · fallback: `ALLOW_PUBLIC_REGISTER` en `.env`
+  - Commits: `0b57297` (fix auth) + `3edf2e5` (fix duplicado `db`) + `9f2e14a` (admin endpoints + UI)
 - ⬜ **Paso 2:** Logo/ícono unificado (balanza dorada → navbar landing, favicon, emails, instalador)
 - ⬜ **Paso 3:** Instalador `.exe` — referencia "Procurador SCW · parte de Procurador TOOL"
 - ⬜ **Paso 4:** Emails transaccionales — header/footer con branding unificado

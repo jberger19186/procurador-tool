@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-23 (Bloque 1 — branding + pricing landing)
+> Última actualización: 2026-05-23 (Bloque 1 — branding + pricing + toggle registro)
 
 ---
 
@@ -11,24 +11,23 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
-- ✅ **Bloque 1 — Branding & Pricing landing** (sesión 2026-05-23):
-  - **Jerarquía de marca:** "Procurador **TOOL**" (suite) + sublabel "Procurador SCW" en navbar y footer de la landing
-  - **Precios promos en ARS:** EXTENSION_PROMO $1.500/mes · COMBO_PROMO $15.000/mes (antes: USD 1 / USD 9,99)
-  - **Precios planes permanentes (Próximamente):** referenciados a la UMA (CSJN $95.626 ARS): Básico $31.875 · Profesional $63.751 · Enterprise $95.626
-  - **DB migrada:** `price_usd → NULL`, `price_ars` seteado en EXTENSION_PROMO y COMBO_PROMO · migración: `database/migrations/20260522_promo_prices_to_ars.sql`
-  - **Backend refactorizado:** `auth.js`, `users.js`, `usuarios.js` devuelven `price_ars`; upgrade detection usa `price_ars`; `register.js` y `dashboard.js` muestran formato ARS
-  - **Versión en landing:** 2.7.5 (navbar badge · footer · mock titlebar)
-  - **Footer:** links Términos y Condiciones + Política de Privacidad restaurados
-  - **Eliminado:** JS de alternancia TOOL↔SCW cada 10 seg
-  - Archivos tocados: `landing/index.html` · `register/register.js` · `dashboard/dashboard.js` · `routes/auth.js` · `routes/users.js` · `routes/usuarios.js` · `scripts/insert_plans.sql`
+- ✅ **Fix toggle registro público** (sesión 2026-05-23):
+  - **Causa raíz:** `register.js` llamaba a `/auth/register-status` que no existía → 404 → formulario siempre cerrado
+  - **Fix:** creado `GET /auth/register-status` en `routes/auth.js` — lee `app_settings.allow_public_register` en DB, fallback a env var
+  - **Toggle reconectado:** `admin.js` tiene `GET /admin/settings` + `PUT /admin/settings/:key` (whitelist: `allow_public_register`)
+  - **Dashboard:** card "⚙️ Configuración rápida" con botón verde/rojo en **Resumen** y en **Usuarios pendientes**
+  - `app_settings` en DB es la fuente de verdad; env var `ALLOW_PUBLIC_REGISTER` es fallback
+  - Commits: `0b57297` (toggle admin) · `3edf2e5` (register-status + pending)
 
-- ✅ **Sección "Ayuda" en portal web** (sesión 2026-05-21):
-  - Nueva sección "📚 Ayuda" en el sidebar del portal (`/usuarios/`), separada de "Asistente IA"
-  - FAQ accordion con las mismas 34 preguntas y 7 categorías que la app Electron
-  - Manual de usuario inline con toggle "Ver manual / Ocultar manual"
-- ✅ **v2.7.3** — Soporte y chat redirigen al portal web con SSO
-- ✅ **v2.7.2** — Asistente IA (Claude Haiku) en Electron y portal web · 34 FAQs
-- ✅ **v2.7.0** — QA pre-comercialización: 159/165 tests PASS
+- ✅ **Bloque 1 — Branding & Pricing landing** (sesión 2026-05-23):
+  - **Jerarquía de marca:** "Procurador **TOOL**" (suite) + sublabel "Procurador SCW" en navbar y footer
+  - **Precios promos ARS:** EXTENSION_PROMO $1.500/mes · COMBO_PROMO $15.000/mes (antes: USD)
+  - **Planes permanentes (Próximamente):** indexados a UMA CSJN $95.626: Básico $31.875 · Pro $63.751 · Enterprise $95.626
+  - **DB:** `price_usd → NULL`, `price_ars` seteado · migración `20260522_promo_prices_to_ars.sql`
+  - **Backend:** `auth.js`, `users.js`, `usuarios.js` usan `price_ars`; `register.js` y `dashboard.js` muestran ARS
+  - Commit: `a614238`
+
+- ✅ **Sección "Ayuda" en portal web** (sesión 2026-05-21) · **v2.7.3** SSO soporte · **v2.7.2** IA Haiku · **v2.7.0** QA 159/165
 
 ### Pricing actual en producción
 | Plan | price_usd | price_ars | Activo |
@@ -41,8 +40,19 @@
 
 > UMA de referencia: **$95.626 ARS** (CSJN vigente a 2026-05-23)
 
+### Toggle registro público — cómo funciona
+```
+DB: app_settings WHERE key = 'allow_public_register'  ← fuente de verdad
+  ↓ fallback si falla la consulta
+Env: ALLOW_PUBLIC_REGISTER=true (en .env del servidor)
+
+Controlar desde: Panel admin → Resumen → "⚙️ Configuración rápida"
+                             → Usuarios pendientes → misma card
+Endpoint que lee el toggle: GET /auth/register-status → { open: true/false }
+```
+
 ### Próximo paso concreto
-**→ Bloque 1 (continúa):** Paso 2 — logo/ícono unificado (requiere archivo fuente del logo)
+**→ Bloque 1 (continúa):** Paso 2 — logo/ícono unificado (requiere archivo fuente PNG/SVG del logo)
 **→ Bloque 1:** Paso 3 — instalador Electron con referencia a la suite
 **→ Bloque 1:** Paso 4 — emails transaccionales con branding unificado
 **→ Bloque 3:** iniciar trámite de Code Signing (Azure Trusted Signing) — tiempos externos
