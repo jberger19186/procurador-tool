@@ -1,21 +1,30 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-23 (Bloque 1 — branding + pricing + toggle registro)
+> Última actualización: 2026-05-23 (Bloque 1 — ícono oficial + favicon + release v2.7.10)
 
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.5** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.10** — publicada en GitHub Releases (auto-updater activo)
 > Última sesión: 2026-05-23
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Bloque 1 — Ícono oficial balanza dorada** (sesión 2026-05-23):
+  - **Ícono:** ⚖️ emoji renderizado con Puppeteer → ICO multi-resolución (16/32/48/256px)
+  - **Favicon landing:** `backend-server/public/assets/favicon.png` · `<link rel="icon">` en `index.html`
+  - **Electron app:** `afterPack.js` hook usa `rcedit` para embeber el ícono en el `.exe` post-empaquetado
+  - **Causa raíz del problema:** electron-builder no llamaba rcedit automáticamente; sin el hook el exe mantenía el ícono default de Electron (átomo azul)
+  - **Runtime icon:** `appIcon` en `main.js` — dev: `assets/icon.ico` · prod: `process.resourcesPath/icon.ico` (via `extraResources`)
+  - **Archivos clave:** `electron-app/build/icon.ico` (build) · `electron-app/assets/icon.ico` (runtime) · `scripts/generate-icon.js` · `scripts/afterPack.js`
+  - Releases: v2.7.6 → v2.7.7 → v2.7.8 → v2.7.9 → **v2.7.10** (fix definitivo)
 
 - ✅ **Fix toggle registro público** (sesión 2026-05-23):
   - **Causa raíz:** `register.js` llamaba a `/auth/register-status` que no existía → 404 → formulario siempre cerrado
   - **Fix:** creado `GET /auth/register-status` en `routes/auth.js` — lee `app_settings.allow_public_register` en DB, fallback a env var
   - **Toggle reconectado:** `admin.js` tiene `GET /admin/settings` + `PUT /admin/settings/:key` (whitelist: `allow_public_register`)
-  - **Dashboard:** card "⚙️ Configuración rápida" con botón verde/rojo en **Resumen** y en **Usuarios pendientes**
+  - **Dashboard:** card "⚙️ Configuración rápida" con botón verde/rojo en **Usuarios pendientes** (se quitó de Resumen)
   - `app_settings` en DB es la fuente de verdad; env var `ALLOW_PUBLIC_REGISTER` es fallback
   - Commits: `0b57297` (toggle admin) · `3edf2e5` (register-status + pending)
 
@@ -46,16 +55,24 @@ DB: app_settings WHERE key = 'allow_public_register'  ← fuente de verdad
   ↓ fallback si falla la consulta
 Env: ALLOW_PUBLIC_REGISTER=true (en .env del servidor)
 
-Controlar desde: Panel admin → Resumen → "⚙️ Configuración rápida"
-                             → Usuarios pendientes → misma card
+Controlar desde: Panel admin → Usuarios pendientes → "⚙️ Configuración rápida"
 Endpoint que lee el toggle: GET /auth/register-status → { open: true/false }
 ```
 
+### Ícono oficial — cómo regenerar
+```bash
+cd electron-app
+node scripts/generate-icon.js
+# → genera build/icon.ico (multi-res), build/icon.png, assets/icon.ico, assets/icon.png, backend-server/public/assets/favicon.png
+# Luego: npm run release
+```
+> `afterPack.js` embebe el ícono en el `.exe` vía rcedit automáticamente en cada build.
+
 ### Próximo paso concreto
-**→ Bloque 1 (continúa):** Paso 2 — logo/ícono unificado (requiere archivo fuente PNG/SVG del logo)
-**→ Bloque 1:** Paso 3 — instalador Electron con referencia a la suite
-**→ Bloque 1:** Paso 4 — emails transaccionales con branding unificado
-**→ Bloque 3:** iniciar trámite de Code Signing (Azure Trusted Signing) — tiempos externos
+**→ Bloque 1 (continúa):** Paso 4 — emails transaccionales con branding unificado (`mailer.js`)
+**→ Bloque 1:** Paso 5 — Chrome Web Store: actualizar descripción con mención a la suite
+**→ Bloque 1:** Paso 6 — cierre Bloque 1 (tag + docs)
+**→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
 
 ---
 
@@ -145,7 +162,10 @@ ProcuradorTool/
 │   │   │   └── securityMetrics.js
 │   │   └── preCalentarChrome.js           warm-up del perfil Chrome
 │   ├── build/installer.nsh                config instalador NSIS
+│   ├── assets/icon.ico + icon.png         ícono runtime (incluido en asar)
 │   ├── scripts/cleanup-dist.js            limpieza pre-build
+│   ├── scripts/generate-icon.js           genera ICO multi-res desde emoji ⚖️ (Puppeteer)
+│   ├── scripts/afterPack.js               hook post-build: embebe ícono en .exe via rcedit
 │   ├── demo-visores/                      ejemplos de visor (no se distribuye)
 │   ├── dist/                              salida de electron-builder (gitignored)
 │   └── node_modules/                      (gitignored)

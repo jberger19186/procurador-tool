@@ -1,7 +1,7 @@
 # Próximos pasos — Handoff para sesiones nuevas
 
 > **Documento de continuidad.** Después de `/clear`, leer este archivo + CLAUDE.md da el contexto suficiente para retomar.
-> Última actualización: 2026-05-23 (Bloque 1 — branding + pricing + toggle registro)
+> Última actualización: 2026-05-23 (Bloque 1 — ícono oficial + favicon + v2.7.10)
 
 ---
 
@@ -14,11 +14,12 @@
 - **Fase 5 (Cobranza):** **PRÓXIMA** — diseño completo abajo
 - **Fase 6 (Staging/Release seguro):** Pendiente
 
-### Versión Electron actual: **v2.7.5**
+### Versión Electron actual: **v2.7.10**
 
 ### Tags Git relevantes (rollback points)
 ```
-bloque1-branding-ars-toggle  ← último estable (Bloque 1 en curso)
+bloque1-icono-v2.7.10        ← último estable (ícono oficial resuelto)
+bloque1-branding-ars-toggle  ← branding + pricing + toggle registro
 fase4-completa               ← cierre Fase 4 soporte
 fase4-item3                  ← cierre Item 3 (visibilidad + AI suggest + ajustes)
 fase4-item2                  ← cierre Item 2 (prioridad IA)
@@ -58,7 +59,12 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
   - Dashboard admin: card "⚙️ Configuración rápida" en Resumen **y** en Usuarios pendientes
   - Fuente de verdad: `app_settings WHERE key = 'allow_public_register'` · fallback: `ALLOW_PUBLIC_REGISTER` en `.env`
   - Commits: `0b57297` (fix auth) + `3edf2e5` (fix duplicado `db`) + `9f2e14a` (admin endpoints + UI)
-- ⬜ **Paso 2:** Logo/ícono unificado (balanza dorada → navbar landing, favicon, emails, instalador)
+- ✅ **Paso 2:** Ícono oficial ⚖️ — favicon landing, ícono instalador, ícono app Electron
+  - Generado con Puppeteer → ICO multi-res (16/32/48/256px)
+  - `afterPack.js` hook embebe el ícono en el `.exe` via rcedit (electron-builder no lo hacía solo)
+  - `appIcon` en `main.js`: dev → `assets/icon.ico` · prod → `process.resourcesPath/icon.ico`
+  - Favicon: `backend-server/public/assets/favicon.png` + `<link rel="icon">` en landing
+  - v2.7.6 → v2.7.10 (5 releases hasta fix definitivo)
 - ⬜ **Paso 3:** Instalador `.exe` — referencia "Procurador SCW · parte de Procurador TOOL"
 - ⬜ **Paso 4:** Emails transaccionales — header/footer con branding unificado
 - ⬜ **Paso 5:** Extensión Chrome Store — descripción menciona suite Procurador TOOL (sin tocar código)
