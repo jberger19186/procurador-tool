@@ -28,7 +28,7 @@ router.get('/account', async (req, res) => {
                 s.cancel_at, s.scheduled_plan,
                 s.reactivation_request,
                 p.display_name AS plan_display_name,
-                p.price_usd,
+                p.price_usd, p.price_ars,
                 p.proc_executions_limit, p.informe_limit,
                 p.monitor_partes_limit, p.monitor_novedades_limit,
                 p.batch_executions_limit, p.extension_flows
@@ -66,6 +66,7 @@ router.get('/account', async (req, res) => {
                 plan: row.plan,
                 planDisplayName: row.plan_display_name,
                 priceUsd: row.price_usd,
+                priceArs: row.price_ars,
                 status: row.subscription_status,
                 usageCount: row.usage_count,
                 usageLimit: row.usage_limit,
@@ -284,11 +285,12 @@ router.post('/change-plan', async (req, res) => {
 
         // Obtener plan actual para determinar upgrade/downgrade
         const currentPlanResult = await db.query(
-            `SELECT price_usd FROM plans WHERE id = $1`,
+            `SELECT price_usd, price_ars FROM plans WHERE id = $1`,
             [u.current_plan_id]
         );
-        const currentPrice = currentPlanResult.rows[0]?.price_usd || 0;
-        const isUpgrade = newPlan.price_usd > currentPrice;
+        const planPrice = (p) => Number(p?.price_ars ?? p?.price_usd ?? 0);
+        const currentPrice = planPrice(currentPlanResult.rows[0]);
+        const isUpgrade = planPrice(newPlan) > currentPrice;
         const isReactivation = u.registration_status === 'suspended_plan_expired';
 
         const client = await db.connect();

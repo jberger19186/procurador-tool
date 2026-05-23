@@ -46,9 +46,12 @@ function renderPlanCards(plans) {
     for (const plan of plans) {
         const isSelectable = plan.available;
         const badge = getPlanBadge(plan);
-        const priceText = plan.price_usd != null
-            ? `<div class="plan-price">$${plan.price_usd} <span class="period">USD / mes</span></div>`
-            : `<div class="plan-price" style="color:#94a3b8;font-size:14px">Precio por definir</div>`;
+        const fmtArs = v => new Intl.NumberFormat('es-AR').format(v);
+        const priceText = plan.price_ars != null
+            ? `<div class="plan-price">$${fmtArs(plan.price_ars)} <span class="period">ARS / mes</span></div>`
+            : plan.price_usd != null
+                ? `<div class="plan-price">$${plan.price_usd} <span class="period">USD / mes</span></div>`
+                : `<div class="plan-price" style="color:#94a3b8;font-size:14px">Precio por definir</div>`;
 
         const card = document.createElement('div');
         card.className = 'plan-card' + (isSelectable ? '' : ' disabled');

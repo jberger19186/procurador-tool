@@ -74,20 +74,26 @@
     }
     .nav.scrolled { box-shadow: var(--sh); }
 
-    .nav-brand { display: flex; align-items: center; gap: 9px; text-decoration: none; }
+    .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
     .nav-brand-icon {
-      width: 30px; height: 30px;
+      width: 32px; height: 32px;
       background: linear-gradient(135deg, var(--amber), var(--amber-lt));
       border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 15px;
+      font-size: 16px;
       box-shadow: 0 2px 8px var(--amber-glow);
+      flex-shrink: 0;
     }
+    .nav-brand-text { display: flex; flex-direction: column; line-height: 1; }
     .nav-brand-name {
       font-size: 14px; font-weight: 700;
       color: var(--text-1); letter-spacing: -.02em;
     }
     .nav-brand-name b { color: var(--amber); }
+    .nav-brand-sub {
+      font-size: 10px; font-weight: 600; letter-spacing: .04em;
+      color: var(--text-3); margin-top: 3px;
+    }
 
     .nav-links { display: flex; align-items: center; gap: 1.6rem; list-style: none; }
     .nav-links a { font-size: 13px; font-weight: 500; color: var(--text-3); text-decoration: none; transition: color .15s; }
@@ -546,7 +552,7 @@
     /* ─── SEGURIDAD / PRIVACIDAD ─────────────────────────────────── */
     #seguridad { background: var(--bg); }
     .priv-intro { text-align:center; max-width:620px; margin:0 auto 48px; }
-    .priv-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+    .priv-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; max-width:720px; margin:0 auto; }
     .priv-card {
       background:var(--surface); border:1px solid var(--border-md);
       border-radius:var(--r-lg); padding:24px 20px; text-align:center;
@@ -599,8 +605,10 @@
     .future-name { font-size:15px; font-weight:700; color:var(--text-2); margin-bottom:4px; letter-spacing:-.01em; }
     .future-price {
       font-family:var(--font-serif); font-size:1.5rem; font-weight:300;
-      color:var(--text-3); margin-bottom:8px; line-height:1;
+      color:var(--text-3); margin-bottom:4px; line-height:1;
     }
+    .future-price-unit { font-size:11px; color:var(--text-4); font-family:var(--font); font-weight:400; }
+    .future-uma { font-size:10.5px; font-weight:600; color:var(--amber); letter-spacing:.02em; margin-bottom:10px; }
     .future-desc { font-size:12px; color:var(--text-3); line-height:1.65; margin-bottom:14px; }
     .future-feats { list-style:none; display:flex; flex-direction:column; gap:6px; }
     .future-feat { font-size:12px; color:var(--text-3); display:flex; gap:8px; align-items:flex-start; }
@@ -682,15 +690,17 @@
       padding:32px 2rem;
     }
     .foot { max-width:1120px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-    .foot-brand { display:flex; align-items:center; gap:8px; text-decoration:none; }
-    .foot-brand-icon { width:26px; height:26px; background:linear-gradient(135deg,var(--amber),var(--amber-lt)); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:13px; }
+    .foot-brand { display:flex; align-items:center; gap:9px; text-decoration:none; }
+    .foot-brand-icon { width:28px; height:28px; background:linear-gradient(135deg,var(--amber),var(--amber-lt)); border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+    .foot-brand-text { display:flex; flex-direction:column; line-height:1; }
     .foot-brand-name { font-size:13px; font-weight:700; color:var(--text-1); }
     .foot-brand-name b { color:var(--amber); }
-    .foot-desc { font-size:11.5px; color:var(--text-3); margin-top:3px; }
-    .foot-meta { font-size:11.5px; color:var(--text-3); text-align:right; line-height:1.7; }
-    .foot-legal { display:flex; gap:16px; font-size:11.5px; margin-top:6px; }
+    .foot-brand-sub { font-size:9.5px; font-weight:600; letter-spacing:.04em; color:var(--text-3); margin-top:3px; }
+    .foot-legal { display:flex; gap:16px; font-size:11.5px; margin-top:8px; justify-content:flex-end; }
     .foot-legal a { color:var(--text-3); text-decoration:none; transition:color 0.13s; }
     .foot-legal a:hover { color:var(--amber); }
+    .foot-desc { font-size:11.5px; color:var(--text-3); margin-top:3px; }
+    .foot-meta { font-size:11.5px; color:var(--text-3); text-align:right; line-height:1.7; }
 
     /* ─── RESPONSIVE ──────────────────────────────────────────────── */
     @media(max-width:960px) {
@@ -721,7 +731,10 @@
 <nav class="nav" id="nav">
   <a href="#" class="nav-brand">
     <div class="nav-brand-icon">⚖️</div>
-    <span class="nav-brand-name">Procurador <b>SCW</b></span>
+    <div class="nav-brand-text">
+      <span class="nav-brand-name">Procurador <b>TOOL</b></span>
+      <span class="nav-brand-sub">Procurador SCW</span>
+    </div>
   </a>
   <ul class="nav-links">
     <li><a href="#solucion">La app</a></li>
@@ -732,7 +745,7 @@
     <li><a href="#planes">Planes</a></li>
   </ul>
   <div class="nav-right">
-    <a href="#planes" class="btn-nav-ghost">Iniciar sesión</a>
+    <a href="https://api.procuradortool.com/usuarios/" class="btn-nav-ghost">Iniciar sesión</a>
     <a href="#planes" class="btn-nav-cta">
       Obtener la app
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
@@ -744,18 +757,22 @@
 <!-- ═══ HERO ═════════════════════════════════════════════════════════ -->
 <section class="hero">
   <div class="hero-inner">
+</div>
+
     <div class="hero-badge">
       <div class="hero-badge-pulse"></div>
-      Versión 2.0.27 · Disponible para Windows 10 / 11
+      Versión 2.7.5 · Windows 10 / 11 · Google Chrome
     </div>
 
     <div class="hero-icon">⚖️</div>
 
-    <h1 class="h1">Procurá 100 expedientes<br>en el tiempo que tardás<br>en revisar <em>uno solo</em></h1>
+    <h1 class="h1">Automatizá tu<br><em>procuración</em> ante el PJN</h1>
 
     <p class="lead wide" style="margin:1.6rem auto 0">
-      Procurador SCW automatiza completamente la consulta, el monitoreo y la generación de informes
-      de expedientes del PJN. Vos cerrás la app y ella trabaja. Sola.
+      Procurador SCW automatiza la consulta, el monitoreo y la generación de informes de expedientes del PJN. Vos minimizás la app y ella trabaja.
+    </p>
+    <p class="lead wide" style="margin:0.8rem auto 0;text-align:center;font-size:13.5px;color:var(--text-3)">
+      <strong>Procurador SCW</strong> es parte del ecosistema <strong>Procurador Tool</strong>.
     </p>
 
     <div class="hero-divider"></div>
@@ -772,15 +789,11 @@
     </div>
 
     <div class="hero-stats">
-      <div class="hs"><div class="hs-n">9</div><div class="hs-l">Módulos integrados</div></div>
+      <div class="hs"><div class="hs-n">4</div><div class="hs-l">Módulos integrados</div></div>
       <div class="hs"><div class="hs-n">4</div><div class="hs-l">Subsistemas PJN</div></div>
       <div class="hs"><div class="hs-n">100%</div><div class="hs-l">Automatizado</div></div>
       <div class="hs"><div class="hs-n">0</div><div class="hs-l">Contraseñas en servidores</div></div>
     </div>
-  </div>
-  <div class="scroll-hint">
-    <span>Conocer más</span>
-    <div class="scroll-mouse"><div class="scroll-wheel"></div></div>
   </div>
 </section>
 
@@ -820,7 +833,7 @@
             <div class="pain-icon">🔍</div>
             <div>
               <div class="pain-title">Sin visibilidad multi-jurisdicción</div>
-              <div class="pain-desc">Rastrear partes en Civil, Laboral, Federal y otras jurisdicciones al mismo tiempo es prácticamente imposible de forma manual.</div>
+              <div class="pain-desc">Rastrear partes en Civil, Laboral, Federal y otras jurisdicciones al mismo tiempo es sumamente engorroso de forma manual.</div>
             </div>
           </li>
         </ul>
@@ -854,13 +867,16 @@
       <p class="lead" style="text-align:center">
         Procurador SCW se conecta al SCW del PJN, consulta todos tus expedientes, detecta novedades y genera informes. Automáticamente, sin que tengas que hacer nada.
       </p>
+      <p class="lead" style="text-align:center;margin-top:12px;font-size:13.5px">
+        <strong>Requisitos:</strong> Windows 10 / 11 · Google Chrome. Para mayor velocidad en la automatización, se recomienda activar el gestor de contraseñas de Chrome.
+      </p>
     </div>
 
     <!-- Ventana de la app -->
     <div class="app-frame rev rev-d1">
       <div class="app-titlebar">
         <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-        <span class="tb-title">Procurador SCW — v2.0.27</span>
+        <span class="tb-title">Procurador SCW — v2.7.5</span>
         <div class="tb-right">
           <span class="tb-badge"><span class="tb-dot"></span> Conectado · PJN</span>
         </div>
@@ -933,7 +949,7 @@
             <span>62 / 100 expedientes</span>
             <span>·</span>
             <span style="color:var(--green)">0 errores</span>
-            <span style="margin-left:auto" class="ssb-accent">Procurador SCW v2.0.27</span>
+            <span style="margin-left:auto" class="ssb-accent">Procurador SCW v2.7.5</span>
           </div>
         </div>
       </div>
@@ -950,7 +966,7 @@
     <div class="features-header rev">
       <div class="label center">Funciones</div>
       <h2 class="h2" style="margin-top:12px;text-align:center">Todo lo que necesitás,<br><em>en un solo lugar</em></h2>
-      <p class="lead" style="text-align:center">Cuatro módulos principales que cubren el 100% de tu flujo de trabajo con el PJN.</p>
+      <p class="lead" style="text-align:center">Cuatro módulos principales que cubren el 100% del flujo de trabajo en la consulta y gestión de expedientes ante el PJN.</p>
     </div>
 
     <div class="feat-grid">
@@ -1037,15 +1053,13 @@
           </div>
         </div>
         <p class="feat-desc">
-          Estadísticas de uso en tiempo real: cantidad de procuraciones, informes y monitoreos ejecutados,
-          tasa de éxito por sesión, y última ejecución. Desde el panel de cuenta gestionás tu plan,
-          cuotas por subsistema y tickets de soporte directamente dentro de la app.
+          Todo el control de tu operación en un solo panel: estadísticas por subsistema, tasa de éxito en tiempo real, gestión de cuotas del plan, soporte integrado con tickets y chat, y actualizaciones automáticas de la app.
         </p>
         <div class="feat-pills">
           <span class="feat-pill">Estadísticas por subsistema</span>
           <span class="feat-pill">Tasa de éxito en tiempo real</span>
           <span class="feat-pill">Gestión de cuotas del plan</span>
-          <span class="feat-pill">Soporte integrado con tickets</span>
+          <span class="feat-pill">Soporte con tickets y chat</span>
           <span class="feat-pill">Actualizaciones automáticas</span>
         </div>
       </div>
@@ -1132,7 +1146,6 @@
         <div class="feat-pills">
           <span class="feat-pill">notif.pjn.gov.ar</span>
           <span class="feat-pill">deox.pjn.gov.ar</span>
-          <span class="feat-pill">React/MUI compatible</span>
         </div>
       </div>
 
@@ -1141,18 +1154,19 @@
         <div class="feat-header">
           <div class="feat-icon" style="background:rgba(0,0,0,.04);border-color:var(--border-md)">🖱️</div>
           <div class="feat-title-block">
-            <div class="feat-name">Expediente desde cualquier página</div>
-            <div class="feat-sub">Selección de texto · Todos los planes</div>
+            <div class="feat-name">Lanzá flujos desde cualquier página de Chrome</div>
+            <div class="feat-sub">Sitios web, emails, PDFs abiertos en Chrome · Todos los planes</div>
           </div>
         </div>
         <p class="feat-desc">
-          Seleccionás un número de expediente en cualquier página web — un email, un PDF,
-          un documento — hacés click derecho y elegís "Enviar expediente a PJN". Se pre-rellena
-          automáticamente y lanzás el flujo al instante, sin copiar y pegar.
+          Seleccionás un número de expediente en cualquier contexto de Chrome — una web, un email,
+          incluso un PDF abierto en el navegador — hacés click derecho y elegís "Enviar expediente a PJN".
+          El flujo se inicia automáticamente con el expediente ya cargado, sin copiar ni pegar nada.
         </p>
         <div class="feat-pills">
           <span class="feat-pill">Menú contextual</span>
-          <span class="feat-pill">Cualquier sitio web</span>
+          <span class="feat-pill">Sitios web y emails</span>
+          <span class="feat-pill">PDFs en Chrome</span>
           <span class="feat-pill">Formato FCR 18745/2017</span>
           <span class="feat-pill">Un click derecho</span>
         </div>
@@ -1205,7 +1219,7 @@
       <div class="label center">Privacidad &amp; seguridad</div>
       <h2 class="h2" style="margin-top:12px;text-align:center">Tus contraseñas<br>y datos <em>quedan en tu equipo</em></h2>
       <p class="lead" style="text-align:center;margin:14px auto 0">
-        Procurador SCW — tanto la app como la extensión — fue diseñado para no gestionar ni almacenar tus credenciales del PJN. Eso es responsabilidad tuya, y así debe ser.
+        Procurador SCW — tanto la app como la extensión — fueron diseñadas para no gestionar ni almacenar tus credenciales del PJN. Eso es responsabilidad tuya, y así debe ser.
       </p>
     </div>
 
@@ -1227,22 +1241,6 @@
         </p>
       </div>
 
-      <div class="priv-card rev rev-d2">
-        <div class="priv-icon" style="background:var(--blue-bg)">🔒</div>
-        <div class="priv-name">Licencia vinculada a tu dispositivo</div>
-        <p class="priv-desc">
-          Tu licencia está asociada a tu hardware. Solo un equipo puede tener tu sesión activa al mismo tiempo, lo que evita que tu cuenta se use desde otros dispositivos sin tu conocimiento.
-        </p>
-      </div>
-
-      <div class="priv-card rev rev-d3">
-        <div class="priv-icon" style="background:rgba(0,0,0,.04)">📡</div>
-        <div class="priv-name">Comunicación cifrada con el backend</div>
-        <p class="priv-desc">
-          Las únicas comunicaciones con nuestro servidor son de autenticación de licencia y actualizaciones de la app. Todo el tráfico usa HTTPS con tokens JWT de corta duración.
-        </p>
-      </div>
-
     </div>
   </div>
 </section>
@@ -1256,7 +1254,7 @@
     <div class="planes-header rev">
       <div class="label center">Planes</div>
       <h2 class="h2" style="margin-top:12px;text-align:center">Elegí el plan que<br>se adapta a <em>tu estudio</em></h2>
-      <p class="lead" style="text-align:center;margin:14px auto 0">Precios de lanzamiento disponibles por tiempo limitado. Actualizaciones automáticas incluidas. Sin permanencia mínima.</p>
+      <p class="lead" style="text-align:center;margin:14px auto 0">Precios de lanzamiento disponibles por tiempo limitado. <strong>Cupos limitados.</strong> Actualizaciones automáticas incluidas. Sin permanencia mínima.</p>
     </div>
 
     <!-- ── 2 planes promo vigentes ─────────────────────────────── -->
@@ -1269,7 +1267,7 @@
           <div class="plan-name">Extensión</div>
           <div class="plan-desc">Acceso completo a la extensión Chrome con los 5 flujos del PJN. Precio de lanzamiento.</div>
           <div class="plan-price">
-            <div class="plan-price-amount">USD 1</div>
+            <div class="plan-price-amount">$1.500 <span style="font-size:.55em;font-weight:400;color:var(--text-3)">ARS</span></div>
             <div class="plan-price-period">por mes · promo de lanzamiento · sin permanencia</div>
           </div>
         </div>
@@ -1283,7 +1281,7 @@
           <li class="plan-feat-item"><span class="dash">–</span> App de escritorio Electron</li>
         </ul>
         <div class="plan-cta">
-          <a href="https://api.procuradortool.com/register/" class="plan-btn outline">Empezar por USD 1/mes</a>
+          <a href="https://api.procuradortool.com/register/" class="plan-btn outline">Empezar por $1.500 / mes</a>
         </div>
       </div>
 
@@ -1295,7 +1293,7 @@
           <div class="plan-name">Combo Beta</div>
           <div class="plan-desc">Extensión completa + App de escritorio Electron en versión Beta. El paquete completo.</div>
           <div class="plan-price">
-            <div class="plan-price-amount featured">USD 9,99</div>
+            <div class="plan-price-amount featured">$15.000 <span style="font-size:.55em;font-weight:400;color:var(--text-3)">ARS</span></div>
             <div class="plan-price-period">por mes · promo beta · sin permanencia</div>
           </div>
         </div>
@@ -1306,11 +1304,11 @@
           <li class="plan-feat-item"><span class="chk">✓</span> Monitor de Partes — 3 partes activas</li>
           <li class="plan-feat-item"><span class="chk">✓</span> Monitor de Novedades — 10/mes</li>
           <li class="plan-feat-item"><span class="chk">✓</span> Procuración por lote — 20 ejecuciones</li>
-          <li class="plan-feat-item"><span class="chk">✓</span> Soporte por ticket integrado</li>
+          <li class="plan-feat-item"><span class="chk">✓</span> Soporte por ticket integrado + chat</li>
         </ul>
         <div class="plan-cta">
           <a href="https://api.procuradortool.com/register/" class="plan-btn primary">
-            Empezar por USD 9,99/mes
+            Empezar por $15.000 / mes
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
           </a>
         </div>
@@ -1319,7 +1317,7 @@
     </div>
 
     <p class="rev" style="text-align:center;font-size:12px;color:var(--text-3);margin-top:20px">
-      Precios en dólares · Sin permanencia mínima · Disponibles por tiempo limitado durante el lanzamiento.
+      Precios en pesos argentinos · Sin permanencia mínima · Disponibles por tiempo limitado y cupos limitados durante el lanzamiento.
     </p>
 
     <!-- ── Planes permanentes (próximamente) ────────────────────── -->
@@ -1327,13 +1325,18 @@
       <span class="future-sep-label">Planes permanentes · Próximamente</span>
     </div>
 
+    <p class="rev" style="text-align:center;font-size:12px;color:var(--text-3);margin:-6px auto 24px;max-width:640px">
+      Precios de referencia indexados a la <strong>UMA</strong> (Unidad de Medida Arancelaria del CSJN). Valor vigente: <strong>$95.626 ARS</strong>. Se actualizan automáticamente cuando la Corte fija un nuevo valor.
+    </p>
+
     <div class="future-grid rev">
 
       <!-- Básico -->
       <div class="future-card">
         <div class="future-badge">🌱 Básico</div>
         <div class="future-name">Básico</div>
-        <div class="future-price">— / mes</div>
+        <div class="future-price">$31.875 <span class="future-price-unit">ARS / mes</span></div>
+        <div class="future-uma">≈ 1/3 UMA</div>
         <p class="future-desc">Para abogados independientes. App Electron con cuotas de entrada y extensión Chrome incluida.</p>
         <ul class="future-feats">
           <li class="future-feat">50 procuraciones / mes</li>
@@ -1348,7 +1351,8 @@
       <div class="future-card" style="border-color:var(--border-md)">
         <div class="future-badge">⚡ Profesional</div>
         <div class="future-name">Profesional</div>
-        <div class="future-price">— / mes</div>
+        <div class="future-price">$63.751 <span class="future-price-unit">ARS / mes</span></div>
+        <div class="future-uma">≈ 2/3 UMA</div>
         <p class="future-desc">Para estudios con cartera media y alta. Cuotas extendidas y extensión completa.</p>
         <ul class="future-feats">
           <li class="future-feat">200 procuraciones / mes</li>
@@ -1363,7 +1367,8 @@
       <div class="future-card">
         <div class="future-badge">🏛️ Enterprise</div>
         <div class="future-name">Enterprise</div>
-        <div class="future-price">A medida</div>
+        <div class="future-price">$95.626 <span class="future-price-unit">ARS / mes</span></div>
+        <div class="future-uma">≈ 1 UMA</div>
         <p class="future-desc">Para estudios grandes. Sin límites operativos y soporte dedicado.</p>
         <ul class="future-feats">
           <li class="future-feat">Procuraciones ilimitadas</li>
@@ -1398,15 +1403,15 @@
         <a href="#seguridad" class="btn btn-ghost btn-lg">🔑 Tu privacidad, tu control</a>
       </div>
       <div class="cta-meta rev rev-d4">
-        <span>Versión 2.0.27</span>
-        <div class="cta-meta-sep"></div>
-        <span>Electron 28</span>
-        <div class="cta-meta-sep"></div>
-        <span>Windows 10 / 11</span>
+        <span>Procurador SCW</span>
         <div class="cta-meta-sep"></div>
         <span>Requiere licencia activa</span>
         <div class="cta-meta-sep"></div>
         <span>Sin permanencia mínima</span>
+        <div class="cta-meta-sep"></div>
+        <span>Windows 10 / 11</span>
+        <div class="cta-meta-sep"></div>
+        <span>Google Chrome</span>
       </div>
     </div>
   </div>
@@ -1419,14 +1424,16 @@
     <div>
       <a href="#" class="foot-brand">
         <div class="foot-brand-icon">⚖️</div>
-        <span class="foot-brand-name">Procurador <b>SCW</b></span>
+        <div class="foot-brand-text">
+          <span class="foot-brand-name">Procurador <b>TOOL</b></span>
+          <span class="foot-brand-sub">Procurador SCW</span>
+        </div>
       </a>
       <div class="foot-desc">Sistema de automatización para el Poder Judicial de la Nación</div>
     </div>
     <div class="foot-meta">
-      Versión 2.7.0 · Electron 28 · Windows 10 / 11<br>
-      Poder Judicial de la Nación · Argentina<br>
-      © 2025 Procurador SCW. Todos los derechos reservados.
+      Procurador SCW — Versión 2.7.5 · Windows 10 / 11<br>
+      © Procurador TOOL 2026. Todos los derechos reservados.
       <div class="foot-legal">
         <a href="https://api.procuradortool.com/terminos/" target="_blank">Términos y Condiciones</a>
         <a href="https://api.procuradortool.com/privacidad/" target="_blank">Política de Privacidad</a>

@@ -89,13 +89,13 @@ router.get('/plans', async (req, res) => {
 
     try {
         const result = await db.query(`
-            SELECT id, name, display_name, description, price_usd, plan_type,
+            SELECT id, name, display_name, description, price_usd, price_ars, plan_type,
                    proc_executions_limit, informe_limit, monitor_novedades_limit,
                    batch_executions_limit, monitor_partes_limit, extension_flows,
                    promo_type, promo_end_date, promo_max_users, promo_used_count
             FROM plans
             WHERE active = true
-            ORDER BY price_usd ASC NULLS FIRST, id ASC
+            ORDER BY COALESCE(price_ars, price_usd) ASC NULLS FIRST, id ASC
         `);
 
         res.json({
@@ -106,6 +106,7 @@ router.get('/plans', async (req, res) => {
                 displayName: p.display_name,
                 description: p.description,
                 priceUsd: p.price_usd,
+                priceArs: p.price_ars,
                 planType: p.plan_type,
                 promoType: p.promo_type,
                 promoEndDate: p.promo_end_date,

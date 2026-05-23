@@ -1,7 +1,7 @@
 # Próximos pasos — Handoff para sesiones nuevas
 
 > **Documento de continuidad.** Después de `/clear`, leer este archivo + CLAUDE.md da el contexto suficiente para retomar.
-> Última actualización: 2026-05-22 (post-cierre Fase 4)
+> Última actualización: 2026-05-23 (Bloque 1 — branding + pricing landing)
 
 ---
 
@@ -9,7 +9,7 @@
 
 - **Fase 1 (Aplicación):** En curso — UI rediseñada, refactor pendiente
 - **Fase 2 (Backend):** Pendiente — backups programados, hardening secretos
-- **Fase 3 (Comercial):** En curso — landing lista, falta definir precios definitivos
+- **Fase 3 (Comercial):** 🔄 En curso — landing actualizada con precios ARS + branding suite/producto
 - **Fase 4 (Soporte):** ✅ **CERRADA** (tag `fase4-completa`, commit `bc0ce2e`)
 - **Fase 5 (Cobranza):** **PRÓXIMA** — diseño completo abajo
 - **Fase 6 (Staging/Release seguro):** Pendiente
@@ -42,18 +42,27 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 
 ## 📋 PENDIENTES POR BLOQUE (extraídos de CLAUDE.md)
 
-### 🥇 BLOQUE 1 — Identidad de Marca & Landing
-- ⬜ Identidad de marca consolidada: copy unificado, tono consistente en todos los emails transaccionales
-- ⬜ Consistencia de nombre en instalador `.exe`, extensión Chrome Store y emails
-- ✅ Landing con planes y precios de promos
-- ✅ Términos y Condiciones publicados
-- ✅ Política de Privacidad publicada
-- ✅ Aviso PJN sobre credenciales
+### 🥇 BLOQUE 1 — Identidad de Marca & Landing (🔄 EN CURSO)
+- ✅ Jerarquía marca: "Procurador TOOL" (suite) + sublabel "Procurador SCW" en landing
+- ✅ Landing portada a archivo nuevo (www_ProcuradorSCW_nueva.html) con copy actualizado
+- ✅ Versión 2.7.5 en landing (badge hero, footer, mock titlebar)
+- ✅ Footer con links Términos y Privacidad
+- ✅ Precios promos en ARS: $1.500 / $15.000 (antes USD)
+- ✅ Precios planes permanentes indexados a UMA CSJN ($95.626): Básico $31.875 · Pro $63.751 · Enterprise $95.626
+- ✅ DB migrada: `price_usd → NULL`, `price_ars` seteado (migración `20260522_promo_prices_to_ars.sql`)
+- ✅ Backend refactorizado para usar `price_ars` en auth/users/usuarios/register/dashboard
+- ⬜ **Paso 2:** Logo/ícono unificado (balanza dorada → navbar landing, favicon, emails, instalador)
+- ⬜ **Paso 3:** Instalador `.exe` — referencia "Procurador SCW · parte de Procurador TOOL"
+- ⬜ **Paso 4:** Emails transaccionales — header/footer con branding unificado
+- ⬜ **Paso 5:** Extensión Chrome Store — descripción menciona suite Procurador TOOL (sin tocar código)
+- ⬜ **Paso 6:** Cierre Bloque 1 — tag + commit + docs
 
-### 🥈 BLOQUE 2 — Planes & Precios ← DECISIÓN COMERCIAL PENDIENTE
-- ⬜ **Definir precios finales BASIC / PRO / ENTERPRISE** (desbloquea todo lo demás)
-- ⬜ Publicar precios en landing (reemplazar `— / mes`)
-- ⬜ Habilitar planes permanentes en flujo de registro
+### 🥈 BLOQUE 2 — Planes & Precios ← PARCIALMENTE RESUELTO
+- ✅ Precios de referencia publicados en landing (indexados a UMA)
+- ⬜ **Decisión pendiente:** confirmar precios definitivos BASIC / PRO / ENTERPRISE antes de activar (`active=true` en DB)
+- ⬜ Habilitar planes permanentes en flujo de registro cuando estén listos
+
+> **Nota UMA:** valor de referencia $95.626 ARS (acordada CSJN vigente a 2026-05-23). Al actualizarse, editar 4 lugares en `landing/index.html` (3 precios + nota UMA) y 2 filas en DB.
 
 ### 🥉 BLOQUE 3 — Code Signing ← TIEMPOS EXTERNOS
 - ⬜ Cuenta Azure + Azure Trusted Signing (~USD 9/mes)

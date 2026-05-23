@@ -42,7 +42,7 @@ router.get('/plan-availability', async (req, res) => {
     const db = req.app.get('db');
     try {
         const result = await db.query(`
-            SELECT name, display_name, plan_type, price_usd, active,
+            SELECT name, display_name, plan_type, price_usd, price_ars, active,
                    promo_type, promo_end_date, promo_max_users, promo_used_count,
                    proc_executions_limit, informe_limit, monitor_novedades_limit,
                    batch_executions_limit, extension_flows
@@ -62,6 +62,7 @@ router.get('/plan-availability', async (req, res) => {
                 display_name: p.display_name,
                 plan_type: p.plan_type,
                 price_usd: p.price_usd,
+                price_ars: p.price_ars,
                 available,
                 reason,
                 promo_type: p.promo_type,

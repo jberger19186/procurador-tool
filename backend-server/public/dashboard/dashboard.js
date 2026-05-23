@@ -1636,7 +1636,9 @@ async function renderPlans() {
                     <tbody>${plans.map(p => {
                         const fmt = v => v === -1 ? '<span class="badge badge-green">∞</span>' : v;
                         const typeLabel = { electron: '💻 Electron', extension: '🧩 Extensión', combo: '🔗 Combo' };
-                        const priceStr = p.price_usd != null ? `$${p.price_usd} USD` : '—';
+                        const priceStr = p.price_ars != null
+                            ? `$${new Intl.NumberFormat('es-AR').format(p.price_ars)} ARS`
+                            : p.price_usd != null ? `$${p.price_usd} USD` : '—';
                         let promoBadge = '—';
                         if (p.promo_type === 'date' && p.promo_end_date) {
                             const d = new Date(p.promo_end_date);

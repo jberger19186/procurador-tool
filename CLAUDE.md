@@ -1,45 +1,51 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-21
+> Última actualización: 2026-05-23 (Bloque 1 — branding + pricing landing)
 
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.3** — publicada en GitHub Releases (auto-updater activo)
-> Última sesión: 2026-05-21
+> Versión app Electron: **2.7.5** — publicada en GitHub Releases (auto-updater activo)
+> Última sesión: 2026-05-23
 
 ### Últimas funcionalidades implementadas (listas en producción)
-- ✅ **Sección "Ayuda" en portal web** (sesión 2026-05-21, sin bump de versión — cambio solo en archivos estáticos):
+
+- ✅ **Bloque 1 — Branding & Pricing landing** (sesión 2026-05-23):
+  - **Jerarquía de marca:** "Procurador **TOOL**" (suite) + sublabel "Procurador SCW" en navbar y footer de la landing
+  - **Precios promos en ARS:** EXTENSION_PROMO $1.500/mes · COMBO_PROMO $15.000/mes (antes: USD 1 / USD 9,99)
+  - **Precios planes permanentes (Próximamente):** referenciados a la UMA (CSJN $95.626 ARS): Básico $31.875 · Profesional $63.751 · Enterprise $95.626
+  - **DB migrada:** `price_usd → NULL`, `price_ars` seteado en EXTENSION_PROMO y COMBO_PROMO · migración: `database/migrations/20260522_promo_prices_to_ars.sql`
+  - **Backend refactorizado:** `auth.js`, `users.js`, `usuarios.js` devuelven `price_ars`; upgrade detection usa `price_ars`; `register.js` y `dashboard.js` muestran formato ARS
+  - **Versión en landing:** 2.7.5 (navbar badge · footer · mock titlebar)
+  - **Footer:** links Términos y Condiciones + Política de Privacidad restaurados
+  - **Eliminado:** JS de alternancia TOOL↔SCW cada 10 seg
+  - Archivos tocados: `landing/index.html` · `register/register.js` · `dashboard/dashboard.js` · `routes/auth.js` · `routes/users.js` · `routes/usuarios.js` · `scripts/insert_plans.sql`
+
+- ✅ **Sección "Ayuda" en portal web** (sesión 2026-05-21):
   - Nueva sección "📚 Ayuda" en el sidebar del portal (`/usuarios/`), separada de "Asistente IA"
-  - FAQ accordion con las mismas 34 preguntas y 7 categorías que la app Electron (pills de filtro + buscador por texto)
-  - Manual de usuario inline: toggle "Ver manual / Ocultar manual" que renderiza el manual completo como HTML dentro del portal (sin PDF, sin nueva pestaña)
-  - `goto=ayuda` funciona vía el handler SSO genérico ya existente
-  - Funciones: `renderAyuda()`, `renderAyudaFaq()`, `getManualHTML()`, `AYUDA_FAQ_ITEMS`, `AYUDA_FAQ_CATS`
-- ✅ **v2.7.3** — Soporte y chat redirigen al portal web con SSO (sesión 2026-05-21):
-  - Botón "Abrir chat" del Asistente IA → abre `/usuarios/?goto=ia#sso=TOKEN` (portal web, sección IA)
-  - Tab Soporte en Mi Cuenta → reemplazado por dos botones: "Ver mis tickets" y "+ Nuevo ticket", ambos abren el portal web
-  - Botón 🎫 del chat widget → `goto=nuevo-ticket` (abre portal + modal de nuevo ticket)
-  - Chat widget interno preservado en código pero no accesible desde la UI (para uso futuro)
-  - Portal web: SSO handler extendido para leer `?goto=` y navegar a la sección tras auto-login
-  - `openPortalSection(section)` — nueva función helper en renderer.js (extiende `openPortal()`)
-- ✅ **v2.7.2** — Asistente IA expandido + endpoints IA en Electron y portal web (sesión 2026-05-21):
-  - `FAQ_ITEMS`: 10 → **34 preguntas** en 7 categorías, pills de filtro, `getBotResponse()` retorna `null` sin match → llama API
-  - `POST /client/ai/chat`: Electron → Claude Haiku, match local primero (gratis), fallback a API si no matchea
-  - `POST /usuarios/api/ai-chat`: portal web → mismo Claude Haiku, historial conversacional, system prompt sincronizado
-  - IPC `ai-chat` wired: `preload.js` → `main.js` → `backendClient.aiChat()`
-  - `ANTHROPIC_API_KEY` activa en servidor — ambos endpoints funcionales en producción
-- ✅ **v2.7.1** — Sección Métricas y Legal en panel admin + chat widget:
-  - Panel admin: cards de distribución y Legal usan `.card-header` + `.card-body` (fix padding)
-  - Vista previa Legal: iframe sandboxed (CSS isolation, sin leakage al dashboard)
-  - Botón "Abrir chat" del Asistente abre el chat widget flotante (no la tab Soporte)
-- ✅ **v2.7.0** — QA pre-comercialización: 159/165 tests PASS, 6 SKIP por diseño
-- ✅ Sistema de notificaciones in-app (v2.5.x): badge, mark-as-read, panel completo
-- ✅ Panel admin — historial de eventos, hash routing (`#user-detail/ID`)
+  - FAQ accordion con las mismas 34 preguntas y 7 categorías que la app Electron
+  - Manual de usuario inline con toggle "Ver manual / Ocultar manual"
+- ✅ **v2.7.3** — Soporte y chat redirigen al portal web con SSO
+- ✅ **v2.7.2** — Asistente IA (Claude Haiku) en Electron y portal web · 34 FAQs
+- ✅ **v2.7.0** — QA pre-comercialización: 159/165 tests PASS
+
+### Pricing actual en producción
+| Plan | price_usd | price_ars | Activo |
+|---|---|---|---|
+| EXTENSION_PROMO | NULL | $1.500 ARS | ✅ |
+| COMBO_PROMO | NULL | $15.000 ARS | ✅ |
+| BASIC | NULL | NULL | ❌ Próximamente (≈ 1/3 UMA) |
+| PRO | NULL | NULL | ❌ Próximamente (≈ 2/3 UMA) |
+| ENTERPRISE | NULL | NULL | ❌ Próximamente (≈ 1 UMA) |
+
+> UMA de referencia: **$95.626 ARS** (CSJN vigente a 2026-05-23)
 
 ### Próximo paso concreto
-**→ Bloque 2:** definir precios BASIC / PRO / ENTERPRISE y publicarlos en la landing
-**→ Bloque 3:** iniciar trámite de Code Signing (Azure Trusted Signing) — tiene tiempos externos
+**→ Bloque 1 (continúa):** Paso 2 — logo/ícono unificado (requiere archivo fuente del logo)
+**→ Bloque 1:** Paso 3 — instalador Electron con referencia a la suite
+**→ Bloque 1:** Paso 4 — emails transaccionales con branding unificado
+**→ Bloque 3:** iniciar trámite de Code Signing (Azure Trusted Signing) — tiempos externos
 
 ---
 
@@ -72,18 +78,200 @@ Distribuida en la **Chrome Web Store** (aprobada por Google):
 
 ## Mapa de componentes
 
+> Snapshot al 2026-05-22. Para encontrar el "último archivo tocado" usar:
+> ```bash
+> git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" log --name-only --pretty=format: -20 | sort -u
+> # o por carpeta:
+> ls -lt electron-app/ | head
+> ```
+
 ```
 ProcuradorTool/
-├── CLAUDE.md                  ← este archivo
-├── electron-app/              ← cliente desktop (Electron 28)
-├── backend-server/            ← API central (Express 5 + PostgreSQL)
-├── extension-app/             ← extensión Chrome (MV3) — distribución Chrome Web Store
-├── database/
-│   └── schema.sql             ← schema completo de producción (pg_dump --schema-only)
-└── docs/
-    ├── manual-de-usuario.md           ← guía para el usuario final (instalación, secciones, FAQ)
-    └── internal/
-        └── sistema-estados-flujos.md  ← referencia interna: estados, flujos IA, errores, IPC, deploy
+├── CLAUDE.md                              ← este archivo (guía maestra)
+├── .gitignore
+├── procurador_db_backup.sql               ← backup histórico (no usar, ver Desktop/ProcuradorBackups)
+│
+├── electron-app/                          ← cliente desktop (Electron 28)
+│   ├── main.js                            (~108 KB) proceso principal + IPC handlers
+│   ├── preload.js                         puente seguro Main ↔ Renderer
+│   ├── renderer.js                        (~166 KB) UI dashboard — PENDIENTE refactor a módulos ES6
+│   ├── index.html                         shell del dashboard
+│   ├── styles.css                         (~45 KB) sistema de diseño aplicado
+│   ├── package.json                       v2.7.5
+│   ├── Monitor-Procurador.ps1             watchdog Windows (legacy)
+│   ├── visorModal_template.html           plantilla visor de expediente
+│   ├── renderer/                          ventanas auxiliares
+│   │   ├── login.html / login.js / login.css
+│   │   └── app.html
+│   ├── onboarding/                        flujo de primer uso
+│   │   ├── onboarding.html / .js / .css
+│   │   ├── preload-onboarding.js
+│   │   └── tour.js                        tour guiado paso a paso
+│   ├── informe/                           generación de informes Excel + visor
+│   │   ├── generador_excel.js
+│   │   ├── generador_visor.js
+│   │   └── visor_informes_template.html
+│   ├── src/
+│   │   ├── api/backendClient.js           wrapper Axios a /client/* /license/*
+│   │   ├── auth/
+│   │   │   ├── authManager.js             login, JWT, persistencia sesión
+│   │   │   └── machineId.js               hardware ID (binding dispositivo)
+│   │   ├── browser/windowManager.js       gestión Chrome+perfil
+│   │   ├── scripts/
+│   │   │   ├── scriptExecutor.js          orquesta Puppeteer (descarga, descifra, corre)
+│   │   │   ├── scriptCache.js             caché local
+│   │   │   ├── abrirNavegadorPJN.js       inline: abre Chrome → SCW
+│   │   │   └── agregarPasswordSCW.js      inline: inyecta credenciales del gestor Chrome
+│   │   ├── security/                      ⛔ NO TOCAR
+│   │   │   ├── fileEncryption.js          AES-256-CBC
+│   │   │   ├── scriptVerifier.js          verifica firma RSA-2048
+│   │   │   ├── scriptAutoDestruct.js      borra script al terminar
+│   │   │   ├── secureTempFolder.js        carpeta temporal aislada
+│   │   │   ├── codeObfuscator.js
+│   │   │   └── public.pem                 clave pública para verificar firmas
+│   │   ├── notifications/notificationManager.js   toast Windows
+│   │   ├── telemetry/
+│   │   │   ├── securityAudit.js
+│   │   │   └── securityMetrics.js
+│   │   └── preCalentarChrome.js           warm-up del perfil Chrome
+│   ├── build/installer.nsh                config instalador NSIS
+│   ├── scripts/cleanup-dist.js            limpieza pre-build
+│   ├── demo-visores/                      ejemplos de visor (no se distribuye)
+│   ├── dist/                              salida de electron-builder (gitignored)
+│   └── node_modules/                      (gitignored)
+│
+├── backend-server/                        ← API Express 5 + PostgreSQL 14
+│   ├── server.js                          (~32 KB) entry point, middlewares, cron
+│   ├── package.json
+│   ├── ecosystem.config.js                config PM2
+│   ├── .env / .env.example                secretos (JWT, DB, ANTHROPIC_API_KEY, etc.)
+│   ├── extension-meta.json                metadata versión extensión (legacy CRX)
+│   ├── routes/
+│   │   ├── auth.js                        login, registro, refresh, extension-login
+│   │   ├── client.js                      heartbeat, scripts, account, notifications, IA chat
+│   │   ├── license.js                     lock ejecución (start/heartbeat/end)
+│   │   ├── monitor.js                     CRUD partes + novedades
+│   │   ├── admin.js                       panel admin
+│   │   ├── tickets.js                     soporte (IA priority, visibility)
+│   │   ├── extension.js                   ⚠️ DEPRECADO (CRX) — pendiente eliminar
+│   │   ├── scripts.js                     gestión de scripts cifrados
+│   │   ├── users.js / usuarios.js         portal usuarios + API SSO
+│   │   ├── analytics.js                   métricas
+│   │   └── legal.js                       T&C, privacidad, aceptación
+│   ├── middleware/
+│   │   ├── authenticateToken.js
+│   │   ├── checkLicense.js                cuotas + estado suscripción
+│   │   ├── rateLimiter.js
+│   │   └── tokenBlacklist.js
+│   ├── utils/
+│   │   ├── scriptEncryption.js            ⛔ NO TOCAR (AES + firma RSA server-side)
+│   │   ├── mailer.js                      emails transaccionales (Nodemailer)
+│   │   ├── cacheManager.js
+│   │   └── logger.js                      Winston
+│   ├── src/security/
+│   │   ├── scriptSigner.js                ⛔ firma RSA-2048
+│   │   ├── scriptVerifier.js
+│   │   └── signatureCache.js
+│   ├── public/                            servido por Express (estáticos)
+│   │   ├── landing/                       procuradortool.com (Nginx sirve este)
+│   │   │   ├── index.html
+│   │   │   ├── terminos.html
+│   │   │   └── privacidad.html
+│   │   ├── usuarios/                      portal web autoservicio (SSO desde Electron)
+│   │   │   ├── index.html / app.js / app.css
+│   │   ├── dashboard/                     panel admin
+│   │   │   ├── index.html / dashboard.js / dashboard.css
+│   │   ├── register/                      registro público
+│   │   ├── legal/accept                   aceptación T&C
+│   │   ├── terminos/ · privacidad/        copias servidas vía rutas
+│   │   └── extension/                     ⚠️ DEPRECADO (descargas CRX)
+│   ├── scripts/                           scripts Puppeteer cifrados (se distribuyen al Electron)
+│   │   ├── consultarscwpjn.js · listarSCWPJN.js · informequickscwpjn.js
+│   │   ├── buscarPorParteScwpjn.js · validarCampoParteScwpjn.js
+│   │   ├── monitoreo.js · procesarMonitoreo.js · procesarNovedadesCompleto.js
+│   │   ├── procesarCustomExpedientes.js · cerrarNavegador.js
+│   │   ├── sessionManager.js · errorHandler.js
+│   │   ├── backup-db.js · data-retention.js · canary-test.js
+│   │   ├── testM1.js · testM2.js · test_registro.js
+│   │   ├── insert_plans.sql
+│   │   └── validacion_campo_parte.json
+│   ├── database/init.sql · migrations/    bootstrap DB
+│   ├── setup/createTestUser.js
+│   ├── test/                              tests internos
+│   ├── generate-keys.js                   genera par RSA (uso one-shot)
+│   ├── create-admin.js · list_users.js · assign_cuit.js · migrate_cuit.js
+│   ├── reencrypt_scripts.js               re-cifrar todos los scripts tras rotación de clave
+│   ├── seed_legal_tmp.js · test_legal_tmp.js · test_legal_full_tmp.js   (temporales)
+│   └── keys/                              ⛔ claves RSA privadas (gitignored)
+│
+├── extension-app/                         ← extensión Chrome MV3 (Chrome Web Store)
+│   ├── manifest.json                      v1.3.2
+│   ├── background.js                      service worker
+│   ├── popup.html · popup.js              UI principal
+│   ├── auth.js                            login + FLOW_ALIASES
+│   ├── config.js                          URL backend, versión
+│   ├── cs-scw.js                          content script scw.pjn.gov.ar
+│   ├── cs-escritos2.js                    escritos.pjn.gov.ar
+│   ├── cs-notif.js                        notif.pjn.gov.ar
+│   ├── cs-deox.js                         deox.pjn.gov.ar
+│   ├── cs-selection.js                    sin uso activo (vestigio)
+│   ├── icon16.png · icon48.png · icon128.png
+│   └── imagenes/                          assets para store (EXCLUIR del ZIP)
+│
+├── database/                              ← snapshots y migraciones del esquema
+│   ├── schema.sql                         schema actual de producción (pg_dump --schema-only)
+│   ├── backup_fase4_inicio.sql            backup pre-Fase 4
+│   ├── backup_pre_v2.1.sql                (untracked)
+│   └── migrations/
+│       ├── 001_flujo_usuario_v2.1.sql
+│       ├── 001_registration_gaps.sql
+│       ├── 20260522_add_comment_visibility_and_ai_logs.sql
+│       └── 20260522_add_ticket_priority_source.sql
+│
+├── docs/
+│   ├── manual-de-usuario.md               guía pública del usuario final
+│   └── internal/                          documentación interna
+│       ├── proximos-pasos.md              ⭐ handoff de continuidad (leer post-/clear)
+│       ├── sistema-estados-flujos.md      flujos técnicos (IA, email, IPC, deploy)
+│       ├── mejoras-futuras.md             ideas diferidas (KB, borradores masivos)
+│       └── rollback-fase4.md              procedimientos de restore Fase 4
+│
+├── tests/                                 ← QA pytest + Playwright
+│   ├── README.md · QA_RESULTS.md          (159/165 PASS)
+│   ├── conftest.py · pytest.ini · requirements.txt · run_tests.py
+│   ├── api/                               tests API REST
+│   ├── desktop/                           tests Electron (Playwright)
+│   ├── web/                               tests portal web
+│   ├── helpers/                           fixtures compartidas
+│   ├── tests/                             suite principal
+│   ├── test_m14_cron.sh · test_m14_cron.sql
+│   └── *.png                              screenshots de referencia
+│
+└── .claude/                               ← worktrees + plans + memoria local (gitignored)
+    ├── worktrees/                         worktrees activos
+    └── plans/                              planes guardados (cozy-cuddling-badger.md, etc.)
+```
+
+### Archivos top-level "no esperados" (revisar antes de borrar)
+- `procurador_db_backup.sql` en la raíz — backup histórico, no es la fuente actual
+- `backend-server/seed_legal_tmp.js`, `test_legal_tmp.js`, `test_legal_full_tmp.js` — temporales del seed legal, candidatos a limpieza
+- `backend-server/routes/extension.js` + `backend-server/public/extension/` — distribución CRX deprecada (Bloque 1.2)
+- `electron-app/Monitor-Procurador.ps1` — watchdog Windows legacy, ver si sigue usándose
+
+### Atajos rápidos para localizar archivos
+```bash
+# Último archivo modificado por carpeta
+ls -lt electron-app/src/scripts/ | head
+ls -lt backend-server/routes/ | head
+
+# Buscar por nombre
+git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" ls-files | grep -i <fragmento>
+
+# Archivos cambiados en el último commit
+git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" show --name-only --pretty=format: HEAD
+
+# Archivos cambiados desde un tag
+git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" diff --name-only fase4-completa..HEAD
 ```
 
 > **Nota sobre extensiones:** `extension-app/` es la **única** versión activa (la que se publica en Chrome Web Store).
