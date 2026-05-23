@@ -22,6 +22,9 @@ let shouldSkipTour = false;   // true cuando el usuario eligió "Entrar a la app
 // ✅ DETECTAR SI ESTAMOS EN PRODUCCIÓN O DESARROLLO
 const isDev = !app.isPackaged;
 const appPath = isDev ? __dirname : path.join(process.resourcesPath, 'app.asar');
+const appIcon = isDev
+    ? path.join(__dirname, 'assets', 'icon.ico')
+    : path.join(process.resourcesPath, 'icon.ico');
 
 // ============ AUTO-UPDATER ============
 // Solo activo en la app instalada (no en desarrollo con "npm start")
@@ -88,7 +91,7 @@ function createOnboardingWindow() {
             contextIsolation: true,
             sandbox: true
         },
-        icon: path.join(__dirname, 'assets', 'icon.ico'),
+        icon: appIcon,
         show: false,
         title: 'Configuración inicial — Procurador SCW'
     });
@@ -168,7 +171,7 @@ function createMainWindow() {
             contextIsolation: true,
             sandbox: true
         },
-        icon: path.join(__dirname, 'assets', 'icon.ico'),
+        icon: appIcon,
         backgroundColor: '#f7f7f5',
         show: false,
         center: true,
