@@ -24,24 +24,110 @@ function getTransporter() {
     return transporter;
 }
 
+// ─────────────────────────────────────────────
+//  BRANDING — header y footer unificados
+// ─────────────────────────────────────────────
+
 /**
- * Función base para enviar emails.
- * Si SMTP no está configurado, loguea y no falla.
+ * Header de email con branding Procurador TOOL / SCW.
+ * @param {string} [accentColor='#d97706']  Color del borde y acentos (amber por defecto)
  */
+function emailHeader(accentColor = '#d97706') {
+    return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto">
+      <tr>
+        <td style="background:${accentColor};padding:0;border-radius:8px 8px 0 0;height:5px"></td>
+      </tr>
+      <tr>
+        <td style="background:#ffffff;padding:24px 32px 16px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb">
+          <table cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="width:42px;vertical-align:middle">
+                <div style="width:38px;height:38px;background:linear-gradient(145deg,#f5a623,#d97706);border-radius:9px;
+                            display:flex;align-items:center;justify-content:center;
+                            font-size:22px;line-height:38px;text-align:center">⚖️</div>
+              </td>
+              <td style="padding-left:12px;vertical-align:middle">
+                <div style="font-family:'Segoe UI',Arial,sans-serif;font-size:16px;font-weight:700;color:#1a1a1a;line-height:1.1">
+                  Procurador <span style="color:${accentColor}">TOOL</span>
+                </div>
+                <div style="font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#8a8a8a;letter-spacing:0.03em;margin-top:2px">
+                  Procurador SCW
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#ffffff;padding:0 32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb">
+          <hr style="border:none;border-top:1px solid #f3f4f6;margin:0">
+        </td>
+      </tr>
+    </table>`;
+}
+
+/**
+ * Footer de email con branding y contacto.
+ */
+function emailFooter() {
+    return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto">
+      <tr>
+        <td style="background:#ffffff;padding:0 32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb">
+          <hr style="border:none;border-top:1px solid #f3f4f6;margin:0">
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#f9fafb;padding:18px 32px 22px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;text-align:center">
+          <p style="font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#6b7280;margin:0 0 4px">
+            <strong style="color:#4a4a4a">Procurador SCW</strong> · parte de <strong style="color:#4a4a4a">Procurador TOOL</strong>
+          </p>
+          <p style="font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#9ca3af;margin:0">
+            <a href="mailto:soporte@procuradortool.com" style="color:#d97706;text-decoration:none">soporte@procuradortool.com</a>
+            &nbsp;·&nbsp;
+            <a href="https://procuradortool.com" style="color:#9ca3af;text-decoration:none">procuradortool.com</a>
+          </p>
+        </td>
+      </tr>
+    </table>`;
+}
+
+/**
+ * Envuelve el contenido en el layout completo del email.
+ * @param {string} content   HTML del cuerpo (entre header y footer)
+ * @param {string} [accent]  Color de acento (opcional)
+ */
+function emailLayout(content, accent = '#d97706') {
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+</head>
+<body style="margin:0;padding:20px 0;background:#f3f4f6;font-family:'Segoe UI',Arial,sans-serif">
+  ${emailHeader(accent)}
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto">
+    <tr>
+      <td style="background:#ffffff;padding:24px 32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb">
+        ${content}
+      </td>
+    </tr>
+  </table>
+  ${emailFooter()}
+</body>
+</html>`;
+}
+
+// ─────────────────────────────────────────────
+//  FUNCIÓN BASE
+// ─────────────────────────────────────────────
+
 async function sendEmail(to, subject, html) {
     const t = getTransporter();
     if (!t) return;
 
-    // Envolver con <!DOCTYPE> + meta charset para asegurar UTF-8 en todos los clientes (Gmail, Outlook, etc.)
-    const fullHtml = html.trim().startsWith('<!DOCTYPE') ? html : `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${subject.replace(/<[^>]+>/g, '')}</title>
-</head>
-<body>${html}</body>
-</html>`;
+    const fullHtml = html.trim().startsWith('<!DOCTYPE') ? html : emailLayout(html);
 
     try {
         const info = await t.sendMail({
@@ -49,7 +135,7 @@ async function sendEmail(to, subject, html) {
             to,
             subject,
             html: fullHtml,
-            textEncoding: 'base64',  // Asegura que caracteres no-ASCII en el subject viajen bien
+            textEncoding: 'base64',
         });
         logger.info(`📧 Email enviado a ${to}: ${subject} (id: ${info.messageId})`);
     } catch (err) {
@@ -57,121 +143,9 @@ async function sendEmail(to, subject, html) {
     }
 }
 
-/**
- * Email de verificación de cuenta.
- * @param {string} email
- * @param {string} nombre
- * @param {string} token
- */
-async function sendEmailVerification(email, nombre, token) {
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    const link = `${baseUrl}/auth/verify-email?token=${token}`;
-
-    await sendEmail(
-        email,
-        'Verificá tu cuenta — Procurador SCW',
-        `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <h2 style="color:#1e40af">Procurador SCW</h2>
-          <p>Hola <strong>${nombre}</strong>,</p>
-          <p>Gracias por registrarte. Para activar tu cuenta hacé clic en el siguiente botón:</p>
-          <div style="text-align:center;margin:30px 0">
-            <a href="${link}"
-               style="background:#1e40af;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-size:16px">
-              Verificar mi email
-            </a>
-          </div>
-          <p style="color:#6b7280;font-size:13px">
-            Este enlace vence en 24 horas. Si no te registraste en Procurador SCW, ignorá este mensaje.
-          </p>
-          <p style="color:#6b7280;font-size:12px">
-            Si el botón no funciona, copiá este enlace en tu navegador:<br>
-            <a href="${link}">${link}</a>
-          </p>
-        </div>
-        `
-    );
-}
-
-/**
- * Email de bienvenida post-verificación.
- * @param {string} email
- * @param {string} nombre
- * @param {string} planName
- */
-async function sendWelcomeEmail(email, nombre, planName) {
-    await sendEmail(
-        email,
-        '¡Bienvenido a Procurador SCW!',
-        `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <h2 style="color:#1e40af">Procurador SCW</h2>
-          <p>Hola <strong>${nombre}</strong>,</p>
-          <p>Tu email fue verificado correctamente. Tu cuenta con el plan <strong>${planName}</strong> está pendiente de activación por el administrador.</p>
-          <p>Mientras tanto, podés usar la aplicación con <strong>20 ejecuciones de prueba</strong> gratuitas.</p>
-          <p>Te notificaremos cuando tu suscripción sea activada.</p>
-          <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-        </div>
-        `
-    );
-}
-
-/**
- * Alerta al administrador cuando se registra un nuevo usuario.
- * @param {{ nombre: string, apellido: string, email: string, cuit: string, plan_name: string }} userData
- */
-async function sendAdminNewUserAlert(userData) {
-    const to = process.env.ALERT_EMAIL_TO;
-    if (!to) return;
-
-    await sendEmail(
-        to,
-        `Nuevo registro pendiente — ${userData.nombre} ${userData.apellido}`,
-        `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <h2 style="color:#1e40af">Nuevo usuario pendiente de activación</h2>
-          <table style="width:100%;border-collapse:collapse">
-            <tr><td style="padding:8px;color:#6b7280">Nombre</td><td style="padding:8px"><strong>${userData.nombre} ${userData.apellido}</strong></td></tr>
-            <tr style="background:#f9fafb"><td style="padding:8px;color:#6b7280">Email</td><td style="padding:8px">${userData.email}</td></tr>
-            <tr><td style="padding:8px;color:#6b7280">CUIT</td><td style="padding:8px">${userData.cuit}</td></tr>
-            <tr style="background:#f9fafb"><td style="padding:8px;color:#6b7280">Plan</td><td style="padding:8px">${userData.plan_name}</td></tr>
-          </table>
-          <p style="margin-top:20px">
-            Ingresá al <a href="${process.env.BASE_URL || 'http://localhost:3000'}/dashboard">dashboard</a> para activar la cuenta.
-          </p>
-        </div>
-        `
-    );
-}
-
-/**
- * Aviso de vencimiento próximo de promo.
- * @param {string} email
- * @param {string} nombre
- * @param {string} planName
- * @param {number} daysLeft
- * @param {string|null} promoEndDate - ISO string de fecha de vencimiento (null si es por cupo)
- */
-async function sendPromoExpirationWarning(email, nombre, planName, daysLeft, promoEndDate) {
-    const fechaMsg = promoEndDate
-        ? `el ${new Date(promoEndDate).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}`
-        : 'pronto';
-
-    await sendEmail(
-        email,
-        `Tu promo vence en ${daysLeft} días — Procurador SCW`,
-        `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <h2 style="color:#d97706">⚠️ Tu promo está por vencer</h2>
-          <p>Hola <strong>${nombre}</strong>,</p>
-          <p>Tu plan <strong>${planName}</strong> tiene un precio promocional que vence <strong>${fechaMsg}</strong> (en ${daysLeft} días).</p>
-          <p>Para continuar usando Procurador SCW sin interrupciones, te recomendamos elegir uno de los planes disponibles antes del vencimiento.</p>
-          <p>Abrí la aplicación para ver las opciones de renovación.</p>
-          <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-        </div>
-        `
-    );
-}
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
 
 const PORTAL_URL = 'https://api.procuradortool.com/usuarios/';
 
@@ -179,120 +153,204 @@ function dateAR(d) {
     return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
+function btnPrimary(href, text) {
+    return `<div style="text-align:center;margin:28px 0">
+      <a href="${href}" style="background:#d97706;color:#fff;padding:13px 28px;border-radius:6px;
+         text-decoration:none;font-size:14px;font-weight:600;display:inline-block">${text}</a>
+    </div>`;
+}
+
+function infoBox(content, accent = '#d97706') {
+    return `<div style="background:#fffbeb;border-left:3px solid ${accent};border-radius:6px;
+              padding:14px 18px;margin:18px 0;font-size:13.5px;color:#4a4a4a;line-height:1.55">
+      ${content}
+    </div>`;
+}
+
+function p(text) {
+    return `<p style="font-size:15px;color:#1a1a1a;line-height:1.6;margin:0 0 14px">${text}</p>`;
+}
+
+// ─────────────────────────────────────────────
+//  EMAILS
+// ─────────────────────────────────────────────
+
+async function sendEmailVerification(email, nombre, token) {
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const link = `${baseUrl}/auth/verify-email?token=${token}`;
+
+    await sendEmail(
+        email,
+        'Verificá tu cuenta — Procurador SCW',
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${p('Gracias por registrarte. Para activar tu cuenta hacé clic en el siguiente botón:')}
+          ${btnPrimary(link, 'Verificar mi email')}
+          <p style="font-size:12px;color:#6b7280;margin:0 0 8px">
+            Este enlace vence en 24 horas. Si no te registraste en Procurador SCW, ignorá este mensaje.
+          </p>
+          <p style="font-size:12px;color:#9ca3af;margin:0">
+            Si el botón no funciona, copiá este enlace:<br>
+            <a href="${link}" style="color:#d97706;word-break:break-all">${link}</a>
+          </p>
+        `)
+    );
+}
+
+async function sendWelcomeEmail(email, nombre, planName) {
+    await sendEmail(
+        email,
+        '¡Bienvenido a Procurador SCW!',
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${p(`Tu email fue verificado correctamente. Tu cuenta con el plan <strong>${planName}</strong> está pendiente de activación por el administrador.`)}
+          ${infoBox(`<strong>Mientras tanto</strong>, podés usar la aplicación con <strong>20 ejecuciones de prueba</strong> gratuitas.`)}
+          ${p('Te notificaremos por email cuando tu suscripción sea activada.')}
+        `)
+    );
+}
+
+async function sendAdminNewUserAlert(userData) {
+    const to = process.env.ALERT_EMAIL_TO;
+    if (!to) return;
+
+    await sendEmail(
+        to,
+        `Nuevo registro pendiente — ${userData.nombre} ${userData.apellido}`,
+        emailLayout(`
+          <h3 style="font-size:16px;font-weight:700;color:#1a1a1a;margin:0 0 18px">
+            Nuevo usuario pendiente de activación
+          </h3>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr><td style="padding:8px 0;color:#6b7280;width:120px">Nombre</td><td style="padding:8px 0"><strong>${userData.nombre} ${userData.apellido}</strong></td></tr>
+            <tr style="border-top:1px solid #f3f4f6"><td style="padding:8px 0;color:#6b7280">Email</td><td style="padding:8px 0">${userData.email}</td></tr>
+            <tr style="border-top:1px solid #f3f4f6"><td style="padding:8px 0;color:#6b7280">CUIT</td><td style="padding:8px 0">${userData.cuit}</td></tr>
+            <tr style="border-top:1px solid #f3f4f6"><td style="padding:8px 0;color:#6b7280">Plan</td><td style="padding:8px 0">${userData.plan_name}</td></tr>
+          </table>
+          ${btnPrimary(`${process.env.BASE_URL || 'https://api.procuradortool.com'}/dashboard`, 'Activar en el dashboard →')}
+        `)
+    );
+}
+
+async function sendPromoExpirationWarning(email, nombre, planName, daysLeft, promoEndDate) {
+    const fechaMsg = promoEndDate
+        ? `el ${dateAR(promoEndDate)}`
+        : 'pronto';
+
+    await sendEmail(
+        email,
+        `Tu promo vence en ${daysLeft} días — Procurador SCW`,
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${infoBox(`Tu plan <strong>${planName}</strong> tiene un precio promocional que vence <strong>${fechaMsg}</strong> (en ${daysLeft} días).`)}
+          ${p('Para continuar usando Procurador SCW sin interrupciones, te recomendamos elegir uno de los planes disponibles antes del vencimiento.')}
+          ${p('Abrí la aplicación para ver las opciones de renovación.')}
+        `, '#f59e0b')
+    );
+}
+
 async function sendActivationEmail(email, nombre) {
-    await sendEmail(email, 'Tu cuenta fue activada — Procurador SCW', `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#16a34a">✅ ¡Tu cuenta está activa!</h2>
-      <p>Hola <strong>${nombre}</strong>,</p>
-      <p>El administrador activó tu cuenta. Ya podés usar todas las funciones de tu plan sin límite de usos de prueba.</p>
-      <p><a href="${PORTAL_URL}" style="color:#1e40af">Ver mi plan en el portal →</a></p>
-      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-    </div>`);
+    await sendEmail(
+        email,
+        'Tu cuenta fue activada — Procurador SCW',
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${infoBox('<strong>✅ ¡Tu cuenta está activa!</strong> Ya podés usar todas las funciones de tu plan sin límite de usos de prueba.', '#16a34a')}
+          ${btnPrimary(PORTAL_URL, 'Ver mi plan en el portal →')}
+        `, '#16a34a')
+    );
 }
 
 async function sendRejectionEmail(email, nombre, reason, mode) {
     const isBlock = mode === 'block';
     const subject = isBlock ? 'Tu solicitud fue rechazada — Procurador SCW' : 'Tu solicitud está en espera — Procurador SCW';
     const body = isBlock
-        ? `<p>Lamentablemente tu acceso fue <strong>denegado</strong>. Motivo: <em>${reason}</em>.</p><p>Si creés que es un error, contactanos en soporte@procuradortool.com.</p>`
-        : `<p>Tu solicitud está <strong>en espera</strong>. Motivo: <em>${reason}</em>. Podés seguir usando tus usos de prueba.</p>`;
-    await sendEmail(email, subject, `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#dc2626">Procurador SCW</h2>
-      <p>Hola <strong>${nombre}</strong>,</p>
-      ${body}
-      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-    </div>`);
+        ? `${p(`Lamentablemente tu acceso fue <strong>denegado</strong>.`)}${infoBox(`Motivo: <em>${reason}</em>`, '#dc2626')}${p('Si creés que es un error, contactanos en <a href="mailto:soporte@procuradortool.com" style="color:#d97706">soporte@procuradortool.com</a>.')}`
+        : `${p('Tu solicitud está <strong>en espera</strong>.')}${infoBox(`Motivo: <em>${reason}</em><br>Podés seguir usando tus usos de prueba.`, '#f59e0b')}`;
+
+    await sendEmail(email, subject, emailLayout(`${p(`Hola <strong>${nombre}</strong>,`)}${body}`, '#dc2626'));
 }
 
 async function sendTrialExhaustedEmail(email, nombre) {
-    await sendEmail(email, 'Tus usos de prueba se agotaron — Procurador SCW', `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#dc2626">Procurador SCW</h2>
-      <p>Hola <strong>${nombre}</strong>,</p>
-      <p>Utilizaste todos tus <strong>20 usos de prueba</strong>. Tu acceso fue bloqueado automáticamente.</p>
-      <p>Contactanos en soporte@procuradortool.com si querés activar una suscripción.</p>
-      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-    </div>`);
+    await sendEmail(
+        email,
+        'Tus usos de prueba se agotaron — Procurador SCW',
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${infoBox('Utilizaste todos tus <strong>20 usos de prueba</strong>. Tu acceso fue bloqueado automáticamente.', '#dc2626')}
+          ${p('Contactanos en <a href="mailto:soporte@procuradortool.com" style="color:#d97706">soporte@procuradortool.com</a> si querés activar una suscripción.')}
+        `, '#dc2626')
+    );
 }
 
 async function sendPlanExpiryWarningEmail(email, nombre, planExpiryDate) {
     const fecha = dateAR(planExpiryDate);
-    await sendEmail(email, `Tu plan vence el ${fecha} — Procurador SCW`, `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#d97706">⚠️ Tu plan está por vencer</h2>
-      <p>Hola <strong>${nombre}</strong>,</p>
-      <p>Tu plan actual vence el <strong>${fecha}</strong>. Para continuar sin interrupciones, seleccioná un nuevo plan.</p>
-      <p><a href="${PORTAL_URL}" style="color:#1e40af">Seleccionar nuevo plan →</a></p>
-      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-    </div>`);
+    await sendEmail(
+        email,
+        `Tu plan vence el ${fecha} — Procurador SCW`,
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${infoBox(`Tu plan actual vence el <strong>${fecha}</strong>. Para continuar sin interrupciones, seleccioná un nuevo plan.`, '#f59e0b')}
+          ${btnPrimary(PORTAL_URL, 'Seleccionar nuevo plan →')}
+        `, '#f59e0b')
+    );
 }
 
 async function sendPlanExpiredSuspendedEmail(email, nombre) {
-    await sendEmail(email, 'Tu plan venció — Procurador SCW', `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#dc2626">Tu plan venció</h2>
-      <p>Hola <strong>${nombre}</strong>,</p>
-      <p>Tu plan venció y tu acceso fue suspendido. Podés reactivarlo eligiendo un nuevo plan desde el portal.</p>
-      <p><a href="${PORTAL_URL}" style="background:#d97706;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none">Seleccionar nuevo plan</a></p>
-      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-    </div>`);
+    await sendEmail(
+        email,
+        'Tu plan venció — Procurador SCW',
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${infoBox('Tu plan venció y tu acceso fue <strong>suspendido</strong>. Podés reactivarlo eligiendo un nuevo plan desde el portal.', '#dc2626')}
+          ${btnPrimary(PORTAL_URL, 'Seleccionar nuevo plan')}
+        `, '#dc2626')
+    );
 }
 
 async function sendAdminSuspendedEmail(email, nombre, reason) {
-    await sendEmail(email, 'Tu cuenta fue suspendida — Procurador SCW', `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#dc2626">Cuenta suspendida</h2>
-      <p>Hola <strong>${nombre}</strong>,</p>
-      <p>Tu cuenta fue suspendida por el administrador. Motivo: <em>${reason}</em>.</p>
-      <p>Podés solicitar una revisión desde el portal (una sola solicitud disponible).</p>
-      <p><a href="${PORTAL_URL}" style="color:#1e40af">Solicitar revisión →</a></p>
-      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-    </div>`);
+    await sendEmail(
+        email,
+        'Tu cuenta fue suspendida — Procurador SCW',
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${infoBox(`Tu cuenta fue suspendida por el administrador.<br>Motivo: <em>${reason}</em>`, '#dc2626')}
+          ${p('Podés solicitar una revisión desde el portal (una sola solicitud disponible).')}
+          ${btnPrimary(PORTAL_URL, 'Solicitar revisión →')}
+        `, '#dc2626')
+    );
 }
 
 async function sendReactivationResultEmail(email, nombre, approved, reason) {
     const subject = approved ? 'Tu acceso fue restaurado — Procurador SCW' : 'Tu solicitud fue revisada — Procurador SCW';
+    const accent = approved ? '#16a34a' : '#dc2626';
     const body = approved
-        ? '<p>¡Tu cuenta fue reactivada! Ya podés volver a usar la aplicación.</p>'
-        : `<p>Tu solicitud de reactivación fue revisada. La suspensión se mantiene${reason ? `. Motivo: <em>${reason}</em>` : ''}.</p><p>Contactanos en soporte@procuradortool.com si tenés dudas.</p>`;
-    await sendEmail(email, subject, `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:${approved ? '#16a34a' : '#dc2626'}">Procurador SCW</h2>
-      <p>Hola <strong>${nombre}</strong>,</p>
-      ${body}
-      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-    </div>`);
+        ? infoBox('✅ ¡Tu cuenta fue reactivada! Ya podés volver a usar la aplicación.', '#16a34a')
+        : `${infoBox(`Tu solicitud de reactivación fue revisada. La suspensión se mantiene${reason ? `.<br>Motivo: <em>${reason}</em>` : '.'} `, '#dc2626')}${p('Contactanos en <a href="mailto:soporte@procuradortool.com" style="color:#d97706">soporte@procuradortool.com</a> si tenés dudas.')}`;
+
+    await sendEmail(email, subject, emailLayout(`${p(`Hola <strong>${nombre}</strong>,`)}${body}`, accent));
 }
 
 async function sendBillingReminderEmail(email, nombre, nextBillingDate) {
     const fecha = dateAR(nextBillingDate);
-    await sendEmail(email, `Tu suscripción se renueva el ${fecha} — Procurador SCW`, `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#1e40af">Procurador SCW</h2>
-      <p>Hola <strong>${nombre}</strong>,</p>
-      <p>Tu suscripción se renueva automáticamente el <strong>${fecha}</strong>.</p>
-      <p>Si querés cambiar tu plan o método de pago, hacelo desde el portal antes de esa fecha.</p>
-      <p><a href="${PORTAL_URL}" style="color:#1e40af">Ir al portal →</a></p>
-      <p style="color:#6b7280;font-size:13px">Procurador SCW — soporte@procuradortool.com</p>
-    </div>`);
+    await sendEmail(
+        email,
+        `Tu suscripción se renueva el ${fecha} — Procurador SCW`,
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${p(`Tu suscripción se renueva automáticamente el <strong>${fecha}</strong>.`)}
+          ${p('Si querés cambiar tu plan o método de pago, hacelo desde el portal antes de esa fecha.')}
+          ${btnPrimary(PORTAL_URL, 'Ir al portal →')}
+        `)
+    );
 }
 
-/**
- * Email al usuario cuando soporte (admin) responde un ticket.
- * @param {string} email — email del usuario
- * @param {string} nombre — nombre del usuario
- * @param {number} ticketId — ID del ticket
- * @param {string} ticketTitle — título del ticket
- * @param {string} commentPreview — preview de la respuesta (max 200 chars)
- */
 async function sendTicketReplyEmail(email, nombre, ticketId, ticketTitle, commentPreview) {
     if (process.env.EMAIL_TICKET_REPLY_ENABLED !== 'true') {
         logger.info(`📧 [skip] EMAIL_TICKET_REPLY_ENABLED=false — no se envía reply a ${email}`);
         return;
     }
 
-    // Link al portal con goto=soporte — el usuario hace login normal y luego es redirigido a Soporte
     const portalUrl = `${PORTAL_URL}?goto=soporte`;
     const truncatedTitle = ticketTitle.length > 60 ? ticketTitle.substring(0, 60) + '…' : ticketTitle;
     const escapedPreview = String(commentPreview || '')
@@ -303,57 +361,40 @@ async function sendTicketReplyEmail(email, nombre, ticketId, ticketTitle, commen
     await sendEmail(
         email,
         `Procurador SCW — Respuesta a tu ticket #${ticketId}`,
-        `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
-          <h2 style="color:#d97706;margin-bottom:8px">🎫 Procurador SCW</h2>
-          <p style="color:#1a1a1a;font-size:15px">Hola <strong>${nombre || 'usuario'}</strong>,</p>
-          <p style="color:#1a1a1a;font-size:15px">El equipo de soporte respondió tu ticket:</p>
-
-          <div style="background:#fffbeb;border-left:3px solid #d97706;border-radius:6px;padding:14px 18px;margin:18px 0">
-            <div style="font-size:12px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">
-              Ticket #${ticketId}
-            </div>
-            <div style="font-size:14px;color:#1a1a1a;font-weight:500;margin-bottom:10px">
-              ${truncatedTitle}
-            </div>
-            <div style="font-size:13.5px;color:#4a4a4a;line-height:1.55;font-style:italic;border-top:1px solid #fde68a;padding-top:10px;white-space:pre-wrap">
-              ${previewWithEllipsis}
-            </div>
-          </div>
-
-          <div style="text-align:center;margin:28px 0">
-            <a href="${portalUrl}"
-               style="background:#d97706;color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;display:inline-block">
-              Ver respuesta completa →
-            </a>
-          </div>
-
-          <p style="color:#6b7280;font-size:12px;margin-top:24px;border-top:1px solid #e5e7eb;padding-top:14px">
+        emailLayout(`
+          ${p(`Hola <strong>${nombre || 'usuario'}</strong>,`)}
+          ${p('El equipo de soporte respondió tu ticket:')}
+          ${infoBox(`
+            <div style="font-size:12px;color:#92400e;font-weight:600;text-transform:uppercase;
+                        letter-spacing:0.05em;margin-bottom:6px">Ticket #${ticketId}</div>
+            <div style="font-size:14px;color:#1a1a1a;font-weight:500;margin-bottom:10px">${truncatedTitle}</div>
+            <div style="border-top:1px solid #fde68a;padding-top:10px;font-style:italic;white-space:pre-wrap">${previewWithEllipsis}</div>
+          `)}
+          ${btnPrimary(portalUrl, 'Ver respuesta completa →')}
+          <p style="font-size:12px;color:#6b7280;margin:0">
             El botón te lleva al portal web — ingresá con tu email y contraseña, y serás redirigido directamente a tu ticket.
           </p>
-          <p style="color:#9ca3af;font-size:11px;text-align:center;margin-top:8px">
-            Procurador SCW — soporte@procuradortool.com
-          </p>
-        </div>
-        `
+        `)
     );
 }
 
 async function sendAdminReactivationRequest(nombre, apellido, email, suspensionReason, userMessage) {
     const to = process.env.ALERT_EMAIL_TO;
     if (!to) return;
-    await sendEmail(to, `Solicitud de reactivación — ${nombre} ${apellido}`, `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-      <h2 style="color:#d97706">Pedido de reactivación</h2>
-      <table style="width:100%;border-collapse:collapse">
-        <tr><td style="padding:8px;color:#6b7280">Usuario</td><td style="padding:8px"><strong>${nombre} ${apellido}</strong> (${email})</td></tr>
-        <tr style="background:#f9fafb"><td style="padding:8px;color:#6b7280">Motivo suspensión</td><td style="padding:8px">${suspensionReason || '-'}</td></tr>
-        <tr><td style="padding:8px;color:#6b7280">Mensaje del usuario</td><td style="padding:8px">${userMessage || '(sin mensaje)'}</td></tr>
-      </table>
-      <p style="margin-top:20px">
-        <a href="${process.env.BASE_URL || 'https://api.procuradortool.com'}/dashboard">Revisar en el panel de admin →</a>
-      </p>
-    </div>`);
+
+    await sendEmail(
+        to,
+        `Solicitud de reactivación — ${nombre} ${apellido}`,
+        emailLayout(`
+          <h3 style="font-size:16px;font-weight:700;color:#1a1a1a;margin:0 0 18px">Pedido de reactivación</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr><td style="padding:8px 0;color:#6b7280;width:140px">Usuario</td><td style="padding:8px 0"><strong>${nombre} ${apellido}</strong> (${email})</td></tr>
+            <tr style="border-top:1px solid #f3f4f6"><td style="padding:8px 0;color:#6b7280">Motivo suspensión</td><td style="padding:8px 0">${suspensionReason || '-'}</td></tr>
+            <tr style="border-top:1px solid #f3f4f6"><td style="padding:8px 0;color:#6b7280">Mensaje del usuario</td><td style="padding:8px 0">${userMessage || '(sin mensaje)'}</td></tr>
+          </table>
+          ${btnPrimary(`${process.env.BASE_URL || 'https://api.procuradortool.com'}/dashboard`, 'Revisar en el panel de admin →')}
+        `)
+    );
 }
 
 module.exports = {
