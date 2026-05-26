@@ -2018,7 +2018,17 @@ async function loadAccountData() {
         // Aviso de método de pago faltante en sección Cuenta
         const trialBannerEl = document.getElementById('cuenta-trial-banner');
         if (trialBannerEl) {
-            if (a.registrationStatus === 'pending_activation') {
+            if (a.registrationStatus === 'pending_email') {
+                trialBannerEl.style.display = '';
+                trialBannerEl.innerHTML = `
+                    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
+                        <span style="font-size:22px;flex-shrink:0">📧</span>
+                        <div>
+                            <div style="font-weight:700;color:#92400e;font-size:13px;margin-bottom:4px">Email pendiente de verificación</div>
+                            <div style="color:#78350f;font-size:12px;line-height:1.5">Revisá tu casilla de correo y hacé click en el enlace de verificación para activar el período de prueba. Mientras tanto la aplicación está bloqueada.</div>
+                        </div>
+                    </div>`;
+            } else if (a.registrationStatus === 'pending_activation') {
                 const used  = a.usageCount ?? 0;
                 const limit = a.usageLimit ?? 20;
                 const rem   = Math.max(0, limit - used);
@@ -2314,7 +2324,17 @@ async function checkSubscriptionStatusBanner() {
             return Math.ceil((new Date(dateStr) - Date.now()) / 86400000);
         };
 
-        if (rs === 'pending_activation') {
+        if (rs === 'pending_email') {
+            msg     = '📧 Verificá tu email para usar la aplicación. Revisá tu casilla de correo y hacé click en el enlace de verificación.';
+            color   = '#b45309'; // ámbar
+            showBtn = false;
+            // Bloquear el botón principal de acción
+            const btnMain = document.getElementById('btnMain');
+            if (btnMain) {
+                btnMain.disabled = true;
+                btnMain.title    = 'Verificá tu email para continuar';
+            }
+        } else if (rs === 'pending_activation') {
             const used      = sub.usageCount ?? 0;
             const limit     = sub.usageLimit ?? 20;
             const remaining = limit - used;
