@@ -320,7 +320,7 @@ function renderStatusBanner() {
                 const limit = 20;
                 const rem = limit - used;
                 const alerta = rem <= 5 ? ' 🔴' : '';
-                return `Cuenta pendiente de activación — ${rem} de ${limit} usos de prueba disponibles. El administrador activará tu cuenta en breve.${alerta}`;
+                return `Cuenta pendiente de activación — ${used} de ${limit} usos de prueba utilizados. El administrador activará tu cuenta en breve.${alerta}`;
             }
         },
         suspended: {
@@ -684,7 +684,7 @@ function renderPlan() {
                         <span style="font-size:13px;font-weight:700;color:#92400e">⏳ Período de prueba</span>
                         <span style="font-size:12px;color:#78350f;margin-left:8px">Tu cuenta está pendiente de activación por el administrador</span>
                     </div>
-                    <span style="font-size:20px;font-weight:800;color:${barColor}">${trialRem} <span style="font-size:13px;font-weight:500;color:#92400e">/ ${trialLimit} usos restantes</span></span>
+                    <span style="font-size:20px;font-weight:800;color:${barColor}">${trialUsed} <span style="font-size:13px;font-weight:500;color:#92400e">/ ${trialLimit} usos utilizados</span></span>
                 </div>
                 <div style="background:#fde68a;border-radius:4px;height:8px;overflow:hidden">
                     <div style="height:100%;width:${pctTrial}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
@@ -787,7 +787,7 @@ function renderDownloads() {
             <div class="download-item-icon">⚖️</div>
             <div class="download-item-info">
                 <div class="download-item-title">App de escritorio — Procurador SCW <span style="font-size:11px;color:#9ca3af;font-weight:400">Windows</span></div>
-                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.10</div>
+                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.11</div>
             </div>
             <div class="download-item-actions">
                 <a class="btn btn-primary btn-sm"

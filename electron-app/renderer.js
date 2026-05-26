@@ -2018,7 +2018,28 @@ async function loadAccountData() {
         // Aviso de método de pago faltante en sección Cuenta
         const trialBannerEl = document.getElementById('cuenta-trial-banner');
         if (trialBannerEl) {
-            if (!a.paymentProvider && a.registrationStatus === 'active') {
+            if (a.registrationStatus === 'pending_activation') {
+                const used  = a.usageCount ?? 0;
+                const limit = a.usageLimit ?? 20;
+                const rem   = Math.max(0, limit - used);
+                const pct   = Math.min(100, Math.round((used / limit) * 100));
+                const barColor = rem <= 5 ? '#dc2626' : rem <= 10 ? '#d97706' : '#16a34a';
+                trialBannerEl.style.display = '';
+                trialBannerEl.innerHTML = `
+                    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;margin-bottom:16px">
+                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+                            <div>
+                                <span style="font-weight:700;color:#92400e;font-size:13px">⏳ Período de prueba</span>
+                                <span style="color:#78350f;font-size:12px;margin-left:8px">El administrador activará tu cuenta en breve</span>
+                            </div>
+                            <span style="font-size:18px;font-weight:800;color:${barColor}">${used}<span style="font-size:12px;font-weight:500;color:#92400e"> / ${limit} usos utilizados</span></span>
+                        </div>
+                        <div style="background:#fde68a;border-radius:4px;height:7px;overflow:hidden">
+                            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
+                        </div>
+                        ${rem <= 5 ? `<div style="margin-top:7px;font-size:12px;color:#991b1b;font-weight:600">🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.</div>` : ''}
+                    </div>`;
+            } else if (!a.paymentProvider && a.registrationStatus === 'active') {
                 trialBannerEl.style.display = '';
                 trialBannerEl.innerHTML = `
                     <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
@@ -2032,7 +2053,6 @@ async function loadAccountData() {
                             Ir al portal
                         </button>
                     </div>`;
-                // Listener programático — inline onclick no funciona en Electron con CSP
                 document.getElementById('btn-ir-portal-cuenta')?.addEventListener('click', () => openPortal());
             } else {
                 trialBannerEl.style.display = 'none';
@@ -2299,7 +2319,7 @@ async function checkSubscriptionStatusBanner() {
             const limit     = sub.usageLimit ?? 20;
             const remaining = limit - used;
             const lowIcon   = remaining <= 5 ? ' 🔴' : '';
-            msg   = `${used}/${limit} usos de prueba — Para continuar configurá tu suscripción${lowIcon}`;
+            msg   = `${used}/${limit} usos de prueba utilizados — El administrador activará tu cuenta en breve${lowIcon}`;
             color = '#1d4ed8'; // azul
         } else if (rs === 'active') {
             const expiryDays = daysUntil(sub.planExpiryDate);
