@@ -2197,6 +2197,113 @@ router.patch('/ai-suggest-logs/:id', authenticateAdmin, async (req, res) => {
     }
 });
 
+// ==================== SMOKE TESTS ====================
+
+const _fs   = require('fs');
+const _path = require('path');
+const SMOKE_FILE = _path.join(__dirname, '..', 'data', 'smoke-test-results.json');
+
+function _loadSmoke() {
+    try { if (_fs.existsSync(SMOKE_FILE)) return JSON.parse(_fs.readFileSync(SMOKE_FILE, 'utf8')); } catch (_) {}
+    return { api: null, pjn: null };
+}
+
+function _saveSmoke(data) {
+    const dir = _path.dirname(SMOKE_FILE);
+    if (!_fs.existsSync(dir)) _fs.mkdirSync(dir, { recursive: true });
+    _fs.writeFileSync(SMOKE_FILE, JSON.stringify(data, null, 2));
+}
+
+// GET /admin/smoke-tests/latest
+router.get('/smoke-tests/latest', authenticateAdmin, (req, res) => {
+    res.json({ success: true, results: _loadSmoke() });
+});
+
+// POST /admin/smoke-tests/run-api
+router.post('/smoke-tests/run-api', authenticateAdmin, async (req, res) => {
+    const axios = require('axios');
+    const https = require('https');
+
+    const t0Total = Date.now();
+    const checks  = [];
+    const logs    = [];
+
+    const BASE    = process.env.API_INTERNAL_URL || 'https://localhost:3443';
+    const agent   = new https.Agent({ rejectUnauthorized: false });
+    const ax      = axios.create({ baseURL: BASE, httpsAgent: agent, timeout: 8000, validateStatus: () => true });
+
+    function ts() { return new Date().toLocaleTimeString('es-AR'); }
+
+    async function runCheck(method, path, body, expectedStatus, label) {
+        const t = Date.now();
+        try {
+            const cfg = { method, url: path };
+            if (body !== null) cfg.data = body;
+            const r = await ax(cfg);
+            const ok = r.status === expectedStatus;
+            const ms = Date.now() - t;
+            checks.push({ label, method, path, expectedStatus, actualStatus: r.status, ok, duration: ms });
+            logs.push(`[${ts()}] ${ok ? '✅' : '❌'}  ${method.padEnd(4)} ${path.padEnd(36)} ${r.status}  (${ms}ms)`);
+        } catch (err) {
+            const ms = Date.now() - t;
+            checks.push({ label, method, path, expectedStatus, actualStatus: null, ok: false, duration: ms, error: err.message });
+            logs.push(`[${ts()}] ❌  ${method.padEnd(4)} ${path.padEnd(36)} ERROR: ${err.message}`);
+        }
+    }
+
+    logs.push(`[${ts()}] ▶ Iniciando smoke tests API...`);
+
+    await runCheck('GET',  '/health',                   null,                                200, '/health');
+    await runCheck('POST', '/auth/login',               {},                                  400, 'POST /auth/login sin body');
+    await runCheck('POST', '/auth/login',               { email: 'x@x.com', password: 'wrong' }, 401, 'POST /auth/login creds inválidas');
+    await runCheck('GET',  '/auth/register-status',     null,                                200, 'GET /auth/register-status');
+    await runCheck('GET',  '/client/scripts/available', null,                                401, 'GET /client/scripts/available sin token');
+    await runCheck('POST', '/license/execution/start',  {},                                  401, 'POST /license/execution/start sin token');
+    await runCheck('POST', '/auth/portal-login',        {},                                  400, 'POST /auth/portal-login sin body');
+
+    // DB check
+    const tDB = Date.now();
+    try {
+        await req.app.get('db').query('SELECT 1');
+        const ms = Date.now() - tDB;
+        checks.push({ label: 'PostgreSQL', ok: true, duration: ms });
+        logs.push(`[${ts()}] ✅  PostgreSQL                               conectado  (${ms}ms)`);
+    } catch (err) {
+        const ms = Date.now() - tDB;
+        checks.push({ label: 'PostgreSQL', ok: false, duration: ms, error: err.message });
+        logs.push(`[${ts()}] ❌  PostgreSQL                               ERROR: ${err.message}`);
+    }
+
+    const totalMs = Date.now() - t0Total;
+    const passed  = checks.filter(c => c.ok).length;
+    const total   = checks.length;
+
+    logs.push(`[${ts()}] ─────────────────────────────────────────────────────`);
+    logs.push(`[${ts()}] RESULTADO: ${passed}/${total} ${passed === total ? '✅' : '❌'}  —  duración: ${(totalMs / 1000).toFixed(1)}s`);
+
+    const apiResult = { timestamp: new Date().toISOString(), passed, total, ok: passed === total, duration: totalMs, checks, logs };
+
+    const saved = _loadSmoke();
+    saved.api = apiResult;
+    _saveSmoke(saved);
+
+    console.log(`[smoke-tests] API ejecutado por admin ${req.user.id}: ${passed}/${total}`);
+    res.json({ success: true, result: apiResult });
+});
+
+// POST /admin/smoke-tests/report-pjn  (llamado por el script local)
+router.post('/smoke-tests/report-pjn', authenticateAdmin, (req, res) => {
+    const { result } = req.body;
+    if (!result || typeof result !== 'object') {
+        return res.status(400).json({ error: 'Se requiere result' });
+    }
+    const saved = _loadSmoke();
+    saved.pjn = { ...result, timestamp: new Date().toISOString(), reportedBy: req.user.email };
+    _saveSmoke(saved);
+    console.log(`[smoke-tests] PJN reportado por admin ${req.user.id}: ${result.passed}/${result.total}`);
+    res.json({ success: true });
+});
+
 // ─── GET /admin/settings ─────────────────────────────────────────────────────
 // Devuelve todos los valores de app_settings
 router.get('/settings', authenticateAdmin, async (req, res) => {

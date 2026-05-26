@@ -161,14 +161,15 @@ function navigate(page, id) {
         scripts: 'Scripts',
         plans: 'Planes de suscripción',
         metrics: 'Métricas del sistema',
-        legal: 'Legal'
+        legal: 'Legal',
+        diagnostico: 'Diagnóstico del sistema'
     };
     document.getElementById('topbar-title').textContent = titles[page] || page;
 
     const content = document.getElementById('content');
     content.innerHTML = '<div class="loading">Cargando...</div>';
 
-    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal };
+    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal, diagnostico: renderDiagnostico };
     if (pages[page]) pages[page]();
 }
 
@@ -2519,6 +2520,177 @@ async function legalDelete(id) {
     } catch (e) {
         alert('Error al eliminar: ' + e.message);
     }
+}
+
+// ───── DIAGNÓSTICO DEL SISTEMA ─────
+
+async function renderDiagnostico() {
+    const content = document.getElementById('content');
+
+    content.innerHTML = `
+    <style>
+        .diag-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:4px; }
+        @media(max-width:900px){ .diag-grid { grid-template-columns:1fr; } }
+        .diag-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; }
+        .diag-card-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #f3f4f6; background:#fafafa; }
+        .diag-card-title { font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px; }
+        .diag-last { font-size:11px; color:#9ca3af; margin-top:2px; }
+        .diag-badge { font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; }
+        .diag-badge.ok { background:#d1fae5; color:#065f46; }
+        .diag-badge.fail { background:#fee2e2; color:#991b1b; }
+        .diag-badge.none { background:#f3f4f6; color:#6b7280; }
+        .diag-log { font-family:'Cascadia Code',Consolas,monospace; font-size:12px; padding:14px 18px; background:#1a1a1a; color:#d1d5db; min-height:160px; max-height:340px; overflow-y:auto; line-height:1.7; white-space:pre; }
+        .diag-log .ok  { color:#34d399; }
+        .diag-log .err { color:#f87171; }
+        .diag-log .sep { color:#6b7280; }
+        .diag-log .res { color:#fbbf24; font-weight:700; }
+        .diag-log .hdr { color:#93c5fd; }
+        .diag-footer { padding:12px 18px; display:flex; align-items:center; gap:10px; border-top:1px solid #f3f4f6; }
+        .diag-btn { padding:7px 16px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:opacity .15s; }
+        .diag-btn:disabled { opacity:.5; cursor:not-allowed; }
+        .diag-btn.primary { background:#d97706; color:#fff; }
+        .diag-btn.primary:hover:not(:disabled) { background:#b45309; }
+        .diag-btn.secondary { background:#f3f4f6; color:#374151; }
+        .diag-btn.secondary:hover:not(:disabled) { background:#e5e7eb; }
+        .diag-pjn-cmd { font-family:monospace; font-size:12px; background:#f3f4f6; padding:6px 12px; border-radius:6px; color:#1f2937; flex:1; overflow-x:auto; }
+    </style>
+
+    <div class="diag-grid">
+
+        <!-- ── BACKEND API ── -->
+        <div class="diag-card">
+            <div class="diag-card-header">
+                <div>
+                    <div class="diag-card-title">🖥️ Backend API</div>
+                    <div class="diag-last" id="diag-api-last">Cargando...</div>
+                </div>
+                <span class="diag-badge none" id="diag-api-badge">—</span>
+            </div>
+            <div class="diag-log" id="diag-api-log">Esperando ejecución...</div>
+            <div class="diag-footer">
+                <button class="diag-btn primary" id="diag-btn-api" onclick="diagRunApi()">▶ Ejecutar</button>
+            </div>
+        </div>
+
+        <!-- ── PORTAL PJN ── -->
+        <div class="diag-card">
+            <div class="diag-card-header">
+                <div>
+                    <div class="diag-card-title">⚖️ Portal PJN</div>
+                    <div class="diag-last" id="diag-pjn-last">Cargando...</div>
+                </div>
+                <span class="diag-badge none" id="diag-pjn-badge">—</span>
+            </div>
+            <div class="diag-log" id="diag-pjn-log">Esperando ejecución...</div>
+            <div class="diag-footer" style="flex-wrap:wrap; gap:8px;">
+                <span class="diag-pjn-cmd">node scripts/smoke-test-pjn.js</span>
+                <button class="diag-btn secondary" onclick="diagCopyPjnCmd()" title="Copiar comando">📋</button>
+            </div>
+        </div>
+
+    </div>`;
+
+    // Cargar últimos resultados
+    try {
+        const data = await apiFetch('/admin/smoke-tests/latest');
+        if (data.results) {
+            diagRenderApi(data.results.api);
+            diagRenderPjn(data.results.pjn);
+        }
+    } catch (e) {
+        document.getElementById('diag-api-last').textContent = 'Error cargando resultados';
+    }
+}
+
+function diagColorLog(log) {
+    return log
+        .replace(/✅/g, '<span class="ok">✅</span>')
+        .replace(/❌/g, '<span class="err">❌</span>')
+        .replace(/^(\[.*?\] ─+.*)$/gm, '<span class="sep">$1</span>')
+        .replace(/^(\[.*?\] RESULTADO:.*)$/gm, '<span class="res">$1</span>')
+        .replace(/^(\[.*?\] ▶.*)$/gm, '<span class="hdr">$1</span>');
+}
+
+function diagRenderApi(result) {
+    const logEl   = document.getElementById('diag-api-log');
+    const badgeEl = document.getElementById('diag-api-badge');
+    const lastEl  = document.getElementById('diag-api-last');
+
+    if (!result) {
+        logEl.innerHTML  = 'Sin ejecuciones previas.';
+        badgeEl.textContent = '—';
+        lastEl.textContent  = 'Nunca ejecutado';
+        return;
+    }
+
+    logEl.innerHTML  = diagColorLog(result.logs.join('\n'));
+    logEl.scrollTop  = logEl.scrollHeight;
+    badgeEl.textContent = `${result.passed}/${result.total} ${result.ok ? '✅' : '❌'}`;
+    badgeEl.className   = `diag-badge ${result.ok ? 'ok' : 'fail'}`;
+    lastEl.textContent  = `Última ejecución: ${diagRelativeTime(result.timestamp)}  —  ${(result.duration / 1000).toFixed(1)}s`;
+}
+
+function diagRenderPjn(result) {
+    const logEl   = document.getElementById('diag-pjn-log');
+    const badgeEl = document.getElementById('diag-pjn-badge');
+    const lastEl  = document.getElementById('diag-pjn-last');
+
+    if (!result) {
+        logEl.innerHTML  = 'Sin ejecuciones previas.\n\nCorré el script local para ver resultados aquí:\n  node scripts/smoke-test-pjn.js';
+        badgeEl.textContent = '—';
+        lastEl.textContent  = 'Nunca ejecutado';
+        return;
+    }
+
+    logEl.innerHTML  = diagColorLog(result.logs.join('\n'));
+    logEl.scrollTop  = logEl.scrollHeight;
+    badgeEl.textContent = `${result.passed}/${result.total} ${result.ok ? '✅' : '❌'}`;
+    badgeEl.className   = `diag-badge ${result.ok ? 'ok' : 'fail'}`;
+    lastEl.textContent  = `Última ejecución: ${diagRelativeTime(result.timestamp)}  —  ${(result.duration / 1000).toFixed(1)}s`;
+}
+
+window.diagRunApi = async function() {
+    const btn    = document.getElementById('diag-btn-api');
+    const logEl  = document.getElementById('diag-api-log');
+    const badgeEl = document.getElementById('diag-api-badge');
+    const lastEl  = document.getElementById('diag-api-last');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Ejecutando...';
+    logEl.textContent = 'Ejecutando checks...';
+    badgeEl.textContent = '…';
+    badgeEl.className = 'diag-badge none';
+
+    try {
+        const data = await apiFetch('/admin/smoke-tests/run-api', 'POST', {});
+        diagRenderApi(data.result);
+    } catch (e) {
+        logEl.textContent = '❌ Error: ' + e.message;
+        lastEl.textContent = 'Error en última ejecución';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Ejecutar';
+    }
+};
+
+window.diagCopyPjnCmd = function() {
+    navigator.clipboard.writeText('node scripts/smoke-test-pjn.js').then(() => {
+        const btn = document.querySelector('[onclick="diagCopyPjnCmd()"]');
+        btn.textContent = '✅';
+        setTimeout(() => { btn.textContent = '📋'; }, 1500);
+    });
+};
+
+function diagRelativeTime(iso) {
+    if (!iso) return '—';
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1)   return 'hace menos de 1 minuto';
+    if (mins < 60)  return `hace ${mins} minuto${mins !== 1 ? 's' : ''}`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)   return `hace ${hrs} hora${hrs !== 1 ? 's' : ''}`;
+    const days = Math.floor(hrs / 24);
+    return `hace ${days} día${days !== 1 ? 's' : ''}`;
 }
 
 // resetTicketPriority quedó deprecado en favor del toggle 'IA gestiona'
