@@ -84,9 +84,16 @@ node scripts/generate-icon.js
 ```
 > `afterPack.js` embebe el ícono en el `.exe` vía rcedit automáticamente en cada build.
 
+- ✅ **Smoke tests — dashboard admin + script local PJN** (sesión 2026-05-26):
+  - **Dashboard admin "🧪 Diagnóstico":** tarjeta API (7 checks + DB) con botón "▶ Ejecutar" + tarjeta PJN con logs coloreados y badge pass/fail
+  - **Endpoints backend:** `GET /admin/smoke-tests/latest` · `POST /admin/smoke-tests/run-api` · `POST /admin/smoke-tests/report-pjn`
+  - **Persistencia:** resultados en `backend-server/data/smoke-test-results.json` (directorio creado automáticamente)
+  - **Script local:** `electron-app/scripts/smoke-test-pjn.js` — abre Chrome con perfil ProcuradorSCW, verifica 4 checks (accesibilidad SCW, formulario SSO, login, campos consulta pública) y sube resultados al dashboard vía API admin
+  - Commit: `aaa6aff`
+
 ### Próximo paso concreto
-**→ Pre-lanzamiento:** smoke tests CI (endpoints críticos)
 **→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
+**→ Pre-lanzamiento diferido:** smoke tests CI GitHub Actions (post-Fase 5)
 
 ### SSL api.procuradortool.com
 `certbot.timer` activo — renueva automáticamente 2×/día cuando faltan ≤30 días. **No requiere intervención manual.**

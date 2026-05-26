@@ -113,7 +113,8 @@ Ver sección detallada abajo "PLAN FASE 5 — COBRANZA".
 - ✅ Hardening secretos RSA — `RSA_PRIVATE_KEY` + `RSA_PUBLIC_KEY` en `.env` (2026-05-26)
 - ✅ Suite QA (159/165 PASS)
 - ✅ Tests automatizados (pytest + Playwright)
-- ⬜ Smoke tests CI pre-deploy ← **PRE-LANZAMIENTO**
+- ✅ **Smoke tests manual** — dashboard admin "🧪 Diagnóstico" (API + PJN) + script local `smoke-test-pjn.js` (2026-05-26)
+- ⬜ Smoke tests CI pre-deploy (GitHub Actions) ← **POST-LANZAMIENTO**
 - ⬜ **Diferido:** Análisis de seguridad profundo
 - ⬜ **Diferido:** Documentación técnica completa
 - ⬜ **Diferido futuro:** Replicar backups a DO Spaces (~USD 5/mes)
@@ -371,7 +372,7 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 2. ✅ PRE-LANZAMIENTO: links descarga + flujo registro/activación completo
 3. ✅ BLOQUE 6 (backups automáticos + hardening RSA a env vars)
      ↓
-4. PRE-LANZAMIENTO: smoke tests CI + aprobación extensión Chrome Store
+4. ✅ PRE-LANZAMIENTO: smoke tests manual (dashboard + script PJN) + extensión Chrome Store v1.3.3
      ↓
 5. FASE 5 / BLOQUE 4 (cobranza + facturación) ← detalle abajo
      ↓
