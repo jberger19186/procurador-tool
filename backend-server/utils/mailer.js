@@ -43,13 +43,10 @@ function emailHeader(accentColor = '#d97706') {
           <table cellpadding="0" cellspacing="0">
             <tr>
               <td style="width:42px;vertical-align:middle">
-                <table cellpadding="0" cellspacing="0" style="width:38px;height:38px">
-                  <tr>
-                    <td style="width:38px;height:38px;background-color:#d97706;border-radius:9px;
-                                text-align:center;vertical-align:middle;
-                                font-size:22px;line-height:1">⚖️</td>
-                  </tr>
-                </table>
+                <img src="https://api.procuradortool.com/assets/icon128.png"
+                     alt="Procurador SCW"
+                     width="38" height="38"
+                     style="display:block;border-radius:9px;width:38px;height:38px">
               </td>
               <td style="padding-left:12px;vertical-align:middle">
                 <div style="font-family:'Segoe UI',Arial,sans-serif;font-size:16px;font-weight:700;color:#1a1a1a;line-height:1.1">

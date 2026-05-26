@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-23 (Bloque 1 ✅ CERRADO — extensión v1.3.3 + cierre)
+> Última actualización: 2026-05-26
 
 ---
 
@@ -353,6 +353,23 @@ ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot certifi
 # Renovar manualmente si hace falta
 ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot renew"
 ```
+
+---
+
+## Checklist al publicar nueva versión Electron
+
+Cuando se genera y publica una nueva release de la app Electron, hacer estos pasos **en orden**:
+
+1. Bumping de versión en `electron-app/package.json` (`"version"` + `"build.buildVersion"` si existe)
+2. `npm run release` en `electron-app/` → genera instalador y lo sube a GitHub Releases
+3. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea `v2.7.10` en `download-item-desc`
+   *(el link de descarga es dinámico via `/client/download/electron` → no necesita actualización)*
+4. Deploy `app.js` al servidor + `pm2 restart procurador-api`
+5. Hacer commit + push
+
+> **Nota sobre el link de descarga**: el portal usa `https://api.procuradortool.com/client/download/electron`
+> que consulta la GitHub API en tiempo real y redirige al `.exe` del último release.
+> Solo hay que actualizar el texto de versión visible (`v2.7.10`), no la URL.
 
 ---
 

@@ -757,8 +757,8 @@ function renderDownloads() {
             </div>
             <div class="download-item-actions">
                 <a class="btn btn-primary btn-sm"
-                   href="https://github.com/jberger19186/procurador-tool/releases/latest/download/Procurador-SCW-Setup-2.7.10.exe"
-                   target="_blank" rel="noopener">⬇ Descargar instalador</a>
+                   href="https://api.procuradortool.com/client/download/electron"
+                   rel="noopener">⬇ Descargar instalador</a>
             </div>
         </div>` : '';
 

@@ -80,6 +80,9 @@ pool.query('SELECT NOW()', (err, res) => {
     }
 });
 
+// Servir assets estáticos globales (íconos, imágenes de marca)
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
+
 // Servir dashboard web admin como archivos estáticos
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dashboard')));
 

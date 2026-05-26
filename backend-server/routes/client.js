@@ -813,4 +813,32 @@ router.post('/ai/chat', authenticateToken, async (req, res) => {
     }
 });
 
+// ─── GET /client/download/electron ───────────────────────────────────────────
+// Redirige siempre al instalador más reciente en GitHub Releases.
+// El portal usa esta URL fija — no necesita actualizarse con cada versión.
+router.get('/download/electron', authenticateToken, async (req, res) => {
+    try {
+        const https = require('https');
+        const data = await new Promise((resolve, reject) => {
+            const req2 = https.get(
+                'https://api.github.com/repos/jberger19186/procurador-tool/releases/latest',
+                { headers: { 'User-Agent': 'procurador-api', 'Accept': 'application/vnd.github+json' } },
+                (r) => {
+                    let body = '';
+                    r.on('data', c => body += c);
+                    r.on('end', () => resolve(JSON.parse(body)));
+                }
+            );
+            req2.on('error', reject);
+        });
+
+        const asset = data.assets?.find(a => a.name.endsWith('.exe') && !a.name.endsWith('.blockmap'));
+        if (!asset) return res.status(404).json({ error: 'Instalador no disponible.' });
+
+        res.redirect(asset.browser_download_url);
+    } catch (e) {
+        res.status(500).json({ error: 'Error al obtener el instalador.' });
+    }
+});
+
 module.exports = router;
