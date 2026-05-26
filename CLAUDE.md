@@ -988,6 +988,11 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
   - `scriptSigner.js` lee env vars primero, fallback a archivos PEM solo en desarrollo
   - `ENCRYPTION_KEY` (AES) ya estaba en `.env` desde el inicio
   - Archivos `keys/private.pem` y `keys/public.pem` se mantienen en servidor como backup, pero el proceso no depende de ellos
+- ⬜ **Verificar descarga de scripts en PC de usuario real** ← PRE-LANZAMIENTO
+  - Confirmar que el flujo completo funciona en un equipo de usuario (no solo desde el servidor)
+  - Verificar que `scriptVerifier.js` en Electron valida la firma RSA correctamente
+  - Verificar que los scripts se eliminan del disco al finalizar (`scriptAutoDestruct.js`)
+  - Hacerlo con una cuenta de usuario real (no admin) con suscripción activa
 - ⬜ Análisis de seguridad profundo (Electron + backend)
 - ✅ Suite QA completa ejecutada (2026-05-20): 159/165 PASS, 0 FAIL — ver `tests/QA_RESULTS.md`
 - ✅ Suite de tests automatizados en `tests/` (pytest + Playwright) con módulos M1–M14
