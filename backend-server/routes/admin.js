@@ -2255,7 +2255,7 @@ router.post('/smoke-tests/run-api', authenticateAdmin, async (req, res) => {
 
     await runCheck('GET',  '/health',                   null,                                200, '/health');
     await runCheck('POST', '/auth/login',               {},                                  400, 'POST /auth/login sin body');
-    await runCheck('POST', '/auth/login',               { email: 'x@x.com', password: 'wrong' }, 401, 'POST /auth/login creds inválidas');
+    await runCheck('POST', '/auth/login',               { email: 'x@x.com', password: 'wrong', machineId: 'smoke-test' }, 401, 'POST /auth/login creds inválidas');
     await runCheck('GET',  '/auth/register-status',     null,                                200, 'GET /auth/register-status');
     await runCheck('GET',  '/client/scripts/available', null,                                401, 'GET /client/scripts/available sin token');
     await runCheck('POST', '/license/execution/start',  {},                                  401, 'POST /license/execution/start sin token');
