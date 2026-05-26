@@ -150,7 +150,14 @@ async function runPjnChecks() {
                 if (sessionOk) {
                     pass('Login exitoso — sesión activa detectada');
                 } else {
-                    fail('Login — no se detectó sesión activa tras submit');
+                    // Intentar detectar mensaje de error del SSO para mejor diagnóstico
+                    const errMsg = await page.$eval('#kc-error-message, .alert-error, [class*="error"]', el => el.textContent.trim())
+                        .catch(() => '');
+                    const currentUrl = page.url();
+                    const detail = errMsg
+                        ? `Error SSO: "${errMsg.slice(0, 80)}"`
+                        : `URL actual: ${currentUrl.slice(0, 80)}`;
+                    fail('Login — no se detectó sesión activa tras submit', detail);
                     return; // Sin sesión no podemos continuar
                 }
             } else {
