@@ -730,19 +730,21 @@ function renderDownloads() {
     const hasElectron = planType.includes('electron') || planName.includes('electron');
 
     const extensionItem = `
-        <div class="download-item">
-            <div class="download-item-icon">⚖️</div>
-            <div class="download-item-info">
-                <div class="download-item-title">Extensión Chrome — Procurador SCW</div>
-                <div class="download-item-desc">Completado automático de expedientes en SCW, Escritos, Notificaciones y DEOX</div>
+        <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#f9fafb">
+            <div class="download-item" style="border:none;border-radius:0;margin:0">
+                <div class="download-item-icon">⚖️</div>
+                <div class="download-item-info">
+                    <div class="download-item-title">Extensión Chrome — Procurador SCW</div>
+                    <div class="download-item-desc">Completado automático de expedientes en SCW, Escritos, Notificaciones y DEOX</div>
+                </div>
+                <div class="download-item-actions">
+                    <a class="btn btn-primary btn-sm"
+                       href="https://chromewebstore.google.com/detail/procurador-scw-%E2%80%93-automati/aodnfemklhciagaglpggnclmbdhnhbme"
+                       target="_blank" rel="noopener">🧩 Instalar desde Chrome Web Store</a>
+                </div>
             </div>
-            <div class="download-item-actions">
-                <a class="btn btn-primary btn-sm"
-                   href="https://chromewebstore.google.com/detail/procurador-scw-%E2%80%93-automati/aodnfemklhciagaglpggnclmbdhnhbme"
-                   target="_blank" rel="noopener">🧩 Instalar desde Chrome Web Store</a>
-                <p style="margin:6px 0 0;font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;line-height:1.4;">
-                    ⚠️ Al instalar, Chrome puede mostrar un aviso de precaución. Es normal para extensiones nuevas y no indica ningún riesgo. Hacé click en <strong>"Continuar a la instalación"</strong> para proceder.
-                </p>
+            <div style="padding:8px 16px 10px;border-top:1px solid #fde68a;background:#fffbeb;font-size:11px;color:#92400e;line-height:1.5;">
+                ⚠️ Al instalar, Chrome puede mostrar un aviso de precaución. Es normal para extensiones nuevas y no indica ningún riesgo. Hacé click en <strong>"Continuar a la instalación"</strong> para proceder.
             </div>
         </div>`;
 
@@ -755,7 +757,7 @@ function renderDownloads() {
             </div>
             <div class="download-item-actions">
                 <a class="btn btn-primary btn-sm"
-                   href="https://github.com/jberger19186/procurador-tool/releases/latest/download/Procurador%20SCW-Setup-2.7.10.exe"
+                   href="https://github.com/jberger19186/procurador-tool/releases/latest/download/Procurador-SCW-Setup-2.7.10.exe"
                    target="_blank" rel="noopener">⬇ Descargar instalador</a>
             </div>
         </div>` : '';
