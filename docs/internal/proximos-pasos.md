@@ -59,7 +59,7 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 - ⏸️ **Paso 3 diferido:** Instalador `.exe` — referencia suite en `installer.nsh` (menor prioridad)
 
 ### 🔔 PENDIENTES PRE-LANZAMIENTO (surgidos en Bloque 1)
-- ⏳ **Extensión Chrome Web Store** — v1.3.3 + visibilidad pública enviados a revisión. Esperar aprobación Google (1-3 días hábiles)
+- ✅ **Extensión Chrome Web Store v1.3.3** — aprobada por Google, visibilidad pública activa. Nombre: "Procurador SCW – Automatización PJN", ícono balanza
 - ✅ **Links de descarga en el panel de usuario** (portal web `usuarios/`):
   - ✅ Link directo a Chrome Web Store: `https://chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme`
   - ✅ Link al instalador: `GET /client/download/electron` → redirect dinámico vía GitHub API (no requiere actualizar en cada release)
@@ -109,13 +109,14 @@ Ver sección detallada abajo "PLAN FASE 5 — COBRANZA".
 - 📌 KB y borradores masivos → `docs/internal/mejoras-futuras.md`
 
 ### 6️⃣ BLOQUE 6 — Seguridad & Backups & Tests ← ANTES DEL LANZAMIENTO
-- ⬜ Backups programados PostgreSQL + procedimiento de restauración
-- ⬜ Hardening: mover claves RSA y AES a env vars
-- ⬜ Análisis de seguridad profundo
+- ✅ Backups programados PostgreSQL — cron 03:00 AM, 7 días retención, alerta email (2026-05-26)
+- ✅ Hardening secretos RSA — `RSA_PRIVATE_KEY` + `RSA_PUBLIC_KEY` en `.env` (2026-05-26)
 - ✅ Suite QA (159/165 PASS)
 - ✅ Tests automatizados (pytest + Playwright)
-- ⬜ Smoke tests CI pre-deploy
-- ⬜ Documentación técnica completa
+- ⬜ Smoke tests CI pre-deploy ← **PRE-LANZAMIENTO**
+- ⬜ **Diferido:** Análisis de seguridad profundo
+- ⬜ **Diferido:** Documentación técnica completa
+- ⬜ **Diferido futuro:** Replicar backups a DO Spaces (~USD 5/mes)
 
 ### 7️⃣ BLOQUE 7 — Entorno de Pruebas
 - ⬜ Servidor staging (PM2 separado, `procurador_db_staging`, `staging.api.procuradortool.com`)

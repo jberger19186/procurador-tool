@@ -20,6 +20,11 @@
   - **Archivos clave:** `electron-app/build/icon.ico` (build) · `electron-app/assets/icon.ico` (runtime) · `scripts/generate-icon.js` · `scripts/afterPack.js`
   - Releases: v2.7.6 → v2.7.7 → v2.7.8 → v2.7.9 → **v2.7.10** (fix definitivo)
 
+- ✅ **Extensión Chrome Web Store v1.3.3 aprobada** (sesión 2026-05-26):
+  - Nombre actualizado: "Procurador SCW – Automatización PJN" · ícono balanza · descripción con mención a suite
+  - Visibilidad pública habilitada · aprobada por Google
+  - Portal web → sección Descargas: enlace directo a la store
+
 - ✅ **Flujo de registro y activación completo** (sesión 2026-05-26):
   - **Portal de usuarios** migrado de `/auth/extension-login` a `/auth/portal-login` — permite acceso a usuarios en cualquier estado no terminal (`pending_email`, `pending_activation`, `suspended`)
   - **Nuevo endpoint:** `POST /auth/resend-verification` — reenvía email de verificación de forma segura (respuesta genérica siempre, anti-enumeración)
@@ -80,7 +85,7 @@ node scripts/generate-icon.js
 > `afterPack.js` embebe el ícono en el `.exe` vía rcedit automáticamente en cada build.
 
 ### Próximo paso concreto
-**→ Pre-lanzamiento:** esperar aprobación extensión Chrome Web Store v1.3.3 + smoke tests CI
+**→ Pre-lanzamiento:** smoke tests CI (endpoints críticos)
 **→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
 
 ### SSL api.procuradortool.com
@@ -247,7 +252,7 @@ ProcuradorTool/
 │   └── keys/                              ⛔ claves RSA privadas (gitignored)
 │
 ├── extension-app/                         ← extensión Chrome MV3 (Chrome Web Store)
-│   ├── manifest.json                      v1.3.2
+│   ├── manifest.json                      v1.3.3
 │   ├── background.js                      service worker
 │   ├── popup.html · popup.js              UI principal
 │   ├── auth.js                            login + FLOW_ALIASES
@@ -340,7 +345,7 @@ git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" diff --name-only fase4-co
 | **Cloudflare** | CDN + WAF + SSL para procuradortool.com (landing) | — |
 | **GitHub** | Repositorio privado + GitHub Releases (distribución instalador) | jberger19186@gmail.com |
 | **Brevo** (ex Sendinblue) | SMTP transaccional — emails que salen con @procuradortool.com | jberger19186@gmail.com |
-| **Chrome Web Store** | Distribución extensión Chrome (v1.3.2) | jberger19186@gmail.com / Publisher: Jonathan Berger |
+| **Chrome Web Store** | Distribución extensión Chrome (v1.3.3 — aprobada ✅) | jberger19186@gmail.com / Publisher: Jonathan Berger |
 | **Anthropic** | API de Claude Haiku para el chat IA del Asistente — ✅ activa en producción | console.anthropic.com |
 | **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-06-29) | sin cuenta — corre en el servidor |
 | **Azure Trusted Signing** | Code Signing del instalador .exe — ⬜ pendiente contratar | — |
@@ -932,10 +937,11 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 
 ---
 
-### 🥈 BLOQUE 2 — Planes & Precios ⏸️ DIFERIDO
+### 🥈 BLOQUE 2 — Planes & Precios ⏸️ DIFERIDO (ejecutar al abrir venta pública)
 - ✅ Precios fijados en DB y landing (indexados a UMA CSJN): BASIC $31.875 · PRO $63.751 · ENTERPRISE $95.626 ARS/mes
 - ✅ Promos: EXTENSION_PROMO $1.500 · COMBO_PROMO $15.000 ARS/mes
-- ⏸️ Activar planes permanentes → diferido al lanzamiento público (`UPDATE plans SET active=true WHERE name IN ('BASIC','PRO','ENTERPRISE')`)
+- ⏸️ **Activar planes permanentes** → diferido al lanzamiento público (`UPDATE plans SET active=true WHERE name IN ('BASIC','PRO','ENTERPRISE')`)
+- ⏸️ **Actualizar precios** en `landing/index.html` (3 precios + nota UMA) + `terminos.html` + 2 filas en DB → diferido; ejecutar solo si el valor UMA cambia antes del lanzamiento
 
 ---
 
@@ -1081,7 +1087,7 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - Revisitar solo si el archivo crece significativamente o aparecen conflictos reales
 
 #### 1.2 Migración extensión → Chrome Web Store ✅ COMPLETADO
-- Extensión publicada y aprobada en Chrome Web Store (v1.3.2)
+- Extensión publicada y aprobada en Chrome Web Store (v1.3.3 — branding actualizado)
 - Onboarding actualizado con enlace directo a la store
 - Aviso sobre warning de Chrome al instalar incluido en onboarding
 - ✅ Limpiar distribución CRX vieja del backend (`/extension/updates.xml`, `/extension/download`, `/extension/latest.crx`)
