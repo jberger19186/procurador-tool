@@ -81,7 +81,7 @@ node scripts/generate-icon.js
 
 ### Próximo paso concreto
 **→ Pre-lanzamiento:** hacer pública la extensión en Chrome Web Store (actualmente en revisión v1.3.3 — esperar aprobación Google)
-**→ Bloque 6:** backups programados + hardening secretos (mover claves RSA y AES a env vars)
+**→ Bloque 6:** hardening secretos (mover claves RSA y AES a env vars) — backups automáticos ya activos ✅
 **→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
 
 ### SSL api.procuradortool.com
@@ -980,7 +980,10 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 ---
 
 ### 6️⃣ BLOQUE 6 — Seguridad & Backups & Tests & Documentación ← antes del lanzamiento público
-- ⬜ Backups programados PostgreSQL + procedimiento de restauración documentado
+- ✅ Backups automáticos PostgreSQL — cron diario 03:00 AM, retención 7 días, log + alerta email (2026-05-26)
+  - Script: `/var/www/procurador/backend-server/scripts/backup-db.sh`
+  - Destino: `/var/backups/procurador/` en el servidor
+  - ⬜ **Pendiente futuro:** replicar backups a **DigitalOcean Spaces** (~USD 5/mes) para tener copia fuera del servidor — integrar con `s3cmd` en el mismo script
 - ⬜ Hardening: mover claves RSA y AES a variables de entorno (sacar de `keys/`)
 - ⬜ Análisis de seguridad profundo (Electron + backend)
 - ✅ Suite QA completa ejecutada (2026-05-20): 159/165 PASS, 0 FAIL — ver `tests/QA_RESULTS.md`
