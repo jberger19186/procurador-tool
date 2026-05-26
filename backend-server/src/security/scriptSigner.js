@@ -24,31 +24,44 @@ class ScriptSigner {
     }
 
     /**
-     * Cargar claves RSA desde archivos PEM
+     * Cargar claves RSA — primero desde env vars (producción), luego desde archivos (desarrollo)
      */
     _loadKeys() {
         try {
+            // ── 1. Producción: leer desde variables de entorno ────────────────
+            if (process.env.RSA_PRIVATE_KEY) {
+                // Las env vars almacenan los saltos de línea como \n literal (2 chars: \ + n)
+                const BACKSLASH_N = String.fromCharCode(92) + 'n';
+                this.privateKey = process.env.RSA_PRIVATE_KEY.split(BACKSLASH_N).join('\n');
+                if (process.env.RSA_PUBLIC_KEY) {
+                    this.publicKey = process.env.RSA_PUBLIC_KEY.split(BACKSLASH_N).join('\n');
+                }
+                this._verifyKeyPair();
+                this.initialized = true;
+                console.log('✅ [ScriptSigner] Inicializado con RSA-2048 (env vars)');
+                return;
+            }
+
+            // ── 2. Desarrollo: fallback a archivos PEM ────────────────────────
             const keysDir = path.join(__dirname, '..', '..', 'keys');
             const privateKeyPath = path.join(keysDir, 'private.pem');
-            const publicKeyPath = path.join(keysDir, 'public.pem');
+            const publicKeyPath  = path.join(keysDir, 'public.pem');
 
             if (!fs.existsSync(privateKeyPath)) {
                 console.error('❌ [ScriptSigner] Clave privada no encontrada en:', privateKeyPath);
-                console.error('   Ejecuta: node generate-keys.js');
+                console.error('   En producción: configurar RSA_PRIVATE_KEY en .env');
+                console.error('   En desarrollo: ejecutar node generate-keys.js');
                 return;
             }
 
             this.privateKey = fs.readFileSync(privateKeyPath, 'utf8');
-            
             if (fs.existsSync(publicKeyPath)) {
                 this.publicKey = fs.readFileSync(publicKeyPath, 'utf8');
             }
 
-            // Verificar que la clave es válida
             this._verifyKeyPair();
-
             this.initialized = true;
-            console.log('✅ [ScriptSigner] Inicializado con RSA-2048');
+            console.log('✅ [ScriptSigner] Inicializado con RSA-2048 (archivos PEM — solo desarrollo)');
 
         } catch (error) {
             console.error('❌ [ScriptSigner] Error cargando claves:', error.message);
