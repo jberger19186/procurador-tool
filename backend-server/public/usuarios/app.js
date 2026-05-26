@@ -871,7 +871,14 @@ function renderPlansModal() {
         const infLim = p.limits?.informe === -1 ? '∞' : (p.limits?.informe ?? '-');
         const monLim = p.limits?.monitorNovedades === -1 ? '∞' : (p.limits?.monitorNovedades ?? '-');
         const batchLim = p.limits?.batch === -1 ? '∞' : (p.limits?.batch ?? '-');
-        const price = p.priceUsd ? `USD ${p.priceUsd}/mes` : 'Gratis';
+        let price;
+        if (p.priceArs) {
+            price = `$${Number(p.priceArs).toLocaleString('es-AR')}/mes`;
+        } else if (p.priceUsd) {
+            price = `USD ${p.priceUsd}/mes`;
+        } else {
+            price = 'Gratis';
+        }
 
         return `<div class="plan-option" style="${isCurrent ? 'border-color:var(--accent);background:var(--accent-light)' : ''}">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
