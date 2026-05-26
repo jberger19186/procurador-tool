@@ -674,6 +674,66 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
     }
 });
 
+// ─── POST /auth/portal-login ──────────────────────────────────────────────────
+// Login exclusivo para el portal de usuario web.
+// Permite el acceso con cualquier estado válido (incluyendo pending_email y trial).
+// Bloquea solo estados terminales: rejected, cancelled.
+router.post('/portal-login', loginLimiter, async (req, res) => {
+    const { email, password } = req.body;
+    const db = req.app.get('db');
+
+    try {
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+        }
+
+        const userResult = await db.query(`SELECT * FROM users WHERE email = $1`, [email.toLowerCase().trim()]);
+        if (userResult.rows.length === 0) {
+            return res.status(401).json({ error: 'Credenciales inválidas' });
+        }
+
+        const user = userResult.rows[0];
+        const validPassword = await bcrypt.compare(password, user.password_hash);
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Credenciales inválidas' });
+        }
+
+        // Solo bloquear estados terminales — el resto accede al portal para ver su estado
+        const hardBlocked = {
+            rejected:  'Tu cuenta fue rechazada. Contactá al administrador.',
+            cancelled: 'Tu suscripción fue cancelada.',
+        };
+        if (hardBlocked[user.registration_status]) {
+            return res.status(403).json({ error: hardBlocked[user.registration_status] });
+        }
+
+        await db.query(`UPDATE users SET last_login = NOW() WHERE id = $1`, [user.id]);
+
+        const token = jwt.sign(
+            { id: user.id, role: user.role, client: 'portal' },
+            process.env.JWT_SECRET,
+            { expiresIn: '8h' }
+        );
+
+        logger.info(`✅ Portal-login: ${email} (status: ${user.registration_status})`);
+
+        res.json({
+            success: true,
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                emailVerified: user.email_verified,
+                registrationStatus: user.registration_status,
+            }
+        });
+
+    } catch (error) {
+        logger.error('Error en portal-login:', error.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 // Logout (invalidar sesión)
 router.post('/logout', authenticateToken, async (req, res) => {
     const db = req.app.get('db');

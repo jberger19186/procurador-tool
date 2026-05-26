@@ -162,7 +162,7 @@ async function doLogin(email, password) {
     btn.innerHTML = '<span class="spinner"></span> Ingresando...';
 
     try {
-        const res = await fetch(BASE_URL + '/auth/extension-login', {
+        const res = await fetch(BASE_URL + '/auth/portal-login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password }),
