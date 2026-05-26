@@ -363,16 +363,16 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 
 ---
 
-## 🎯 ORDEN SUGERIDO POST-FASE 4
+## 🎯 ORDEN SUGERIDO (actualizado 2026-05-26)
 
 ```
 1. ✅ BLOQUE 1 (branding completo)
+2. ✅ PRE-LANZAMIENTO: links descarga + flujo registro/activación completo
+3. ✅ BLOQUE 6 (backups automáticos + hardening RSA a env vars)
      ↓
-2. PRE-LANZAMIENTO: links descarga en panel usuario + extensión pública en store
+4. PRE-LANZAMIENTO: smoke tests CI + aprobación extensión Chrome Store
      ↓
-3. BLOQUE 6 (seguridad: backups programados, hardening secretos)
-     ↓
-4. FASE 5 / BLOQUE 4 (cobranza + facturación) ← detalle abajo
+5. FASE 5 / BLOQUE 4 (cobranza + facturación) ← detalle abajo
      ↓
 5. BLOQUE 7 (staging)
      ↓

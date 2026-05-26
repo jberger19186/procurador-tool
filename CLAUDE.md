@@ -80,8 +80,7 @@ node scripts/generate-icon.js
 > `afterPack.js` embebe el ícono en el `.exe` vía rcedit automáticamente en cada build.
 
 ### Próximo paso concreto
-**→ Pre-lanzamiento:** hacer pública la extensión en Chrome Web Store (actualmente en revisión v1.3.3 — esperar aprobación Google)
-**→ Bloque 6:** hardening secretos (mover claves RSA y AES a env vars) — backups automáticos ya activos ✅
+**→ Pre-lanzamiento:** esperar aprobación extensión Chrome Web Store v1.3.3 + smoke tests CI
 **→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
 
 ### SSL api.procuradortool.com
@@ -988,16 +987,12 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
   - `scriptSigner.js` lee env vars primero, fallback a archivos PEM solo en desarrollo
   - `ENCRYPTION_KEY` (AES) ya estaba en `.env` desde el inicio
   - Archivos `keys/private.pem` y `keys/public.pem` se mantienen en servidor como backup, pero el proceso no depende de ellos
-- ⬜ **Verificar descarga de scripts en PC de usuario real** ← PRE-LANZAMIENTO
-  - Confirmar que el flujo completo funciona en un equipo de usuario (no solo desde el servidor)
-  - Verificar que `scriptVerifier.js` en Electron valida la firma RSA correctamente
-  - Verificar que los scripts se eliminan del disco al finalizar (`scriptAutoDestruct.js`)
-  - Hacerlo con una cuenta de usuario real (no admin) con suscripción activa
-- ⬜ Análisis de seguridad profundo (Electron + backend)
+- ⬜ Smoke tests / canary tests para endpoints críticos (CI pre-deploy) ← PRE-LANZAMIENTO
 - ✅ Suite QA completa ejecutada (2026-05-20): 159/165 PASS, 0 FAIL — ver `tests/QA_RESULTS.md`
 - ✅ Suite de tests automatizados en `tests/` (pytest + Playwright) con módulos M1–M14
-- ⬜ Smoke tests / canary tests para endpoints críticos (CI pre-deploy)
-- ⬜ Documentación técnica completa (endpoints, esquema DB, runbook de operaciones)
+- ⬜ **Diferido:** Verificar descarga de scripts en PC de usuario real (firma RSA + auto-destrucción)
+- ⬜ **Diferido:** Análisis de seguridad profundo (Electron + backend)
+- ⬜ **Diferido:** Documentación técnica completa (endpoints, esquema DB, runbook de operaciones)
 
 ---
 
