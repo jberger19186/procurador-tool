@@ -43,9 +43,13 @@ function emailHeader(accentColor = '#d97706') {
           <table cellpadding="0" cellspacing="0">
             <tr>
               <td style="width:42px;vertical-align:middle">
-                <div style="width:38px;height:38px;background:linear-gradient(145deg,#f5a623,#d97706);border-radius:9px;
-                            display:flex;align-items:center;justify-content:center;
-                            font-size:22px;line-height:38px;text-align:center">⚖️</div>
+                <table cellpadding="0" cellspacing="0" style="width:38px;height:38px">
+                  <tr>
+                    <td style="width:38px;height:38px;background-color:#d97706;border-radius:9px;
+                                text-align:center;vertical-align:middle;
+                                font-size:22px;line-height:1">⚖️</td>
+                  </tr>
+                </table>
               </td>
               <td style="padding-left:12px;vertical-align:middle">
                 <div style="font-family:'Segoe UI',Arial,sans-serif;font-size:16px;font-weight:700;color:#1a1a1a;line-height:1.1">
