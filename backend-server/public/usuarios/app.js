@@ -787,7 +787,7 @@ function renderDownloads() {
             <div class="download-item-icon">⚖️</div>
             <div class="download-item-info">
                 <div class="download-item-title">App de escritorio — Procurador SCW <span style="font-size:11px;color:#9ca3af;font-weight:400">Windows</span></div>
-                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.12</div>
+                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.13</div>
             </div>
             <div class="download-item-actions">
                 <a class="btn btn-primary btn-sm"

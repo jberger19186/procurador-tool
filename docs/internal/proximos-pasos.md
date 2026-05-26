@@ -14,11 +14,12 @@
 - **Fase 5 (Cobranza):** **PRÓXIMA** — diseño completo abajo
 - **Fase 6 (Staging/Release seguro):** Pendiente
 
-### Versión Electron actual: **v2.7.12**
+### Versión Electron actual: **v2.7.13**
 
 ### Tags Git relevantes (rollback points)
 ```
-bloque1-icono-v2.7.12        ← último estable (flujo registro + activación completo)
+bloque1-icono-v2.7.13        ← último estable (FAQs actualizadas + documentación completa)
+bloque1-icono-v2.7.12        ← flujo registro + activación completo
 bloque1-icono-v2.7.10        ← ícono oficial resuelto
 bloque1-branding-ars-toggle  ← branding + pricing + toggle registro
 fase4-completa               ← cierre Fase 4 soporte

@@ -6,7 +6,7 @@
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.12** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.13** — publicada en GitHub Releases (auto-updater activo)
 > Última sesión: 2026-05-26
 
 ### Últimas funcionalidades implementadas (listas en producción)
@@ -29,7 +29,7 @@
   - **Electron — Mi Cuenta:** card de prueba con contador `X/20 utilizados` + barra de progreso coloreada (verde/naranja/rojo)
   - **Portal — Mi Plan:** card de prueba idéntica cuando `registration_status = 'pending_activation'`
   - **Portal — Descargas:** extensión con enlace directo Chrome Web Store · app usa `/client/download/electron`
-  - Releases: v2.7.10 → v2.7.11 → **v2.7.12** (banner trial + `pending_email` fix + FAQs)
+  - Releases: v2.7.10 → v2.7.11 → v2.7.12 → **v2.7.13** (banner trial + `pending_email` fix + FAQs)
 
 - ✅ **Fix toggle registro público** (sesión 2026-05-23):
   - **Causa raíz:** `register.js` llamaba a `/auth/register-status` que no existía → 404 → formulario siempre cerrado
@@ -137,7 +137,7 @@ ProcuradorTool/
 │   ├── renderer.js                        (~166 KB) UI dashboard — PENDIENTE refactor a módulos ES6
 │   ├── index.html                         shell del dashboard
 │   ├── styles.css                         (~45 KB) sistema de diseño aplicado
-│   ├── package.json                       v2.7.12
+│   ├── package.json                       v2.7.13
 │   ├── Monitor-Procurador.ps1             watchdog Windows (legacy)
 │   ├── visorModal_template.html           plantilla visor de expediente
 │   ├── renderer/                          ventanas auxiliares
@@ -372,14 +372,14 @@ Cuando se genera y publica una nueva release de la app Electron, hacer estos pas
 
 1. Bumping de versión en `electron-app/package.json` (`"version"` + `"build.buildVersion"` si existe)
 2. `npm run release` en `electron-app/` → genera instalador y lo sube a GitHub Releases
-3. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea `v2.7.12` en `download-item-desc`
+3. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea de versión en `download-item-desc` (ej: `v2.7.13`)
    *(el link de descarga es dinámico via `/client/download/electron` → no necesita actualización)*
 4. Deploy `app.js` al servidor + `pm2 restart procurador-api`
 5. Hacer commit + push
 
 > **Nota sobre el link de descarga**: el portal usa `https://api.procuradortool.com/client/download/electron`
 > que consulta la GitHub API en tiempo real y redirige al `.exe` del último release.
-> Solo hay que actualizar el texto de versión visible (`v2.7.12`), no la URL.
+> Solo hay que actualizar el texto de versión visible (ej: `v2.7.13`), no la URL.
 
 ---
 
