@@ -740,6 +740,9 @@ function renderDownloads() {
                 <a class="btn btn-primary btn-sm"
                    href="https://chromewebstore.google.com/detail/procurador-scw-%E2%80%93-automati/aodnfemklhciagaglpggnclmbdhnhbme"
                    target="_blank" rel="noopener">🧩 Instalar desde Chrome Web Store</a>
+                <p style="margin:6px 0 0;font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;line-height:1.4;">
+                    ⚠️ Al instalar, Chrome puede mostrar un aviso de precaución. Es normal para extensiones nuevas y no indica ningún riesgo. Hacé click en <strong>"Continuar a la instalación"</strong> para proceder.
+                </p>
             </div>
         </div>`;
 
