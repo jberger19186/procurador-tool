@@ -731,32 +731,29 @@ function renderDownloads() {
 
     const extensionItem = `
         <div class="download-item">
-            <div class="download-item-icon">🧩</div>
+            <div class="download-item-icon">⚖️</div>
             <div class="download-item-info">
-                <div class="download-item-title">Extensión Chrome</div>
-                <div class="download-item-desc">Disponible en la Chrome Web Store — instalación directa desde el navegador</div>
+                <div class="download-item-title">Extensión Chrome — Procurador SCW</div>
+                <div class="download-item-desc">Completado automático de expedientes en SCW, Escritos, Notificaciones y DEOX</div>
             </div>
             <div class="download-item-actions">
                 <a class="btn btn-primary btn-sm"
-                   href="https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme"
+                   href="https://chromewebstore.google.com/detail/procurador-scw-%E2%80%93-automati/aodnfemklhciagaglpggnclmbdhnhbme"
                    target="_blank" rel="noopener">🧩 Instalar desde Chrome Web Store</a>
             </div>
-        </div>
-        <div style="margin:4px 0 8px;padding:9px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;font-size:12px;color:#78350f;line-height:1.55">
-            <strong>⚠️ Chrome puede mostrar "Procede con cuidado":</strong>
-            es una advertencia estándar para extensiones del store oficial con pocos usuarios.
-            La extensión es segura — hacé clic en <strong>"Continuar a la instalación"</strong>.
         </div>`;
 
     const electronItem = hasElectron ? `
         <div class="download-item">
-            <div class="download-item-icon">🖥️</div>
+            <div class="download-item-icon">⚖️</div>
             <div class="download-item-info">
-                <div class="download-item-title">App Electron (Windows)</div>
-                <div class="download-item-desc">Instalador de escritorio — gestiona la extensión automáticamente</div>
+                <div class="download-item-title">App de escritorio — Procurador SCW <span style="font-size:11px;color:#9ca3af;font-weight:400">Windows</span></div>
+                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.10</div>
             </div>
             <div class="download-item-actions">
-                <button class="btn btn-primary btn-sm" onclick="downloadElectron()">⬇ Descargar</button>
+                <a class="btn btn-primary btn-sm"
+                   href="https://github.com/jberger19186/procurador-tool/releases/latest/download/Procurador%20SCW-Setup-2.7.10.exe"
+                   target="_blank" rel="noopener">⬇ Descargar instalador</a>
             </div>
         </div>` : '';
 
