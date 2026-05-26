@@ -253,6 +253,46 @@ router.post('/register', registerLimiter, async (req, res) => {
     }
 });
 
+// ─── POST /auth/resend-verification ──────────────────────────────────────────
+router.post('/resend-verification', loginLimiter, async (req, res) => {
+    const { email } = req.body;
+    const db = req.app.get('db');
+
+    if (!email) return res.status(400).json({ error: 'Email requerido.' });
+
+    try {
+        const result = await db.query(
+            'SELECT id, nombre FROM users WHERE email = $1 AND email_verified = false',
+            [email.toLowerCase().trim()]
+        );
+
+        // Respuesta genérica siempre (no revelar si el email existe o no)
+        if (result.rows.length === 0) {
+            return res.json({ message: 'Si tu email no está verificado, recibirás un nuevo enlace en breve.' });
+        }
+
+        const user = result.rows[0];
+
+        // Generar nuevo token con 24h de validez
+        const token = crypto.randomBytes(32).toString('hex');
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        await db.query(
+            'UPDATE users SET email_verify_token = $1, email_verify_expires = $2 WHERE id = $3',
+            [token, expires, user.id]
+        );
+
+        await mailer.sendEmailVerification(email, user.nombre || 'Usuario', token);
+
+        logger.info(`📧 Reenvío verificación solicitado: ${email}`);
+        res.json({ message: 'Te enviamos un nuevo enlace de verificación. Revisá tu casilla.' });
+
+    } catch (error) {
+        logger.error('Error en resend-verification:', error.message);
+        res.status(500).json({ error: 'Error del servidor. Intentá de nuevo.' });
+    }
+});
+
 // ─── GET /auth/verify-email ───────────────────────────────────────────────────
 router.get('/verify-email', async (req, res) => {
     const { token } = req.query;
