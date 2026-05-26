@@ -91,16 +91,19 @@ async function existeXPath(page, xpath) {
     return result;
 }
 
+// URL de entrada — la misma que usan los scripts de la app
+const SCW_URL = 'http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1';
+
 // ── GRUPO A: Acceso al portal ─────────────────────────────────────────────────
 async function grupoA(page) {
     log('\n══ GRUPO A — Acceso al portal ══════════════════════════');
 
-    // A1: Portal PJN accesible
-    log('Navegando a portalpjn.pjn.gov.ar...');
-    await page.goto('https://portalpjn.pjn.gov.ar', { waitUntil: 'networkidle2', timeout: 30000 });
-    pass('A1 — portalpjn.pjn.gov.ar accesible');
+    // A1: SCW accesible (misma URL que usa la app Electron)
+    log('Navegando a scw.pjn.gov.ar/scw/consultaListaRelacionados...');
+    await page.goto(SCW_URL, { waitUntil: 'networkidle2', timeout: 30000 });
+    pass('A1 — scw.pjn.gov.ar accesible');
 
-    // A2: Detectar formulario SSO o sesión activa
+    // A2: Detectar formulario SSO (Keycloak) o sesión activa ya en SCW
     const loginDetected = await Promise.race([
         page.waitForSelector('#username',                                { timeout: 15000 }).then(() => 'login'),
         page.waitForSelector('a.dropdown-toggle.menu-btn-border-right', { timeout: 15000 }).then(() => 'session'),
@@ -174,10 +177,11 @@ async function grupoA(page) {
 async function grupoB(page) {
     log('\n══ GRUPO B — Módulo Listado ════════════════════════════');
 
-    // Navegar al SCW
-    log('Navegando a scw.pjn.gov.ar/scw/consultaListaRelacionados...');
-    await page.goto('http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1',
-        { waitUntil: 'networkidle2', timeout: 30000 });
+    // Asegurar que estamos en la lista principal del SCW
+    if (!page.url().includes('scw.pjn.gov.ar')) {
+        log('Navegando a scw.pjn.gov.ar...');
+        await page.goto(SCW_URL, { waitUntil: 'networkidle2', timeout: 30000 });
+    }
 
     // B1: Título principal de la lista
     const headerSCW = await page.waitForSelector('h2.form_title', { timeout: 15000 }).catch(() => null);
