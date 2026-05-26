@@ -984,7 +984,10 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
   - Script: `/var/www/procurador/backend-server/scripts/backup-db.sh`
   - Destino: `/var/backups/procurador/` en el servidor
   - ⬜ **Pendiente futuro:** replicar backups a **DigitalOcean Spaces** (~USD 5/mes) para tener copia fuera del servidor — integrar con `s3cmd` en el mismo script
-- ⬜ Hardening: mover claves RSA y AES a variables de entorno (sacar de `keys/`)
+- ✅ Hardening secretos RSA (2026-05-26): `RSA_PRIVATE_KEY` + `RSA_PUBLIC_KEY` movidas a `.env`
+  - `scriptSigner.js` lee env vars primero, fallback a archivos PEM solo en desarrollo
+  - `ENCRYPTION_KEY` (AES) ya estaba en `.env` desde el inicio
+  - Archivos `keys/private.pem` y `keys/public.pem` se mantienen en servidor como backup, pero el proceso no depende de ellos
 - ⬜ Análisis de seguridad profundo (Electron + backend)
 - ✅ Suite QA completa ejecutada (2026-05-20): 159/165 PASS, 0 FAIL — ver `tests/QA_RESULTS.md`
 - ✅ Suite de tests automatizados en `tests/` (pytest + Playwright) con módulos M1–M14
