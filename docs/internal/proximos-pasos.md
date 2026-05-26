@@ -44,31 +44,24 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 
 ## 📋 PENDIENTES POR BLOQUE (extraídos de CLAUDE.md)
 
-### 🥇 BLOQUE 1 — Identidad de Marca & Landing (🔄 EN CURSO)
+### 🥇 BLOQUE 1 — Identidad de Marca & Landing ✅ CERRADO (tag `bloque1-completo`)
 - ✅ Jerarquía marca: "Procurador TOOL" (suite) + sublabel "Procurador SCW" en landing
-- ✅ Landing portada a archivo nuevo (www_ProcuradorSCW_nueva.html) con copy actualizado
-- ✅ Versión 2.7.5 en landing (badge hero, footer, mock titlebar)
+- ✅ Landing portada a archivo nuevo con copy actualizado · versión 2.7.10 en 4 lugares
 - ✅ Footer con links Términos y Privacidad
-- ✅ Precios promos en ARS: $1.500 / $15.000 (antes USD)
-- ✅ Precios planes permanentes indexados a UMA CSJN ($95.626): Básico $31.875 · Pro $63.751 · Enterprise $95.626
-- ✅ DB migrada: `price_usd → NULL`, `price_ars` seteado (migración `20260522_promo_prices_to_ars.sql`)
-- ✅ Backend refactorizado para usar `price_ars` en auth/users/usuarios/register/dashboard
-- ✅ **Toggle registro** — reconectado de punta a punta (estaba roto: DB existía pero sin endpoints ni UI)
-  - `GET /auth/register-status` — endpoint nuevo (antes faltaba → 404 → form siempre cerrado)
-  - `GET /admin/settings` + `PUT /admin/settings/:key` — endpoints admin nuevos
-  - Dashboard admin: card "⚙️ Configuración rápida" en Resumen **y** en Usuarios pendientes
-  - Fuente de verdad: `app_settings WHERE key = 'allow_public_register'` · fallback: `ALLOW_PUBLIC_REGISTER` en `.env`
-  - Commits: `0b57297` (fix auth) + `3edf2e5` (fix duplicado `db`) + `9f2e14a` (admin endpoints + UI)
-- ✅ **Paso 2:** Ícono oficial ⚖️ — favicon landing, ícono instalador, ícono app Electron
-  - Generado con Puppeteer → ICO multi-res (16/32/48/256px)
-  - `afterPack.js` hook embebe el ícono en el `.exe` via rcedit (electron-builder no lo hacía solo)
-  - `appIcon` en `main.js`: dev → `assets/icon.ico` · prod → `process.resourcesPath/icon.ico`
-  - Favicon: `backend-server/public/assets/favicon.png` + `<link rel="icon">` en landing
-  - v2.7.6 → v2.7.10 (5 releases hasta fix definitivo)
-- ⬜ **Paso 3:** Instalador `.exe` — referencia "Procurador SCW · parte de Procurador TOOL"
-- ⬜ **Paso 4:** Emails transaccionales — header/footer con branding unificado
-- ⬜ **Paso 5:** Extensión Chrome Store — descripción menciona suite Procurador TOOL (sin tocar código)
-- ⬜ **Paso 6:** Cierre Bloque 1 — tag + commit + docs
+- ✅ Precios promos en ARS: $1.500 / $15.000 · planes permanentes indexados a UMA CSJN
+- ✅ DB migrada a `price_ars` · backend refactorizado (auth/users/usuarios/register/dashboard)
+- ✅ Toggle registro público reconectado (endpoint + admin endpoints + dashboard UI)
+- ✅ Ícono oficial ⚖️ — favicon landing, instalador y app Electron (afterPack + rcedit, v2.7.10)
+- ✅ Emails transaccionales: branding unificado (`emailHeader/Footer/Layout` en `mailer.js`)
+- ✅ Extensión Chrome Store v1.3.3 — nombre "Procurador SCW – Automatización PJN", ícono balanza, descripción con mención a suite · **en revisión por Google**
+- ⏸️ **Paso 3 diferido:** Instalador `.exe` — referencia suite en `installer.nsh` (menor prioridad)
+
+### 🔔 PENDIENTES PRE-LANZAMIENTO (surgidos en Bloque 1)
+- ⬜ **Hacer pública la extensión en Chrome Web Store** — actualmente privada, esperando aprobación v1.3.3
+- ⬜ **Links de descarga en el panel de usuario** (portal web `usuarios/`):
+  - Link directo a Chrome Web Store: `https://chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme`
+  - Link al instalador `.exe` más reciente: última release de GitHub (`/releases/latest`)
+- ⬜ **SSL `api.procuradortool.com`** — `certbot.timer` activo, renueva automáticamente. No requiere acción.
 
 ### 🥈 BLOQUE 2 — Planes & Precios ⏸️ DIFERIDO (precios fijados, activación pendiente)
 - ✅ Precios fijados en DB y landing, indexados a UMA CSJN:
@@ -363,17 +356,20 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 ## 🎯 ORDEN SUGERIDO POST-FASE 4
 
 ```
-1. BLOQUE 1 (branding: logo, emails, instalador) ← EN CURSO
+1. ✅ BLOQUE 1 (branding completo)
      ↓
-2. FASE 5 / BLOQUE 4 (cobranza + facturación) ← detalle arriba
-     ↓ requiere antes de ir a producción
+2. PRE-LANZAMIENTO: links descarga en panel usuario + extensión pública en store
+     ↓
 3. BLOQUE 6 (seguridad: backups programados, hardening secretos)
      ↓
-4. BLOQUE 7 (staging)
+4. FASE 5 / BLOQUE 4 (cobranza + facturación) ← detalle abajo
      ↓
-5. BLOQUE 3 (code signing — paralelo, tiene tiempos externos)
+5. BLOQUE 7 (staging)
+     ↓
+6. BLOQUE 3 (code signing — paralelo, tiene tiempos externos)
      ↓
 LANZAMIENTO PÚBLICO
+  → extensión Chrome pública en store
   → activar BASIC/PRO/ENTERPRISE en DB (Bloque 2 ⏸️)
 ```
 

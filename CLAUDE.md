@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-23 (Bloque 1 — ícono oficial + favicon + release v2.7.10)
+> Última actualización: 2026-05-23 (Bloque 1 ✅ CERRADO — extensión v1.3.3 + cierre)
 
 ---
 
@@ -69,10 +69,13 @@ node scripts/generate-icon.js
 > `afterPack.js` embebe el ícono en el `.exe` vía rcedit automáticamente en cada build.
 
 ### Próximo paso concreto
-**→ Bloque 1 (continúa):** Paso 4 — emails transaccionales con branding unificado (`mailer.js`)
-**→ Bloque 1:** Paso 5 — Chrome Web Store: actualizar descripción con mención a la suite
-**→ Bloque 1:** Paso 6 — cierre Bloque 1 (tag + docs)
+**→ Pre-lanzamiento:** links de descarga en el panel de usuario (portal web) — extensión Chrome + instalador app
+**→ Pre-lanzamiento:** hacer pública la extensión en Chrome Web Store (actualmente privada, en revisión v1.3.3)
+**→ Bloque 6:** backups programados + hardening secretos
 **→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
+
+### SSL api.procuradortool.com
+`certbot.timer` activo — renueva automáticamente 2×/día cuando faltan ≤30 días. **No requiere intervención manual.**
 
 ---
 
