@@ -317,9 +317,10 @@ function renderStatusBanner() {
             color: '#1d4ed8',
             msg: () => {
                 const used = acc.usageCount ?? 0;
-                const limit = acc.usageLimit ?? 20;
+                const limit = 20;
                 const rem = limit - used;
-                return `${used}/${limit} usos de prueba — Configurá tu suscripción en Mi Plan` + (rem <= 5 ? ' 🔴' : '');
+                const alerta = rem <= 5 ? ' 🔴' : '';
+                return `Cuenta pendiente de activación — ${rem} de ${limit} usos de prueba disponibles. El administrador activará tu cuenta en breve.${alerta}`;
             }
         },
         suspended: {

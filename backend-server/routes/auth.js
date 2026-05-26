@@ -414,7 +414,7 @@ a{color:#1e40af;text-decoration:none}</style></head>
 <div class="icon">${icon}</div>
 <h2>Procurador SCW</h2>
 <p>${message}</p>
-<p style="margin-top:24px"><a href="/">Volver al inicio</a></p>
+<p style="margin-top:24px"><a href="https://api.procuradortool.com/usuarios/">Ir al portal →</a></p>
 </div></body></html>`;
 }
 
