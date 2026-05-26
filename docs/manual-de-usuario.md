@@ -1,6 +1,6 @@
 # Manual de usuario — Procurador SCW
-**Versión 2.7.3** · Para abogados y procuradores  
-Última actualización: 2026-05-21
+**Versión 2.7.12** · Para abogados y procuradores  
+Última actualización: 2026-05-26
 
 ---
 
@@ -25,7 +25,7 @@ Procurador SCW es una herramienta de automatización judicial que te permite pro
 ## Instalación de la app de escritorio
 
 ### Paso 1 — Descargá el instalador
-Bajá el archivo `Procurador-SCW-Setup-X.X.X.exe` desde el enlace que te enviamos al activar tu cuenta.
+Iniciá sesión en el **portal web** (`api.procuradortool.com/usuarios/`) y hacé click en **Descargar app** en la sección Descargas. El sistema te redirige automáticamente al instalador más reciente.
 
 ### Paso 2 — Instalá
 Ejecutá el instalador, aceptá las opciones predeterminadas y hacé click en **Instalar**. Al finalizar, la app se abre automáticamente.
@@ -34,6 +34,35 @@ Ejecutá el instalador, aceptá las opciones predeterminadas y hacé click en **
 
 ### Paso 3 — Primer inicio de sesión
 Ingresá tu email y contraseña de Procurador (no de tu cuenta PJN). La app te guiará por los pasos de configuración inicial.
+
+> **Si la app muestra "Verificá tu email":** tu cuenta requiere verificación de email antes de poder usar las funciones. Seguí los pasos de la sección siguiente.
+
+---
+
+## Verificación de email y período de prueba
+
+### Verificación de email
+
+Al registrarte, recibís un email de verificación en la casilla con la que te registraste. Ese email contiene un enlace que debés hacer click para activar tu dirección.
+
+**Si no recibiste el email:**
+1. Revisá la carpeta de spam/correo no deseado
+2. Iniciá sesión en el portal web (`api.procuradortool.com/usuarios/`)
+3. Si tu email no está verificado, aparece un botón **"Reenviar email de verificación"** — hacé click para solicitar uno nuevo
+
+**Una vez verificado el email:** tu cuenta pasa a estado "pendiente de activación" y podés acceder al período de prueba.
+
+### Período de prueba
+
+Los nuevos usuarios reciben **20 ejecuciones de prueba** válidas por 365 días. Durante este período podés usar la app completa sin restricciones de funcionalidad.
+
+El contador de uso aparece en:
+- **App Electron → Mi Cuenta**: card amarilla con contador `X / 20 usos utilizados` y barra de progreso
+- **Portal web → Mi Plan**: misma información
+
+La activación final de la cuenta es manual — el administrador revisa y activa (o rechaza) dentro de las 24-48 horas hábiles de haberte registrado.
+
+> **Nota:** el período de prueba se inicia automáticamente al verificar tu email. No necesitás configurar ningún método de pago para comenzar a usarlo.
 
 ---
 
@@ -231,6 +260,15 @@ No. El sistema abre y cierra Chrome automáticamente en segundo plano. Podés us
 
 ### ¿Por qué dice "proceso activo en otro dispositivo"?
 El sistema previene que dos instancias corran al mismo tiempo. Asegurate de haber cerrado todas las ventanas de la app. Si el error persiste después de 2 minutos, cerrá la app completamente y volvé a abrirla.
+
+### ¿Qué pasa si no recibí el email de verificación?
+Iniciá sesión en el portal web. Si tu email no está verificado, aparece el botón "Reenviar email de verificación". Revisá también la carpeta de spam.
+
+### ¿Qué es el período de prueba?
+Al verificar tu email recibís 20 ejecuciones gratuitas válidas por 365 días. Podés usar toda la funcionalidad de la app sin restricciones. El contador aparece en "Mi Cuenta" (app) y "Mi Plan" (portal web).
+
+### ¿Qué pasa cuando se agotan los usos de prueba?
+Al llegar a 20 ejecuciones, la cuenta queda en espera de activación. El administrador revisa y activa manualmente. Si necesitás continuar antes de que se active tu cuenta, contactá al soporte.
 
 ### ¿Cómo actualizo la app?
 La app se actualiza automáticamente. Cuando haya una nueva versión, aparecerá una notificación en la barra superior. Hacé click en **Actualizar** y la app se reinicia con la versión nueva.

@@ -6,8 +6,8 @@
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.10** — publicada en GitHub Releases (auto-updater activo)
-> Última sesión: 2026-05-23
+> Versión app Electron: **2.7.12** — publicada en GitHub Releases (auto-updater activo)
+> Última sesión: 2026-05-26
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
@@ -19,6 +19,17 @@
   - **Runtime icon:** `appIcon` en `main.js` — dev: `assets/icon.ico` · prod: `process.resourcesPath/icon.ico` (via `extraResources`)
   - **Archivos clave:** `electron-app/build/icon.ico` (build) · `electron-app/assets/icon.ico` (runtime) · `scripts/generate-icon.js` · `scripts/afterPack.js`
   - Releases: v2.7.6 → v2.7.7 → v2.7.8 → v2.7.9 → **v2.7.10** (fix definitivo)
+
+- ✅ **Flujo de registro y activación completo** (sesión 2026-05-26):
+  - **Portal de usuarios** migrado de `/auth/extension-login` a `/auth/portal-login` — permite acceso a usuarios en cualquier estado no terminal (`pending_email`, `pending_activation`, `suspended`)
+  - **Nuevo endpoint:** `POST /auth/resend-verification` — reenvía email de verificación de forma segura (respuesta genérica siempre, anti-enumeración)
+  - **Nuevo endpoint:** `GET /client/download/electron` (autenticado) — consulta GitHub API en tiempo real y redirige al `.exe` del último release; no requiere actualizar la URL en cada versión
+  - **Email verificación:** ícono real (`/assets/icon128.png`) en lugar de emoji · enlace "Ir al portal →" post-verificación apunta a `/usuarios/` en lugar de `/`
+  - **Electron — estado `pending_email`:** banner ámbar "Verificá tu email" + `btnMain` deshabilitado
+  - **Electron — Mi Cuenta:** card de prueba con contador `X/20 utilizados` + barra de progreso coloreada (verde/naranja/rojo)
+  - **Portal — Mi Plan:** card de prueba idéntica cuando `registration_status = 'pending_activation'`
+  - **Portal — Descargas:** extensión con enlace directo Chrome Web Store · app usa `/client/download/electron`
+  - Releases: v2.7.10 → v2.7.11 → **v2.7.12** (banner trial + `pending_email` fix + FAQs)
 
 - ✅ **Fix toggle registro público** (sesión 2026-05-23):
   - **Causa raíz:** `register.js` llamaba a `/auth/register-status` que no existía → 404 → formulario siempre cerrado
@@ -69,9 +80,8 @@ node scripts/generate-icon.js
 > `afterPack.js` embebe el ícono en el `.exe` vía rcedit automáticamente en cada build.
 
 ### Próximo paso concreto
-**→ Pre-lanzamiento:** links de descarga en el panel de usuario (portal web) — extensión Chrome + instalador app
-**→ Pre-lanzamiento:** hacer pública la extensión en Chrome Web Store (actualmente privada, en revisión v1.3.3)
-**→ Bloque 6:** backups programados + hardening secretos
+**→ Pre-lanzamiento:** hacer pública la extensión en Chrome Web Store (actualmente en revisión v1.3.3 — esperar aprobación Google)
+**→ Bloque 6:** backups programados + hardening secretos (mover claves RSA y AES a env vars)
 **→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
 
 ### SSL api.procuradortool.com
@@ -127,7 +137,7 @@ ProcuradorTool/
 │   ├── renderer.js                        (~166 KB) UI dashboard — PENDIENTE refactor a módulos ES6
 │   ├── index.html                         shell del dashboard
 │   ├── styles.css                         (~45 KB) sistema de diseño aplicado
-│   ├── package.json                       v2.7.5
+│   ├── package.json                       v2.7.12
 │   ├── Monitor-Procurador.ps1             watchdog Windows (legacy)
 │   ├── visorModal_template.html           plantilla visor de expediente
 │   ├── renderer/                          ventanas auxiliares
@@ -180,8 +190,8 @@ ProcuradorTool/
 │   ├── .env / .env.example                secretos (JWT, DB, ANTHROPIC_API_KEY, etc.)
 │   ├── extension-meta.json                metadata versión extensión (legacy CRX)
 │   ├── routes/
-│   │   ├── auth.js                        login, registro, refresh, extension-login
-│   │   ├── client.js                      heartbeat, scripts, account, notifications, IA chat
+│   │   ├── auth.js                        login, registro, refresh, extension-login, portal-login, resend-verification
+│   │   ├── client.js                      heartbeat, scripts, account, notifications, IA chat, download/electron
 │   │   ├── license.js                     lock ejecución (start/heartbeat/end)
 │   │   ├── monitor.js                     CRUD partes + novedades
 │   │   ├── admin.js                       panel admin
@@ -362,14 +372,14 @@ Cuando se genera y publica una nueva release de la app Electron, hacer estos pas
 
 1. Bumping de versión en `electron-app/package.json` (`"version"` + `"build.buildVersion"` si existe)
 2. `npm run release` en `electron-app/` → genera instalador y lo sube a GitHub Releases
-3. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea `v2.7.10` en `download-item-desc`
+3. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea `v2.7.12` en `download-item-desc`
    *(el link de descarga es dinámico via `/client/download/electron` → no necesita actualización)*
 4. Deploy `app.js` al servidor + `pm2 restart procurador-api`
 5. Hacer commit + push
 
 > **Nota sobre el link de descarga**: el portal usa `https://api.procuradortool.com/client/download/electron`
 > que consulta la GitHub API en tiempo real y redirige al `.exe` del último release.
-> Solo hay que actualizar el texto de versión visible (`v2.7.10`), no la URL.
+> Solo hay que actualizar el texto de versión visible (`v2.7.12`), no la URL.
 
 ---
 
@@ -536,6 +546,30 @@ Verificar flujos disponibles: canUseFlow() en auth.js (consulta la DB)
 FLOW_ALIASES: { 'notif' → 'notificaciones' }  ← importante, las keys internas difieren de la DB
 ```
 
+### Portal web de usuarios ↔ Backend
+```
+Login (permite todos los estados no terminales): POST /auth/portal-login {email, password}
+  ← token (8h), emailVerified, registrationStatus
+  → Bloquea solo: rejected, cancelled
+
+Reenvío email verificación: POST /auth/resend-verification {email}
+  ← Respuesta genérica siempre (anti-enumeración)
+
+Descarga instalador: GET /client/download/electron (autenticado)
+  → Consulta https://api.github.com/repos/jberger19186/procurador-tool/releases/latest
+  ← 302 redirect al .exe del último release
+```
+
+### Estados de `registration_status` del usuario
+```
+pending_email      → email no verificado: puede logear en portal, NO en Electron/extensión
+pending_activation → email verificado, esperando activación manual admin: trial activo (20 usos)
+active             → cuenta activa, suscripción normal
+suspended          → suspendida por admin
+rejected           → rechazada (bloqueo total)
+cancelled          → cancelada (bloqueo total)
+```
+
 ### Navegación al portal web con auto-login (SSO)
 ```javascript
 // renderer.js — openPortalSection(section)
@@ -570,7 +604,10 @@ POST   /client/scripts/log-execution     — Registrar ejecución
 POST   /license/execution/start          — Adquirir lock
 POST   /license/execution/heartbeat      — Refrescar lock
 POST   /license/execution/end            — Liberar lock
-POST   /auth/extension-login             — Login desde extensión
+POST   /auth/extension-login             — Login desde extensión Chrome
+POST   /auth/portal-login               — Login desde portal web (permite pending_email, pending_activation, suspended)
+POST   /auth/resend-verification        — Reenvío email verificación (público, rate limited, respuesta genérica)
+GET    /client/download/electron        — Redirect dinámico al .exe del último release (autenticado)
 GET    /client/notifications             — Notificaciones in-app del usuario (últimas 50)
 POST   /client/notifications/:id/read    — Marcar notificación como leída (id='all' = todas)
 POST   /client/ai/chat                   — Chat con asistente IA desde Electron (fallback Claude Haiku, rate limit 20/hora/usuario)

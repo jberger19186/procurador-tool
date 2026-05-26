@@ -500,7 +500,7 @@ const FAQ_ITEMS = [
     { cat: 'monitor', q: '¿Con qué frecuencia se actualiza el monitor?', a: 'El monitor se actualiza cada vez que ejecutás la sección Monitor manualmente, o si configuraste una frecuencia automática en Configuración.' },
     { cat: 'monitor', q: '¿Cuántas partes puedo monitorear?', a: 'Depende de tu plan: COMBO_PROMO permite 3 partes activas, PRO permite 10, ENTERPRISE ilimitadas.' },
     // --- EXTENSIÓN ---
-    { cat: 'extension', q: '¿Cómo instalo la extensión de Chrome?', a: 'Buscá "Procurador SCW" en la Chrome Web Store o pedile el enlace directo al soporte. Hacé click en "Agregar a Chrome" y aceptá los permisos.' },
+    { cat: 'extension', q: '¿Cómo instalo la extensión de Chrome?', a: 'Buscá "Procurador SCW" en la Chrome Web Store (chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme) o desde la sección Descargas del portal web. Hacé click en "Agregar a Chrome" y aceptá los permisos.' },
     { cat: 'extension', q: '¿Cómo actualizo la extensión?', a: 'La extensión se actualiza automáticamente desde la Chrome Web Store. También podés ir a chrome://extensions y hacer click en el ícono de actualizar.' },
     { cat: 'extension', q: '¿Para qué sirve la extensión?', a: 'La extensión autocompleta el número de expediente (jurisdicción, número y año) en los módulos del PJN: SCW, Escritos, Notificaciones y DEOX, evitando la escritura manual.' },
     { cat: 'extension', q: '¿La extensión funciona sin la app Electron?', a: 'Sí. Con el plan EXTENSION_PROMO tenés acceso solo a la extensión sin necesitar instalar la app de escritorio.' },
@@ -510,8 +510,10 @@ const FAQ_ITEMS = [
     { cat: 'cuenta', q: '¿Puedo usar la app en más de una computadora?', a: 'No. La licencia está vinculada a un dispositivo. Para cambiar de equipo, contactá al soporte.' },
     { cat: 'cuenta', q: '¿Cómo cancelo mi suscripción?', a: 'Ingresá al portal web en api.procuradortool.com/usuarios/, sección "Facturación", y hacé click en "Cancelar suscripción". Conservás el acceso hasta fin del período pago.' },
     { cat: 'cuenta', q: '¿Dónde veo cuántas ejecuciones me quedan?', a: 'En la sección "Mi Cuenta" de la app (ícono de usuario en la barra lateral) o en el portal web, sección "Mi Plan".' },
-    { cat: 'cuenta', q: '¿Qué pasa cuando se vence el trial?', a: 'Al agotar las 20 ejecuciones de prueba, la cuenta queda pendiente de activación. El admin revisa y activa (o rechaza) manualmente.' },
+    { cat: 'cuenta', q: '¿Qué es el período de prueba?', a: 'Al verificar tu email recibís 20 ejecuciones gratuitas válidas por 365 días. Podés usar toda la funcionalidad sin restricciones. El contador aparece en la sección Mi Cuenta (arriba a la derecha) y en el portal web → Mi Plan.' },
+    { cat: 'cuenta', q: '¿Qué pasa cuando se agotan los usos de prueba?', a: 'Al llegar a 20 ejecuciones, la cuenta queda en espera de activación. El administrador revisa y activa manualmente. Si necesitás continuar antes, abrí un ticket de soporte.' },
     // --- ERRORES FRECUENTES ---
+    { cat: 'errores', q: '¿Por qué dice "Verificá tu email para usar la aplicación"?', a: 'Tu cuenta requiere verificación de email antes de poder ejecutar procesos. Revisá tu casilla (incluyendo spam) y hacé click en el enlace del email que te enviamos al registrarte. Si no lo encontrás, podés reenviarlo desde el portal web.' },
     { cat: 'errores', q: '¿Qué significa que el login al PJN falló?', a: 'El sistema no pudo ingresar al SCW. Verificá que Chrome tenga guardada la contraseña (botón "Agregar contraseña SCW" en la app). Si la contraseña del PJN cambió, actualizala en Chrome primero.' },
     { cat: 'errores', q: '¿Por qué se colgó el proceso?', a: 'Podés detenerlo con el botón "Detener". Si se repite, revisá que Chrome no tenga otras pestañas abiertas del PJN bloqueando el acceso y que tu sesión PJN esté vigente.' },
     { cat: 'errores', q: '¿Por qué dice "proceso activo en otro dispositivo"?', a: 'El sistema tiene un candado anti-concurrencia. Asegurate de no tener otra instancia de la app abierta. Si el error persiste después de cerrar todo, esperá 2 minutos y reintentá.' },

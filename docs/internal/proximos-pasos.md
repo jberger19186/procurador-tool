@@ -1,7 +1,7 @@
 # Próximos pasos — Handoff para sesiones nuevas
 
 > **Documento de continuidad.** Después de `/clear`, leer este archivo + CLAUDE.md da el contexto suficiente para retomar.
-> Última actualización: 2026-05-23 (Bloque 1 — ícono oficial + favicon + v2.7.10)
+> Última actualización: 2026-05-26 (Flujo registro/activación completo + v2.7.12)
 
 ---
 
@@ -14,11 +14,12 @@
 - **Fase 5 (Cobranza):** **PRÓXIMA** — diseño completo abajo
 - **Fase 6 (Staging/Release seguro):** Pendiente
 
-### Versión Electron actual: **v2.7.10**
+### Versión Electron actual: **v2.7.12**
 
 ### Tags Git relevantes (rollback points)
 ```
-bloque1-icono-v2.7.10        ← último estable (ícono oficial resuelto)
+bloque1-icono-v2.7.12        ← último estable (flujo registro + activación completo)
+bloque1-icono-v2.7.10        ← ícono oficial resuelto
 bloque1-branding-ars-toggle  ← branding + pricing + toggle registro
 fase4-completa               ← cierre Fase 4 soporte
 fase4-item3                  ← cierre Item 3 (visibilidad + AI suggest + ajustes)
@@ -58,10 +59,18 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 
 ### 🔔 PENDIENTES PRE-LANZAMIENTO (surgidos en Bloque 1)
 - ⏳ **Extensión Chrome Web Store** — v1.3.3 + visibilidad pública enviados a revisión. Esperar aprobación Google (1-3 días hábiles)
-- ⬜ **Links de descarga en el panel de usuario** (portal web `usuarios/`):
-  - Link directo a Chrome Web Store: `https://chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme`
-  - Link al instalador `.exe` más reciente: última release de GitHub (`/releases/latest`)
-- ⬜ **SSL `api.procuradortool.com`** — `certbot.timer` activo, renueva automáticamente. No requiere acción.
+- ✅ **Links de descarga en el panel de usuario** (portal web `usuarios/`):
+  - ✅ Link directo a Chrome Web Store: `https://chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme`
+  - ✅ Link al instalador: `GET /client/download/electron` → redirect dinámico vía GitHub API (no requiere actualizar en cada release)
+- ✅ **SSL `api.procuradortool.com`** — `certbot.timer` activo, renueva automáticamente. No requiere acción.
+- ✅ **Flujo completo de registro/activación** (sesión 2026-05-26):
+  - `POST /auth/portal-login` — login portal para todos los estados no terminales
+  - `POST /auth/resend-verification` — reenvío email de verificación
+  - `GET /client/download/electron` — descarga dinámica instalador
+  - Email verificación: ícono real + redirect correcto al portal
+  - Electron: banner `pending_email` + bloqueo botón principal
+  - Mi Cuenta (Electron) + Mi Plan (portal): card trial con contador X/20 + barra progreso
+  - FAQs actualizadas: trial, email verificación, período de prueba
 
 ### 🥈 BLOQUE 2 — Planes & Precios ⏸️ DIFERIDO (precios fijados, activación pendiente)
 - ✅ Precios fijados en DB y landing, indexados a UMA CSJN:
