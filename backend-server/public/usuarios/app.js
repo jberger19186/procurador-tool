@@ -662,6 +662,39 @@ function renderPlan() {
         expiredAlert.remove();
     }
 
+    // Trial info box — solo para pending_activation
+    let trialBox = document.getElementById('trial-info-box');
+    if (rs === 'pending_activation') {
+        const trialUsed  = acc.usageCount ?? 0;
+        const trialLimit = 20;
+        const trialRem   = Math.max(0, trialLimit - trialUsed);
+        const pctTrial   = Math.min(100, Math.round((trialUsed / trialLimit) * 100));
+        const barColor   = trialRem <= 5 ? '#dc2626' : trialRem <= 10 ? '#d97706' : '#16a34a';
+
+        if (!trialBox) {
+            trialBox = document.createElement('div');
+            trialBox.id = 'trial-info-box';
+            const planCard = planSection.querySelector('.plan-card-main') || planSection.firstElementChild;
+            planSection.insertBefore(trialBox, planCard);
+        }
+        trialBox.innerHTML = `
+            <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px 20px;margin-bottom:16px">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+                    <div>
+                        <span style="font-size:13px;font-weight:700;color:#92400e">⏳ Período de prueba</span>
+                        <span style="font-size:12px;color:#78350f;margin-left:8px">Tu cuenta está pendiente de activación por el administrador</span>
+                    </div>
+                    <span style="font-size:20px;font-weight:800;color:${barColor}">${trialRem} <span style="font-size:13px;font-weight:500;color:#92400e">/ ${trialLimit} usos restantes</span></span>
+                </div>
+                <div style="background:#fde68a;border-radius:4px;height:8px;overflow:hidden">
+                    <div style="height:100%;width:${pctTrial}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
+                </div>
+                ${trialRem <= 5 ? `<p style="margin:8px 0 0;font-size:12px;color:#991b1b;font-weight:600">🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.</p>` : ''}
+            </div>`;
+    } else if (trialBox) {
+        trialBox.remove();
+    }
+
     const daysRemaining = period.daysRemaining ?? 0;
     document.getElementById('plan-days-number').textContent = daysRemaining;
 
