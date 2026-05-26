@@ -2205,7 +2205,7 @@ const SMOKE_FILE = _path.join(__dirname, '..', 'data', 'smoke-test-results.json'
 
 function _loadSmoke() {
     try { if (_fs.existsSync(SMOKE_FILE)) return JSON.parse(_fs.readFileSync(SMOKE_FILE, 'utf8')); } catch (_) {}
-    return { api: null, pjn: null };
+    return { api: null, pjn: null, extension: null };
 }
 
 function _saveSmoke(data) {
@@ -2301,6 +2301,19 @@ router.post('/smoke-tests/report-pjn', authenticateAdmin, (req, res) => {
     saved.pjn = { ...result, timestamp: new Date().toISOString(), reportedBy: req.user.email };
     _saveSmoke(saved);
     console.log(`[smoke-tests] PJN reportado por admin ${req.user.id}: ${result.passed}/${result.total}`);
+    res.json({ success: true });
+});
+
+// POST /admin/smoke-tests/report-extension  (llamado por smoke-test-extension.js local)
+router.post('/smoke-tests/report-extension', authenticateAdmin, (req, res) => {
+    const { result } = req.body;
+    if (!result || typeof result !== 'object') {
+        return res.status(400).json({ error: 'Se requiere result' });
+    }
+    const saved = _loadSmoke();
+    saved.extension = { ...result, timestamp: new Date().toISOString(), reportedBy: req.user.email };
+    _saveSmoke(saved);
+    console.log(`[smoke-tests] Extensión reportada por admin ${req.user.id}: ${result.passed}/${result.total}`);
     res.json({ success: true });
 });
 

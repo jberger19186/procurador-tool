@@ -2529,7 +2529,8 @@ async function renderDiagnostico() {
 
     content.innerHTML = `
     <style>
-        .diag-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:4px; }
+        .diag-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; margin-top:4px; }
+        @media(max-width:1200px){ .diag-grid { grid-template-columns:1fr 1fr; } }
         @media(max-width:900px){ .diag-grid { grid-template-columns:1fr; } }
         .diag-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; }
         .diag-card-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #f3f4f6; background:#fafafa; }
@@ -2588,6 +2589,22 @@ async function renderDiagnostico() {
             </div>
         </div>
 
+        <!-- ── EXTENSIÓN CHROME ── -->
+        <div class="diag-card">
+            <div class="diag-card-header">
+                <div>
+                    <div class="diag-card-title">🧩 Extensión Chrome</div>
+                    <div class="diag-last" id="diag-ext-last">Cargando...</div>
+                </div>
+                <span class="diag-badge none" id="diag-ext-badge">—</span>
+            </div>
+            <div class="diag-log" id="diag-ext-log">Esperando ejecución...</div>
+            <div class="diag-footer" style="flex-wrap:wrap; gap:8px;">
+                <span class="diag-pjn-cmd">node scripts/smoke-test-extension.js</span>
+                <button class="diag-btn secondary" onclick="diagCopyExtCmd()" title="Copiar comando">📋</button>
+            </div>
+        </div>
+
     </div>`;
 
     // Cargar últimos resultados
@@ -2596,6 +2613,7 @@ async function renderDiagnostico() {
         if (data.results) {
             diagRenderApi(data.results.api);
             diagRenderPjn(data.results.pjn);
+            diagRenderExtension(data.results.extension);
         }
     } catch (e) {
         document.getElementById('diag-api-last').textContent = 'Error cargando resultados';
@@ -2676,6 +2694,33 @@ window.diagRunApi = async function() {
 window.diagCopyPjnCmd = function() {
     navigator.clipboard.writeText('node scripts/smoke-test-pjn.js').then(() => {
         const btn = document.querySelector('[onclick="diagCopyPjnCmd()"]');
+        btn.textContent = '✅';
+        setTimeout(() => { btn.textContent = '📋'; }, 1500);
+    });
+};
+
+function diagRenderExtension(result) {
+    const logEl   = document.getElementById('diag-ext-log');
+    const badgeEl = document.getElementById('diag-ext-badge');
+    const lastEl  = document.getElementById('diag-ext-last');
+
+    if (!result) {
+        logEl.innerHTML  = 'Sin ejecuciones previas.\n\nCorré el script local para ver resultados aquí:\n  node scripts/smoke-test-extension.js';
+        badgeEl.textContent = '—';
+        lastEl.textContent  = 'Nunca ejecutado';
+        return;
+    }
+
+    logEl.innerHTML  = diagColorLog(result.logs.join('\n'));
+    logEl.scrollTop  = logEl.scrollHeight;
+    badgeEl.textContent = `${result.passed}/${result.total} ${result.ok ? '✅' : '❌'}`;
+    badgeEl.className   = `diag-badge ${result.ok ? 'ok' : 'fail'}`;
+    lastEl.textContent  = `Última ejecución: ${diagRelativeTime(result.timestamp)}  —  ${(result.duration / 1000).toFixed(1)}s`;
+}
+
+window.diagCopyExtCmd = function() {
+    navigator.clipboard.writeText('node scripts/smoke-test-extension.js').then(() => {
+        const btn = document.querySelector('[onclick="diagCopyExtCmd()"]');
         btn.textContent = '✅';
         setTimeout(() => { btn.textContent = '📋'; }, 1500);
     });
