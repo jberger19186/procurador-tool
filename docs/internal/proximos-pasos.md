@@ -57,7 +57,7 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 - ⏸️ **Paso 3 diferido:** Instalador `.exe` — referencia suite en `installer.nsh` (menor prioridad)
 
 ### 🔔 PENDIENTES PRE-LANZAMIENTO (surgidos en Bloque 1)
-- ⬜ **Hacer pública la extensión en Chrome Web Store** — actualmente privada, esperando aprobación v1.3.3
+- ⏳ **Extensión Chrome Web Store** — v1.3.3 + visibilidad pública enviados a revisión. Esperar aprobación Google (1-3 días hábiles)
 - ⬜ **Links de descarga en el panel de usuario** (portal web `usuarios/`):
   - Link directo a Chrome Web Store: `https://chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme`
   - Link al instalador `.exe` más reciente: última release de GitHub (`/releases/latest`)
