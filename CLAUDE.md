@@ -1,13 +1,13 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-26
+> Última actualización: 2026-05-27
 
 ---
 
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.13** — publicada en GitHub Releases (auto-updater activo)
-> Última sesión: 2026-05-26
+> Última sesión: 2026-05-27
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
@@ -1106,7 +1106,8 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - Extensión publicada y aprobada en Chrome Web Store (v1.3.3 — branding actualizado)
 - Onboarding actualizado con enlace directo a la store
 - Aviso sobre warning de Chrome al instalar incluido en onboarding
-- ⏸️ **Limpiar distribución CRX del backend** — diferido: `main.js` sigue llamando a `/api/extension/version` y `/api/extension/download`; para limpiar hay que migrar esos handlers en Electron a la Chrome Web Store. No urgente — la ruta sigue funcionando sin impacto.
+- ⏸️ **Actualizar imágenes en Chrome Web Store** — las capturas del listing deben reflejar la UI actual (diferido)
+- ⏸️ **Limpiar distribución CRX del backend** — diferido: `main.js` sigue llamando a `/api/extension/version` y `/api/extension/download`; para limpiar hay que migrar esos handlers. No urgente — la ruta sigue funcionando.
 
 #### 1.3b Rediseño visual de los visores HTML ✅ COMPLETADO (sesión 2026-04-24)
 - `visorModal_template.html` (procuración): rediseñado — tabla plana con modal de movimientos, amber/Inter
@@ -1160,7 +1161,7 @@ Sección Sistema del sidebar:
 - Muestra "Sin resultados para X" si no hay coincidencias
 - Se resetea y enfoca automáticamente al abrir el modal
 
-**Pendiente (Fase 4):** conectar IA real al endpoint del chat.
+**IA real conectada:** `POST /client/ai/chat` → Claude Haiku (ANTHROPIC_API_KEY activa). ✅
 
 ---
 
@@ -1186,11 +1187,11 @@ Sección Sistema del sidebar:
 
 ---
 
-#### 1.3 Code Signing — PENDIENTE
+#### 1.3 Code Signing — ⏸️ DIFERIDO (iniciar en paralelo a Fase 5 — tiene tiempos externos)
 - Firmar el instalador `.exe` de Electron con **Microsoft Azure Trusted Signing**
 - Objetivo: eliminar el warning "Editor desconocido" de Windows SmartScreen al instalar la app
 - Sin firma: SmartScreen bloquea o advierte la instalación en Windows; con firma: instalación fluida
-- Requiere cuenta Azure + certificado EV o Azure Trusted Signing (más accesible y económico)
+- Requiere cuenta Azure + certificado EV o Azure Trusted Signing (~USD 9/mes)
 - Docs: https://learn.microsoft.com/en-us/azure/trusted-signing/
 
 ---
@@ -1201,8 +1202,8 @@ Sección Sistema del sidebar:
 - ✅ Backups programados PostgreSQL — cron 03:00 AM, retención 7 días, alerta email (2026-05-26)
 - ✅ Hardening secretos RSA — `RSA_PRIVATE_KEY` + `RSA_PUBLIC_KEY` movidos a `.env` (2026-05-26)
 - ✅ Smoke tests endpoints críticos — `smoke-test-pjn.js` 48/48 ✅ (2026-05-27)
-- ⬜ Análisis de seguridad profundo (app Electron + backend) — diferido
-- ⬜ Documentación técnica completa del backend — diferido
+- ⏸️ Análisis de seguridad profundo (app Electron + backend) — diferido post-Fase 5
+- ⏸️ Documentación técnica completa del backend — diferido
 
 ---
 
@@ -1214,7 +1215,7 @@ Sección Sistema del sidebar:
 - URL: https://procuradortool.com
 - Sistema de diseño aplicado (amber, Inter, Crimson Pro)
 - Estructura: Navbar · Hero · Problema · App Showcase · Funciones · Extensión · Cómo funciona · Seguridad/Privacidad · Planes · CTA · Footer
-- ⬜ **Agregar sección Planes con precios reales** (BASIC / PRO / ENTERPRISE / promos) — pendiente definir precios
+- Planes permanentes visibles como "Próximamente" — se activan al lanzamiento público (ver 3.3)
 
 #### 3.2 Términos Legales ✅ COMPLETADO (2026-05-20)
 - ✅ Términos y Condiciones de Uso — `/terminos/index.html` publicado
@@ -1222,11 +1223,11 @@ Sección Sistema del sidebar:
 - ✅ Aviso PJN (credenciales nunca pasan por servidores) — en sección "Privacidad & seguridad" de la landing
 - ✅ Links desde footer de la landing y desde checkbox en formulario de registro
 
-#### 3.3 Estrategia de Venta y Planes — PARCIALMENTE HECHO
-- ✅ Planes definidos en DB: EXTENSION_PROMO (USD 1/mes) · COMBO_PROMO (USD 9.99/mes) · BASIC · PRO · ENTERPRISE
-- ✅ Planes de promo visibles en landing (con precios) y en flujo de registro (cards dinámicas)
-- ✅ Planes permanentes visibles en landing como "Próximamente" (sin precio hasta definirlos)
-- ⬜ **Definir y publicar precios de BASIC / PRO / ENTERPRISE** ← única tarea pendiente en este bloque
+#### 3.3 Estrategia de Venta y Planes ✅ COMPLETADO (activación diferida al lanzamiento)
+- ✅ Promos: EXTENSION_PROMO $1.500 ARS/mes · COMBO_PROMO $15.000 ARS/mes — activas en DB y landing
+- ✅ Permanentes fijados en DB indexados a UMA CSJN: BASIC $31.875 · PRO $63.751 · ENTERPRISE $95.626 ARS/mes
+- ✅ Planes permanentes visibles en landing como "Próximamente"
+- ⏸️ **Activar BASIC/PRO/ENTERPRISE** — diferido al lanzamiento público: `UPDATE plans SET active=true WHERE name IN ('BASIC','PRO','ENTERPRISE')`
 - Registro en: `https://api.procuradortool.com/register/`
 
 #### 3.4 Registro y Recolección de Datos ✅ COMPLETADO
