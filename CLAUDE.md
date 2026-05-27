@@ -1560,6 +1560,50 @@ git push
 
 ---
 
+## Smoke Tests
+
+Tres scripts que verifican que los portales del PJN y los flujos de la extensión siguen respondiendo con los selectores DOM correctos.
+
+### Desde `electron-app/`
+
+```bash
+# ── Portal PJN (módulos Listado + Informe) ────────────────────────
+# Sin registro en dashboard:
+node scripts/smoke-test-pjn.js
+
+# Con registro en dashboard:
+ADMIN_EMAIL=admin@procuradortool.com ADMIN_PASSWORD=xxx node scripts/smoke-test-pjn.js
+
+# ── Extensión Chrome (5 flujos: D consulta/secciones · E escritos1+informe
+#                                F escritos2 · G notificaciones · H deox) ──
+# Sin registro:
+node scripts/smoke-test-extension.js
+
+# Con registro:
+ADMIN_EMAIL=admin@procuradortool.com ADMIN_PASSWORD=xxx node scripts/smoke-test-extension.js
+```
+
+### Backend API — desde el dashboard
+El check de la API se ejecuta **desde el servidor** (no requiere Chrome):
+- Dashboard → sección 🧪 Diagnóstico → **Backend API** → botón **▶ Ejecutar**
+- O por cURL: `POST https://api.procuradortool.com/admin/smoke-tests/run-api` (requiere Bearer token admin)
+
+### Resultados y logs
+| Tipo | Dónde se guarda |
+|------|----------------|
+| Resultados en tiempo real | Consola del terminal |
+| Registro en dashboard | `backend-server/data/smoke-test-results.json` (si se pasan ADMIN_EMAIL/PASSWORD) |
+| Log local (extensión) | `electron-app/logs/smoke-extension-YYYYMMDD-HHMMSS.log` |
+| Visualización | Dashboard → 🧪 Diagnóstico (3 tarjetas: Backend API · Portal PJN · Extensión Chrome) |
+
+### Grupos de checks
+| Script | Grupos | ¿Qué verifica? |
+|--------|--------|----------------|
+| `smoke-test-pjn.js` | A (acceso) · B (4 secciones + paginación) · C (informe completo) | Módulos procuración e informe de la app Electron |
+| `smoke-test-extension.js` | D (SCW consulta + 4 secciones) · E (escritos1 + informe completo) · F (escritos2 `/nuevo`) · G (notif `/nueva`) · H (deox `/nuevo`) | Los 5 flujos de cs-scw/cs-escritos2/cs-notif/cs-deox |
+
+---
+
 ## 📘 Guía simple de Git y GitHub (explicado sin tecnicismos)
 
 ### ¿Qué es Git?

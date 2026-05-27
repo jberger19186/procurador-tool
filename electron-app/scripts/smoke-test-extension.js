@@ -15,8 +15,11 @@
  *       → cubre cs-scw.js flujo "escritos1" + todos los selectores del módulo informe
  *
  *   F — Escritos 2  → escritos.pjn.gov.ar/nuevo  (cs-escritos2.js)
+ *       F1–F6: acceso + selectores MUI · F7–F9: rellena FCR 18745/2017 y verifica resultado
  *   G — Notificaciones → notif.pjn.gov.ar/nueva   (cs-notif.js)
+ *       G1–G6: acceso + selectores MUI · G7–G9: rellena FCR 18745/2017 y verifica resultado
  *   H — DEOX        → deox.pjn.gov.ar/nuevo       (cs-deox.js)
+ *       H1–H6: acceso + selectores · H7–H9: rellena FCR 18745/2017 (setReactVal) y verifica resultado
  *
  * URLs reales de la extensión (background.js FLOW_URLS):
  *   consulta/escritos1: https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=225541
@@ -278,6 +281,92 @@ async function loginSSO(page, sessionSelector) {
     const ok = await page.waitForSelector(sessionSelector, { timeout: 20000 })
         .then(() => true).catch(() => false);
     return ok ? 'logged-in' : 'failed';
+}
+
+/**
+ * Rellena el formulario MUI stepper de expediente (escritos2 y notif).
+ * Replica exactamente lo que hace la extensión (cs-escritos2.js / cs-notif.js).
+ * Retorna: { jurisdiccionOk, numOk, anioOk, resultadoTxt }
+ */
+async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
+    // 1) Rellenar combobox jurisdicción con .value + input event (como hace la extensión)
+    await page.evaluate((label) => {
+        const input = document.querySelector('input[role="combobox"][aria-autocomplete="list"]');
+        if (!input) return;
+        input.focus();
+        input.value = label;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, jurisdiccionLabel);
+    await sleep(900);
+
+    // 2) Seleccionar la opción del dropdown
+    const jurisdiccionOk = await page.evaluate(() => {
+        const listbox = document.querySelector('ul[role="listbox"]');
+        if (!listbox) return false;
+        const items = listbox.querySelectorAll('li[role="option"]');
+        for (const item of items) {
+            if (item.textContent.includes('FCR')) { item.click(); return true; }
+        }
+        // Si solo hay una opción, la seleccionamos
+        if (items.length > 0) { items[0].click(); return true; }
+        return false;
+    });
+    await sleep(400);
+
+    // 3) Rellenar número y año con setReactVal (como usa la extensión)
+    await page.evaluate((num, yr) => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        const numEl  = document.querySelector('input[name="numeroExpediente"]');
+        const anioEl = document.querySelector('input[name="anioExpediente"]');
+        if (numEl)  { setter.call(numEl,  num); numEl.dispatchEvent(new Event('input', { bubbles: true })); }
+        if (anioEl) { setter.call(anioEl, yr);  anioEl.dispatchEvent(new Event('input', { bubbles: true })); }
+    }, numero, anio);
+    await sleep(200);
+
+    const numOk  = await page.$eval('input[name="numeroExpediente"]', el => el.value).catch(() => '') === numero;
+    const anioOk = await page.$eval('input[name="anioExpediente"]',  el => el.value).catch(() => '') === anio;
+
+    // 4) Click StepperNextBtn
+    await page.evaluate(() => {
+        const btn = document.querySelector('button#StepperNextBtn');
+        if (btn) btn.click();
+    });
+
+    // 5) Esperar resultado
+    const resultEl = await page.waitForSelector('h5#simple-form-title', { timeout: 12000 }).catch(() => null);
+    const resultadoTxt = resultEl
+        ? await resultEl.evaluate(el => el.textContent.trim()).catch(() => '')
+        : null;
+
+    return { jurisdiccionOk, numOk, anioOk, resultadoTxt };
+}
+
+/**
+ * Guarda un archivo de log local en electron-app/logs/
+ */
+function saveLogFile(logs, result) {
+    try {
+        const logDir = path.join(__dirname, '..', 'logs');
+        if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const logFile = path.join(logDir, `smoke-extension-${ts}.log`);
+        const header = [
+            '🧪 Smoke Test — Extensión Chrome',
+            `Fecha:     ${new Date().toLocaleString('es-AR')}`,
+            `Resultado: ${result.passed}/${result.total} ${result.ok ? '✅ PASS' : '❌ FAIL'}  —  ${(result.duration / 1000).toFixed(1)}s`,
+            '',
+        ];
+        const fallidos = result.checks.filter(c => c.ok === false);
+        if (fallidos.length > 0) {
+            header.push('Checks fallidos:');
+            fallidos.forEach(c => header.push(`  ❌ ${c.label}${c.error ? ': ' + c.error : ''}`));
+            header.push('');
+        }
+        fs.writeFileSync(logFile, [...header, ...logs].join('\n'), 'utf8');
+        console.log(`📄 Log guardado: ${logFile}`);
+    } catch (err) {
+        console.warn('⚠️  No se pudo guardar el log:', err.message);
+    }
 }
 
 /**
@@ -806,6 +895,37 @@ async function grupoF(page) {
     fBtn
         ? pass('F6 — button#StepperNextBtn presente')
         : fail('F6 — button#StepperNextBtn no encontrado');
+
+    // F7–F9: Rellenar FCR 18745/2017 y verificar resultado end-to-end
+    if (fJuris && fNumero && fAnio && fBtn) {
+        log(`F7 — Rellenando FCR ${EXP_NUMERO}/${EXP_ANIO}...`);
+        try {
+            const res = await rellenarFormularioMUI(page, 'FCR', EXP_NUMERO, EXP_ANIO);
+            res.jurisdiccionOk
+                ? pass('F7 — Jurisdicción FCR seleccionada del dropdown')
+                : fail('F7 — No se pudo seleccionar FCR del dropdown');
+            (res.numOk && res.anioOk)
+                ? pass('F8 — Campos número/año llenados', `${EXP_NUMERO}/${EXP_ANIO}`)
+                : fail('F8 — Campos número/año incorrectos', `num=${res.numOk} anio=${res.anioOk}`);
+            if (res.resultadoTxt !== null) {
+                const encontrado = res.resultadoTxt.toLowerCase().includes('encontrado')
+                                || res.resultadoTxt.toLowerCase().includes('seleccione');
+                encontrado
+                    ? pass('F9 — Resultado búsqueda expediente', res.resultadoTxt.slice(0, 60))
+                    : fail('F9 — Resultado inesperado', res.resultadoTxt.slice(0, 60));
+            } else {
+                fail('F9 — h5#simple-form-title no apareció tras búsqueda');
+            }
+        } catch (err) {
+            fail('F7 — Error al rellenar formulario', err.message.slice(0, 60));
+            skip('F8 — Campos número/año', 'error en F7');
+            skip('F9 — Resultado búsqueda', 'error en F7');
+        }
+    } else {
+        skip('F7 — Rellenar FCR 18745/2017', 'formulario incompleto (F3-F6 fallidos)');
+        skip('F8 — Campos número/año', 'formulario incompleto');
+        skip('F9 — Resultado búsqueda', 'formulario incompleto');
+    }
 }
 
 // ── GRUPO G: Notificaciones ────────────────────────────────────────────────────
@@ -869,6 +989,37 @@ async function grupoG(page) {
     fBtn
         ? pass('G6 — button#StepperNextBtn presente')
         : fail('G6 — button#StepperNextBtn no encontrado');
+
+    // G7–G9: Rellenar FCR 18745/2017 y verificar resultado end-to-end
+    if (fJuris && fNumero && fAnio && fBtn) {
+        log(`G7 — Rellenando FCR ${EXP_NUMERO}/${EXP_ANIO}...`);
+        try {
+            const res = await rellenarFormularioMUI(page, 'FCR', EXP_NUMERO, EXP_ANIO);
+            res.jurisdiccionOk
+                ? pass('G7 — Jurisdicción FCR seleccionada del dropdown')
+                : fail('G7 — No se pudo seleccionar FCR del dropdown');
+            (res.numOk && res.anioOk)
+                ? pass('G8 — Campos número/año llenados', `${EXP_NUMERO}/${EXP_ANIO}`)
+                : fail('G8 — Campos número/año incorrectos', `num=${res.numOk} anio=${res.anioOk}`);
+            if (res.resultadoTxt !== null) {
+                const encontrado = res.resultadoTxt.toLowerCase().includes('encontrado')
+                                || res.resultadoTxt.toLowerCase().includes('seleccione');
+                encontrado
+                    ? pass('G9 — Resultado búsqueda expediente', res.resultadoTxt.slice(0, 60))
+                    : fail('G9 — Resultado inesperado', res.resultadoTxt.slice(0, 60));
+            } else {
+                fail('G9 — h5#simple-form-title no apareció tras búsqueda');
+            }
+        } catch (err) {
+            fail('G7 — Error al rellenar formulario', err.message.slice(0, 60));
+            skip('G8 — Campos número/año', 'error en G7');
+            skip('G9 — Resultado búsqueda', 'error en G7');
+        }
+    } else {
+        skip('G7 — Rellenar FCR 18745/2017', 'formulario incompleto (G3-G6 fallidos)');
+        skip('G8 — Campos número/año', 'formulario incompleto');
+        skip('G9 — Resultado búsqueda', 'formulario incompleto');
+    }
 }
 
 // ── GRUPO H: DEOX ──────────────────────────────────────────────────────────────
@@ -932,6 +1083,74 @@ async function grupoH(page) {
     fBtn
         ? pass('H6 — button#StepperNextBtn presente')
         : fail('H6 — button#StepperNextBtn no encontrado');
+
+    // H7–H9: Rellenar FCR 18745/2017 y verificar resultado end-to-end
+    // DEOX usa input[name="camara"] con setReactVal (código numérico), no un combobox MUI
+    if (fCamara && fNumero && fAnio && fBtn) {
+        log(`H7 — Rellenando FCR ${EXP_NUMERO}/${EXP_ANIO} en DEOX...`);
+        try {
+            await page.evaluate((camaraVal, num, yr) => {
+                const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+                const camaraEl = document.querySelector('input[name="camara"]');
+                const numEl    = document.querySelector('input[name="numeroExpediente"]');
+                const anioEl   = document.querySelector('input[name="anioExpediente"]');
+                if (camaraEl) {
+                    setter.call(camaraEl, camaraVal);
+                    camaraEl.dispatchEvent(new Event('input',  { bubbles: true }));
+                    camaraEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                if (numEl) {
+                    setter.call(numEl, num);
+                    numEl.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                if (anioEl) {
+                    setter.call(anioEl, yr);
+                    anioEl.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }, EXP_JURISDICCION, EXP_NUMERO, EXP_ANIO);
+            await sleep(400);
+
+            const camaraVal = await page.$eval('input[name="camara"]',           el => el.value).catch(() => '');
+            const numVal    = await page.$eval('input[name="numeroExpediente"]', el => el.value).catch(() => '');
+            const anioVal   = await page.$eval('input[name="anioExpediente"]',   el => el.value).catch(() => '');
+
+            camaraVal === EXP_JURISDICCION
+                ? pass('H7 — input[name="camara"] llenado', `código "${camaraVal}"`)
+                : fail('H7 — input[name="camara"] no retiene el valor', `esperado="${EXP_JURISDICCION}" actual="${camaraVal}"`);
+
+            (numVal === EXP_NUMERO && anioVal === EXP_ANIO)
+                ? pass('H8 — Campos número/año llenados', `${EXP_NUMERO}/${EXP_ANIO}`)
+                : fail('H8 — Campos número/año incorrectos', `num="${numVal}" anio="${anioVal}"`);
+
+            // Click StepperNextBtn + esperar resultado
+            await page.evaluate(() => {
+                const btn = document.querySelector('button#StepperNextBtn');
+                if (btn) btn.click();
+            });
+            const resultEl = await page.waitForSelector('h5#simple-form-title', { timeout: 12000 }).catch(() => null);
+            const resultadoTxt = resultEl
+                ? await resultEl.evaluate(el => el.textContent.trim()).catch(() => '')
+                : null;
+
+            if (resultadoTxt !== null) {
+                const encontrado = resultadoTxt.toLowerCase().includes('encontrado')
+                                || resultadoTxt.toLowerCase().includes('seleccione');
+                encontrado
+                    ? pass('H9 — Resultado búsqueda expediente', resultadoTxt.slice(0, 60))
+                    : fail('H9 — Resultado inesperado', resultadoTxt.slice(0, 60));
+            } else {
+                fail('H9 — h5#simple-form-title no apareció tras búsqueda');
+            }
+        } catch (err) {
+            fail('H7 — Error al rellenar formulario DEOX', err.message.slice(0, 60));
+            skip('H8 — Campos número/año', 'error en H7');
+            skip('H9 — Resultado búsqueda', 'error en H7');
+        }
+    } else {
+        skip('H7 — Rellenar FCR 18745/2017', 'formulario incompleto (H3-H6 fallidos)');
+        skip('H8 — Campos número/año', 'formulario incompleto');
+        skip('H9 — Resultado búsqueda', 'formulario incompleto');
+    }
 }
 
 // ── Subir resultados al dashboard ──────────────────────────────────────────────
@@ -968,9 +1187,10 @@ async function main() {
     console.log('═══════════════════════════════════════════════════════════');
     console.log('  🧪 Smoke Test — Extensión Chrome (5 flujos PJN)');
     console.log(`  ${new Date().toLocaleString('es-AR')}`);
-    console.log('  D: SCW Consulta + 4 secciones   E: SCW Escritos 1 + Informe completo');
-    console.log('  F: escritos.pjn.gov.ar/nuevo    G: notif.pjn.gov.ar/nueva');
+    console.log('  D: SCW Consulta + 4 secciones     E: SCW Escritos 1 + Informe completo');
+    console.log('  F: escritos.pjn.gov.ar/nuevo      G: notif.pjn.gov.ar/nueva');
     console.log('  H: deox.pjn.gov.ar/nuevo');
+    console.log('  F/G/H incluyen llenado de FCR 18745/2017 y verificación de resultado');
     console.log('═══════════════════════════════════════════════════════════\n');
 
     t0Total = Date.now();
@@ -1048,6 +1268,7 @@ async function main() {
 
     const result = { passed, total, ok: passed === total, duration, checks, logs };
     await uploadResults(result);
+    saveLogFile(logs, result);
 
     process.exit(passed === total ? 0 : 1);
 }
