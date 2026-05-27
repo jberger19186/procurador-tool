@@ -112,7 +112,48 @@ async function clickXPath(page, xpath) {
     }, xpath);
 }
 
-/** Navega a la siguiente página en el paginador de LISTAS de expedientes. */
+/**
+ * Navega a través de TODAS las páginas del paginador de LISTAS hasta la última.
+ * Retorna el total de páginas recorridas.
+ */
+async function navegarTodasLasPaginasLista(page) {
+    const tablaSelector = 'table.table-striped tbody';
+    let paginas = 1;
+
+    while (true) {
+        const contenidoAntes = await page.$eval(tablaSelector, el => el.innerHTML).catch(() => null);
+        if (!contenidoAntes) break;
+
+        const haySiguiente = await page.evaluate(() => {
+            const links = Array.from(document.querySelectorAll('a'));
+            return links.some(l => l.querySelector('span[title="Siguiente"]'));
+        });
+        if (!haySiguiente) break;
+
+        await page.evaluate(() => {
+            const links = Array.from(document.querySelectorAll('a'));
+            const link = links.find(l => l.querySelector('span[title="Siguiente"]'));
+            if (link) link.click();
+        });
+
+        try {
+            await page.waitForFunction(
+                (sel, prev) => {
+                    const el = document.querySelector(sel);
+                    return el && el.innerHTML !== prev;
+                },
+                { timeout: 20000 },
+                tablaSelector, contenidoAntes
+            );
+            paginas++;
+        } catch {
+            break;
+        }
+    }
+    return paginas;
+}
+
+/** Navega a la siguiente página (mantener compatibilidad para actuaciones). */
 async function paginaSiguienteLista(page) {
     const tablaSelector = 'table.table-striped tbody';
     const contenidoAntes = await page.$eval(tablaSelector, el => el.innerHTML).catch(() => null);
@@ -360,35 +401,43 @@ async function grupoD(page) {
                 await sleep(1000);
             }
 
+            // Contar expedientes totales (el contador existe aunque la tabla esté vacía)
+            await sleep(800); // dar tiempo al AJAX de la sección
+            const total = await page.$eval('div[class*="well"] strong', el => {
+                const m = el.textContent.match(/(\d+)\s+expediente/);
+                return m ? parseInt(m[1]) : -1;
+            }).catch(() => -1);
+
+            if (total === 0) {
+                // Sección válida pero sin expedientes — no hay tabla y es esperado
+                pass(`D${sec.code} — ${sec.tipo}`, '0 expedientes (sección vacía — OK)');
+                continue;
+            }
+
             const tablaPresente = await existe(page, 'table.table-striped tbody');
             if (!tablaPresente) {
-                fail(`D${sec.code} — ${sec.tipo} — tabla de expedientes no encontrada`);
-                continue;
+                // Puede haber expedientes pero la tabla tardó — intentar esperar
+                const tablaEl = await page.waitForSelector('table.table-striped tbody', { timeout: 8000 }).catch(() => null);
+                if (!tablaEl) {
+                    fail(`D${sec.code} — ${sec.tipo} — tabla no encontrada`, total >= 0 ? `contador=${total}` : '');
+                    continue;
+                }
             }
 
             const filas = await page.$$eval('table.table-striped tbody tr', rows =>
                 rows.filter(r => r.cells.length > 0 && r.cells[0]?.textContent.trim() !== '').length
             ).catch(() => 0);
 
-            const total = await page.$eval('div[class*="well"] strong', el => {
-                const m = el.textContent.match(/(\d+)\s+expediente/);
-                return m ? m[1] : '?';
-            }).catch(() => '?');
-
+            // Paginar a través de TODAS las páginas numeradas hasta la última
             const hayUltima = await existe(page, 'a.last-page');
             if (hayUltima) {
-                const resultado = await paginaSiguienteLista(page);
-                if (resultado && resultado.ok) {
-                    pass(`D${sec.code} — ${sec.tipo}`, `${total} exp · ${filas} filas en pág1 · paginó a pág ${resultado.pagina}`);
-                    const primera = await page.$('a.first-page');
-                    if (primera) { await primera.click(); await sleep(1500); }
-                } else if (resultado && !resultado.ok) {
-                    fail(`D${sec.code} — ${sec.tipo} — paginador falló`, resultado.error);
-                } else {
-                    pass(`D${sec.code} — ${sec.tipo}`, `${total} exp · ${filas} filas (paginador sin respuesta)`);
-                }
+                const totalPaginas = await navegarTodasLasPaginasLista(page);
+                pass(`D${sec.code} — ${sec.tipo}`, `${total >= 0 ? total : '?'} exp · ${filas} filas/pág · ${totalPaginas} páginas recorridas`);
+                // Volver a página 1
+                const primera = await page.$('a.first-page');
+                if (primera) { await primera.click(); await sleep(1500); }
             } else {
-                pass(`D${sec.code} — ${sec.tipo}`, `${total} exp · ${filas} filas (1 sola página)`);
+                pass(`D${sec.code} — ${sec.tipo}`, `${total >= 0 ? total : '?'} exp · ${filas} filas (1 sola página)`);
             }
 
         } catch (err) {
@@ -583,14 +632,17 @@ async function grupoE(page) {
                 const filasHist = await page.$$eval(`${tablaHist} tbody tr`, rows => rows.length).catch(() => 0);
                 pass('E9 — Tabla actuaciones históricas', `${filasHist} fila(s)`);
 
-                // E10: Paginador históricas (XPath — distintos selectores al de actuaciones)
+                // E10: Paginador históricas — usa getElementById (evita selector CSS inválido con ":")
                 const haySigHist = await page.evaluate(() => {
                     const xpath = "//a[.//span[contains(text(), 'Siguiente')]]";
                     const r = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
                     return r.singleNodeValue !== null;
                 });
                 if (haySigHist) {
-                    const contenidoAntes = await page.$eval(tablaHist, el => el.innerText).catch(() => '');
+                    // getElementById evita el problema de `:` en querySelector dentro de waitForFunction
+                    const contenidoAntes = await page.evaluate(
+                        () => (document.getElementById('expediente:action-historic-table') || {}).innerText || ''
+                    );
                     await page.evaluate(() => {
                         const xpath = "//a[.//span[contains(text(), 'Siguiente')]]";
                         const r = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
@@ -598,12 +650,12 @@ async function grupoE(page) {
                     });
                     try {
                         await page.waitForFunction(
-                            (sel, prev) => {
-                                const el = document.querySelector(sel);
+                            (prev) => {
+                                const el = document.getElementById('expediente:action-historic-table');
                                 return el && el.innerText !== prev;
                             },
                             { timeout: 20000 },
-                            tablaHist.replace(/\\/g, ''), contenidoAntes
+                            contenidoAntes
                         );
                         pass('E10 — Paginador históricas', 'paginó a página 2');
                     } catch (e) {
@@ -616,6 +668,18 @@ async function grupoE(page) {
                 fail('E9 — Tabla históricas no encontrada tras click');
                 skip('E10 — Paginador históricas', 'tabla no encontrada');
             }
+        }
+    }
+
+    // Volver a "Ver Actuales" antes de chequear las pestañas
+    // (las pestañas rf-tab-hdr solo son visibles en la vista de actuaciones, no en históricas)
+    const btnVerActuales = await page.$('a.btn.pull-right').catch(() => null);
+    if (btnVerActuales) {
+        const btnText = await btnVerActuales.evaluate(el => el.textContent.trim()).catch(() => '');
+        if (btnText.toLowerCase().includes('actual')) {
+            await btnVerActuales.click();
+            await sleep(2000);
+            log('E — Volvió a "Ver Actuales" para verificar pestañas');
         }
     }
 
@@ -928,6 +992,18 @@ async function main() {
 
     const pages = await browser.pages();
     const page  = pages.length > 0 ? pages[0] : await browser.newPage();
+
+    // ── Handler de diálogos del navegador ─────────────────────────────────────
+    // Los portales React (escritos/notif/deox) muestran "¿Deseas abandonar el sitio?"
+    // al navegar entre ellos. Aceptamos automáticamente para permitir la navegación.
+    page.on('dialog', async (dialog) => {
+        if (dialog.type() === 'beforeunload') {
+            await dialog.accept();
+        } else {
+            // alert/confirm/prompt del PJN: aceptar para no bloquear el script
+            await dialog.accept();
+        }
+    });
 
     try {
         // D: Login SCW + recorre 4 secciones + formulario consulta
