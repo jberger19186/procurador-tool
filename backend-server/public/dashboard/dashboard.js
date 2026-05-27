@@ -2600,7 +2600,7 @@ async function renderDiagnostico() {
             </div>
             <div class="diag-log" id="diag-ext-log">Esperando ejecución...</div>
             <div class="diag-footer" style="flex-wrap:wrap; gap:8px;">
-                <span class="diag-pjn-cmd">node scripts/smoke-test-extension.js</span>
+                <span class="diag-pjn-cmd">node scripts/smoke-test-pjn.js</span>
                 <button class="diag-btn secondary" onclick="diagCopyExtCmd()" title="Copiar comando">📋</button>
             </div>
         </div>
@@ -2705,7 +2705,7 @@ function diagRenderExtension(result) {
     const lastEl  = document.getElementById('diag-ext-last');
 
     if (!result) {
-        logEl.innerHTML  = 'Sin ejecuciones previas.\n\nCorré el script local para ver resultados aquí:\n  node scripts/smoke-test-extension.js';
+        logEl.innerHTML  = 'Sin ejecuciones previas.\n\nCorré el script local para ver resultados aquí:\n  node scripts/smoke-test-pjn.js';
         badgeEl.textContent = '—';
         lastEl.textContent  = 'Nunca ejecutado';
         return;
@@ -2719,7 +2719,7 @@ function diagRenderExtension(result) {
 }
 
 window.diagCopyExtCmd = function() {
-    navigator.clipboard.writeText('node scripts/smoke-test-extension.js').then(() => {
+    navigator.clipboard.writeText('node scripts/smoke-test-pjn.js').then(() => {
         const btn = document.querySelector('[onclick="diagCopyExtCmd()"]');
         btn.textContent = '✅';
         setTimeout(() => { btn.textContent = '📋'; }, 1500);

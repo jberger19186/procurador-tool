@@ -1562,25 +1562,17 @@ git push
 
 ## Smoke Tests
 
-Tres scripts que verifican que los portales del PJN y los flujos de la extensión siguen respondiendo con los selectores DOM correctos.
+Dos scripts que verifican que los portales del PJN y los flujos de la extensión siguen respondiendo con los selectores DOM correctos.
 
 ### Desde `electron-app/`
 
 ```bash
-# ── Portal PJN (módulos Listado + Informe) ────────────────────────
+# ── Portal PJN + Extensión Chrome (un solo script, alimenta las 2 solapas del dashboard) ──
 # Sin registro en dashboard:
 node scripts/smoke-test-pjn.js
 
-# Con registro en dashboard:
+# Con registro en dashboard (D+E → solapa "Portal PJN", F+G+H → solapa "Extensión Chrome"):
 ADMIN_EMAIL=admin@procuradortool.com ADMIN_PASSWORD=xxx node scripts/smoke-test-pjn.js
-
-# ── Extensión Chrome (5 flujos: D consulta/secciones · E escritos1+informe
-#                                F escritos2 · G notificaciones · H deox) ──
-# Sin registro:
-node scripts/smoke-test-extension.js
-
-# Con registro:
-ADMIN_EMAIL=admin@procuradortool.com ADMIN_PASSWORD=xxx node scripts/smoke-test-extension.js
 ```
 
 ### Backend API — desde el dashboard
@@ -1593,14 +1585,14 @@ El check de la API se ejecuta **desde el servidor** (no requiere Chrome):
 |------|----------------|
 | Resultados en tiempo real | Consola del terminal |
 | Registro en dashboard | `backend-server/data/smoke-test-results.json` (si se pasan ADMIN_EMAIL/PASSWORD) |
-| Log local (extensión) | `electron-app/logs/smoke-extension-YYYYMMDD-HHMMSS.log` |
+| Log local | `electron-app/logs/smoke-pjn-YYYYMMDD-HHMMSS.log` |
 | Visualización | Dashboard → 🧪 Diagnóstico (3 tarjetas: Backend API · Portal PJN · Extensión Chrome) |
 
 ### Grupos de checks
-| Script | Grupos | ¿Qué verifica? |
-|--------|--------|----------------|
-| `smoke-test-pjn.js` | A (acceso) · B (4 secciones + paginación) · C (informe completo) | Módulos procuración e informe de la app Electron |
-| `smoke-test-extension.js` | D (SCW consulta + 4 secciones) · E (escritos1 + informe completo) · F (escritos2 `/nuevo`) · G (notif `/nueva`) · H (deox `/nuevo`) | Los 5 flujos de cs-scw/cs-escritos2/cs-notif/cs-deox |
+| Script | Grupos | Dashboard | ¿Qué verifica? |
+|--------|--------|-----------|----------------|
+| `smoke-test-pjn.js` | D (SCW consulta + 4 secciones) · E (escritos1 + informe completo) | → "Portal PJN" | Login SCW · módulos procuración e informe |
+| `smoke-test-pjn.js` | F (escritos2 `/nuevo`) · G (notif `/nueva`) · H (deox `/nuevo`) | → "Extensión Chrome" | Los 5 flujos de cs-scw/cs-escritos2/cs-notif/cs-deox + relleno FCR 18745/2017 |
 
 ---
 
