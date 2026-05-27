@@ -11,7 +11,6 @@
 
 const express = require('express');
 const router  = express.Router();
-const db      = require('../db');
 const authenticateToken = require('../middleware/authenticateToken');
 const { createPreapproval, linkPreapproval, cancelSubscription } = require('../services/subscriptionService');
 const logger  = require('../utils/logger');
@@ -93,6 +92,7 @@ router.post('/cancel', async (req, res) => {
 // Retorna el estado actual de la suscripción del usuario (para la UI)
 router.get('/status', async (req, res) => {
   const userId = req.user.id;
+  const db = req.app.get('db');
 
   try {
     const { rows: [sub] } = await db.query(

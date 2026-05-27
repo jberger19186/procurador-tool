@@ -9,7 +9,7 @@
  *   4. cancelSubscription() → programa cancel_at al fin del período (soft cancel)
  */
 
-const db = require('../db');
+const db = require('../db');  // pool compartido para servicios (ver db.js)
 const { preApprovalClient, PLAN_LIMITS, PLAN_PRICES, isPlanPayable } = require('../utils/mercadopago');
 const logger = require('../utils/logger');
 
