@@ -224,4 +224,101 @@ router.post('/ai-chat', authenticateToken, async (req, res) => {
     }
 });
 
+// ─── GET /usuarios/api/payments — historial de pagos del usuario ────────────
+router.get('/payments', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+    const limit = Math.min(parseInt(req.query.limit || '24', 10), 100);
+
+    try {
+        const { rows } = await db.query(
+            `SELECT id, external_payment_id, amount, currency, status,
+                    payment_method, plan, period_start, period_end,
+                    refund_amount, refunded_at, created_at
+             FROM payments
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT $2`,
+            [userId, limit]
+        );
+        res.json({ payments: rows });
+    } catch (err) {
+        console.error('[GET /payments] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── GET /usuarios/api/invoices — historial de facturas del usuario ─────────
+router.get('/invoices', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+    const limit = Math.min(parseInt(req.query.limit || '24', 10), 100);
+
+    try {
+        const { rows } = await db.query(
+            `SELECT id, invoice_type, cae, numero, amount, pdf_url,
+                    status, issued_at, created_at
+             FROM invoices
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT $2`,
+            [userId, limit]
+        );
+        res.json({ invoices: rows });
+    } catch (err) {
+        console.error('[GET /invoices] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── GET /usuarios/api/subscription/current — estado enriquecido ────────────
+router.get('/subscription/current', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+
+    try {
+        const { rows: [sub] } = await db.query(
+            `SELECT s.status, s.plan, s.next_billing_date, s.cancel_at,
+                    s.trial_bonus_until, s.payment_provider,
+                    s.external_subscription_id, s.last_payment_at,
+                    s.usage_count, s.usage_limit, s.auto_renewal,
+                    s.payment_grace_ends_at,
+                    p.display_name AS plan_display_name
+             FROM subscriptions s
+             LEFT JOIN plans p ON s.plan_id = p.id
+             WHERE s.user_id = $1`,
+            [userId]
+        );
+
+        if (!sub) return res.status(404).json({ error: 'Suscripción no encontrada' });
+
+        const { rows: [lastPayment] } = await db.query(
+            `SELECT amount, currency, status, created_at
+             FROM payments WHERE user_id = $1 AND status = 'approved'
+             ORDER BY created_at DESC LIMIT 1`,
+            [userId]
+        );
+
+        res.json({
+            status:             sub.status,
+            plan:               sub.plan,
+            planDisplayName:    sub.plan_display_name,
+            nextBillingDate:    sub.next_billing_date,
+            cancelAt:           sub.cancel_at,
+            trialBonusUntil:    sub.trial_bonus_until,
+            paymentProvider:    sub.payment_provider,
+            hasPaymentMethod:   !!sub.external_subscription_id,
+            lastPaymentAt:      sub.last_payment_at,
+            usageCount:         sub.usage_count,
+            usageLimit:         sub.usage_limit,
+            autoRenewal:        sub.auto_renewal,
+            paymentGraceEndsAt: sub.payment_grace_ends_at,
+            lastApprovedPayment: lastPayment || null
+        });
+    } catch (err) {
+        console.error('[GET /subscription/current] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 module.exports = router;

@@ -1183,71 +1183,175 @@ async function changePlan(planName) {
 }
 
 // ─── SECTION: FACTURACIÓN ────────────────────────────────────────────────────
-function renderFact() {
+async function renderFact() {
     const acc = state.account;
     const container = document.getElementById('facturacion-content');
     if (!acc) return;
 
     const rs = acc.registrationStatus;
-    const sub = {
-        nextBilling: acc.nextBillingDate,
-        provider: acc.paymentProvider,
-        cancelAt: acc.cancelAt,
-        planChanges: acc.planChangesThisCycle ?? 0,
-    };
 
-    let cancelAtHtml = '';
-    if (sub.cancelAt) {
-        cancelAtHtml = `<div style="margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#991b1b">
-            <strong>Cancelación programada:</strong> tu suscripción se cancela el ${formatDate(sub.cancelAt)}. Hasta esa fecha podés seguir usando el servicio.
-        </div>`;
-    }
+    // Skeleton mientras carga
+    container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:32px;color:var(--text-muted)">Cargando...</div></div>`;
 
-    const providerDisplay = sub.provider
-        ? `<span class="badge badge-active" style="font-size:12px">${escapeHtml(sub.provider)}</span>`
-        : `<span style="color:var(--text-muted);font-size:13px">No configurado — <a href="#" onclick="navigateTo('soporte');return false">contactar soporte</a></span>`;
+    // Cargar datos en paralelo
+    let subData = null, payments = [], invoices = [];
+    try {
+        const [subRes, paymentsRes, invoicesRes] = await Promise.all([
+            apiFetch('/usuarios/api/subscription/current'),
+            apiFetch('/usuarios/api/payments?limit=12'),
+            apiFetch('/usuarios/api/invoices?limit=12'),
+        ]);
+        if (subRes && subRes.ok) subData = await subRes.json();
+        if (paymentsRes && paymentsRes.ok) { const d = await paymentsRes.json(); payments = d.payments || []; }
+        if (invoicesRes && invoicesRes.ok) { const d = await invoicesRes.json(); invoices = d.invoices || []; }
+    } catch (e) { /* continua con datos del state */ }
 
-    const nextBillingDisplay = sub.nextBilling
-        ? formatDate(sub.nextBilling)
-        : '<span style="color:var(--text-muted)">No disponible</span>';
+    const provider    = subData?.paymentProvider  || acc.paymentProvider;
+    const hasMethod   = subData?.hasPaymentMethod || !!acc.paymentProvider;
+    const nextBilling = subData?.nextBillingDate  || acc.nextBillingDate;
+    const cancelAt    = subData?.cancelAt         || acc.cancelAt;
+    const trialBonus  = subData?.trialBonusUntil  || acc.trialBonusUntil;
+    const planName    = subData?.planDisplayName  || acc.plan || '';
+    const planChanges = acc.planChangesThisCycle ?? 0;
 
-    container.innerHTML = `
+    // Card: Método de pago
+    const paymentMethodCard = `
         <div class="card">
-            <div class="card-header"><h3>Estado de facturación</h3></div>
+            <div class="card-header"><h3>Método de pago</h3></div>
             <div class="card-body">
-                <div style="display:grid;gap:16px">
+                ${!hasMethod ? `
+                    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                        <div style="flex:1;min-width:200px">
+                            <p style="font-size:13px;color:var(--text-muted);margin:0">No tenés un método de pago configurado. Configurá tu tarjeta para activar el cobro automático mensual.</p>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap">💳 Configurar método de pago</button>
+                    </div>
+                ` : `
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                        <div>
+                            <span class="badge badge-active" style="font-size:12px">${escapeHtml(provider || 'MercadoPago')}</span>
+                            <span style="font-size:12px;color:var(--text-muted);margin-left:8px">Cobro automático activo</span>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="initCheckout()">Cambiar método</button>
+                    </div>
+                `}
+                ${trialBonus && new Date(trialBonus) > new Date() ? `
+                    <div style="margin-top:14px;padding:10px 14px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:13px;color:#065f46">
+                        🎁 <strong>Bonus de bienvenida:</strong> +20 usos de prueba incluidos en tu plan hasta el ${formatDate(trialBonus)}.
+                    </div>` : ''}
+                ${cancelAt ? `
+                    <div style="margin-top:14px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#991b1b">
+                        <strong>Cancelación programada:</strong> tu suscripción se cancela el ${formatDate(cancelAt)}. Seguís teniendo acceso hasta esa fecha.
+                    </div>` : ''}
+            </div>
+        </div>`;
+
+    // Card: Resumen de suscripción
+    const subscriptionCard = `
+        <div class="card">
+            <div class="card-header"><h3>Suscripción</h3></div>
+            <div class="card-body">
+                <div style="display:grid;gap:0">
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-                        <span style="font-size:13px;color:var(--text-muted)">Método de pago</span>
-                        <span>${providerDisplay}</span>
+                        <span style="font-size:13px;color:var(--text-muted)">Plan actual</span>
+                        <span style="font-size:13px;font-weight:600">${escapeHtml(planName || acc.plan || '—')}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
                         <span style="font-size:13px;color:var(--text-muted)">Próxima renovación</span>
-                        <span style="font-size:13px;font-weight:500">${nextBillingDisplay}</span>
+                        <span style="font-size:13px;font-weight:500">${nextBilling ? formatDate(nextBilling) : '<span style="color:var(--text-muted)">No disponible</span>'}</span>
                     </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
                         <span style="font-size:13px;color:var(--text-muted)">Cambios de plan este ciclo</span>
-                        <span style="font-size:13px;font-weight:500">${sub.planChanges} / 2</span>
+                        <span style="font-size:13px;font-weight:500">${planChanges} / 2</span>
                     </div>
                 </div>
-                ${cancelAtHtml}
-                ${rs === 'active' && !sub.cancelAt ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-                    <button class="btn btn-outline btn-sm" style="color:#991b1b;border-color:#fca5a5" onclick="confirmCancelSubscription()">Cancelar suscripción</button>
-                    <p style="font-size:11px;color:var(--text-muted);margin-top:6px">La cancelación es efectiva al finalizar el período actual.</p>
-                </div>` : ''}
-            </div>
-        </div>
-        <div class="card">
-            <div class="card-body">
-                <div class="billing-placeholder">
-                    <div class="billing-icon">💳</div>
-                    <h3>Historial de pagos — Próximamente</h3>
-                    <p>El historial de facturas y pagos estará disponible próximamente.</p>
-                    <div style="margin-top:16px">
-                        <button class="btn btn-outline btn-sm" onclick="navigateTo('soporte')">Consultar por facturación</button>
-                    </div>
-                </div>
+                ${rs === 'active' && !cancelAt ? `
+                    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+                        <button class="btn btn-outline btn-sm" style="color:#991b1b;border-color:#fca5a5" onclick="confirmCancelSubscription()">Cancelar suscripción</button>
+                        <p style="font-size:11px;color:var(--text-muted);margin-top:6px">La cancelación es efectiva al finalizar el período actual.</p>
+                    </div>` : ''}
             </div>
         </div>`;
+
+    // Card: Historial de pagos
+    const statusBadge = s => ({ approved:'<span class="badge badge-active" style="font-size:11px">Aprobado</span>', rejected:'<span class="badge badge-error" style="font-size:11px">Rechazado</span>', refunded:'<span class="badge badge-warning" style="font-size:11px">Reembolsado</span>', pending:'<span class="badge badge-warning" style="font-size:11px">Pendiente</span>' }[s] || '—');
+
+    const paymentsRows = payments.length === 0
+        ? `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Sin pagos registrados aún</td></tr>`
+        : payments.map(p => `<tr>
+            <td style="font-size:13px;padding:8px 6px">${formatDate(p.created_at)}</td>
+            <td style="font-size:13px;padding:8px 6px;font-weight:500">$${Number(p.amount).toLocaleString('es-AR')} ${p.currency||'ARS'}</td>
+            <td style="padding:8px 6px">${statusBadge(p.status)}</td>
+            <td style="font-size:12px;padding:8px 6px;color:var(--text-muted)">${escapeHtml(p.plan||'—')}</td>
+          </tr>`).join('');
+
+    const paymentsCard = `
+        <div class="card">
+            <div class="card-header"><h3>Historial de pagos</h3></div>
+            <div class="card-body" style="padding:0">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead><tr style="border-bottom:1px solid var(--border)">
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Fecha</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Monto</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Estado</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Plan</th>
+                    </tr></thead>
+                    <tbody>${paymentsRows}</tbody>
+                </table>
+            </div>
+        </div>`;
+
+    // Card: Historial de facturas
+    const invoicesRows = invoices.length === 0
+        ? `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Sin facturas emitidas aún</td></tr>`
+        : invoices.map(inv => `<tr>
+            <td style="font-size:13px;padding:8px 6px">${inv.issued_at ? formatDate(inv.issued_at) : formatDate(inv.created_at)}</td>
+            <td style="font-size:13px;padding:8px 6px;font-weight:500">${inv.numero ? `Nro. ${escapeHtml(inv.numero)}` : '—'}</td>
+            <td style="font-size:13px;padding:8px 6px">$${inv.amount ? Number(inv.amount).toLocaleString('es-AR') : '—'}</td>
+            <td style="padding:8px 6px">${inv.pdf_url
+                ? `<a href="${escapeHtml(inv.pdf_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px">Ver PDF</a>`
+                : `<span style="font-size:12px;color:var(--text-muted)">${inv.status==='pending'?'Emitiendo…':inv.status==='failed'?'Error':'—'}</span>`}</td>
+          </tr>`).join('');
+
+    const invoicesCard = `
+        <div class="card">
+            <div class="card-header"><h3>Facturas</h3></div>
+            <div class="card-body" style="padding:0">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead><tr style="border-bottom:1px solid var(--border)">
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Fecha</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Número</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Monto</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">PDF</th>
+                    </tr></thead>
+                    <tbody>${invoicesRows}</tbody>
+                </table>
+            </div>
+        </div>`;
+
+    container.innerHTML = paymentMethodCard + subscriptionCard + paymentsCard + invoicesCard;
+}
+
+// Inicia el checkout MP para configurar tarjeta
+async function initCheckout() {
+    const acc = state.account;
+    if (!acc) return;
+    try {
+        const res = await apiFetch('/usuarios/api/checkout/init', {
+            method: 'POST',
+            body: JSON.stringify({ plan_name: acc.plan }),
+        });
+        if (!res) return;
+        if (res.status === 503) {
+            alert('El módulo de pagos estará disponible muy pronto. Por ahora podés contactar soporte para gestionar tu suscripción.');
+            return;
+        }
+        if (!res.ok) { const d = await res.json(); alert(d.error || 'Error al iniciar el proceso de pago.'); return; }
+        const data = await res.json();
+        if (data.init_point) window.open(data.init_point, '_blank', 'noopener');
+    } catch (e) {
+        alert('Error de conexión. Intentá de nuevo más tarde.');
+    }
 }
 
 async function confirmCancelSubscription() {
