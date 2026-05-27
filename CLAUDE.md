@@ -1318,6 +1318,7 @@ Sección Sistema del sidebar:
 
 ### FASE 5 — COBRANZA (pendiente)
 **Objetivo:** cobro automático de suscripciones.
+**Plan detallado:** `docs/internal/plan-fase5-cobranza.md`
 
 ---
 
