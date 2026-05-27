@@ -84,12 +84,12 @@ node scripts/generate-icon.js
 ```
 > `afterPack.js` embebe el ícono en el `.exe` vía rcedit automáticamente en cada build.
 
-- ✅ **Smoke tests — dashboard admin + script local PJN** (sesión 2026-05-26):
-  - **Dashboard admin "🧪 Diagnóstico":** tarjeta API (7 checks + DB) con botón "▶ Ejecutar" + tarjeta PJN con logs coloreados y badge pass/fail
-  - **Endpoints backend:** `GET /admin/smoke-tests/latest` · `POST /admin/smoke-tests/run-api` · `POST /admin/smoke-tests/report-pjn`
-  - **Persistencia:** resultados en `backend-server/data/smoke-test-results.json` (directorio creado automáticamente)
-  - **Script local:** `electron-app/scripts/smoke-test-pjn.js` — abre Chrome con perfil ProcuradorSCW, verifica 4 checks (accesibilidad SCW, formulario SSO, login, campos consulta pública) y sube resultados al dashboard vía API admin
-  - Commit: `aaa6aff`
+- ✅ **Smoke tests — dashboard admin + script local PJN** (sesión 2026-05-26 → 2026-05-27):
+  - **Dashboard admin "🧪 Diagnóstico":** 3 tarjetas — API Backend · Portal PJN · Extensión Chrome
+  - **Endpoints backend:** `GET /admin/smoke-tests/latest` · `POST /admin/smoke-tests/run-api` · `POST /admin/smoke-tests/report-pjn` · `POST /admin/smoke-tests/report-extension`
+  - **Persistencia:** resultados en `backend-server/data/smoke-test-results.json`
+  - **Script unificado:** `electron-app/scripts/smoke-test-pjn.js` — cubre Portal PJN (grupos D+E, 24 checks) Y Extensión Chrome (grupos F+G+H, 24 checks) → **48 checks totales**, 66 segundos
+  - **Último resultado:** 48/48 ✅ (2026-05-27)
 
 ### Próximo paso concreto
 **→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
@@ -1562,17 +1562,38 @@ git push
 
 ## Smoke Tests
 
-Dos scripts que verifican que los portales del PJN y los flujos de la extensión siguen respondiendo con los selectores DOM correctos.
+Un script unificado que verifica que los portales del PJN y los flujos de la extensión siguen respondiendo con los selectores DOM correctos. **48 checks · ~70 segundos · usa Chrome con el perfil ProcuradorSCW.**
 
-### Desde `electron-app/`
+### Cómo pedirle a Claude que ejecute los tests
 
-```bash
-# ── Portal PJN + Extensión Chrome (un solo script, alimenta las 2 solapas del dashboard) ──
-# Sin registro en dashboard:
+> "ejecutá los smoke tests" o "corré el diagnóstico completo"
+
+Claude necesita un token JWT de admin para subir los resultados al dashboard. El token se genera en el servidor con la clave privada del `.env` y dura 24h. Claude puede generarlo automáticamente via SSH.
+
+### Ejecutar manualmente desde `electron-app/`
+
+```powershell
+# ── Opción A: con token JWT pre-generado (recomendada para Claude / CI) ──
+$env:ADMIN_TOKEN = "<token>"
+$env:API_URL = "https://api.procuradortool.com"
 node scripts/smoke-test-pjn.js
 
-# Con registro en dashboard (D+E → solapa "Portal PJN", F+G+H → solapa "Extensión Chrome"):
-ADMIN_EMAIL=admin@procuradortool.com ADMIN_PASSWORD=xxx node scripts/smoke-test-pjn.js
+# ── Opción B: con email + contraseña ──
+$env:ADMIN_EMAIL = "admin@procurador.com"
+$env:ADMIN_PASSWORD = "<password>"
+node scripts/smoke-test-pjn.js
+
+# ── Sin subir al dashboard (solo local) ──
+node scripts/smoke-test-pjn.js
+```
+
+### Generar token JWT para Claude (cuando no hay contraseña a mano)
+
+```bash
+# En el servidor (la clave JWT_SECRET está en /var/www/procurador/backend-server/.env)
+ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 \
+  "cd /var/www/procurador/backend-server && node -e \"const jwt=require('jsonwebtoken'); console.log(jwt.sign({id:6,role:'admin'},process.env.JWT_SECRET,{expiresIn:'24h'}));\""
+# id=6 → admin@procurador.com (usuario admin en DB)
 ```
 
 ### Backend API — desde el dashboard
@@ -1581,18 +1602,21 @@ El check de la API se ejecuta **desde el servidor** (no requiere Chrome):
 - O por cURL: `POST https://api.procuradortool.com/admin/smoke-tests/run-api` (requiere Bearer token admin)
 
 ### Resultados y logs
-| Tipo | Dónde se guarda |
-|------|----------------|
-| Resultados en tiempo real | Consola del terminal |
-| Registro en dashboard | `backend-server/data/smoke-test-results.json` (si se pasan ADMIN_EMAIL/PASSWORD) |
+| Tipo | Dónde |
+|------|-------|
+| Tiempo real | Consola del terminal |
+| Dashboard | Portal admin → 🧪 Diagnóstico (3 tarjetas: Backend API · Portal PJN · Extensión Chrome) |
+| JSON persistido | `backend-server/data/smoke-test-results.json` en el servidor |
 | Log local | `electron-app/logs/smoke-pjn-YYYYMMDD-HHMMSS.log` |
-| Visualización | Dashboard → 🧪 Diagnóstico (3 tarjetas: Backend API · Portal PJN · Extensión Chrome) |
 
-### Grupos de checks
-| Script | Grupos | Dashboard | ¿Qué verifica? |
-|--------|--------|-----------|----------------|
-| `smoke-test-pjn.js` | D (SCW consulta + 4 secciones) · E (escritos1 + informe completo) | → "Portal PJN" | Login SCW · módulos procuración e informe |
-| `smoke-test-pjn.js` | F (escritos2 `/nuevo`) · G (notif `/nueva`) · H (deox `/nuevo`) | → "Extensión Chrome" | Los 5 flujos de cs-scw/cs-escritos2/cs-notif/cs-deox + relleno FCR 18745/2017 |
+### Grupos de checks (48 total)
+| Grupos | Solapa dashboard | ¿Qué verifica? |
+|--------|-----------------|----------------|
+| **D** — SCW consulta + 4 secciones (D1–D10) | → "Portal PJN" | Login SSO · LETRADO/PARTE/FAVORITOS · formulario búsqueda |
+| **E** — Escritos 1 + informe completo (E1–E14) | → "Portal PJN" | Expediente FCR 18745/2017 · actuaciones · pestañas · click "Presentar escrito" → nueva pestaña |
+| **F** — Escritos 2 `escritos.pjn.gov.ar/nuevo` (F1–F8) | → "Extensión Chrome" | Formulario MUI · selección FCR · relleno número/año |
+| **G** — Notificaciones `notif.pjn.gov.ar/nueva` (G1–G8) | → "Extensión Chrome" | Ídem Escritos 2 |
+| **H** — DEOX `deox.pjn.gov.ar/nuevo` (H1–H8) | → "Extensión Chrome" | `input[name="camara"]` · selección FCR · relleno número/año |
 
 ---
 
