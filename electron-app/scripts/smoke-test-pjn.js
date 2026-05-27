@@ -294,6 +294,39 @@ async function loginSSO(page, sessionSelector) {
  *   Fase 2: los <li role="option"> se renderizan dentro del ul
  * Hay que usar waitForSelector para ambas fases en lugar de un sleep fijo.
  */
+
+/**
+ * Replica cs-deox.js waitForStepTransition:
+ *   1. Espera que button#StepperNextBtn esté habilitado
+ *   2. Click real de Puppeteer (más confiable que page.evaluate btn.click())
+ *   3. Monitorea que el atributo "form" cambie → señal de que el stepper avanzó
+ */
+async function clickStepperNextBtn(page, timeout = 10000) {
+    // Esperar que el botón exista y no esté deshabilitado
+    await page.waitForFunction(
+        () => { const b = document.querySelector('button#StepperNextBtn'); return b && !b.disabled; },
+        { timeout: 5000 }
+    ).catch(() => null);
+
+    const prevForm = await page.$eval(
+        'button#StepperNextBtn', el => el.getAttribute('form') || ''
+    ).catch(() => '');
+
+    // Click via Puppeteer (dispara eventos de mouse reales, no solo el handler de React)
+    const btn = await page.$('button#StepperNextBtn');
+    if (btn) await btn.click();
+
+    // Confirmar que el stepper avanzó: form attr cambió o botón desapareció
+    await page.waitForFunction(
+        (prev) => {
+            const b = document.querySelector('button#StepperNextBtn');
+            return !b || (b.getAttribute('form') || '') !== prev;
+        },
+        { timeout },
+        prevForm
+    ).catch(() => null);
+}
+
 async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
     // 1) Usar eventos de teclado REALES para que MUI Autocomplete filtre correctamente.
     //    page.evaluate con .value + Event('input') NO dispara el filtro de MUI en Puppeteer.
@@ -348,16 +381,15 @@ async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
     const numOk  = await page.$eval('input[name="numeroExpediente"]', el => el.value).catch(() => '') === numero;
     const anioOk = await page.$eval('input[name="anioExpediente"]',   el => el.value).catch(() => '') === anio;
 
-    // 4) Click StepperNextBtn
-    await page.evaluate(() => {
-        const btn = document.querySelector('button#StepperNextBtn');
-        if (btn) btn.click();
-    });
+    // 4) Click StepperNextBtn con waitForStepTransition (replica cs-deox.js)
+    await sleep(300); // dar tiempo a React para procesar los últimos keyboard events
+    await clickStepperNextBtn(page);
 
     // 5) Cerrar alert "Se han encontrado N resultados" si aparece (cs-escritos2.js lo hace también)
     await page.waitForSelector('div[role="alert"] .MuiAlert-action button', { timeout: 2000 })
         .then(btn => btn.evaluate(el => { if (/cerrar/i.test(el.textContent)) el.click(); }))
         .catch(() => null);
+    await sleep(300);
 
     // 6) Esperar resultado (h5#simple-form-title)
     const resultEl = await page.waitForSelector('h5#simple-form-title', { timeout: 12000 }).catch(() => null);
@@ -1211,14 +1243,13 @@ async function grupoH(page) {
                 ? pass('H8 — Campos número/año llenados', `${EXP_NUMERO}/${EXP_ANIO}`)
                 : fail('H8 — Campos número/año incorrectos', `num="${numVal}" anio="${anioVal}"`);
 
-            // Click StepperNextBtn + cerrar alert + esperar resultado
-            await page.evaluate(() => {
-                const btn = document.querySelector('button#StepperNextBtn');
-                if (btn) btn.click();
-            });
+            // Click StepperNextBtn con waitForStepTransition + cerrar alert + esperar resultado
+            await sleep(300);
+            await clickStepperNextBtn(page);
             await page.waitForSelector('div[role="alert"] .MuiAlert-action button', { timeout: 2000 })
                 .then(btn => btn.evaluate(el => { if (/cerrar/i.test(el.textContent)) el.click(); }))
                 .catch(() => null);
+            await sleep(300);
 
             const resultEl = await page.waitForSelector('h5#simple-form-title', { timeout: 12000 }).catch(() => null);
             const resultadoTxt = resultEl
