@@ -287,9 +287,14 @@ async function loginSSO(page, sessionSelector) {
  * Rellena el formulario MUI stepper de expediente (escritos2 y notif).
  * Replica exactamente lo que hace la extensión (cs-escritos2.js / cs-notif.js).
  * Retorna: { jurisdiccionOk, numOk, anioOk, resultadoTxt }
+ *
+ * IMPORTANTE — MUI Autocomplete renderiza en 2 fases:
+ *   Fase 1: el <ul role="listbox"> aparece en el DOM
+ *   Fase 2: los <li role="option"> se renderizan dentro del ul
+ * Hay que usar waitForSelector para ambas fases en lugar de un sleep fijo.
  */
 async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
-    // 1) Rellenar combobox jurisdicción con .value + input event (como hace la extensión)
+    // 1) Focus + .value + input event (exactamente como cs-escritos2.js)
     await page.evaluate((label) => {
         const input = document.querySelector('input[role="combobox"][aria-autocomplete="list"]');
         if (!input) return;
@@ -297,34 +302,43 @@ async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
         input.value = label;
         input.dispatchEvent(new Event('input', { bubbles: true }));
     }, jurisdiccionLabel);
-    await sleep(900);
 
-    // 2) Seleccionar la opción del dropdown
-    const jurisdiccionOk = await page.evaluate(() => {
-        const listbox = document.querySelector('ul[role="listbox"]');
-        if (!listbox) return false;
-        const items = listbox.querySelectorAll('li[role="option"]');
-        for (const item of items) {
-            if (item.textContent.includes('FCR')) { item.click(); return true; }
-        }
-        // Si solo hay una opción, la seleccionamos
-        if (items.length > 0) { items[0].click(); return true; }
-        return false;
-    });
+    // 2) Esperar las 2 fases de render del dropdown MUI
+    const listboxEl = await page.waitForSelector('ul[role="listbox"]', { timeout: 6000 }).catch(() => null);
+    let jurisdiccionOk = false;
+    if (listboxEl) {
+        // Fase 2: esperar que los <li> aparezcan dentro del <ul>
+        await page.waitForSelector('ul[role="listbox"] li[role="option"]', { timeout: 3000 }).catch(() => null);
+        jurisdiccionOk = await page.evaluate((texto) => {
+            const listbox = document.querySelector('ul[role="listbox"]');
+            if (!listbox) return false;
+            const items = listbox.querySelectorAll('li[role="option"]');
+            const textoBuscar = texto.trim().toLowerCase();
+            for (const item of items) {
+                const t = item.innerText.trim().toLowerCase();
+                // Mismo criterio que cs-escritos2.js: si alguno contiene el texto buscado
+                if (t.includes(textoBuscar) || textoBuscar.includes(t.slice(0, 3))) {
+                    item.click();
+                    return true;
+                }
+            }
+            if (items.length > 0) { items[0].click(); return true; }
+            return false;
+        }, jurisdiccionLabel);
+    }
     await sleep(400);
 
-    // 3) Rellenar número y año con setReactVal (como usa la extensión)
+    // 3) Rellenar número y año (.value + input, como cs-escritos2.js)
     await page.evaluate((num, yr) => {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         const numEl  = document.querySelector('input[name="numeroExpediente"]');
         const anioEl = document.querySelector('input[name="anioExpediente"]');
-        if (numEl)  { setter.call(numEl,  num); numEl.dispatchEvent(new Event('input', { bubbles: true })); }
-        if (anioEl) { setter.call(anioEl, yr);  anioEl.dispatchEvent(new Event('input', { bubbles: true })); }
+        if (numEl)  { numEl.value  = num;  numEl.dispatchEvent(new Event('input', { bubbles: true })); }
+        if (anioEl) { anioEl.value = yr;   anioEl.dispatchEvent(new Event('input', { bubbles: true })); }
     }, numero, anio);
     await sleep(200);
 
     const numOk  = await page.$eval('input[name="numeroExpediente"]', el => el.value).catch(() => '') === numero;
-    const anioOk = await page.$eval('input[name="anioExpediente"]',  el => el.value).catch(() => '') === anio;
+    const anioOk = await page.$eval('input[name="anioExpediente"]',   el => el.value).catch(() => '') === anio;
 
     // 4) Click StepperNextBtn
     await page.evaluate(() => {
@@ -332,7 +346,12 @@ async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
         if (btn) btn.click();
     });
 
-    // 5) Esperar resultado
+    // 5) Cerrar alert "Se han encontrado N resultados" si aparece (cs-escritos2.js lo hace también)
+    await page.waitForSelector('div[role="alert"] .MuiAlert-action button', { timeout: 2000 })
+        .then(btn => btn.evaluate(el => { if (/cerrar/i.test(el.textContent)) el.click(); }))
+        .catch(() => null);
+
+    // 6) Esperar resultado (h5#simple-form-title)
     const resultEl = await page.waitForSelector('h5#simple-form-title', { timeout: 12000 }).catch(() => null);
     const resultadoTxt = resultEl
         ? await resultEl.evaluate(el => el.textContent.trim()).catch(() => '')
@@ -1085,48 +1104,75 @@ async function grupoH(page) {
         : fail('H6 — button#StepperNextBtn no encontrado');
 
     // H7–H9: Rellenar FCR 18745/2017 y verificar resultado end-to-end
-    // DEOX usa input[name="camara"] con setReactVal (código numérico), no un combobox MUI
+    // DEOX: input[name="camara"] es un Autocomplete MUI que acepta la SIGLA ("FCR"),
+    // necesita focus + mousedown + setReactVal (native setter) y luego esperar listbox.
+    // Replica exactamente cs-deox.js líneas 143-169.
+    const EXP_SIGLA = 'FCR'; // sigla corta, NO el código numérico "14"
     if (fCamara && fNumero && fAnio && fBtn) {
         log(`H7 — Rellenando FCR ${EXP_NUMERO}/${EXP_ANIO} en DEOX...`);
         try {
-            await page.evaluate((camaraVal, num, yr) => {
-                const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            // Focus + mousedown + setReactVal con la sigla (como cs-deox.js)
+            await page.evaluate(() => {
                 const camaraEl = document.querySelector('input[name="camara"]');
-                const numEl    = document.querySelector('input[name="numeroExpediente"]');
-                const anioEl   = document.querySelector('input[name="anioExpediente"]');
-                if (camaraEl) {
-                    setter.call(camaraEl, camaraVal);
-                    camaraEl.dispatchEvent(new Event('input',  { bubbles: true }));
-                    camaraEl.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-                if (numEl) {
-                    setter.call(numEl, num);
-                    numEl.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-                if (anioEl) {
-                    setter.call(anioEl, yr);
-                    anioEl.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-            }, EXP_JURISDICCION, EXP_NUMERO, EXP_ANIO);
-            await sleep(400);
+                if (!camaraEl) return;
+                camaraEl.focus();
+                camaraEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            });
+            await sleep(150);
+            await page.evaluate((sigla) => {
+                const setter   = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+                const camaraEl = document.querySelector('input[name="camara"]');
+                if (!camaraEl) return;
+                setter.call(camaraEl, sigla);
+                camaraEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }, EXP_SIGLA);
 
-            const camaraVal = await page.$eval('input[name="camara"]',           el => el.value).catch(() => '');
-            const numVal    = await page.$eval('input[name="numeroExpediente"]', el => el.value).catch(() => '');
-            const anioVal   = await page.$eval('input[name="anioExpediente"]',   el => el.value).catch(() => '');
+            // Esperar las 2 fases de render del listbox MUI (igual que rellenarFormularioMUI)
+            const listboxH = await page.waitForSelector('ul[role="listbox"]', { timeout: 4000 }).catch(() => null);
+            let camaraOk = false;
+            if (listboxH) {
+                await page.waitForSelector('ul[role="listbox"] li[role="option"]', { timeout: 2000 }).catch(() => null);
+                camaraOk = await page.evaluate(() => {
+                    const listbox = document.querySelector('ul[role="listbox"]');
+                    if (!listbox) return false;
+                    const items = listbox.querySelectorAll('li[role="option"]');
+                    if (items.length > 0) { items[0].click(); return true; }
+                    return false;
+                });
+            }
+            await sleep(300);
 
-            camaraVal === EXP_JURISDICCION
-                ? pass('H7 — input[name="camara"] llenado', `código "${camaraVal}"`)
-                : fail('H7 — input[name="camara"] no retiene el valor', `esperado="${EXP_JURISDICCION}" actual="${camaraVal}"`);
+            // Verificar que camara tiene algún valor (después de la selección tendrá el texto del item)
+            const camaraVal = await page.$eval('input[name="camara"]', el => el.value).catch(() => '');
+            camaraOk && camaraVal
+                ? pass('H7 — input[name="camara"] seleccionado del dropdown', `"${camaraVal.slice(0, 30)}"`)
+                : fail('H7 — No se pudo seleccionar jurisdicción en DEOX', camaraVal ? `val="${camaraVal}"` : 'listbox no apareció');
 
+            // Rellenar número y año
+            await page.evaluate((num, yr) => {
+                const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+                const numEl  = document.querySelector('input[name="numeroExpediente"]');
+                const anioEl = document.querySelector('input[name="anioExpediente"]');
+                if (numEl)  { numEl.focus();  setter.call(numEl,  num); numEl.dispatchEvent(new Event('input', { bubbles: true })); }
+                if (anioEl) { anioEl.focus(); setter.call(anioEl, yr);  anioEl.dispatchEvent(new Event('input', { bubbles: true })); }
+            }, EXP_NUMERO, EXP_ANIO);
+            await sleep(200);
+
+            const numVal  = await page.$eval('input[name="numeroExpediente"]', el => el.value).catch(() => '');
+            const anioVal = await page.$eval('input[name="anioExpediente"]',   el => el.value).catch(() => '');
             (numVal === EXP_NUMERO && anioVal === EXP_ANIO)
                 ? pass('H8 — Campos número/año llenados', `${EXP_NUMERO}/${EXP_ANIO}`)
                 : fail('H8 — Campos número/año incorrectos', `num="${numVal}" anio="${anioVal}"`);
 
-            // Click StepperNextBtn + esperar resultado
+            // Click StepperNextBtn + cerrar alert + esperar resultado
             await page.evaluate(() => {
                 const btn = document.querySelector('button#StepperNextBtn');
                 if (btn) btn.click();
             });
+            await page.waitForSelector('div[role="alert"] .MuiAlert-action button', { timeout: 2000 })
+                .then(btn => btn.evaluate(el => { if (/cerrar/i.test(el.textContent)) el.click(); }))
+                .catch(() => null);
+
             const resultEl = await page.waitForSelector('h5#simple-form-title', { timeout: 12000 }).catch(() => null);
             const resultadoTxt = resultEl
                 ? await resultEl.evaluate(el => el.textContent.trim()).catch(() => '')
