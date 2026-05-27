@@ -50,6 +50,7 @@ const CUIT        = '27320694359';
 const API_URL     = process.env.API_URL || 'https://api.procuradortool.com';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 const ADMIN_PASS  = process.env.ADMIN_PASSWORD || '';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';  // alternativa: token JWT pre-generado (para CI)
 const PROFILE_DIR = path.join(process.env.LOCALAPPDATA || '', 'ProcuradorSCW', 'ChromeProfile');
 
 // URLs exactas que usa la extensión (FLOW_URLS en background.js)
@@ -1221,19 +1222,26 @@ async function grupoH(page) {
 // D+E → report-pjn  (solapa "Portal PJN")
 // F+G+H → report-extension  (solapa "Extensión Chrome")
 async function uploadResults(allChecks, logs, duration) {
-    if (!ADMIN_EMAIL || !ADMIN_PASS) {
-        console.log('\n⚠️  ADMIN_EMAIL / ADMIN_PASSWORD no configurados — resultados NO subidos al dashboard.');
-        console.log('   Para subir: ADMIN_EMAIL=admin@x.com ADMIN_PASSWORD=pass node scripts/smoke-test-pjn.js\n');
+    // Aceptar token pre-generado (ADMIN_TOKEN) o email+password para obtenerlo
+    if (!ADMIN_TOKEN && (!ADMIN_EMAIL || !ADMIN_PASS)) {
+        console.log('\n⚠️  Credenciales no configuradas — resultados NO subidos al dashboard.');
+        console.log('   Opciones:');
+        console.log('     ADMIN_TOKEN=<jwt>  node scripts/smoke-test-pjn.js');
+        console.log('     ADMIN_EMAIL=admin@x.com ADMIN_PASSWORD=pass  node scripts/smoke-test-pjn.js\n');
         return;
     }
     try {
-        const loginRes = await fetch(`${API_URL}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASS, machineId: 'smoke-test-pjn' }),
-        });
-        const loginData = await loginRes.json();
-        if (!loginData.token) throw new Error('Login fallido: ' + (loginData.error || 'sin token'));
+        let bearerToken = ADMIN_TOKEN;
+        if (!bearerToken) {
+            const loginRes = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASS, machineId: 'smoke-test-pjn' }),
+            });
+            const loginData = await loginRes.json();
+            if (!loginData.token) throw new Error('Login fallido: ' + (loginData.error || 'sin token'));
+            bearerToken = loginData.token;
+        }
 
         // Separar checks: D+E → PJN,  F+G+H → Extensión
         const pjnChecks = allChecks.filter(c => /^[DE]\d/.test(c.label));
@@ -1253,7 +1261,7 @@ async function uploadResults(allChecks, logs, duration) {
         for (const ep of endpoints) {
             const res  = await fetch(ep.url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${loginData.token}` },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearerToken}` },
                 body: JSON.stringify({ result: ep.result }),
             });
             const data = await res.json();
