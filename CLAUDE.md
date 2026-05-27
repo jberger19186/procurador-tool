@@ -92,8 +92,17 @@ node scripts/generate-icon.js
   - **Último resultado:** 48/48 ✅ (2026-05-27)
 
 ### Próximo paso concreto
-**→ Fase 5:** Cobranza — MP + Facturante (plan completo en proximos-pasos.md)
-**→ Pre-lanzamiento diferido:** smoke tests CI GitHub Actions (post-Fase 5)
+**→ Fase 5:** Cobranza — MP + Facturante (plan completo en `docs/internal/proximos-pasos.md`)
+
+### Orden de diferidos (post-Fase 5)
+1. Actualizar imágenes extensión Chrome Web Store
+2. Code Signing Azure (iniciar en paralelo — tiene tiempos externos)
+3. Entorno staging
+4. Análisis de seguridad profundo
+5. Smoke tests CI GitHub Actions
+6. Limpiar CRX del backend (migrar 2 handlers en `main.js`)
+7. Activar BASIC/PRO/ENTERPRISE en DB — al lanzamiento público (`UPDATE plans SET active=true WHERE name IN ('BASIC','PRO','ENTERPRISE')`)
+8. Base de Conocimiento IA — con 20-30 tickets cerrados reales
 
 ### SSL api.procuradortool.com
 `certbot.timer` activo — renueva automáticamente 2×/día cuando faltan ≤30 días. **No requiere intervención manual.**

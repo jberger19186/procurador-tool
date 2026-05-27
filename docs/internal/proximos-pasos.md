@@ -60,6 +60,7 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 
 ### 🔔 PENDIENTES PRE-LANZAMIENTO (surgidos en Bloque 1)
 - ✅ **Extensión Chrome Web Store v1.3.3** — aprobada por Google, visibilidad pública activa. Nombre: "Procurador SCW – Automatización PJN", ícono balanza
+- ⬜ **Actualizar imágenes de la extensión en Chrome Web Store** — las capturas de pantalla del listing en la store deben reflejar la versión actual de la UI (flujos, popup, formularios MUI)
 - ✅ **Links de descarga en el panel de usuario** (portal web `usuarios/`):
   - ✅ Link directo a Chrome Web Store: `https://chromewebstore.google.com/detail/aodnfemklhciagaglpggnclmbdhnhbme`
   - ✅ Link al instalador: `GET /client/download/electron` → redirect dinámico vía GitHub API (no requiere actualizar en cada release)
@@ -365,7 +366,7 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 
 ---
 
-## 🎯 ORDEN SUGERIDO (actualizado 2026-05-26)
+## 🎯 ORDEN SUGERIDO (actualizado 2026-05-27)
 
 ```
 1. ✅ BLOQUE 1 (branding completo)
@@ -374,15 +375,20 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
      ↓
 4. ✅ PRE-LANZAMIENTO: smoke tests manual 48/48 (dashboard + script PJN + extensión Chrome) + extensión Chrome Store v1.3.3
      ↓
-5. FASE 5 / BLOQUE 4 (cobranza + facturación) ← detalle abajo
+5. FASE 5 / BLOQUE 4 (cobranza + facturación) ← PRÓXIMO
      ↓
-5. BLOQUE 7 (staging)
-     ↓
-6. BLOQUE 3 (code signing — paralelo, tiene tiempos externos)
-     ↓
-LANZAMIENTO PÚBLICO
-  → extensión Chrome pública en store
-  → activar BASIC/PRO/ENTERPRISE en DB (Bloque 2 ⏸️)
+── DIFERIDOS (en este orden) ──────────────────────────────
+6.  Actualizar imágenes extensión Chrome Web Store
+7.  Code Signing Azure (.exe — tiempos externos, iniciar en paralelo)
+8.  Entorno staging (PM2 separado + DB staging + subdominio)
+9.  Análisis de seguridad profundo
+10. Smoke tests CI GitHub Actions (pre-deploy)
+11. Limpiar CRX del backend (migrar 2 handlers en main.js)
+── Al momento del lanzamiento público ─────────────────────
+12. Activar BASIC/PRO/ENTERPRISE en DB (1 línea SQL, Bloque 2)
+── Post-volumen (>20-30 tickets cerrados) ─────────────────
+13. Base de Conocimiento IA (KB)
+14. Borradores masivos con IA
 ```
 
 ---
