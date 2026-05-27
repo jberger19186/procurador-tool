@@ -1,7 +1,7 @@
 # Próximos pasos — Handoff para sesiones nuevas
 
 > **Documento de continuidad.** Después de `/clear`, leer este archivo + CLAUDE.md da el contexto suficiente para retomar.
-> Última actualización: 2026-05-26 (Flujo registro/activación completo + v2.7.12)
+> Última actualización: 2026-05-27 (Smoke tests 48/48 completo + pendientes unificados con CLAUDE.md)
 
 ---
 
@@ -14,7 +14,7 @@
 - **Fase 5 (Cobranza):** **PRÓXIMA** — diseño completo abajo
 - **Fase 6 (Staging/Release seguro):** Pendiente
 
-### Versión Electron actual: **v2.7.13**
+### Versión Electron actual: **v2.7.13** (último release estable)
 
 ### Tags Git relevantes (rollback points)
 ```
@@ -113,7 +113,7 @@ Ver sección detallada abajo "PLAN FASE 5 — COBRANZA".
 - ✅ Hardening secretos RSA — `RSA_PRIVATE_KEY` + `RSA_PUBLIC_KEY` en `.env` (2026-05-26)
 - ✅ Suite QA (159/165 PASS)
 - ✅ Tests automatizados (pytest + Playwright)
-- ✅ **Smoke tests manual** — dashboard admin "🧪 Diagnóstico" (API + PJN) + script local `smoke-test-pjn.js` (2026-05-26)
+- ✅ **Smoke tests manual** — `smoke-test-pjn.js` 48/48 ✅ Portal PJN + Extensión Chrome (2026-05-27) · dashboard admin "🧪 Diagnóstico" (3 tarjetas)
 - ⬜ Smoke tests CI pre-deploy (GitHub Actions) ← **POST-LANZAMIENTO**
 - ⬜ **Diferido:** Análisis de seguridad profundo
 - ⬜ **Diferido:** Documentación técnica completa
@@ -372,7 +372,7 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 2. ✅ PRE-LANZAMIENTO: links descarga + flujo registro/activación completo
 3. ✅ BLOQUE 6 (backups automáticos + hardening RSA a env vars)
      ↓
-4. ✅ PRE-LANZAMIENTO: smoke tests manual (dashboard + script PJN) + extensión Chrome Store v1.3.3
+4. ✅ PRE-LANZAMIENTO: smoke tests manual 48/48 (dashboard + script PJN + extensión Chrome) + extensión Chrome Store v1.3.3
      ↓
 5. FASE 5 / BLOQUE 4 (cobranza + facturación) ← detalle abajo
      ↓

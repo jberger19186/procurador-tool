@@ -1186,14 +1186,14 @@ Sección Sistema del sidebar:
 
 ---
 
-### FASE 2 — BACKEND (pendiente)
+### FASE 2 — BACKEND (parcialmente completada)
 **Objetivo:** infraestructura robusta, segura y documentada.
 
-- ⬜ Backups programados de PostgreSQL y procedimiento de restauración
-- ⬜ Hardening de secretos: mover claves RSA y AES a variables de entorno (sacar de `keys/`)
-- ⬜ Análisis de seguridad profundo (app Electron + backend)
-- ⬜ Smoke tests / canary tests para endpoints críticos
-- ⬜ Documentación técnica completa del backend (endpoints, esquema DB, flujos)
+- ✅ Backups programados PostgreSQL — cron 03:00 AM, retención 7 días, alerta email (2026-05-26)
+- ✅ Hardening secretos RSA — `RSA_PRIVATE_KEY` + `RSA_PUBLIC_KEY` movidos a `.env` (2026-05-26)
+- ✅ Smoke tests endpoints críticos — `smoke-test-pjn.js` 48/48 ✅ (2026-05-27)
+- ⬜ Análisis de seguridad profundo (app Electron + backend) — diferido
+- ⬜ Documentación técnica completa del backend — diferido
 
 ---
 
