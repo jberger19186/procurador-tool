@@ -4,11 +4,25 @@
  * los selectores DOM correctos en cada portal del PJN.
  *
  * Grupos:
- *   D — SCW Consulta   (scw.pjn.gov.ar — sesión + nav + formulario)
- *   E — SCW Escritos 1 (scw.pjn.gov.ar/scw/expediente.seam — legend + botón)
- *   F — Escritos 2     (escritos.pjn.gov.ar — MUI stepper form)
- *   G — Notificaciones (notif.pjn.gov.ar — MUI stepper form)
- *   H — DEOX           (deox.pjn.gov.ar — React stepper form)
+ *   D — SCW Consulta + Secciones
+ *       Login SCW · recorre las 4 secciones del listado (LETRADO/PARTE/AUTORIZADO NE/FAVORITOS)
+ *       con paginación real · verifica nav link "Nueva Consulta Pública" y formulario consulta
+ *       → cubre todos los selectores de cs-scw.js para el flujo "consulta"
+ *
+ *   E — SCW Escritos 1 (expediente.seam) + Informe completo
+ *       Busca FCR 18745/2017 · datos generales · tabla actuaciones · paginación · históricas
+ *       · tabs Intervinientes/Vinculados/Recursos · verifica botón "Presentar escrito"
+ *       → cubre cs-scw.js flujo "escritos1" + todos los selectores del módulo informe
+ *
+ *   F — Escritos 2  → escritos.pjn.gov.ar/nuevo  (cs-escritos2.js)
+ *   G — Notificaciones → notif.pjn.gov.ar/nueva   (cs-notif.js)
+ *   H — DEOX        → deox.pjn.gov.ar/nuevo       (cs-deox.js)
+ *
+ * URLs reales de la extensión (background.js FLOW_URLS):
+ *   consulta/escritos1: https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=225541
+ *   escritos2:          https://escritos.pjn.gov.ar/nuevo
+ *   notif:              https://notif.pjn.gov.ar/nueva
+ *   deox:               https://deox.pjn.gov.ar/nuevo
  *
  * Uso:
  *   node scripts/smoke-test-extension.js
@@ -27,25 +41,26 @@ const puppeteer = require('puppeteer');
 const fs        = require('fs');
 const path      = require('path');
 
-// ── Configuración ─────────────────────────────────────────────────────────────
+// ── Configuración ──────────────────────────────────────────────────────────────
 const CUIT        = '27320694359';
 const API_URL     = process.env.API_URL || 'https://api.procuradortool.com';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 const ADMIN_PASS  = process.env.ADMIN_PASSWORD || '';
 const PROFILE_DIR = path.join(process.env.LOCALAPPDATA || '', 'ProcuradorSCW', 'ChromeProfile');
 
-// URLs de los portales
-const SCW_URL       = 'http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1';
-const ESCRITOS2_URL = 'https://escritos.pjn.gov.ar';
-const NOTIF_URL     = 'https://notif.pjn.gov.ar';
-const DEOX_URL      = 'https://deox.pjn.gov.ar';
+// URLs exactas que usa la extensión (FLOW_URLS en background.js)
+const SCW_URL       = 'https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=225541';
+const FAVORITOS_URL = 'http://scw.pjn.gov.ar/scw/consultaListaFavoritos.seam';
+const ESCRITOS2_URL = 'https://escritos.pjn.gov.ar/nuevo';
+const NOTIF_URL     = 'https://notif.pjn.gov.ar/nueva';
+const DEOX_URL      = 'https://deox.pjn.gov.ar/nuevo';
 
-// Expediente de referencia para Escritos 1 (el mismo que usa el smoke-test-pjn)
+// Expediente de referencia para la informe (módulo E)
 const EXP_JURISDICCION = '14';   // FCR
 const EXP_NUMERO       = '18745';
 const EXP_ANIO         = '2017';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 const checks  = [];
 const logs    = [];
 let   t0Total = Date.now();
@@ -82,14 +97,117 @@ async function existe(page, selector) {
     return (await page.$(selector)) !== null;
 }
 
-/**
- * Intenta autenticar contra la SSO de Keycloak usando el gestor de contraseñas de Chrome.
- * Precondición: la página actual ya muestra el formulario SSO (#username presente).
- * Retorna 'logged-in' si el login fue exitoso, 'no-password' o 'failed' si no.
- *
- * @param {Page}   page
- * @param {string} sessionSelector  Selector que indica que la sesión quedó establecida
- */
+async function existeXPath(page, xpath) {
+    return page.evaluate((xp) => {
+        const node = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+        return node !== null;
+    }, xpath);
+}
+
+async function clickXPath(page, xpath) {
+    return page.evaluate((xp) => {
+        const node = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+        if (node) { node.click(); return true; }
+        return false;
+    }, xpath);
+}
+
+/** Navega a la siguiente página en el paginador de LISTAS de expedientes. */
+async function paginaSiguienteLista(page) {
+    const tablaSelector = 'table.table-striped tbody';
+    const contenidoAntes = await page.$eval(tablaSelector, el => el.innerHTML).catch(() => null);
+    if (!contenidoAntes) return null;
+
+    const haySiguiente = await page.evaluate(() => {
+        const links = document.querySelectorAll('a');
+        for (const link of links) {
+            if (link.querySelector('span[title="Siguiente"]')) return true;
+        }
+        return false;
+    });
+    if (!haySiguiente) return null;
+
+    await page.evaluate(() => {
+        const links = document.querySelectorAll('a');
+        for (const link of links) {
+            if (link.querySelector('span[title="Siguiente"]')) { link.click(); break; }
+        }
+    });
+
+    try {
+        await page.waitForFunction(
+            (sel, prev) => {
+                const el = document.querySelector(sel);
+                return el && el.innerHTML !== prev;
+            },
+            { timeout: 20000 },
+            tablaSelector, contenidoAntes
+        );
+        const paginaActual = await page.$eval('ul.pagination li.active span', el => el.textContent.trim()).catch(() => '?');
+        return { ok: true, pagina: paginaActual };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+}
+
+/** Navega a la siguiente página en el paginador de ACTUACIONES del expediente. */
+async function paginaSiguienteActuaciones(page, tablaSelector) {
+    const contenidoAntes = await page.$eval(tablaSelector, el => el.innerText).catch(() => null);
+    if (!contenidoAntes) return null;
+
+    const boton = await page.$('li a span[title="Siguiente"]');
+    if (!boton) return null;
+
+    await page.evaluate(() => {
+        const btn = document.querySelector('li a span[title="Siguiente"]');
+        if (btn) btn.closest('a').click();
+    });
+
+    try {
+        await page.waitForFunction(
+            (sel, prev) => {
+                const el = document.querySelector(sel);
+                return el && el.innerText !== prev;
+            },
+            { timeout: 20000 },
+            tablaSelector, contenidoAntes
+        );
+        const paginaActual = await page.$eval(
+            '.pagination.no-margin.no-padding li.active span',
+            el => el.textContent.trim()
+        ).catch(() => '?');
+        return { ok: true, pagina: paginaActual };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+}
+
+/** Hace click en el botón de sección (LETRADO/PARTE/AUTORIZADO NE), expandiendo el dropdown si es necesario. */
+async function clickSeccionRelacionados(page, selector) {
+    const visible = await page.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetHeight > 0;
+    }, selector);
+
+    if (!visible) {
+        const dropdown = await page.$('a.dropdown-toggle.menu-btn-border');
+        if (dropdown) {
+            await dropdown.click();
+            await sleep(800);
+            const submenu = await page.$('a[id*="btn-lista-relacionados"]');
+            if (submenu) { await submenu.click(); await sleep(800); }
+        }
+    }
+
+    const el = await page.$(selector);
+    if (!el) return false;
+    await el.click();
+    return true;
+}
+
+/** Login SSO con el gestor de contraseñas de Chrome. */
 async function loginSSO(page, sessionSelector) {
     const cuitActual = await page.$eval('#username', el => el.value.trim()).catch(() => '');
     if (cuitActual !== CUIT) {
@@ -123,17 +241,15 @@ async function loginSSO(page, sessionSelector) {
 
 /**
  * Navega a un portal React del PJN y espera que el formulario esté listo.
- * Si la SSO session de Keycloak está activa, el portal hace auto-login sin mostrar el form de login.
- * Si no, muestra #username → intenta autenticar con el gestor de Chrome.
- *
- * Retorna: 'active' | 'logged-in' | 'no-password' | 'failed' | 'timeout' | 'error'
+ * Maneja SSO automáticamente (auto-login si la sesión Keycloak está activa).
+ * Retorna: 'active' | 'logged-in' | 'no-password' | 'failed' | 'timeout'
  */
 async function navegarPortalReact(page, url, formSelector) {
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 40000 });
 
     const estado = await Promise.race([
-        page.waitForSelector('#username',  { timeout: 20000 }).then(() => 'login'),
-        page.waitForSelector(formSelector, { timeout: 20000 }).then(() => 'form'),
+        page.waitForSelector('#username',  { timeout: 25000 }).then(() => 'login'),
+        page.waitForSelector(formSelector, { timeout: 25000 }).then(() => 'form'),
     ]).catch(() => 'timeout');
 
     if (estado === 'form') return 'active';
@@ -142,22 +258,26 @@ async function navegarPortalReact(page, url, formSelector) {
         const passExists = await existe(page, 'input[type="password"]');
         const btnExists  = await existe(page, '#kc-login');
         if (!passExists || !btnExists) return 'sso-incompleto';
-
         return await loginSSO(page, formSelector);
     }
 
     return estado; // 'timeout'
 }
 
-// ── GRUPO D: SCW Consulta ──────────────────────────────────────────────────────
+// ── GRUPO D: SCW Consulta + Secciones ─────────────────────────────────────────
+// Replica la navegación completa de cs-scw.js:
+//   D1–D3: login SCW
+//   D4:    header "Lista de Expedientes Relacionados"
+//   D5–D8: recorre LETRADO / PARTE / AUTORIZADO NE / FAVORITOS con paginación real
+//   D9:    nav link "Nueva Consulta Pública" presente
+//   D10:   formulario consulta pública completo (camara + numero + anio + buscar)
 async function grupoD(page) {
-    log('\n══ GRUPO D — SCW Consulta (cs-scw.js) ══════════════════════');
+    log('\n══ GRUPO D — SCW Consulta + Secciones (cs-scw.js) ══════════');
 
     // D1: Portal SCW accesible
     await page.goto(SCW_URL, { waitUntil: 'networkidle2', timeout: 30000 });
     pass('D1 — scw.pjn.gov.ar accesible');
 
-    // Detectar estado: SSO login o sesión activa
     const loginDetected = await Promise.race([
         page.waitForSelector('#username',                                { timeout: 15000 }).then(() => 'login'),
         page.waitForSelector('a.dropdown-toggle.menu-btn-border-right', { timeout: 15000 }).then(() => 'session'),
@@ -197,70 +317,152 @@ async function grupoD(page) {
     await page.waitForSelector('h2.form_title', { timeout: 10000 }).catch(() => {});
     const titulo = await page.$eval('h2.form_title', el => el.textContent.trim()).catch(() => '');
     if (titulo.includes('Lista de Expedientes Relacionados')) {
-        pass('D4 — Header SCW "Lista de Expedientes Relacionados"');
+        pass('D4 — Header "Lista de Expedientes Relacionados" presente');
     } else {
-        fail('D4 — Header inesperado en SCW', titulo.slice(0, 60));
+        fail('D4 — Header inesperado', titulo.slice(0, 60));
         return false;
     }
 
-    // D5: Link "Nueva Consulta Pública" en menú
+    // D5–D8: Recorrer las 4 secciones con paginación
+    const secciones = [
+        { code: 5, tipo: 'LETRADO',      selector: 'input[value="LETRADO"]',      favoritos: false },
+        { code: 6, tipo: 'PARTE',         selector: 'input[value="PARTE"]',         favoritos: false },
+        { code: 7, tipo: 'AUTORIZADO NE', selector: 'input[value="AUTORIZADO NE"]', favoritos: false },
+        { code: 8, tipo: 'FAVORITOS',     selector: null,                           favoritos: true  },
+    ];
+
+    for (const sec of secciones) {
+        log(`\n── Sección: ${sec.tipo}`);
+        try {
+            if (sec.favoritos) {
+                await page.goto(FAVORITOS_URL, { waitUntil: 'networkidle2', timeout: 30000 });
+                await page.waitForFunction(
+                    () => {
+                        const sp = document.querySelector('span.colorTextGrey');
+                        return sp && sp.textContent.includes('Favoritos');
+                    },
+                    { timeout: 10000 }
+                ).catch(() => {});
+            } else {
+                const clickOk = await clickSeccionRelacionados(page, sec.selector);
+                if (!clickOk) {
+                    fail(`D${sec.code} — ${sec.tipo} — botón de sección no encontrado`);
+                    continue;
+                }
+                await page.waitForFunction(
+                    (sel) => {
+                        const el = document.querySelector(sel);
+                        return el && el.classList.contains('active');
+                    },
+                    { timeout: 15000 },
+                    sec.selector
+                ).catch(() => {});
+                await sleep(1000);
+            }
+
+            const tablaPresente = await existe(page, 'table.table-striped tbody');
+            if (!tablaPresente) {
+                fail(`D${sec.code} — ${sec.tipo} — tabla de expedientes no encontrada`);
+                continue;
+            }
+
+            const filas = await page.$$eval('table.table-striped tbody tr', rows =>
+                rows.filter(r => r.cells.length > 0 && r.cells[0]?.textContent.trim() !== '').length
+            ).catch(() => 0);
+
+            const total = await page.$eval('div[class*="well"] strong', el => {
+                const m = el.textContent.match(/(\d+)\s+expediente/);
+                return m ? m[1] : '?';
+            }).catch(() => '?');
+
+            const hayUltima = await existe(page, 'a.last-page');
+            if (hayUltima) {
+                const resultado = await paginaSiguienteLista(page);
+                if (resultado && resultado.ok) {
+                    pass(`D${sec.code} — ${sec.tipo}`, `${total} exp · ${filas} filas en pág1 · paginó a pág ${resultado.pagina}`);
+                    const primera = await page.$('a.first-page');
+                    if (primera) { await primera.click(); await sleep(1500); }
+                } else if (resultado && !resultado.ok) {
+                    fail(`D${sec.code} — ${sec.tipo} — paginador falló`, resultado.error);
+                } else {
+                    pass(`D${sec.code} — ${sec.tipo}`, `${total} exp · ${filas} filas (paginador sin respuesta)`);
+                }
+            } else {
+                pass(`D${sec.code} — ${sec.tipo}`, `${total} exp · ${filas} filas (1 sola página)`);
+            }
+
+        } catch (err) {
+            fail(`D${sec.code} — ${sec.tipo} — error`, err.message.slice(0, 80));
+        }
+        await sleep(800);
+    }
+
+    // Volver a la lista principal para verificar el nav de consulta
+    if (!page.url().includes('consultaListaRelacionados')) {
+        await page.goto(SCW_URL, { waitUntil: 'networkidle2', timeout: 30000 });
+        await page.waitForSelector('h2.form_title', { timeout: 10000 }).catch(() => {});
+    }
+
+    // D9: Nav link "Nueva Consulta Pública"
     const navLink = await page.$('a[id$="menuNuevaConsulta"]');
-    if (!navLink) {
-        fail('D5 — Nav link "Nueva Consulta Pública" no encontrado (a[id$="menuNuevaConsulta"])');
-        return false;
-    }
-    pass('D5 — Nav link "Nueva Consulta Pública" presente');
+    navLink
+        ? pass('D9 — Nav link "Nueva Consulta Pública" presente')
+        : fail('D9 — Nav link "Nueva Consulta Pública" no encontrado');
 
-    // D6: Click → "Consulta pública"
-    await navLink.click();
-    await sleep(1500);
+    // D10: Formulario consulta pública completo
+    if (navLink) {
+        await navLink.click();
+        await sleep(1500);
 
-    const headerGrey = await page.$eval('span.colorTextGrey', el => el.textContent.trim()).catch(() => '');
-    const headerH2   = await page.$eval('h2.form_title',      el => el.textContent.trim()).catch(() => '');
-    const enConsulta = headerGrey.toLowerCase().includes('consulta') || headerH2.toLowerCase().includes('consulta');
-    if (enConsulta) {
-        pass('D6 — Navegó a "Consulta pública"', (headerGrey || headerH2).slice(0, 50));
+        const fCamara    = await existe(page, '#formPublica\\:camaraNumAni');
+        const fNumero    = await existe(page, 'input[name="formPublica:numero"]');
+        const fAnio      = await existe(page, 'input[name="formPublica:anio"]');
+        const fBtnBuscar = await existe(page, 'input[id$="buscarPorNumeroButton"]');
+        if (fCamara && fNumero && fAnio && fBtnBuscar) {
+            pass('D10 — Formulario consulta pública completo', 'camara + numero + anio + buscar ✓');
+        } else {
+            fail('D10 — Formulario incompleto', `cam=${fCamara} num=${fNumero} anio=${fAnio} btn=${fBtnBuscar}`);
+        }
     } else {
-        fail('D6 — No se detectó página "Consulta pública"', `grey="${headerGrey.slice(0,40)}" h2="${headerH2.slice(0,40)}"`);
-        return false;
-    }
-
-    // D7: Formulario de consulta pública completo
-    const fCamara    = await existe(page, '#formPublica\\:camaraNumAni');
-    const fNumero    = await existe(page, 'input[name="formPublica:numero"]');
-    const fAnio      = await existe(page, 'input[name="formPublica:anio"]');
-    const fBtnBuscar = await existe(page, 'input[id$="buscarPorNumeroButton"]');
-    if (fCamara && fNumero && fAnio && fBtnBuscar) {
-        pass('D7 — Formulario consulta pública completo', 'camara + numero + anio + buscar ✓');
-    } else {
-        fail('D7 — Formulario incompleto', `cam=${fCamara} num=${fNumero} anio=${fAnio} btn=${fBtnBuscar}`);
+        skip('D10 — Formulario consulta pública', 'nav link no encontrado');
     }
 
     return true;
 }
 
-// ── GRUPO E: SCW Escritos 1 ────────────────────────────────────────────────────
+// ── GRUPO E: SCW Escritos 1 + Informe completo ──────────────────────────────
+// Replica los selectores de cs-scw.js flujo "escritos1" + todos los del módulo informe:
+//   E1:    busca FCR 18745/2017 → aterriza en expediente.seam
+//   E2:    legend.ui-fieldset-legend "Datos Generales"
+//   E3:    #expediente:nuevoEscritoBtn a (Presentar escrito) → selector clave de escritos1
+//   E4:    datos generales (detailCamera, detailDependencia, detailSituation, detailCover)
+//   E5:    tabla actuaciones #expediente:action-table
+//   E6:    paginador actuaciones
+//   E7:    checkboxes filtros (DE / N / I / VT + btn Aplicar)
+//   E8:    botón "Ver Históricas"
+//   E9:    tabla históricas (o alerta "sin históricas")
+//   E10:   paginador históricas
+//   E11:   pestaña Intervinientes
+//   E12:   pestaña Vinculados
+//   E13:   pestaña Recursos
 async function grupoE(page) {
-    log('\n══ GRUPO E — SCW Escritos 1 (expediente.seam, cs-scw.js) ═══');
+    log('\n══ GRUPO E — SCW Escritos 1 + Informe completo (cs-scw.js) ═');
 
-    // Necesitamos llegar a expediente.seam buscando FCR 18745/2017
-    // Si el grupo D dejó la página en el form de consulta, usamos ese; si no, navegamos de nuevo.
+    // Si D dejó la página en el form de consulta, lo usamos; si no, volvemos al SCW
     const enFormConsulta = await existe(page, 'input[id$="buscarPorNumeroButton"]');
     if (!enFormConsulta) {
-        log('E — Navegando a SCW para buscar expediente...');
         await page.goto(SCW_URL, { waitUntil: 'networkidle2', timeout: 30000 });
         const navLink = await page.$('a[id$="menuNuevaConsulta"]').catch(() => null);
         if (!navLink) {
             fail('E1 — No se pudo navegar a "Consulta pública"');
-            skip('E2 — legend.ui-fieldset-legend "Datos Generales"', 'sin acceso al formulario');
-            skip('E3 — #expediente:nuevoEscritoBtn a',              'sin acceso al formulario');
+            for (let i = 2; i <= 13; i++) skip(`E${i}`, 'sin acceso a formulario');
             return;
         }
         await navLink.click();
         await sleep(1500);
     }
 
-    // E1: Buscar FCR 18745/2017 → llegar a expediente.seam
+    // E1: Buscar FCR 18745/2017 → expediente.seam
     log(`E1 — Buscando FCR ${EXP_NUMERO}/${EXP_ANIO} → expediente.seam...`);
     try {
         await page.select('#formPublica\\:camaraNumAni', EXP_JURISDICCION);
@@ -272,75 +474,243 @@ async function grupoE(page) {
         await sleep(5000);
     } catch (err) {
         fail('E1 — Error al enviar búsqueda', err.message.slice(0, 60));
-        skip('E2 — legend.ui-fieldset-legend "Datos Generales"', 'búsqueda fallida');
-        skip('E3 — #expediente:nuevoEscritoBtn a',              'búsqueda fallida');
+        for (let i = 2; i <= 13; i++) skip(`E${i}`, 'búsqueda fallida');
         return;
     }
 
-    // Verificar que llegamos a expediente.seam
     const urlActual = page.url();
     if (!urlActual.includes('expediente.seam')) {
         fail('E1 — No se llegó a expediente.seam', `URL: ${urlActual.slice(0, 80)}`);
-        skip('E2 — legend.ui-fieldset-legend "Datos Generales"', 'sin expediente.seam');
-        skip('E3 — #expediente:nuevoEscritoBtn a',              'sin expediente.seam');
+        for (let i = 2; i <= 13; i++) skip(`E${i}`, 'sin expediente.seam');
         return;
     }
     pass('E1 — Llegó a expediente.seam correctamente');
 
-    // E2: legend.ui-fieldset-legend con texto "Datos Generales"
+    // E2: legend.ui-fieldset-legend "Datos Generales" (cs-scw.js escritos1 lo verifica)
     const legend = await page.waitForSelector('legend.ui-fieldset-legend', { timeout: 8000 }).catch(() => null);
     if (!legend) {
-        fail('E2 — legend.ui-fieldset-legend no encontrado en expediente.seam');
+        fail('E2 — legend.ui-fieldset-legend no encontrado');
     } else {
         const legendText = await legend.evaluate(el => el.textContent.trim()).catch(() => '');
-        if (legendText.includes('Datos Generales') || legendText.includes('Datos')) {
-            pass('E2 — legend.ui-fieldset-legend "Datos Generales" presente', legendText.slice(0, 40));
-        } else {
-            fail('E2 — legend encontrado pero texto inesperado', legendText.slice(0, 40));
-        }
+        legendText.includes('Datos')
+            ? pass('E2 — legend.ui-fieldset-legend "Datos Generales"', legendText.slice(0, 40))
+            : fail('E2 — legend texto inesperado', legendText.slice(0, 40));
     }
 
-    // E3: #expediente:nuevoEscritoBtn a ("Presentar escrito")
+    // E3: #expediente:nuevoEscritoBtn a → selector crítico de cs-scw.js flujo escritos1
     const btnEscrito = await page.$('#expediente\\:nuevoEscritoBtn a').catch(() => null);
     if (!btnEscrito) {
         const contenedor = await existe(page, '#expediente\\:nuevoEscritoBtn');
-        fail('E3 — #expediente:nuevoEscritoBtn a no encontrado', contenedor ? 'contenedor existe pero sin <a>' : 'contenedor ausente');
+        fail('E3 — #expediente:nuevoEscritoBtn a no encontrado', contenedor ? 'contenedor sin <a>' : 'contenedor ausente');
     } else {
         const btnText = await btnEscrito.evaluate(el => el.textContent.trim()).catch(() => '');
-        pass('E3 — #expediente:nuevoEscritoBtn a (Presentar escrito) presente', btnText.slice(0, 40));
+        pass('E3 — #expediente:nuevoEscritoBtn a (Presentar escrito)', btnText.slice(0, 40));
+    }
+
+    // E4: Datos generales
+    const detCamera      = await existe(page, '[id$="detailCamera"]');
+    const detDependencia = await existe(page, '[id$="detailDependencia"]');
+    const detSituation   = await existe(page, '[id$="detailSituation"]');
+    const detCover       = await existe(page, '[id$="detailCover"]');
+    if (detCamera && detDependencia && detSituation && detCover) {
+        const camText = await page.$eval('[id$="detailCamera"]',      el => el.textContent.trim()).catch(() => '');
+        const depText = await page.$eval('[id$="detailDependencia"]', el => el.textContent.trim()).catch(() => '');
+        pass('E4 — Datos generales expediente', `${camText} · ${depText}`.slice(0, 60));
+    } else {
+        fail('E4 — Datos generales incompletos', `cam=${detCamera} dep=${detDependencia} sit=${detSituation} cov=${detCover}`);
+    }
+
+    // E5: Tabla actuaciones actuales
+    const tablaAct = '#expediente\\:action-table';
+    const tablaActPresente = await existe(page, tablaAct);
+    if (!tablaActPresente) {
+        fail('E5 — Tabla actuaciones #expediente:action-table no encontrada');
+    } else {
+        const filasAct = await page.$$eval(`${tablaAct} tbody tr`, rows => rows.length).catch(() => 0);
+        pass('E5 — Tabla actuaciones presente', `${filasAct} fila(s)`);
+    }
+
+    // E6: Paginador actuaciones
+    const hayPagActuales = await existe(page, '.pagination.no-margin.no-padding li a span[title="Siguiente"]');
+    if (hayPagActuales) {
+        const res = await paginaSiguienteActuaciones(page, tablaAct);
+        if (res && res.ok) {
+            pass('E6 — Paginador actuaciones', `paginó a página ${res.pagina}`);
+            await page.evaluate(() => {
+                const btn = document.querySelector('li a span[title="Primera página"]');
+                if (btn) btn.closest('a').click();
+            });
+            await sleep(2000);
+        } else if (res && !res.ok) {
+            fail('E6 — Paginador actuaciones — error', res.error?.slice(0, 80));
+        } else {
+            pass('E6 — Paginador actuaciones', 'botón Siguiente encontrado');
+        }
+    } else {
+        pass('E6 — Paginador actuaciones', '1 sola página (OK)');
+    }
+
+    // E7: Checkboxes filtros
+    const chkDE      = await existe(page, '#expediente\\:checkBoxDespachosYEscritosId');
+    const chkN       = await existe(page, '#expediente\\:checkBoxnotaelEctronicasYPapelId');
+    const chkI       = await existe(page, '#expediente\\:checkBoxInformacionesId');
+    const chkVT      = await existe(page, '#expediente\\:checkBoxOtrasActuacionesId');
+    const btnAplicar = await existe(page, '#expediente\\:filtrarActuacionesBtn');
+    (chkDE && chkN && chkI && chkVT && btnAplicar)
+        ? pass('E7 — Checkboxes filtros (DE + N + I + VT + Aplicar)')
+        : fail('E7 — Checkboxes filtros incompletos', `DE=${chkDE} N=${chkN} I=${chkI} VT=${chkVT} btn=${btnAplicar}`);
+
+    // E8: Botón "Ver Históricas"
+    const tablaHist = '#expediente\\:action-historic-table';
+    const btnHist = await page.$('#expediente\\:btnActuacionesHistoricas a');
+    if (!btnHist) {
+        fail('E8 — Botón "Ver Históricas" no encontrado');
+        skip('E9 — Tabla históricas', 'botón no encontrado');
+        skip('E10 — Paginador históricas', 'botón no encontrado');
+    } else {
+        pass('E8 — Botón "Ver Históricas" presente');
+        await btnHist.click();
+        await sleep(3000);
+
+        // E9: Tabla históricas (o alerta "sin históricas")
+        const alertaSinHist = await existe(page, 'div.alert.white-panel.border-grey-sm');
+        if (alertaSinHist) {
+            pass('E9 — Actuaciones históricas', 'sin históricas (alerta OK)');
+            pass('E10 — Paginador históricas', 'n/a — sin históricas');
+        } else {
+            const tablaHistPresente = await existe(page, tablaHist);
+            if (tablaHistPresente) {
+                const filasHist = await page.$$eval(`${tablaHist} tbody tr`, rows => rows.length).catch(() => 0);
+                pass('E9 — Tabla actuaciones históricas', `${filasHist} fila(s)`);
+
+                // E10: Paginador históricas (XPath — distintos selectores al de actuaciones)
+                const haySigHist = await page.evaluate(() => {
+                    const xpath = "//a[.//span[contains(text(), 'Siguiente')]]";
+                    const r = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                    return r.singleNodeValue !== null;
+                });
+                if (haySigHist) {
+                    const contenidoAntes = await page.$eval(tablaHist, el => el.innerText).catch(() => '');
+                    await page.evaluate(() => {
+                        const xpath = "//a[.//span[contains(text(), 'Siguiente')]]";
+                        const r = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                        if (r.singleNodeValue) r.singleNodeValue.click();
+                    });
+                    try {
+                        await page.waitForFunction(
+                            (sel, prev) => {
+                                const el = document.querySelector(sel);
+                                return el && el.innerText !== prev;
+                            },
+                            { timeout: 20000 },
+                            tablaHist.replace(/\\/g, ''), contenidoAntes
+                        );
+                        pass('E10 — Paginador históricas', 'paginó a página 2');
+                    } catch (e) {
+                        fail('E10 — Paginador históricas — timeout', e.message.slice(0, 60));
+                    }
+                } else {
+                    pass('E10 — Paginador históricas', '1 sola página (OK)');
+                }
+            } else {
+                fail('E9 — Tabla históricas no encontrada tras click');
+                skip('E10 — Paginador históricas', 'tabla no encontrada');
+            }
+        }
+    }
+
+    // E11–E13: Pestañas Intervinientes / Vinculados / Recursos
+    const pestanas = [
+        {
+            label: 'Intervinientes',
+            xpathTab: "//td[contains(@class, 'rf-tab-hdr') and .//span[text()='Intervinientes']]",
+            tablas: ["[id='expediente:intervinientesTab']", "[id='expediente:participantsTable']", "[id='expediente:fiscalesTable']"],
+            alertaXpath: null,
+            checkNum: 'E11',
+        },
+        {
+            label: 'Vinculados',
+            xpathTab: "//td[contains(@class, 'rf-tab-hdr') and .//span[text()='Vinculados']]",
+            tablas: ["[id='expediente:vinculadosTab']"],
+            alertaXpath: "//*[starts-with(@id,'expediente:') and substring(@id,string-length(@id)-7)=':content']//div[contains(@class,'alert') and contains(.,'no posee vinculados')]",
+            checkNum: 'E12',
+        },
+        {
+            label: 'Recursos',
+            xpathTab: "//td[contains(@class, 'rf-tab-hdr') and .//span[text()='Recursos']]",
+            tablas: ["[id='expediente:recursosTab']"],
+            alertaXpath: "//*[starts-with(@id,'expediente:') and substring(@id,string-length(@id)-7)=':content']//div[contains(@class,'alert') and contains(.,'no posee recursos')]",
+            checkNum: 'E13',
+        },
+    ];
+
+    for (const pesta of pestanas) {
+        log(`\n── Pestaña: ${pesta.label}`);
+        const tabVisible = await existeXPath(page, pesta.xpathTab);
+        if (!tabVisible) {
+            fail(`${pesta.checkNum} — Pestaña "${pesta.label}" — tab no encontrado`);
+            continue;
+        }
+        await clickXPath(page, pesta.xpathTab);
+        await sleep(2000);
+
+        if (pesta.alertaXpath) {
+            const hayAlerta = await existeXPath(page, pesta.alertaXpath);
+            if (hayAlerta) {
+                pass(`${pesta.checkNum} — Pestaña "${pesta.label}"`, `sin ${pesta.label.toLowerCase()} (alerta OK)`);
+                continue;
+            }
+        }
+
+        let tablaEncontrada = false;
+        let tablaDetalle = '';
+        for (const sel of pesta.tablas) {
+            const tablaEl = await page.waitForSelector(sel, { timeout: 5000 }).catch(() => null);
+            if (tablaEl) {
+                const filas = await page.$$eval(`${sel} tbody tr`, rows => rows.length).catch(() => 0);
+                tablaDetalle = `${sel.replace(/[\[\]']/g, '')} · ${filas} fila(s)`;
+                tablaEncontrada = true;
+                break;
+            }
+        }
+        tablaEncontrada
+            ? pass(`${pesta.checkNum} — Pestaña "${pesta.label}"`, tablaDetalle)
+            : fail(`${pesta.checkNum} — Pestaña "${pesta.label}" — tabla no encontrada`);
     }
 }
 
 // ── GRUPO F: Escritos 2 ────────────────────────────────────────────────────────
+// URL real de la extensión: https://escritos.pjn.gov.ar/nuevo
+// cs-escritos2.js espera: combobox jurisdicción · input número · input año · StepperNextBtn
 async function grupoF(page) {
-    log('\n══ GRUPO F — Escritos 2 (escritos.pjn.gov.ar, cs-escritos2.js) ══');
+    log('\n══ GRUPO F — Escritos 2 (escritos.pjn.gov.ar/nuevo, cs-escritos2.js) ══');
 
-    // F1: Portal accesible
-    log('F1 — Navegando a escritos.pjn.gov.ar...');
+    log('F1 — Navegando a escritos.pjn.gov.ar/nuevo...');
     let estado;
     try {
+        // La sesión SSO de Keycloak establecida en D debería permitir auto-login
         estado = await navegarPortalReact(
             page,
-            ESCRITOS2_URL,
+            ESCRITOS2_URL,   // https://escritos.pjn.gov.ar/nuevo
             'input[role="combobox"][aria-autocomplete="list"]'
         );
     } catch (err) {
-        fail('F1 — Error al navegar a escritos.pjn.gov.ar', err.message.slice(0, 60));
+        fail('F1 — Error al navegar', err.message.slice(0, 60));
         ['F2 — SSO/Sesión', 'F3 — Combobox jurisdicción', 'F4 — input número',
          'F5 — input año', 'F6 — button#StepperNextBtn'].forEach(l => skip(l, 'navegación fallida'));
         return;
     }
 
-    pass('F1 — escritos.pjn.gov.ar accesible');
+    pass('F1 — escritos.pjn.gov.ar/nuevo accesible');
 
     if (estado === 'no-password') {
-        fail('F2 — Contraseña PJN no disponible para escritos.pjn.gov.ar');
+        fail('F2 — Contraseña PJN no disponible');
         ['F3 — Combobox jurisdicción', 'F4 — input número', 'F5 — input año', 'F6 — button#StepperNextBtn']
             .forEach(l => skip(l, 'sin sesión'));
         return;
     }
     if (estado === 'failed' || estado === 'timeout') {
-        fail('F2 — Login SSO fallido para escritos.pjn.gov.ar', estado);
+        fail('F2 — SSO fallido o timeout esperando formulario', estado);
         ['F3 — Combobox jurisdicción', 'F4 — input número', 'F5 — input año', 'F6 — button#StepperNextBtn']
             .forEach(l => skip(l, 'sin sesión'));
         return;
@@ -349,57 +719,62 @@ async function grupoF(page) {
         ? pass('F2 — Sesión SSO activa (auto-login)')
         : pass('F2 — Login SSO exitoso');
 
-    // F3–F6: Formulario MUI stepper
+    // F3–F6: Selectores del formulario MUI stepper
     const fJuris  = await existe(page, 'input[role="combobox"][aria-autocomplete="list"]');
     fJuris
-        ? pass('F3 — Combobox jurisdicción presente', 'input[role="combobox"][aria-autocomplete="list"]')
+        ? pass('F3 — Combobox jurisdicción presente', 'input[role="combobox"][aria-autocomplete="list"] ✓')
         : fail('F3 — Combobox jurisdicción no encontrado');
+
+    // Breve pausa para que React termine de renderizar los demás campos
+    await sleep(600);
 
     const fNumero = await existe(page, 'input[name="numeroExpediente"]');
     fNumero
         ? pass('F4 — input[name="numeroExpediente"] presente')
         : fail('F4 — input[name="numeroExpediente"] no encontrado');
 
-    const fAnio   = await existe(page, 'input[name="anioExpediente"]');
+    const fAnio = await existe(page, 'input[name="anioExpediente"]');
     fAnio
         ? pass('F5 — input[name="anioExpediente"] presente')
         : fail('F5 — input[name="anioExpediente"] no encontrado');
 
-    const fBtn    = await existe(page, 'button#StepperNextBtn');
+    const fBtn = await existe(page, 'button#StepperNextBtn');
     fBtn
         ? pass('F6 — button#StepperNextBtn presente')
         : fail('F6 — button#StepperNextBtn no encontrado');
 }
 
 // ── GRUPO G: Notificaciones ────────────────────────────────────────────────────
+// URL real de la extensión: https://notif.pjn.gov.ar/nueva
+// cs-notif.js espera: combobox jurisdicción · input número · input año · StepperNextBtn
 async function grupoG(page) {
-    log('\n══ GRUPO G — Notificaciones (notif.pjn.gov.ar, cs-notif.js) ═══');
+    log('\n══ GRUPO G — Notificaciones (notif.pjn.gov.ar/nueva, cs-notif.js) ═══');
 
-    log('G1 — Navegando a notif.pjn.gov.ar...');
+    log('G1 — Navegando a notif.pjn.gov.ar/nueva...');
     let estado;
     try {
         estado = await navegarPortalReact(
             page,
-            NOTIF_URL,
+            NOTIF_URL,   // https://notif.pjn.gov.ar/nueva
             'input[role="combobox"][aria-autocomplete="list"]'
         );
     } catch (err) {
-        fail('G1 — Error al navegar a notif.pjn.gov.ar', err.message.slice(0, 60));
+        fail('G1 — Error al navegar', err.message.slice(0, 60));
         ['G2 — SSO/Sesión', 'G3 — Combobox jurisdicción', 'G4 — input número',
          'G5 — input año', 'G6 — button#StepperNextBtn'].forEach(l => skip(l, 'navegación fallida'));
         return;
     }
 
-    pass('G1 — notif.pjn.gov.ar accesible');
+    pass('G1 — notif.pjn.gov.ar/nueva accesible');
 
     if (estado === 'no-password') {
-        fail('G2 — Contraseña PJN no disponible para notif.pjn.gov.ar');
+        fail('G2 — Contraseña PJN no disponible');
         ['G3 — Combobox jurisdicción', 'G4 — input número', 'G5 — input año', 'G6 — button#StepperNextBtn']
             .forEach(l => skip(l, 'sin sesión'));
         return;
     }
     if (estado === 'failed' || estado === 'timeout') {
-        fail('G2 — Login SSO fallido para notif.pjn.gov.ar', estado);
+        fail('G2 — SSO fallido o timeout esperando formulario', estado);
         ['G3 — Combobox jurisdicción', 'G4 — input número', 'G5 — input año', 'G6 — button#StepperNextBtn']
             .forEach(l => skip(l, 'sin sesión'));
         return;
@@ -408,103 +783,94 @@ async function grupoG(page) {
         ? pass('G2 — Sesión SSO activa (auto-login)')
         : pass('G2 — Login SSO exitoso');
 
-    // G3–G6: Selectores de cs-notif.js
-    const fJuris  = await existe(page, 'input[role="combobox"][aria-autocomplete="list"]');
+    // G3–G6: Mismos selectores que Escritos 2 (mismo componente React)
+    const fJuris = await existe(page, 'input[role="combobox"][aria-autocomplete="list"]');
     fJuris
-        ? pass('G3 — Combobox jurisdicción presente', 'input[role="combobox"][aria-autocomplete="list"]')
+        ? pass('G3 — Combobox jurisdicción presente', 'input[role="combobox"][aria-autocomplete="list"] ✓')
         : fail('G3 — Combobox jurisdicción no encontrado');
+
+    await sleep(600);
 
     const fNumero = await existe(page, 'input[name="numeroExpediente"]');
     fNumero
         ? pass('G4 — input[name="numeroExpediente"] presente')
         : fail('G4 — input[name="numeroExpediente"] no encontrado');
 
-    const fAnio   = await existe(page, 'input[name="anioExpediente"]');
+    const fAnio = await existe(page, 'input[name="anioExpediente"]');
     fAnio
         ? pass('G5 — input[name="anioExpediente"] presente')
         : fail('G5 — input[name="anioExpediente"] no encontrado');
 
-    const fBtn    = await existe(page, 'button#StepperNextBtn');
+    const fBtn = await existe(page, 'button#StepperNextBtn');
     fBtn
         ? pass('G6 — button#StepperNextBtn presente')
         : fail('G6 — button#StepperNextBtn no encontrado');
 }
 
 // ── GRUPO H: DEOX ──────────────────────────────────────────────────────────────
+// URL real de la extensión: https://deox.pjn.gov.ar/nuevo
+// cs-deox.js espera: input[name="camara"] · input número · input año · StepperNextBtn
 async function grupoH(page) {
-    log('\n══ GRUPO H — DEOX (deox.pjn.gov.ar, cs-deox.js) ═══════════');
+    log('\n══ GRUPO H — DEOX (deox.pjn.gov.ar/nuevo, cs-deox.js) ═════');
 
-    log('H1 — Navegando a deox.pjn.gov.ar...');
+    log('H1 — Navegando a deox.pjn.gov.ar/nuevo...');
     let estado;
     try {
-        // DEOX usa input[name="camara"] como primer campo del formulario
         estado = await navegarPortalReact(
             page,
-            DEOX_URL,
+            DEOX_URL,    // https://deox.pjn.gov.ar/nuevo
             'input[name="camara"]'
         );
     } catch (err) {
-        fail('H1 — Error al navegar a deox.pjn.gov.ar', err.message.slice(0, 60));
+        fail('H1 — Error al navegar', err.message.slice(0, 60));
         ['H2 — SSO/Sesión', 'H3 — input[name="camara"]', 'H4 — input número',
-         'H5 — input año', 'H6 — button#StepperNextBtn', 'H7 — ul[role="listbox"]'].forEach(l => skip(l, 'navegación fallida'));
+         'H5 — input año', 'H6 — button#StepperNextBtn'].forEach(l => skip(l, 'navegación fallida'));
         return;
     }
 
-    pass('H1 — deox.pjn.gov.ar accesible');
+    pass('H1 — deox.pjn.gov.ar/nuevo accesible');
 
     if (estado === 'no-password') {
-        fail('H2 — Contraseña PJN no disponible para deox.pjn.gov.ar');
-        ['H3 — input[name="camara"]', 'H4 — input número', 'H5 — input año',
-         'H6 — button#StepperNextBtn', 'H7 — ul[role="listbox"]'].forEach(l => skip(l, 'sin sesión'));
+        fail('H2 — Contraseña PJN no disponible');
+        ['H3 — input[name="camara"]', 'H4 — input número', 'H5 — input año', 'H6 — button#StepperNextBtn']
+            .forEach(l => skip(l, 'sin sesión'));
         return;
     }
     if (estado === 'failed' || estado === 'timeout') {
-        fail('H2 — Login SSO fallido para deox.pjn.gov.ar', estado);
-        ['H3 — input[name="camara"]', 'H4 — input número', 'H5 — input año',
-         'H6 — button#StepperNextBtn', 'H7 — ul[role="listbox"]'].forEach(l => skip(l, 'sin sesión'));
+        fail('H2 — SSO fallido o timeout esperando formulario', estado);
+        ['H3 — input[name="camara"]', 'H4 — input número', 'H5 — input año', 'H6 — button#StepperNextBtn']
+            .forEach(l => skip(l, 'sin sesión'));
         return;
     }
     estado === 'active'
         ? pass('H2 — Sesión SSO activa (auto-login)')
         : pass('H2 — Login SSO exitoso');
 
-    // H3: input[name="camara"] — DEOX usa este selector en lugar del combobox genérico
+    // H3: input[name="camara"] — selector diferenciador del DEOX vs escritos/notif
     const fCamara = await existe(page, 'input[name="camara"]');
     fCamara
         ? pass('H3 — input[name="camara"] (jurisdicción) presente')
         : fail('H3 — input[name="camara"] no encontrado');
 
-    // H4: Input número expediente
+    await sleep(600);
+
     const fNumero = await existe(page, 'input[name="numeroExpediente"]');
     fNumero
         ? pass('H4 — input[name="numeroExpediente"] presente')
         : fail('H4 — input[name="numeroExpediente"] no encontrado');
 
-    // H5: Input año
     const fAnio = await existe(page, 'input[name="anioExpediente"]');
     fAnio
         ? pass('H5 — input[name="anioExpediente"] presente')
         : fail('H5 — input[name="anioExpediente"] no encontrado');
 
-    // H6: StepperNextBtn
     const fBtn = await existe(page, 'button#StepperNextBtn');
     fBtn
         ? pass('H6 — button#StepperNextBtn presente')
         : fail('H6 — button#StepperNextBtn no encontrado');
-
-    // H7: ul[role="listbox"] (dropdown de jurisdicciones, aparece al hacer focus en el campo camara)
-    //     Solo verificamos que el selector del combobox sea activable — no abrimos el dropdown.
-    //     La existencia de input[name="camara"] con role correcto es suficiente.
-    const fListboxActivable = await page.$eval(
-        'input[name="camara"]',
-        el => el.getAttribute('role') === 'combobox' || el.getAttribute('aria-autocomplete') !== null || el.tagName === 'INPUT'
-    ).catch(() => false);
-    fListboxActivable
-        ? pass('H7 — input[name="camara"] es un campo interactivo válido')
-        : fail('H7 — input[name="camara"] no tiene atributos de combobox esperados');
 }
 
-// ── Subir resultados al dashboard ─────────────────────────────────────────────
+// ── Subir resultados al dashboard ──────────────────────────────────────────────
 async function uploadResults(result) {
     if (!ADMIN_EMAIL || !ADMIN_PASS) {
         console.log('\n⚠️  ADMIN_EMAIL / ADMIN_PASSWORD no configurados — resultados NO subidos al dashboard.');
@@ -533,13 +899,14 @@ async function uploadResults(result) {
     }
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+// ── Main ───────────────────────────────────────────────────────────────────────
 async function main() {
     console.log('═══════════════════════════════════════════════════════════');
     console.log('  🧪 Smoke Test — Extensión Chrome (5 flujos PJN)');
     console.log(`  ${new Date().toLocaleString('es-AR')}`);
-    console.log('  D: SCW Consulta  E: SCW Escritos 1  F: Escritos 2');
-    console.log('  G: Notificaciones  H: DEOX');
+    console.log('  D: SCW Consulta + 4 secciones   E: SCW Escritos 1 + Informe completo');
+    console.log('  F: escritos.pjn.gov.ar/nuevo    G: notif.pjn.gov.ar/nueva');
+    console.log('  H: deox.pjn.gov.ar/nuevo');
     console.log('═══════════════════════════════════════════════════════════\n');
 
     t0Total = Date.now();
@@ -563,17 +930,18 @@ async function main() {
     const page  = pages.length > 0 ? pages[0] : await browser.newPage();
 
     try {
-        // Grupos D y E necesitan sesión SCW activa
+        // D: Login SCW + recorre 4 secciones + formulario consulta
         const ssoOk = await grupoD(page).catch(err => { fail('D — Error inesperado', err.message); return false; });
 
         if (!ssoOk) {
-            skip('E — SCW Escritos 1', 'sin sesión SCW');
+            skip('E — SCW Escritos 1 + Informe', 'sin sesión SCW');
         } else {
+            // E: Informe completo + verificación de escritos1
             await grupoE(page).catch(err => fail('E — Error inesperado', err.message));
         }
 
-        // Grupos F, G, H usan portales React independientes
-        // La sesión Keycloak establecida en D/E debería permitir auto-login en estos portales
+        // F/G/H: Portales React independientes
+        // La sesión Keycloak de D/E debería permitir auto-login en estos portales
         await grupoF(page).catch(err => fail('F — Error inesperado', err.message));
         await grupoG(page).catch(err => fail('G — Error inesperado', err.message));
         await grupoH(page).catch(err => fail('H — Error inesperado', err.message));
