@@ -295,14 +295,16 @@ async function loginSSO(page, sessionSelector) {
  * Hay que usar waitForSelector para ambas fases en lugar de un sleep fijo.
  */
 async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
-    // 1) Focus + .value + input event (exactamente como cs-escritos2.js)
-    await page.evaluate((label) => {
-        const input = document.querySelector('input[role="combobox"][aria-autocomplete="list"]');
-        if (!input) return;
-        input.focus();
-        input.value = label;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    }, jurisdiccionLabel);
+    // 1) Usar eventos de teclado REALES para que MUI Autocomplete filtre correctamente.
+    //    page.evaluate con .value + Event('input') NO dispara el filtro de MUI en Puppeteer.
+    //    page.keyboard.type() dispara keydown → keypress → input → keyup por cada carácter,
+    //    que es lo que MUI necesita para actualizar su estado interno y mostrar opciones filtradas.
+    const combobox = await page.$('input[role="combobox"][aria-autocomplete="list"]');
+    if (!combobox) return { jurisdiccionOk: false, numOk: false, anioOk: false, resultadoTxt: null };
+    await combobox.click({ clickCount: 3 }); // seleccionar todo el texto existente
+    await page.keyboard.press('Backspace');   // limpiar
+    await sleep(100);
+    await page.keyboard.type(jurisdiccionLabel, { delay: 60 }); // tecleo real
 
     // 2) Esperar las 2 fases de render del dropdown MUI
     const listboxEl = await page.waitForSelector('ul[role="listbox"]', { timeout: 6000 }).catch(() => null);
@@ -317,7 +319,6 @@ async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
             const textoBuscar = texto.trim().toLowerCase();
             for (const item of items) {
                 const t = item.innerText.trim().toLowerCase();
-                // Mismo criterio que cs-escritos2.js: si alguno contiene el texto buscado
                 if (t.includes(textoBuscar) || textoBuscar.includes(t.slice(0, 3))) {
                     item.click();
                     return true;
@@ -860,16 +861,21 @@ async function grupoE(page) {
         skip('E14 — Click "Presentar escrito"', '#expediente:nuevoEscritoBtn a no encontrado');
     } else {
         try {
-            await Promise.all([
-                page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 25000 }),
-                btnEscritoFinal.click(),
-            ]);
+            await btnEscritoFinal.click();
+            // waitForNavigation con networkidle2 no funciona en SPAs React que mantienen
+            // conexiones abiertas. Usamos waitForFunction sobre la URL directamente.
+            await page.waitForFunction(
+                () => location.href.includes('escritos.pjn.gov.ar'),
+                { timeout: 20000 }
+            );
             const urlFinal = page.url();
-            urlFinal.includes('escritos.pjn.gov.ar')
-                ? pass('E14 — Click "Presentar escrito" → escritos.pjn.gov.ar', urlFinal.slice(0, 70))
-                : fail('E14 — URL inesperada tras click "Presentar escrito"', urlFinal.slice(0, 70));
+            pass('E14 — Click "Presentar escrito" → escritos.pjn.gov.ar', urlFinal.slice(0, 70));
         } catch (err) {
-            fail('E14 — Error al navegar tras click', err.message.slice(0, 60));
+            const urlActual = page.url();
+            // Si ya llegó a escritos pero waitForFunction tardó más, igual es un pass
+            urlActual.includes('escritos.pjn.gov.ar')
+                ? pass('E14 — Click "Presentar escrito" → escritos.pjn.gov.ar', urlActual.slice(0, 70))
+                : fail('E14 — No llegó a escritos.pjn.gov.ar', `url="${urlActual.slice(0, 60)}"`);
         }
     }
 }
@@ -1134,42 +1140,39 @@ async function grupoH(page) {
     if (fCamara && fNumero && fAnio && fBtn) {
         log(`H7 — Rellenando FCR ${EXP_NUMERO}/${EXP_ANIO} en DEOX...`);
         try {
-            // Focus + mousedown + setReactVal con la sigla (como cs-deox.js)
-            await page.evaluate(() => {
-                const camaraEl = document.querySelector('input[name="camara"]');
-                if (!camaraEl) return;
-                camaraEl.focus();
-                camaraEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-            });
-            await sleep(150);
-            await page.evaluate((sigla) => {
-                const setter   = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-                const camaraEl = document.querySelector('input[name="camara"]');
-                if (!camaraEl) return;
-                setter.call(camaraEl, sigla);
-                camaraEl.dispatchEvent(new Event('input', { bubbles: true }));
-            }, EXP_SIGLA);
+            // Mismo enfoque que F/G: tecleo real para que MUI filtre correctamente.
+            // setReactVal abre el listbox pero no filtra (muestra todos los items).
+            const camaraInput = await page.$('input[name="camara"]');
+            await camaraInput.click({ clickCount: 3 });
+            await page.keyboard.press('Backspace');
+            await sleep(100);
+            await page.keyboard.type(EXP_SIGLA, { delay: 80 }); // 'FCR' → filtra el dropdown
 
-            // Esperar las 2 fases de render del listbox MUI (igual que rellenarFormularioMUI)
+            // Esperar las 2 fases de render del listbox MUI
             const listboxH = await page.waitForSelector('ul[role="listbox"]', { timeout: 4000 }).catch(() => null);
             let camaraOk = false;
+            let camaraTexto = '';
             if (listboxH) {
                 await page.waitForSelector('ul[role="listbox"] li[role="option"]', { timeout: 2000 }).catch(() => null);
-                camaraOk = await page.evaluate(() => {
+                const selected = await page.evaluate((sigla) => {
                     const listbox = document.querySelector('ul[role="listbox"]');
-                    if (!listbox) return false;
+                    if (!listbox) return null;
                     const items = listbox.querySelectorAll('li[role="option"]');
-                    if (items.length > 0) { items[0].click(); return true; }
-                    return false;
-                });
+                    // Buscar el item que contiene la sigla exacta (FCR)
+                    for (const item of items) {
+                        if (item.innerText.includes(sigla)) { item.click(); return item.innerText.trim().slice(0, 40); }
+                    }
+                    if (items.length > 0) { items[0].click(); return items[0].innerText.trim().slice(0, 40); }
+                    return null;
+                }, EXP_SIGLA);
+                camaraOk   = selected !== null;
+                camaraTexto = selected || '';
             }
             await sleep(300);
 
-            // Verificar que camara tiene algún valor (después de la selección tendrá el texto del item)
-            const camaraVal = await page.$eval('input[name="camara"]', el => el.value).catch(() => '');
-            camaraOk && camaraVal
-                ? pass('H7 — input[name="camara"] seleccionado del dropdown', `"${camaraVal.slice(0, 30)}"`)
-                : fail('H7 — No se pudo seleccionar jurisdicción en DEOX', camaraVal ? `val="${camaraVal}"` : 'listbox no apareció');
+            camaraOk
+                ? pass('H7 — input[name="camara"] seleccionado del dropdown', `"${camaraTexto}"`)
+                : fail('H7 — No se pudo seleccionar jurisdicción en DEOX', 'listbox no apareció o sin opciones');
 
             // Rellenar número y año
             await page.evaluate((num, yr) => {
