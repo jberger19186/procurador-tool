@@ -11,8 +11,9 @@
  *
  *   E — SCW Escritos 1 + Informe completo  ─── reporta a → "Portal PJN"
  *       Busca FCR 18745/2017 · datos generales · tabla actuaciones · paginación · históricas
- *       · tabs Intervinientes/Vinculados/Recursos · verifica botón "Presentar escrito"
- *       → cubre cs-scw.js flujo "escritos1" + todos los selectores del módulo informe
+ *       · tabs Intervinientes/Vinculados/Recursos
+ *       · E14: click "Presentar escrito" → verifica navegación a escritos.pjn.gov.ar
+ *       → cubre cs-scw.js flujo "escritos1" end-to-end + todos los selectores del módulo informe
  *
  *   F — Escritos 2  → escritos.pjn.gov.ar/nuevo  (cs-escritos2.js) ─── reporta a → "Extensión Chrome"
  *       F1–F6: acceso + selectores MUI · F7–F9: rellena FCR 18745/2017 y verifica resultado
@@ -849,6 +850,28 @@ async function grupoE(page) {
             ? pass(`${pesta.checkNum} — Pestaña "${pesta.label}"`, tablaDetalle)
             : fail(`${pesta.checkNum} — Pestaña "${pesta.label}" — tabla no encontrada`);
     }
+
+    // E14: Click "Presentar escrito" → verifica navegación a escritos.pjn.gov.ar
+    // Este es el paso final del flujo escritos1 de cs-scw.js (línea 118-121):
+    //   legend "Datos Generales" ✓  →  click #expediente:nuevoEscritoBtn a  →  escritos.pjn.gov.ar
+    log('\n── E14 — Click "Presentar escrito" → escritos.pjn.gov.ar');
+    const btnEscritoFinal = await page.$('#expediente\\:nuevoEscritoBtn a').catch(() => null);
+    if (!btnEscritoFinal) {
+        skip('E14 — Click "Presentar escrito"', '#expediente:nuevoEscritoBtn a no encontrado');
+    } else {
+        try {
+            await Promise.all([
+                page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 25000 }),
+                btnEscritoFinal.click(),
+            ]);
+            const urlFinal = page.url();
+            urlFinal.includes('escritos.pjn.gov.ar')
+                ? pass('E14 — Click "Presentar escrito" → escritos.pjn.gov.ar', urlFinal.slice(0, 70))
+                : fail('E14 — URL inesperada tras click "Presentar escrito"', urlFinal.slice(0, 70));
+        } catch (err) {
+            fail('E14 — Error al navegar tras click', err.message.slice(0, 60));
+        }
+    }
 }
 
 // ── GRUPO F: Escritos 2 ────────────────────────────────────────────────────────
@@ -1253,7 +1276,7 @@ async function main() {
     console.log('═══════════════════════════════════════════════════════════');
     console.log('  🧪 Smoke Test PJN — Portal SCW + 5 flujos Extensión Chrome');
     console.log(`  ${new Date().toLocaleString('es-AR')}`);
-    console.log('  D+E → Portal PJN:      SCW login · 4 secciones · informe FCR 18745/2017');
+    console.log('  D+E → Portal PJN:      SCW login · 4 secciones · informe FCR 18745/2017 · click Presentar escrito');
     console.log('  F+G+H → Extensión:     escritos · notif · DEOX  (relleno FCR 18745/2017)');
     console.log('═══════════════════════════════════════════════════════════\n');
 
