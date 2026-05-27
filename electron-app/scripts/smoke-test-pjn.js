@@ -330,13 +330,19 @@ async function rellenarFormularioMUI(page, jurisdiccionLabel, numero, anio) {
     }
     await sleep(400);
 
-    // 3) Rellenar número y año (.value + input, como cs-escritos2.js)
-    await page.evaluate((num, yr) => {
-        const numEl  = document.querySelector('input[name="numeroExpediente"]');
-        const anioEl = document.querySelector('input[name="anioExpediente"]');
-        if (numEl)  { numEl.value  = num;  numEl.dispatchEvent(new Event('input', { bubbles: true })); }
-        if (anioEl) { anioEl.value = yr;   anioEl.dispatchEvent(new Event('input', { bubbles: true })); }
-    }, numero, anio);
+    // 3) Rellenar número y año con keyboard events reales (igual que jurisdicción).
+    //    .value + Event('input') actualiza el DOM pero NO el estado interno de React,
+    //    por lo que StepperNextBtn no avanza aunque los valores se vean correctos.
+    const numEl = await page.$('input[name="numeroExpediente"]');
+    if (numEl) {
+        await numEl.click({ clickCount: 3 });
+        await page.keyboard.type(numero, { delay: 30 });
+    }
+    const anioEl = await page.$('input[name="anioExpediente"]');
+    if (anioEl) {
+        await anioEl.click({ clickCount: 3 });
+        await page.keyboard.type(anio, { delay: 30 });
+    }
     await sleep(200);
 
     const numOk  = await page.$eval('input[name="numeroExpediente"]', el => el.value).catch(() => '') === numero;
@@ -860,22 +866,40 @@ async function grupoE(page) {
     if (!btnEscritoFinal) {
         skip('E14 — Click "Presentar escrito"', '#expediente:nuevoEscritoBtn a no encontrado');
     } else {
+        // "Presentar escrito" abre escritos.pjn.gov.ar en una NUEVA PESTAÑA.
+        // Hay que capturar el target antes del click, esperar el stepper
+        // "Selección de destinatario" y cerrar la pestaña al terminar.
         try {
-            await btnEscritoFinal.click();
-            // waitForNavigation con networkidle2 no funciona en SPAs React que mantienen
-            // conexiones abiertas. Usamos waitForFunction sobre la URL directamente.
-            await page.waitForFunction(
-                () => location.href.includes('escritos.pjn.gov.ar'),
-                { timeout: 20000 }
-            );
-            const urlFinal = page.url();
-            pass('E14 — Click "Presentar escrito" → escritos.pjn.gov.ar', urlFinal.slice(0, 70));
+            const browser = page.browser();
+            const [newTarget] = await Promise.all([
+                new Promise(resolve => browser.once('targetcreated', t => resolve(t))),
+                btnEscritoFinal.click(),
+            ]);
+            const newPage = await newTarget.page();
+            if (!newPage) {
+                fail('E14 — Nueva pestaña no obtenida');
+            } else {
+                // Esperar el stepper "Selección de destinatario"
+                const stepLabel = await newPage.waitForSelector(
+                    '.MuiStepLabel-label',
+                    { timeout: 20000 }
+                ).catch(() => null);
+                const labelText = stepLabel
+                    ? await stepLabel.evaluate(el => el.textContent.trim()).catch(() => '')
+                    : '';
+                const url14 = newPage.url();
+                if (labelText.toLowerCase().includes('destinatario') || labelText.toLowerCase().includes('selección')) {
+                    pass('E14 — Escritos 1: nueva pestaña con stepper "Selección de destinatario"', url14.slice(0, 60));
+                } else if (url14.includes('escritos.pjn.gov.ar')) {
+                    pass('E14 — Escritos 1: nueva pestaña en escritos.pjn.gov.ar', `stepper="${labelText.slice(0,30)}"`);
+                } else {
+                    fail('E14 — Pestaña inesperada', `url="${url14.slice(0, 60)}" label="${labelText.slice(0,30)}"`);
+                }
+                await newPage.close();
+                log('E14 — Pestaña de escritos cerrada, continuando con F/G/H');
+            }
         } catch (err) {
-            const urlActual = page.url();
-            // Si ya llegó a escritos pero waitForFunction tardó más, igual es un pass
-            urlActual.includes('escritos.pjn.gov.ar')
-                ? pass('E14 — Click "Presentar escrito" → escritos.pjn.gov.ar', urlActual.slice(0, 70))
-                : fail('E14 — No llegó a escritos.pjn.gov.ar', `url="${urlActual.slice(0, 60)}"`);
+            fail('E14 — Error al manejar nueva pestaña', err.message.slice(0, 60));
         }
     }
 }
@@ -1174,14 +1198,11 @@ async function grupoH(page) {
                 ? pass('H7 — input[name="camara"] seleccionado del dropdown', `"${camaraTexto}"`)
                 : fail('H7 — No se pudo seleccionar jurisdicción en DEOX', 'listbox no apareció o sin opciones');
 
-            // Rellenar número y año
-            await page.evaluate((num, yr) => {
-                const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-                const numEl  = document.querySelector('input[name="numeroExpediente"]');
-                const anioEl = document.querySelector('input[name="anioExpediente"]');
-                if (numEl)  { numEl.focus();  setter.call(numEl,  num); numEl.dispatchEvent(new Event('input', { bubbles: true })); }
-                if (anioEl) { anioEl.focus(); setter.call(anioEl, yr);  anioEl.dispatchEvent(new Event('input', { bubbles: true })); }
-            }, EXP_NUMERO, EXP_ANIO);
+            // Rellenar número y año con keyboard events reales
+            const numElH = await page.$('input[name="numeroExpediente"]');
+            if (numElH) { await numElH.click({ clickCount: 3 }); await page.keyboard.type(EXP_NUMERO, { delay: 30 }); }
+            const anioElH = await page.$('input[name="anioExpediente"]');
+            if (anioElH) { await anioElH.click({ clickCount: 3 }); await page.keyboard.type(EXP_ANIO, { delay: 30 }); }
             await sleep(200);
 
             const numVal  = await page.$eval('input[name="numeroExpediente"]', el => el.value).catch(() => '');
