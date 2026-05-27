@@ -416,7 +416,7 @@ router.get('/account', authenticateToken, async (req, res) => {
                    s.suspension_cause, s.suspended_at, s.suspension_reason,
                    s.billing_paused, s.plan_expiry_date, s.plan_changes_this_cycle,
                    s.next_billing_date, s.payment_provider, s.cancel_at,
-                   s.scheduled_plan, s.reactivation_request,
+                   s.scheduled_plan, s.reactivation_request, s.trial_bonus_until,
                    p.id as plan_id, p.display_name as plan_display_name, p.description as plan_description,
                    p.proc_executions_limit, p.proc_expedientes_limit,
                    p.batch_executions_limit, p.batch_expedientes_limit,
@@ -549,7 +549,8 @@ router.get('/account', authenticateToken, async (req, res) => {
                 paymentProvider: u.payment_provider || null,
                 cancelAt: u.cancel_at || null,
                 scheduledPlan: u.scheduled_plan || null,
-                reactivationRequest: u.reactivation_request || null
+                reactivationRequest: u.reactivation_request || null,
+                trialBonusUntil: u.trial_bonus_until || null
             }
         });
     } catch (error) {

@@ -2052,20 +2052,33 @@ async function loadAccountData() {
                         ${rem <= 5 ? `<div style="margin-top:7px;font-size:12px;color:#991b1b;font-weight:600">🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.</div>` : ''}
                     </div>`;
             } else if (!a.paymentProvider && a.registrationStatus === 'active') {
+                // Banner: sin método de pago
                 trialBannerEl.style.display = '';
                 trialBannerEl.innerHTML = `
                     <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
                         <span style="font-size:20px">⚠️</span>
                         <div style="flex:1">
                             <div style="font-weight:600;color:#856404;font-size:13px">Sin método de pago configurado</div>
-                            <div style="color:#6c5700;font-size:12px;margin-top:2px">Configurá tu método de pago en el portal para evitar interrupciones en el servicio.</div>
+                            <div style="color:#6c5700;font-size:12px;margin-top:2px">Configurá tu método de pago para continuar usando el servicio sin interrupciones.</div>
                         </div>
                         <button id="btn-ir-portal-cuenta"
                             style="background:#ffc107;border:none;color:#333;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
-                            Ir al portal
+                            Configurar pago
                         </button>
                     </div>`;
-                document.getElementById('btn-ir-portal-cuenta')?.addEventListener('click', () => openPortal());
+                document.getElementById('btn-ir-portal-cuenta')?.addEventListener('click', () => openPortalSection('facturacion'));
+            } else if (a.paymentProvider && a.trialBonusUntil && new Date(a.trialBonusUntil) > new Date()) {
+                // Banner: bonus de bienvenida activo
+                const bonusDate = new Date(a.trialBonusUntil).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                trialBannerEl.style.display = '';
+                trialBannerEl.innerHTML = `
+                    <div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                        <span style="font-size:20px">🎁</span>
+                        <div style="flex:1">
+                            <div style="font-weight:600;color:#065f46;font-size:13px">Bonus de bienvenida activo</div>
+                            <div style="color:#047857;font-size:12px;margin-top:2px">Tenés +20 usos de prueba sumados a tu plan, válidos hasta el ${bonusDate}.</div>
+                        </div>
+                    </div>`;
             } else {
                 trialBannerEl.style.display = 'none';
                 trialBannerEl.innerHTML = '';

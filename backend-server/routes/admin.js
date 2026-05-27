@@ -240,7 +240,14 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
         }
 
         const u = userResult.rows[0];
-        const usageLimit = u.proc_executions_limit > 0 ? u.proc_executions_limit : 9999;
+
+        // FASE 5: Al activar, usage_limit se mantiene en 20 (trial).
+        // El límite real del plan se aplica recién con el primer pago aprobado
+        // (webhook payment.approved → applyTrialBonus en subscriptionService.js).
+        // Solo si PAYMENT_MODULE_ENABLED=false (modo legacy sin cobro) se sube al límite del plan.
+        const paymentEnabled = process.env.PAYMENT_MODULE_ENABLED === 'true';
+        const planLimit = u.proc_executions_limit > 0 ? u.proc_executions_limit : 9999;
+        const usageLimit = paymentEnabled ? 20 : planLimit;
 
         await client.query(`
             UPDATE users

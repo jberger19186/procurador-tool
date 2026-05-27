@@ -398,8 +398,36 @@ async function sendAdminReactivationRequest(nombre, apellido, email, suspensionR
     );
 }
 
+// ─── Fase 5 — Emails de cobranza ──────────────────────────────────────────────
+
+async function sendInvoiceEmail(email, pdfUrl, numero) {
+    const html = `
+        <h2>Tu factura de Procurador SCW</h2>
+        <p>Tu factura <strong>#${numero}</strong> ya está disponible.</p>
+        <p><a href="${pdfUrl}" style="display:inline-block;background:#d97706;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Ver factura en PDF</a></p>
+        <p style="color:#8a8a8a;font-size:13px;">Si el botón no funciona, copiá este link: <a href="${pdfUrl}">${pdfUrl}</a></p>
+    `;
+    return sendEmail(email, `Factura #${numero} — Procurador SCW`, html);
+}
+
+async function sendPaymentFailedEmail(email, graceEndDate) {
+    const fecha = new Date(graceEndDate).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const html = `
+        <h2>⚠️ Tu pago no pudo procesarse</h2>
+        <p>Hubo un problema al cobrar tu suscripción de Procurador SCW.</p>
+        <p>Tenés tiempo hasta el <strong>${fecha}</strong> para actualizar tu método de pago antes de que se suspenda el acceso.</p>
+        <p><a href="${process.env.APP_BASE_URL || 'https://procuradortool.com'}/portal" style="display:inline-block;background:#d97706;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Actualizar método de pago</a></p>
+    `;
+    return sendEmail(email, 'Acción requerida: actualizá tu método de pago — Procurador SCW', html);
+}
+
+async function sendMail({ to, subject, text, html }) {
+    return sendEmail(to, subject, html || `<p>${text}</p>`);
+}
+
 module.exports = {
     sendEmail,
+    sendMail,
     sendEmailVerification,
     sendWelcomeEmail,
     sendAdminNewUserAlert,
@@ -414,4 +442,7 @@ module.exports = {
     sendBillingReminderEmail,
     sendAdminReactivationRequest,
     sendTicketReplyEmail,
+    // Fase 5
+    sendInvoiceEmail,
+    sendPaymentFailedEmail,
 };

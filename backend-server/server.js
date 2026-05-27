@@ -50,7 +50,10 @@ app.use((req, res, next) => {
     })(req, res, next);
 });
 
-app.use(express.json());
+// Capturar rawBody para verificar firma de webhooks MercadoPago (HMAC-SHA256)
+app.use(express.json({
+    verify: (req, _res, buf) => { req.rawBody = buf; }
+}));
 app.use(express.urlencoded({ extended: false })); // Para formularios HTML (reset-password, etc.)
 
 // Trust proxy (importante para rate limiting con reverse proxy)
@@ -109,6 +112,11 @@ app.use('/monitor', require('./routes/monitor'));
 app.use('/license', require('./routes/license'));
 app.use('/users', require('./routes/users'));
 app.use('/legal', require('./routes/legal'));
+
+// ── Fase 5: Cobranza — rutas detrás de feature flag ──────────────────────────
+// checkPaymentEnabled se aplica internamente en cada router
+app.use('/usuarios/api/checkout', require('./routes/checkout'));
+app.use('/webhooks',              require('./routes/webhooks'));
 
 // Página guiada de actualización de extensión
 app.get('/descargar', (req, res) => {
@@ -664,6 +672,50 @@ cron.schedule('30 11 * * *', async () => {
         logger.error('[CRON] Error en suspensión por pago:', err.message);
     }
 }, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// ─── Crons de Fase 5 — solo si PAYMENT_MODULE_ENABLED=true ──────────────────
+if (process.env.PAYMENT_MODULE_ENABLED === 'true') {
+    const { retryPendingInvoices } = require('./services/invoiceService');
+
+    // Cobranza retry — cada 6 horas: reintenta suscripciones MP con pago fallido
+    cron.schedule('0 */6 * * *', async () => {
+        logger.info('[CRON] cobranza-retry: buscando suscripciones con pago fallido...');
+        try {
+            // Suscripciones con gracia activa (el preapproval MP reintenta automáticamente,
+            // aquí solo logueamos para tener visibilidad)
+            const { rows } = await pool.query(`
+                SELECT u.id, u.email, s.plan, s.payment_grace_ends_at
+                FROM subscriptions s
+                JOIN users u ON u.id = s.user_id
+                WHERE s.payment_grace_ends_at > NOW()
+                  AND s.suspension_cause = 'payment'
+            `);
+            if (rows.length > 0) {
+                logger.warn(`[CRON] cobranza-retry: ${rows.length} suscripciones con pago pendiente`, {
+                    users: rows.map(r => r.email)
+                });
+            } else {
+                logger.info('[CRON] cobranza-retry: sin suscripciones pendientes');
+            }
+        } catch (err) {
+            logger.error('[CRON] cobranza-retry error:', err.message);
+        }
+    }, { timezone: 'America/Argentina/Buenos_Aires' });
+
+    // Invoice retry — cada hora: reemite facturas Facturante con status='pending'
+    cron.schedule('0 * * * *', async () => {
+        logger.info('[CRON] invoice-retry: procesando facturas pendientes...');
+        try {
+            await retryPendingInvoices();
+        } catch (err) {
+            logger.error('[CRON] invoice-retry error:', err.message);
+        }
+    }, { timezone: 'America/Argentina/Buenos_Aires' });
+
+    logger.info('💳 Módulo de pagos ACTIVO — crons de cobranza e invoices habilitados');
+} else {
+    logger.info('💳 Módulo de pagos DESHABILITADO (PAYMENT_MODULE_ENABLED=false)');
+}
 
 // Manejo de shutdown graceful
 process.on('SIGINT', async () => {
