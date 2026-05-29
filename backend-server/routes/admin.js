@@ -1,9 +1,33 @@
 ﻿const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { getCacheStats, clearCache } = require('../utils/scriptEncryption');
 const { adminLimiter } = require('../middleware/rateLimiter');
 const { sendTicketReplyEmail } = require('../utils/mailer');
+
+// ── Multer: almacenamiento de PDFs de facturas ────────────────────────────────
+const invoicesDir = path.join(__dirname, '../public/invoices');
+if (!fs.existsSync(invoicesDir)) fs.mkdirSync(invoicesDir, { recursive: true });
+
+const invoiceStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, invoicesDir),
+    filename: (req, file, cb) => {
+        const invoiceId = req.params.invoiceId || 'new';
+        const ts = Date.now();
+        cb(null, `factura_${invoiceId}_${ts}.pdf`);
+    }
+});
+const uploadInvoice = multer({
+    storage: invoiceStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB máx
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype !== 'application/pdf') return cb(new Error('Solo se aceptan archivos PDF'));
+        cb(null, true);
+    }
+});
 
 // Aplicar rate limiter a todas las rutas de admin
 router.use(adminLimiter);
@@ -2520,6 +2544,152 @@ router.put('/settings/:key', authenticateAdmin, async (req, res) => {
     } catch (error) {
         console.error('Error actualizando setting:', error);
         res.status(500).json({ error: 'Error actualizando configuración' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECCIÓN: FACTURACIÓN MANUAL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /admin/invoices/pending ───────────────────────────────────────────────
+// Pagos aprobados que aún no tienen factura PDF emitida
+router.get('/invoices/pending', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { search = '' } = req.query;
+    try {
+        const { rows } = await db.query(`
+            SELECT
+                p.id          AS payment_id,
+                p.created_at  AS payment_date,
+                p.amount,
+                p.currency,
+                p.plan,
+                i.id          AS invoice_id,
+                u.id          AS user_id,
+                u.email,
+                u.nombre,
+                u.apellido,
+                u.cuit,
+                u.domicilio,
+                CONCAT_WS(' ',
+                    u.nombre, u.apellido,
+                    '·', u.email,
+                    '·', u.cuit,
+                    '·', (u.domicilio->>'calle'), (u.domicilio->>'numero') || ',',
+                    (u.domicilio->>'localidad') || ',', (u.domicilio->>'provincia')
+                ) AS datos_facturacion
+            FROM payments p
+            JOIN users u ON u.id = p.user_id
+            LEFT JOIN invoices i ON i.payment_id = p.id
+            WHERE p.status = 'approved'
+              AND (i.id IS NULL OR (i.pdf_url IS NULL OR i.pdf_url = ''))
+              AND ($1 = '' OR u.email ILIKE $2 OR u.nombre ILIKE $2 OR u.apellido ILIKE $2 OR u.cuit ILIKE $2)
+            ORDER BY p.created_at DESC
+            LIMIT 100
+        `, [search, `%${search}%`]);
+        res.json({ pending: rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── GET /admin/invoices ───────────────────────────────────────────────────────
+// Facturas ya emitidas con PDF, con filtros opcionales
+router.get('/invoices', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { search = '', status = '' } = req.query;
+    try {
+        const { rows } = await db.query(`
+            SELECT
+                i.id,
+                i.numero,
+                i.amount,
+                i.pdf_url,
+                i.status,
+                i.issued_at,
+                i.created_at,
+                p.id          AS payment_id,
+                p.created_at  AS payment_date,
+                p.plan,
+                u.id          AS user_id,
+                u.email,
+                u.nombre,
+                u.apellido,
+                u.cuit,
+                u.domicilio
+            FROM invoices i
+            LEFT JOIN payments p ON p.id = i.payment_id
+            LEFT JOIN users u ON u.id = i.user_id
+            WHERE i.pdf_url IS NOT NULL AND i.pdf_url <> ''
+              AND ($1 = '' OR u.email ILIKE $2 OR u.nombre ILIKE $2 OR u.apellido ILIKE $2 OR u.cuit ILIKE $2)
+              AND ($3 = '' OR i.status = $3)
+            ORDER BY COALESCE(i.issued_at, i.created_at) DESC
+            LIMIT 200
+        `, [search, `%${search}%`, status]);
+        res.json({ invoices: rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── POST /admin/invoices/:invoiceId/upload ────────────────────────────────────
+// Subir PDF a una factura existente (invoiceId = id de la tabla invoices)
+router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadInvoice.single('pdf'), async (req, res) => {
+    const db = req.app.get('db');
+    const { invoiceId } = req.params;
+    const { numero } = req.body;
+    if (!req.file) return res.status(400).json({ error: 'PDF requerido' });
+
+    const pdfUrl = `/invoices/${req.file.filename}`;
+    try {
+        await db.query(
+            `UPDATE invoices
+             SET pdf_url    = $1,
+                 numero     = COALESCE($2, numero),
+                 status     = 'issued',
+                 issued_at  = NOW(),
+                 updated_at = NOW()
+             WHERE id = $3`,
+            [pdfUrl, numero || null, invoiceId]
+        );
+        res.json({ ok: true, pdf_url: pdfUrl });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── POST /admin/invoices/from-payment/:paymentId ──────────────────────────────
+// Crear registro de factura + subir PDF para un pago que no tiene invoice aún
+router.post('/invoices/from-payment/:paymentId', authenticateAdmin, uploadInvoice.single('pdf'), async (req, res) => {
+    const db = req.app.get('db');
+    const { paymentId } = req.params;
+    const { numero } = req.body;
+    if (!req.file) return res.status(400).json({ error: 'PDF requerido' });
+
+    const pdfUrl = `/invoices/${req.file.filename}`;
+    try {
+        // Obtener datos del pago para crear la factura
+        const { rows: [pmt] } = await db.query(
+            'SELECT user_id, amount, plan FROM payments WHERE id = $1 AND status = $2',
+            [paymentId, 'approved']
+        );
+        if (!pmt) return res.status(404).json({ error: 'Pago no encontrado o no aprobado' });
+
+        // Crear registro de factura
+        const { rows: [inv] } = await db.query(
+            `INSERT INTO invoices (payment_id, user_id, amount, pdf_url, numero, status, issued_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, 'issued', NOW(), NOW())
+             ON CONFLICT (payment_id) DO UPDATE
+               SET pdf_url = EXCLUDED.pdf_url,
+                   numero  = COALESCE(EXCLUDED.numero, invoices.numero),
+                   status  = 'issued',
+                   issued_at = NOW()
+             RETURNING id`,
+            [paymentId, pmt.user_id, pmt.amount, pdfUrl, numero || null]
+        );
+        res.json({ ok: true, invoice_id: inv.id, pdf_url: pdfUrl });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

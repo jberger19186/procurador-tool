@@ -85,6 +85,8 @@ pool.query('SELECT NOW()', (err, res) => {
 
 // Servir assets estáticos globales (íconos, imágenes de marca)
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
+// PDFs de facturas — acceso directo por URL opaca (nombre de archivo con timestamp)
+app.use('/invoices', express.static(path.join(__dirname, 'public', 'invoices')));
 
 // Servir dashboard web admin como archivos estáticos
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dashboard')));

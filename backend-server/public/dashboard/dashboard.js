@@ -162,14 +162,15 @@ function navigate(page, id) {
         plans: 'Planes de suscripción',
         metrics: 'Métricas del sistema',
         legal: 'Legal',
-        diagnostico: 'Diagnóstico del sistema'
+        diagnostico: 'Diagnóstico del sistema',
+        'facturacion-admin': 'Facturación'
     };
     document.getElementById('topbar-title').textContent = titles[page] || page;
 
     const content = document.getElementById('content');
     content.innerHTML = '<div class="loading">Cargando...</div>';
 
-    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal, diagnostico: renderDiagnostico };
+    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal, diagnostico: renderDiagnostico, 'facturacion-admin': renderFacturacionAdmin };
     if (pages[page]) pages[page]();
 }
 
@@ -3005,3 +3006,240 @@ window.runAiPrioritize = async function() {
         btn.innerHTML = originalText;
     }
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SECCIÓN: FACTURACIÓN ADMIN
+// Flujo: pagos aprobados → admin sube PDF → factura visible para el usuario
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function renderFacturacionAdmin() {
+    const content = document.getElementById('content');
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:24px">
+
+            <!-- TAB BAR -->
+            <div style="display:flex;gap:0;border-bottom:2px solid #e5e7eb">
+                <button id="tab-pending" onclick="facturacionTab('pending')"
+                    style="padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:none;border-bottom:2px solid #d97706;margin-bottom:-2px;color:#d97706">
+                    📋 Pendientes
+                </button>
+                <button id="tab-issued" onclick="facturacionTab('issued')"
+                    style="padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:#6b7280">
+                    ✅ Emitidas
+                </button>
+            </div>
+
+            <!-- PANEL PENDIENTES -->
+            <div id="panel-pending">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+                    <input id="search-pending" type="text" placeholder="Buscar por email, nombre o CUIT…"
+                        style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"
+                        oninput="loadPendingInvoices()" />
+                    <button class="btn btn-sm btn-secondary" onclick="loadPendingInvoices()">🔄 Actualizar</button>
+                </div>
+                <div id="table-pending">Cargando…</div>
+            </div>
+
+            <!-- PANEL EMITIDAS -->
+            <div id="panel-issued" style="display:none">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+                    <input id="search-issued" type="text" placeholder="Buscar por email, nombre o CUIT…"
+                        style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"
+                        oninput="loadIssuedInvoices()" />
+                    <button class="btn btn-sm btn-secondary" onclick="loadIssuedInvoices()">🔄 Actualizar</button>
+                </div>
+                <div id="table-issued">Cargando…</div>
+            </div>
+
+        </div>`;
+
+    await loadPendingInvoices();
+}
+
+function facturacionTab(tab) {
+    const isPending = tab === 'pending';
+    document.getElementById('panel-pending').style.display = isPending ? '' : 'none';
+    document.getElementById('panel-issued').style.display  = isPending ? 'none' : '';
+    document.getElementById('tab-pending').style.borderBottomColor = isPending ? '#d97706' : 'transparent';
+    document.getElementById('tab-pending').style.color = isPending ? '#d97706' : '#6b7280';
+    document.getElementById('tab-issued').style.borderBottomColor  = isPending ? 'transparent' : '#d97706';
+    document.getElementById('tab-issued').style.color  = isPending ? '#6b7280' : '#d97706';
+    if (!isPending) loadIssuedInvoices();
+}
+
+async function loadPendingInvoices() {
+    const search = document.getElementById('search-pending')?.value || '';
+    const el = document.getElementById('table-pending');
+    if (!el) return;
+    el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:12px">Cargando…</div>';
+    try {
+        const data = await apiFetch(`/admin/invoices/pending?search=${encodeURIComponent(search)}`);
+        if (!data?.pending?.length) {
+            el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center">✅ No hay facturas pendientes</div>';
+            return;
+        }
+        el.innerHTML = `
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                    <tr style="border-bottom:2px solid #e5e7eb;background:#f9fafb">
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Fecha pago</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Datos de facturación</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Monto</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Plan</th>
+                        <th style="text-align:center;padding:10px 12px;font-weight:600;color:#374151">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.pending.map(row => pendingInvoiceRow(row)).join('')}
+                </tbody>
+            </table>
+            </div>`;
+    } catch (e) {
+        el.innerHTML = `<div style="color:#991b1b;font-size:13px;padding:12px">Error: ${escHtml(e.message)}</div>`;
+    }
+}
+
+function pendingInvoiceRow(row) {
+    const dom = row.domicilio || {};
+    const domStr = [dom.calle, dom.numero, dom.localidad, dom.provincia].filter(Boolean).join(', ') || '—';
+    const datosFacturacion = [
+        `<strong>${escHtml(row.nombre || '')} ${escHtml(row.apellido || '')}</strong>`,
+        escHtml(row.email || ''),
+        row.cuit ? `CUIT: ${escHtml(row.cuit)}` : '',
+        `<span style="color:#6b7280">${escHtml(domStr)}</span>`
+    ].filter(Boolean).join('<br>');
+
+    const uploadId = `upload-${row.payment_id}`;
+    const endpoint = row.invoice_id
+        ? `/admin/invoices/${row.invoice_id}/upload`
+        : `/admin/invoices/from-payment/${row.payment_id}`;
+
+    return `<tr style="border-bottom:1px solid #f3f4f6;transition:background .1s" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+        <td style="padding:12px;white-space:nowrap;vertical-align:top">${fmtDate(row.payment_date)}</td>
+        <td style="padding:12px;vertical-align:top;line-height:1.6">${datosFacturacion}</td>
+        <td style="padding:12px;white-space:nowrap;vertical-align:top;font-weight:600">$${Number(row.amount || 0).toLocaleString('es-AR')}</td>
+        <td style="padding:12px;vertical-align:top">${escHtml(row.plan || '—')}</td>
+        <td style="padding:12px;text-align:center;vertical-align:top">
+            <div id="action-${row.payment_id}">
+                <button class="btn btn-sm btn-primary" style="white-space:nowrap"
+                    onclick="showUploadForm('${row.payment_id}','${row.invoice_id || ''}')">
+                    📎 Subir factura
+                </button>
+            </div>
+        </td>
+    </tr>
+    <tr id="upload-row-${row.payment_id}" style="display:none;background:#fffbeb">
+        <td colspan="5" style="padding:16px 20px">
+            <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+                <div>
+                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Número de factura (opcional)</label>
+                    <input id="numero-${row.payment_id}" type="text" placeholder="Ej: 0001-00000123"
+                        style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:180px">
+                </div>
+                <div>
+                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">PDF de la factura *</label>
+                    <input id="file-${row.payment_id}" type="file" accept=".pdf"
+                        style="font-size:13px">
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="uploadInvoicePdf('${row.payment_id}','${row.invoice_id || ''}')">
+                    ✅ Confirmar
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="document.getElementById('upload-row-${row.payment_id}').style.display='none'">
+                    Cancelar
+                </button>
+            </div>
+        </td>
+    </tr>`;
+}
+
+function showUploadForm(paymentId, invoiceId) {
+    document.getElementById(`upload-row-${paymentId}`).style.display = '';
+    document.getElementById(`file-${paymentId}`)?.focus();
+}
+
+async function uploadInvoicePdf(paymentId, invoiceId) {
+    const fileInput = document.getElementById(`file-${paymentId}`);
+    const numeroInput = document.getElementById(`numero-${paymentId}`);
+    if (!fileInput?.files[0]) { alert('Seleccioná un archivo PDF'); return; }
+
+    const endpoint = invoiceId
+        ? `/admin/invoices/${invoiceId}/upload`
+        : `/admin/invoices/from-payment/${paymentId}`;
+
+    const form = new FormData();
+    form.append('pdf', fileInput.files[0]);
+    if (numeroInput?.value.trim()) form.append('numero', numeroInput.value.trim());
+
+    try {
+        const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: form
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Error al subir');
+        // Marcar la fila como procesada
+        const actionEl = document.getElementById(`action-${paymentId}`);
+        if (actionEl) actionEl.innerHTML = `<span style="color:#16a34a;font-size:12px;font-weight:600">✅ Factura emitida</span>`;
+        document.getElementById(`upload-row-${paymentId}`).style.display = 'none';
+        // Refrescar después de 1.5s para que salga de la lista de pendientes
+        setTimeout(loadPendingInvoices, 1500);
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function loadIssuedInvoices() {
+    const search = document.getElementById('search-issued')?.value || '';
+    const el = document.getElementById('table-issued');
+    if (!el) return;
+    el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:12px">Cargando…</div>';
+    try {
+        const data = await apiFetch(`/admin/invoices?search=${encodeURIComponent(search)}`);
+        if (!data?.invoices?.length) {
+            el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center">Sin facturas emitidas</div>';
+            return;
+        }
+        el.innerHTML = `
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                    <tr style="border-bottom:2px solid #e5e7eb;background:#f9fafb">
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Fecha</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Número</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Usuario</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">CUIT</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Monto</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Plan</th>
+                        <th style="text-align:center;padding:10px 12px;font-weight:600;color:#374151">PDF</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.invoices.map(inv => `
+                    <tr style="border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                        <td style="padding:10px 12px;white-space:nowrap">${fmtDate(inv.issued_at || inv.created_at)}</td>
+                        <td style="padding:10px 12px;font-weight:500">${escHtml(inv.numero || '—')}</td>
+                        <td style="padding:10px 12px">
+                            <div style="font-weight:500">${escHtml(inv.nombre || '')} ${escHtml(inv.apellido || '')}</div>
+                            <div style="color:#6b7280;font-size:11px">${escHtml(inv.email || '')}</div>
+                        </td>
+                        <td style="padding:10px 12px;font-size:12px;color:#6b7280">${escHtml(inv.cuit || '—')}</td>
+                        <td style="padding:10px 12px;font-weight:600">$${Number(inv.amount || 0).toLocaleString('es-AR')}</td>
+                        <td style="padding:10px 12px">${escHtml(inv.plan || '—')}</td>
+                        <td style="padding:10px 12px;text-align:center">
+                            ${inv.pdf_url
+                                ? `<a href="${escHtml(inv.pdf_url)}" target="_blank" rel="noopener"
+                                    style="display:inline-block;padding:4px 12px;background:#d97706;color:#fff;border-radius:5px;font-size:12px;font-weight:600;text-decoration:none">
+                                    📄 Ver PDF
+                                   </a>`
+                                : '—'}
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+            </div>`;
+    } catch (e) {
+        el.innerHTML = `<div style="color:#991b1b;font-size:13px;padding:12px">Error: ${escHtml(e.message)}</div>`;
+    }
+}
