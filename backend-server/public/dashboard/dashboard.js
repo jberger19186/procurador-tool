@@ -3047,8 +3047,82 @@ async function renderFacturacionAdmin() {
                         style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"
                         oninput="loadIssuedInvoices()" />
                     <button class="btn btn-sm btn-secondary" onclick="loadIssuedInvoices()">🔄 Actualizar</button>
+                    <button class="btn btn-sm btn-primary" onclick="openManualInvoiceModal()"
+                        style="white-space:nowrap;display:flex;align-items:center;gap:6px">
+                        <span style="font-size:16px;line-height:1">＋</span> Nueva factura manual
+                    </button>
                 </div>
                 <div id="table-issued">Cargando…</div>
+            </div>
+
+            <!-- MODAL: NUEVA FACTURA MANUAL -->
+            <div id="modal-manual-invoice" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
+                <div style="background:#fff;border-radius:12px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden">
+                    <div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+                        <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827">🧾 Nueva factura manual</h3>
+                        <button onclick="closeManualInvoiceModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;line-height:1">×</button>
+                    </div>
+                    <div style="padding:24px;display:flex;flex-direction:column;gap:16px">
+
+                        <div>
+                            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Usuario (email) *</label>
+                            <div style="position:relative">
+                                <input id="mi-user-search" type="text" placeholder="Escribí el email del usuario…"
+                                    autocomplete="off"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"
+                                    oninput="searchUsersForInvoice(this.value)" />
+                                <div id="mi-user-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;max-height:180px;overflow-y:auto"></div>
+                            </div>
+                            <div id="mi-user-selected" style="display:none;margin-top:6px;padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#166534"></div>
+                        </div>
+
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número de factura</label>
+                                <input id="mi-numero" type="text" placeholder="Ej: 0001-00000456"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                            </div>
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto (ARS) *</label>
+                                <input id="mi-amount" type="number" min="0" step="0.01" placeholder="15000"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                            </div>
+                        </div>
+
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Fecha de emisión *</label>
+                                <input id="mi-date" type="date"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                            </div>
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Plan / Concepto</label>
+                                <input id="mi-plan" type="text" placeholder="Ej: COMBO_PROMO"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">PDF de la factura *</label>
+                            <input id="mi-file" type="file" accept=".pdf"
+                                style="font-size:13px;width:100%">
+                            <p style="margin:4px 0 0;font-size:11px;color:#6b7280">Máximo 5 MB · solo PDF</p>
+                        </div>
+
+                        <div>
+                            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Notas internas (opcional)</label>
+                            <textarea id="mi-notes" rows="2" placeholder="Ej: factura correctiva, NC, etc."
+                                style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical"></textarea>
+                        </div>
+
+                        <div id="mi-error" style="display:none;padding:8px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;font-size:12px;color:#991b1b"></div>
+
+                    </div>
+                    <div style="padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:10px">
+                        <button class="btn btn-secondary" onclick="closeManualInvoiceModal()">Cancelar</button>
+                        <button id="mi-submit-btn" class="btn btn-primary" onclick="submitManualInvoice()">✅ Guardar factura</button>
+                    </div>
+                </div>
             </div>
 
         </div>`;
@@ -3242,4 +3316,118 @@ async function loadIssuedInvoices() {
     } catch (e) {
         el.innerHTML = `<div style="color:#991b1b;font-size:13px;padding:12px">Error: ${escHtml(e.message)}</div>`;
     }
+}
+
+// ── FACTURA MANUAL: modal ─────────────────────────────────────────────────────
+let _manualInvoiceUserId = null;
+let _userSearchTimeout   = null;
+
+function openManualInvoiceModal() {
+    _manualInvoiceUserId = null;
+    ['mi-user-search','mi-numero','mi-amount','mi-plan','mi-notes'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const dateEl = document.getElementById('mi-date');
+    if (dateEl) dateEl.value = new Date().toISOString().slice(0,10);
+    const fileEl = document.getElementById('mi-file');
+    if (fileEl) fileEl.value = '';
+    document.getElementById('mi-user-selected').style.display = 'none';
+    document.getElementById('mi-user-dropdown').style.display = 'none';
+    document.getElementById('mi-error').style.display = 'none';
+    const modal = document.getElementById('modal-manual-invoice');
+    modal.style.display = 'flex';
+    document.getElementById('mi-user-search').focus();
+}
+
+function closeManualInvoiceModal() {
+    document.getElementById('modal-manual-invoice').style.display = 'none';
+}
+
+// Cerrar modal al clickear el fondo
+document.addEventListener('click', e => {
+    const modal = document.getElementById('modal-manual-invoice');
+    if (modal && e.target === modal) closeManualInvoiceModal();
+});
+
+async function searchUsersForInvoice(query) {
+    clearTimeout(_userSearchTimeout);
+    const dd = document.getElementById('mi-user-dropdown');
+    if (!query || query.length < 2) { dd.style.display = 'none'; return; }
+    _userSearchTimeout = setTimeout(async () => {
+        try {
+            const data = await apiFetch(`/admin/users/search?q=${encodeURIComponent(query)}&limit=8`);
+            const users = data?.users || [];
+            if (!users.length) { dd.style.display = 'none'; return; }
+            dd.innerHTML = users.map(u => `
+                <div onclick="selectUserForInvoice(${u.id},'${escHtml(u.email)}','${escHtml(u.nombre||'')}','${escHtml(u.apellido||'')}','${escHtml(u.cuit||'')}','${escHtml(JSON.stringify(u.domicilio||{}).replace(/'/g,"&#39;"))}')"
+                    style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6"
+                    onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+                    <strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong>
+                    <span style="color:#6b7280;margin-left:6px">${escHtml(u.email)}</span>
+                    ${u.cuit ? `<span style="color:#6b7280;margin-left:6px;font-size:11px">CUIT: ${escHtml(u.cuit)}</span>` : ''}
+                </div>`).join('');
+            dd.style.display = '';
+        } catch (_) { dd.style.display = 'none'; }
+    }, 300);
+}
+
+function selectUserForInvoice(id, email, nombre, apellido, cuit, domJson) {
+    _manualInvoiceUserId = id;
+    document.getElementById('mi-user-search').value = email;
+    document.getElementById('mi-user-dropdown').style.display = 'none';
+    let dom = {};
+    try { dom = JSON.parse(domJson); } catch(_) {}
+    const domStr = [dom.calle, dom.numero, dom.localidad, dom.provincia].filter(Boolean).join(', ');
+    const sel = document.getElementById('mi-user-selected');
+    sel.innerHTML = `✅ <strong>${escHtml(nombre)} ${escHtml(apellido)}</strong> · ${escHtml(email)}${cuit ? ` · CUIT: ${escHtml(cuit)}` : ''}${domStr ? ` · ${escHtml(domStr)}` : ''}`;
+    sel.style.display = '';
+}
+
+async function submitManualInvoice() {
+    const errEl = document.getElementById('mi-error');
+    errEl.style.display = 'none';
+
+    if (!_manualInvoiceUserId) { showMiError('Seleccioná un usuario de la lista'); return; }
+    const amount = document.getElementById('mi-amount').value;
+    if (!amount || isNaN(amount) || Number(amount) <= 0) { showMiError('El monto es obligatorio'); return; }
+    const dateVal = document.getElementById('mi-date').value;
+    if (!dateVal) { showMiError('La fecha de emisión es obligatoria'); return; }
+    const fileInput = document.getElementById('mi-file');
+    if (!fileInput?.files[0]) { showMiError('Seleccioná un PDF'); return; }
+
+    const btn = document.getElementById('mi-submit-btn');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+
+    const form = new FormData();
+    form.append('pdf',      fileInput.files[0]);
+    form.append('user_id',  _manualInvoiceUserId);
+    form.append('amount',   amount);
+    form.append('issued_at', dateVal);
+    const numero = document.getElementById('mi-numero').value.trim();
+    const plan   = document.getElementById('mi-plan').value.trim();
+    const notes  = document.getElementById('mi-notes').value.trim();
+    if (numero) form.append('numero',    numero);
+    if (plan)   form.append('plan',      plan);
+    if (notes)  form.append('notes',     notes);
+
+    try {
+        const resp = await fetch('/admin/invoices/manual', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: form
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Error al guardar');
+        closeManualInvoiceModal();
+        loadIssuedInvoices();
+    } catch (e) {
+        showMiError(e.message);
+    } finally {
+        btn.disabled = false; btn.textContent = '✅ Guardar factura';
+    }
+}
+
+function showMiError(msg) {
+    const el = document.getElementById('mi-error');
+    el.textContent = msg; el.style.display = '';
 }

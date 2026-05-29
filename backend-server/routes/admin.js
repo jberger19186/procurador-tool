@@ -216,6 +216,26 @@ router.get('/users', authenticateAdmin, async (req, res) => {
     }
 });
 
+// ─── Búsqueda rápida de usuarios (para autocomplete en facturas manuales) ────
+router.get('/users/search', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { q = '', limit = 10 } = req.query;
+    if (!q || q.length < 2) return res.json({ users: [] });
+    try {
+        const { rows } = await db.query(
+            `SELECT id, email, nombre, apellido, cuit, domicilio
+             FROM users
+             WHERE email ILIKE $1 OR nombre ILIKE $1 OR apellido ILIKE $1 OR cuit ILIKE $1
+             ORDER BY nombre, apellido
+             LIMIT $2`,
+            [`%${q}%`, parseInt(limit, 10)]
+        );
+        res.json({ users: rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Usuarios pendientes de activación ───────────────────────────────────────
 router.get('/users/pending', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
@@ -2653,6 +2673,41 @@ router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadInvoice.sing
             [pdfUrl, numero || null, invoiceId]
         );
         res.json({ ok: true, pdf_url: pdfUrl });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── POST /admin/invoices/manual ──────────────────────────────────────────────
+// Crea una factura manual no asociada a un pago del sistema
+router.post('/invoices/manual', authenticateAdmin, uploadInvoice.single('pdf'), async (req, res) => {
+    const db = req.app.get('db');
+    const { user_id, amount, issued_at, numero, plan, notes } = req.body;
+
+    if (!user_id || !amount || !issued_at) {
+        return res.status(400).json({ error: 'user_id, amount e issued_at son obligatorios' });
+    }
+    if (!req.file) return res.status(400).json({ error: 'PDF requerido' });
+
+    const pdfUrl = `/invoices/${req.file.filename}`;
+    try {
+        const { rows: [inv] } = await db.query(
+            `INSERT INTO invoices
+               (user_id, amount, pdf_url, numero, status, issued_at, created_at)
+             VALUES ($1, $2, $3, $4, 'issued', $5, NOW())
+             RETURNING id`,
+            [user_id, amount, pdfUrl, numero || null, issued_at]
+        );
+
+        // Registrar concepto si se indicó plan/notas (en campo facturante_id como workaround hasta tener campo dedicado)
+        if (plan || notes) {
+            await db.query(
+                `UPDATE invoices SET facturante_id = $1 WHERE id = $2`,
+                [`manual|plan:${plan||''}|notes:${notes||''}`, inv.id]
+            );
+        }
+
+        res.json({ ok: true, invoice_id: inv.id, pdf_url: pdfUrl });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
