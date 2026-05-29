@@ -6,8 +6,8 @@
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.13** — publicada en GitHub Releases (auto-updater activo)
-> Última sesión: 2026-05-27
+> Versión app Electron: **2.7.14** — publicada en GitHub Releases (auto-updater activo)
+> Última sesión: 2026-05-29
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
@@ -34,7 +34,14 @@
   - **Electron — Mi Cuenta:** card de prueba con contador `X/20 utilizados` + barra de progreso coloreada (verde/naranja/rojo)
   - **Portal — Mi Plan:** card de prueba idéntica cuando `registration_status = 'pending_activation'`
   - **Portal — Descargas:** extensión con enlace directo Chrome Web Store · app usa `/client/download/electron`
-  - Releases: v2.7.10 → v2.7.11 → v2.7.12 → **v2.7.13** (banner trial + `pending_email` fix + FAQs)
+  - Releases: v2.7.10 → v2.7.11 → v2.7.12 → v2.7.13 → **v2.7.14** (Fase 5 cobranza: estados de pago/cancelación en banners)
+
+- ✅ **Fase 5 cobranza — flujo completo + facturación manual** (sesión 2026-05-29):
+  - Ciclo de vida de suscripción end-to-end validado en sandbox (alta → cancelación → reactivación → suspensión)
+  - Identificación de pagos por `external_reference=user_{id}` (resuelve email distinto portal vs MercadoPago)
+  - Módulo de facturación manual en dashboard admin (sube PDF de ARCA) — Facturante automático desactivado hasta contratar
+  - Reset de datos de prueba ejecutado (3 usuarios conservados). Ver sección "Reset de datos de prueba"
+  - Detalle completo en sección "Estado Fase 5 — Cobranza"
 
 - ✅ **Fix toggle registro público** (sesión 2026-05-23):
   - **Causa raíz:** `register.js` llamaba a `/auth/register-status` que no existía → 404 → formulario siempre cerrado
@@ -92,9 +99,10 @@ node scripts/generate-icon.js
   - **Último resultado:** 48/48 ✅ (2026-05-27)
 
 ### Estado Fase 5 — Cobranza
-> Última actualización: 2026-05-28
+> Última actualización: 2026-05-29
 
-Infraestructura completa deployada en producción con `PAYMENT_MODULE_ENABLED=true` (sandbox activo).
+Flujo de cobranza **completo y validado en sandbox** en producción con `PAYMENT_MODULE_ENABLED=true`.
+Ciclo de vida de suscripción funcionando end-to-end: alta → cobro → cancelación → reactivación → suspensión por pago fallido.
 
 ---
 
@@ -139,14 +147,29 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 - Backend: `routes/checkout.js`, `routes/webhooks.js`, `services/subscriptionService.js`, `services/invoiceService.js`
 - Admin: endpoints refund-preview, extra-usage (GET/POST), payments (GET), invoices (GET)
 - Portal usuario: card Método de Pago, historial de pagos, historial de facturas
-- Admin dashboard: card Usos Extra + modal, card Historial de Pagos, card Historial de Facturas, modal Suspensión mejorado (Suave/Dura + preview reembolso)
-- Crons: billing reminder (7d), grace period expiration, invoice retry, cobranza retry stub
-- Fix: `applyRenewal` limpia `payment_grace_ends_at` + webhook reactiva `registration_status` si estaba suspendido por pago
+- Admin dashboard: card Usos Extra + modal, card Historial de Pagos, card Historial de Facturas, modal Suspensión mejorado
+
+**Flujo de suscripción completo (sesión 2026-05-29):**
+- **Alta / checkout:** plan-based MP. `init_point` enriquecido con `external_reference=user_{id}` + `payer_email`. Navega en la misma pestaña (no popup). Flag `psc_checkout_pending` en localStorage detecta el retorno aunque MP no agregue `?pago=ok`.
+- **Identificación de pagos (clave):** webhook resuelve el usuario por prioridad: (1) `external_reference=user_{id}` → independiente del email de MP, (2) `external_subscription_id` ya vinculado, (3) `payer_email`. Resuelve el caso de email distinto entre portal y MercadoPago.
+- **Webhook:** maneja `payment`, `subscription_authorized_payment`, `preapproval` y `subscription_preapproval`. Guarda `external_subscription_id` real para poder cancelar luego en MP.
+- **Cancelación:** `cancel_at = next_billing_date`, cancela el preapproval en MP. El cobro del período en curso ya ocurrió; no se cobra la renovación. Acceso hasta fin del período.
+- **Reactivación:** botón "↩ Reactivar" en portal antes del vencimiento → `POST /checkout/reactivate` → quita `cancel_at`, reactiva preapproval en MP.
+- **Pago rechazado:** gracia 3 días → si no se recupera, `status=suspended` → UI "Actualizar método de pago".
+- **Cron cancelaciones:** triple verificación de seguridad (buffer 2h + `auto_renewal=FALSE` + sin pago aprobado reciente) para evitar cancelar cuentas que pagaron.
+- **App Electron (v2.7.14):** fix `sub = a.subscription || a` (campos planos), banner de cancelación programada en Mi Cuenta.
+
+**Facturación manual (reemplazo temporal de Facturante):**
+- Dashboard admin → sección **🧾 Facturación** con 2 tabs: Pendientes (pagos sin PDF) y Emitidas (con buscador).
+- Admin sube PDF generado en ARCA + tipo de comprobante (default Factura C), número (autoformateo `1245`→`0001-00001245`), CAE (opcional).
+- Botón **＋ Nueva factura manual**: modal con autocomplete de usuario (navegación teclado + mouse), monto, fecha, plan, notas.
+- PDFs en `public/invoices/`, servidos vía `/invoices/`. La factura aparece en el portal del usuario al instante.
+- **Facturante automático DESACTIVADO** hasta contratar el servicio (cron comentado en `server.js`, `processInvoice` no-op sin `FACTURANTE_WSDL_URL`). `enqueueInvoice` se mantiene activo: crea el registro pendiente al cobrar.
 
 ---
 
 ## 📋 Pendientes — Lista consolidada
-> Última revisión: 2026-05-28
+> Última revisión: 2026-05-29
 
 ### 🔴 Requieren cuentas / contratos externos
 
@@ -155,7 +178,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 | ~~**B1**~~ | ~~**MercadoPago sandbox**~~ | ✅ Credenciales configuradas. Ver sección "Credenciales de sandbox" arriba. |
 | ~~**B2**~~ | ~~**Probar checkout end-to-end**~~ | ✅ Validado: checkout devuelve `init_point`, pago aprobado en sandbox (PayID `160575039911`), webhook llegó con 200, HMAC validado, procesamiento correcto. |
 | **B3** | **MercadoPago producción** | Una vez validado en sandbox → credenciales reales → `PAYMENT_MODULE_ENABLED=true` |
-| **C1** | **Contrato Facturante** | Facturación AFIP (Factura C). Sin esto las facturas quedan en `status=pending`. Ver `backend-server/utils/facturante.js` |
+| **C1** | **Contrato Facturante** | _No bloqueante._ Mientras tanto la facturación es **manual** (admin sube PDF de ARCA en dashboard → Facturación). Para activar el automático: completar vars `FACTURANTE_*` en `.env` + descomentar cron `invoice-retry` en `server.js`. Ver `backend-server/utils/facturante.js` |
 | **AZ** | **Azure Trusted Signing** | Code signing del instalador `.exe`. Pasos: crear Trusted Signing Account → Certificate Profile (Public Trust, 1-3 días hábiles) → App Registration → 5 env vars → configurar electron-builder + GitHub Actions |
 
 ---
@@ -252,7 +275,7 @@ ProcuradorTool/
 │   ├── renderer.js                        (~166 KB) UI dashboard — PENDIENTE refactor a módulos ES6
 │   ├── index.html                         shell del dashboard
 │   ├── styles.css                         (~45 KB) sistema de diseño aplicado
-│   ├── package.json                       v2.7.13
+│   ├── package.json                       v2.7.14
 │   ├── Monitor-Procurador.ps1             watchdog Windows (legacy)
 │   ├── visorModal_template.html           plantilla visor de expediente
 │   ├── renderer/                          ventanas auxiliares
@@ -562,6 +585,20 @@ ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
 
 > **Nota:** los scripts corren en el cliente (Electron), pero se descargan cifrados desde el servidor.
 > El archivo fuente local (en `backend-server/scripts/`) es solo referencia — lo que importa es lo que queda en la BD después del reencrypt.
+
+### Reset de datos de prueba
+Script: `backend-server/dev-tools/reset-test-data.sql`
+
+Borra todos los datos transaccionales (pagos, facturas, tickets, logs, eventos, notificaciones, webhook_events, monitor) y los usuarios de prueba, **conservando** los admins (id 6, 7) y `procuradortool@gmail.com` (id 19). Resetea las suscripciones de los conservados a estado inicial.
+
+⚠️ **Siempre hacer backup antes** (queda en `/tmp/backup_pre_reset_<fecha>.sql` en el servidor):
+```powershell
+$f = Get-Date -Format "yyyyMMdd_HHmmss"
+ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "sudo -u postgres pg_dump procurador_db > /tmp/backup_pre_reset_$f.sql"
+# Ejecutar el reset (ON_ERROR_STOP aborta si algo falla — es transaccional):
+Get-Content "backend-server/dev-tools/reset-test-data.sql" | ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "sudo -u postgres psql procurador_db -v ON_ERROR_STOP=1"
+```
+> Si cambian los IDs de usuarios a conservar, editar las listas `IN (...)` del script. Último reset: 2026-05-29 (backup `backup_pre_reset_20260529_154533.sql`).
 
 ### Backup completo del proyecto
 Cuando el usuario pide un backup, crear una carpeta en el escritorio con el formato:
