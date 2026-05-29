@@ -3078,11 +3078,15 @@ async function renderFacturacionAdmin() {
 
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                             <div>
-                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Tipo</label>
-                                <div style="padding:8px 12px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:600;color:#374151">
-                                    Factura C
-                                </div>
-                                <input type="hidden" id="mi-tipo" value="C">
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Tipo de comprobante</label>
+                                <select id="mi-tipo"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
+                                    <option value="C" selected>Factura C</option>
+                                    <option value="B">Factura B</option>
+                                    <option value="A">Factura A</option>
+                                    <option value="NC_C">Nota de crédito C</option>
+                                    <option value="NC_B">Nota de crédito B</option>
+                                </select>
                             </div>
                             <div>
                                 <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto (ARS) *</label>
@@ -3224,12 +3228,16 @@ function pendingInvoiceRow(row) {
     <tr id="upload-row-${row.payment_id}" style="display:none;background:#fffbeb">
         <td colspan="5" style="padding:16px 20px">
             <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-                <div style="display:flex;flex-direction:column;justify-content:flex-end">
+                <div>
                     <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Tipo</label>
-                    <span style="display:inline-block;padding:7px 12px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:600;color:#374151">
-                        Factura C
-                    </span>
-                    <input type="hidden" id="tipo-${row.payment_id}" value="C">
+                    <select id="tipo-${row.payment_id}"
+                        style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff">
+                        <option value="C" selected>Factura C</option>
+                        <option value="B">Factura B</option>
+                        <option value="A">Factura A</option>
+                        <option value="NC_C">Nota de crédito C</option>
+                        <option value="NC_B">Nota de crédito B</option>
+                    </select>
                 </div>
                 <div>
                     <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Número de factura *</label>
