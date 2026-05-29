@@ -1371,15 +1371,20 @@ async function renderFact() {
 
     // Card: Historial de facturas
     const invoicesRows = invoices.length === 0
-        ? `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Sin facturas emitidas aún</td></tr>`
-        : invoices.map(inv => `<tr>
-            <td style="font-size:13px;padding:8px 6px 8px 20px">${inv.issued_at ? formatDate(inv.issued_at) : formatDate(inv.created_at)}</td>
-            <td style="font-size:13px;padding:8px 6px;font-weight:500">${inv.numero ? `Nro. ${escapeHtml(inv.numero)}` : '—'}</td>
-            <td style="font-size:13px;padding:8px 6px">$${inv.amount ? Number(inv.amount).toLocaleString('es-AR') : '—'}</td>
-            <td style="padding:8px 20px 8px 6px">${inv.pdf_url
-                ? `<a href="${escapeHtml(inv.pdf_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px">Ver PDF</a>`
-                : `<span style="font-size:12px;color:var(--text-muted)">${inv.status==='pending'?'Emitiendo…':inv.status==='failed'?'Error':'—'}</span>`}</td>
-          </tr>`).join('');
+        ? `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Sin facturas emitidas aún</td></tr>`
+        : invoices.map(inv => {
+            const tipo = inv.invoice_type ? `Factura ${escapeHtml(inv.invoice_type)}` : '—';
+            return `<tr>
+                <td style="font-size:13px;padding:8px 6px 8px 20px">${inv.issued_at ? formatDate(inv.issued_at) : formatDate(inv.created_at)}</td>
+                <td style="font-size:13px;padding:8px 6px">${tipo}</td>
+                <td style="font-size:13px;padding:8px 6px;font-weight:500">${inv.numero ? escapeHtml(inv.numero) : '—'}</td>
+                <td style="font-size:13px;padding:8px 6px">$${inv.amount ? Number(inv.amount).toLocaleString('es-AR') : '—'}</td>
+                <td style="font-size:11px;padding:8px 6px;color:var(--text-muted);font-family:monospace">${inv.cae ? escapeHtml(inv.cae) : '—'}</td>
+                <td style="padding:8px 20px 8px 6px">${inv.pdf_url
+                    ? `<a href="${escapeHtml(inv.pdf_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px">Ver PDF</a>`
+                    : `<span style="font-size:12px;color:var(--text-muted)">${inv.status==='pending'?'Emitiendo…':inv.status==='failed'?'Error':'—'}</span>`}</td>
+            </tr>`;
+        }).join('');
 
     const invoicesCard = `
         <div class="card">
@@ -1388,8 +1393,10 @@ async function renderFact() {
                 <table style="width:100%;border-collapse:collapse">
                     <thead><tr style="border-bottom:1px solid var(--border)">
                         <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px 10px 20px;font-weight:500">Fecha</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Tipo</th>
                         <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Número</th>
                         <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Monto</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">CAE</th>
                         <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 20px 10px 6px;font-weight:500">PDF</th>
                     </tr></thead>
                     <tbody>${invoicesRows}</tbody>

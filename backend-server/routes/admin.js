@@ -2657,20 +2657,22 @@ router.get('/invoices', authenticateAdmin, async (req, res) => {
 router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadInvoice.single('pdf'), async (req, res) => {
     const db = req.app.get('db');
     const { invoiceId } = req.params;
-    const { numero } = req.body;
+    const { numero, invoice_type, cae } = req.body;
     if (!req.file) return res.status(400).json({ error: 'PDF requerido' });
 
     const pdfUrl = `/invoices/${req.file.filename}`;
     try {
         await db.query(
             `UPDATE invoices
-             SET pdf_url    = $1,
-                 numero     = COALESCE($2, numero),
-                 status     = 'issued',
-                 issued_at  = NOW(),
-                 updated_at = NOW()
-             WHERE id = $3`,
-            [pdfUrl, numero || null, invoiceId]
+             SET pdf_url      = $1,
+                 numero       = COALESCE($2, numero),
+                 invoice_type = COALESCE($3, invoice_type),
+                 cae          = COALESCE($4, cae),
+                 status       = 'issued',
+                 issued_at    = NOW(),
+                 updated_at   = NOW()
+             WHERE id = $5`,
+            [pdfUrl, numero || null, invoice_type || null, cae || null, invoiceId]
         );
         res.json({ ok: true, pdf_url: pdfUrl });
     } catch (err) {
@@ -2682,7 +2684,7 @@ router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadInvoice.sing
 // Crea una factura manual no asociada a un pago del sistema
 router.post('/invoices/manual', authenticateAdmin, uploadInvoice.single('pdf'), async (req, res) => {
     const db = req.app.get('db');
-    const { user_id, amount, issued_at, numero, plan, notes } = req.body;
+    const { user_id, amount, issued_at, numero, invoice_type, cae, plan, notes } = req.body;
 
     if (!user_id || !amount || !issued_at) {
         return res.status(400).json({ error: 'user_id, amount e issued_at son obligatorios' });
@@ -2693,10 +2695,10 @@ router.post('/invoices/manual', authenticateAdmin, uploadInvoice.single('pdf'), 
     try {
         const { rows: [inv] } = await db.query(
             `INSERT INTO invoices
-               (user_id, amount, pdf_url, numero, status, issued_at, created_at)
-             VALUES ($1, $2, $3, $4, 'issued', $5, NOW())
+               (user_id, amount, pdf_url, numero, invoice_type, cae, status, issued_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, 'issued', $7, NOW())
              RETURNING id`,
-            [user_id, amount, pdfUrl, numero || null, issued_at]
+            [user_id, amount, pdfUrl, numero || null, invoice_type || 'C', cae || null, issued_at]
         );
 
         // Registrar concepto si se indicó plan/notas (en campo facturante_id como workaround hasta tener campo dedicado)
@@ -2731,16 +2733,19 @@ router.post('/invoices/from-payment/:paymentId', authenticateAdmin, uploadInvoic
         if (!pmt) return res.status(404).json({ error: 'Pago no encontrado o no aprobado' });
 
         // Crear registro de factura
+        const { invoice_type: invType, cae } = req.body;
         const { rows: [inv] } = await db.query(
-            `INSERT INTO invoices (payment_id, user_id, amount, pdf_url, numero, status, issued_at, created_at)
-             VALUES ($1, $2, $3, $4, $5, 'issued', NOW(), NOW())
+            `INSERT INTO invoices (payment_id, user_id, amount, pdf_url, numero, invoice_type, cae, status, issued_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'issued', NOW(), NOW())
              ON CONFLICT (payment_id) DO UPDATE
-               SET pdf_url = EXCLUDED.pdf_url,
-                   numero  = COALESCE(EXCLUDED.numero, invoices.numero),
-                   status  = 'issued',
-                   issued_at = NOW()
+               SET pdf_url       = EXCLUDED.pdf_url,
+                   numero        = COALESCE(EXCLUDED.numero,       invoices.numero),
+                   invoice_type  = COALESCE(EXCLUDED.invoice_type, invoices.invoice_type),
+                   cae           = COALESCE(EXCLUDED.cae,          invoices.cae),
+                   status        = 'issued',
+                   issued_at     = NOW()
              RETURNING id`,
-            [paymentId, pmt.user_id, pmt.amount, pdfUrl, numero || null]
+            [paymentId, pmt.user_id, pmt.amount, pdfUrl, numero || null, invType || 'C', cae || null]
         );
         res.json({ ok: true, invoice_id: inv.id, pdf_url: pdfUrl });
     } catch (err) {

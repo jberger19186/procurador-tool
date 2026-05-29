@@ -3078,14 +3078,33 @@ async function renderFacturacionAdmin() {
 
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                             <div>
-                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número de factura</label>
-                                <input id="mi-numero" type="text" placeholder="Ej: 0001-00000456"
-                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Tipo de comprobante *</label>
+                                <select id="mi-tipo"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
+                                    <option value="C">Factura C</option>
+                                    <option value="B">Factura B</option>
+                                    <option value="A">Factura A</option>
+                                    <option value="NC_C">Nota de crédito C</option>
+                                    <option value="NC_B">Nota de crédito B</option>
+                                </select>
                             </div>
                             <div>
                                 <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto (ARS) *</label>
                                 <input id="mi-amount" type="number" min="0" step="0.01" placeholder="15000"
                                     style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                            </div>
+                        </div>
+
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número de factura</label>
+                                <input id="mi-numero" type="text" placeholder="Ej: 0001-00000456"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                            </div>
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">CAE (AFIP)</label>
+                                <input id="mi-cae" type="text" placeholder="12345678901234"
+                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace">
                             </div>
                         </div>
 
@@ -3207,9 +3226,25 @@ function pendingInvoiceRow(row) {
         <td colspan="5" style="padding:16px 20px">
             <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
                 <div>
-                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Número de factura (opcional)</label>
+                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Tipo de comprobante</label>
+                    <select id="tipo-${row.payment_id}"
+                        style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff">
+                        <option value="C">Factura C</option>
+                        <option value="B">Factura B</option>
+                        <option value="A">Factura A</option>
+                        <option value="NC_C">Nota de crédito C</option>
+                        <option value="NC_B">Nota de crédito B</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Número de factura</label>
                     <input id="numero-${row.payment_id}" type="text" placeholder="Ej: 0001-00000123"
-                        style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:180px">
+                        style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:160px">
+                </div>
+                <div>
+                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">CAE (AFIP)</label>
+                    <input id="cae-${row.payment_id}" type="text" placeholder="12345678901234"
+                        style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:150px;font-family:monospace">
                 </div>
                 <div>
                     <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">PDF de la factura *</label>
@@ -3233,8 +3268,10 @@ function showUploadForm(paymentId, invoiceId) {
 }
 
 async function uploadInvoicePdf(paymentId, invoiceId) {
-    const fileInput = document.getElementById(`file-${paymentId}`);
+    const fileInput  = document.getElementById(`file-${paymentId}`);
     const numeroInput = document.getElementById(`numero-${paymentId}`);
+    const tipoSelect = document.getElementById(`tipo-${paymentId}`);
+    const caeInput   = document.getElementById(`cae-${paymentId}`);
     if (!fileInput?.files[0]) { alert('Seleccioná un archivo PDF'); return; }
 
     const endpoint = invoiceId
@@ -3243,7 +3280,9 @@ async function uploadInvoicePdf(paymentId, invoiceId) {
 
     const form = new FormData();
     form.append('pdf', fileInput.files[0]);
-    if (numeroInput?.value.trim()) form.append('numero', numeroInput.value.trim());
+    if (numeroInput?.value.trim())  form.append('numero',       numeroInput.value.trim());
+    if (tipoSelect?.value)          form.append('invoice_type', tipoSelect.value);
+    if (caeInput?.value.trim())     form.append('cae',          caeInput.value.trim());
 
     try {
         const resp = await fetch(endpoint, {
@@ -3281,7 +3320,9 @@ async function loadIssuedInvoices() {
                 <thead>
                     <tr style="border-bottom:2px solid #e5e7eb;background:#f9fafb">
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Fecha</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Tipo</th>
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Número</th>
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">CAE</th>
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Usuario</th>
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">CUIT</th>
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Monto</th>
@@ -3293,7 +3334,13 @@ async function loadIssuedInvoices() {
                     ${data.invoices.map(inv => `
                     <tr style="border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
                         <td style="padding:10px 12px;white-space:nowrap">${fmtDate(inv.issued_at || inv.created_at)}</td>
+                        <td style="padding:10px 12px">
+                            <span style="display:inline-block;padding:2px 8px;background:#f3f4f6;border-radius:4px;font-size:11px;font-weight:600;color:#374151">
+                                ${escHtml(inv.invoice_type ? `Fact. ${inv.invoice_type}` : '—')}
+                            </span>
+                        </td>
                         <td style="padding:10px 12px;font-weight:500">${escHtml(inv.numero || '—')}</td>
+                        <td style="padding:10px 12px;font-size:11px;color:#6b7280;font-family:monospace">${escHtml(inv.cae || '—')}</td>
                         <td style="padding:10px 12px">
                             <div style="font-weight:500">${escHtml(inv.nombre || '')} ${escHtml(inv.apellido || '')}</div>
                             <div style="color:#6b7280;font-size:11px">${escHtml(inv.email || '')}</div>
@@ -3324,9 +3371,11 @@ let _userSearchTimeout   = null;
 
 function openManualInvoiceModal() {
     _manualInvoiceUserId = null;
-    ['mi-user-search','mi-numero','mi-amount','mi-plan','mi-notes'].forEach(id => {
+    ['mi-user-search','mi-numero','mi-cae','mi-amount','mi-plan','mi-notes'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
     });
+    const tipoEl = document.getElementById('mi-tipo');
+    if (tipoEl) tipoEl.value = 'C';
     const dateEl = document.getElementById('mi-date');
     if (dateEl) dateEl.value = new Date().toISOString().slice(0,10);
     const fileEl = document.getElementById('mi-file');
@@ -3399,16 +3448,20 @@ async function submitManualInvoice() {
     btn.disabled = true; btn.textContent = 'Guardando…';
 
     const form = new FormData();
-    form.append('pdf',      fileInput.files[0]);
-    form.append('user_id',  _manualInvoiceUserId);
-    form.append('amount',   amount);
-    form.append('issued_at', dateVal);
-    const numero = document.getElementById('mi-numero').value.trim();
-    const plan   = document.getElementById('mi-plan').value.trim();
-    const notes  = document.getElementById('mi-notes').value.trim();
-    if (numero) form.append('numero',    numero);
-    if (plan)   form.append('plan',      plan);
-    if (notes)  form.append('notes',     notes);
+    form.append('pdf',        fileInput.files[0]);
+    form.append('user_id',    _manualInvoiceUserId);
+    form.append('amount',     amount);
+    form.append('issued_at',  dateVal);
+    const tipo   = document.getElementById('mi-tipo')?.value  || 'C';
+    const numero = document.getElementById('mi-numero')?.value.trim() || '';
+    const cae    = document.getElementById('mi-cae')?.value.trim()    || '';
+    const plan   = document.getElementById('mi-plan')?.value.trim()   || '';
+    const notes  = document.getElementById('mi-notes')?.value.trim()  || '';
+    form.append('invoice_type', tipo);
+    if (numero) form.append('numero', numero);
+    if (cae)    form.append('cae',    cae);
+    if (plan)   form.append('plan',   plan);
+    if (notes)  form.append('notes',  notes);
 
     try {
         const resp = await fetch('/admin/invoices/manual', {
