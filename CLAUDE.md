@@ -766,6 +766,30 @@ POST   /client/ai/chat                   — Chat con asistente IA desde Electro
 POST   /usuarios/api/ai-chat             — Chat con asistente IA desde portal web (historial conversacional, mismo rate limit)
 ```
 
+### Cobranza / suscripciones (Fase 5 — requieren JWT + PAYMENT_MODULE_ENABLED)
+```
+POST   /usuarios/api/checkout/init        — Genera init_point MP (external_reference=user_{id} + payer_email)
+POST   /usuarios/api/checkout/confirm     — Vincula preapproval tras el checkout (o marca provider si MP no devolvió ID)
+POST   /usuarios/api/checkout/reactivate  — Deshace cancelación programada (quita cancel_at, reactiva preapproval en MP)
+POST   /usuarios/api/checkout/cancel      — Programa cancelación al fin del período (cancel_at = next_billing_date)
+GET    /usuarios/api/checkout/status      — Estado de suscripción para la UI
+GET    /usuarios/api/subscription/current — Estado enriquecido (hasPaymentMethod, cancelAt, etc.)
+GET    /usuarios/api/payments             — Historial de pagos del usuario
+GET    /usuarios/api/invoices             — Historial de facturas del usuario (incluye invoice_type, cae)
+POST   /webhooks/mercadopago              — Receptor webhooks MP (HMAC-SHA256, idempotente). Maneja payment,
+                                            subscription_authorized_payment, preapproval, subscription_preapproval
+```
+
+### Facturación manual — admin (requieren JWT admin)
+```
+GET    /admin/invoices/pending            — Pagos aprobados sin PDF (con datos de facturación del usuario)
+GET    /admin/invoices                    — Facturas emitidas (buscador por email/nombre/CUIT)
+POST   /admin/invoices/:invoiceId/upload  — Sube PDF a invoice existente (multer, invoice_type, cae, numero)
+POST   /admin/invoices/from-payment/:id   — Crea invoice + sube PDF para un pago sin factura
+POST   /admin/invoices/manual             — Factura manual sin pago asociado (user_id, amount, issued_at, PDF)
+GET    /admin/users/search                — Autocomplete de usuarios (nombre, apellido, cuit, domicilio)
+```
+
 ---
 
 ## Base de datos — tablas principales
@@ -781,6 +805,10 @@ POST   /usuarios/api/ai-chat             — Chat con asistente IA desde portal 
 | `token_blacklist` | Tokens invalidados al hacer logout |
 | `support_tickets` | Sistema de tickets de soporte |
 | `ticket_comments` | Comentarios en tickets |
+| `payments` | Pagos MP (external_payment_id, amount, status, raw_response). FK a users + subscriptions |
+| `invoices` | Facturas (invoice_type, cae, numero, amount, pdf_url, status). payment_id NULL = factura manual |
+| `webhook_events` | Idempotencia de webhooks MP (UNIQUE provider+external_id, processed_at) |
+| `usage_extras` | Paquetes de usos extra asignados por admin |
 
 ### Sistema de cuotas por plan
 ```
