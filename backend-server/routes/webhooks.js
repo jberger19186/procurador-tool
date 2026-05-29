@@ -227,9 +227,11 @@ async function handlePaymentEvent(paymentId) {
       [sub.user_id]
     );
 
-    // Encolar factura (fire-and-forget)
+    // Crear registro de factura pendiente (fire-and-forget)
+    // El admin sube el PDF manualmente desde el dashboard → sección Facturación
+    // (Facturante automático desactivado hasta contratar el servicio)
     enqueueInvoice(savedPayment.id).catch(err =>
-      logger.error('[Webhooks] Error encolando factura', { paymentId, err: err.message })
+      logger.error('[Webhooks] Error creando registro de factura', { paymentId, err: err.message })
     );
 
   } else if (status === 'rejected') {

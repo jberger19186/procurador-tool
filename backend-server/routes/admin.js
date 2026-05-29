@@ -2701,11 +2701,11 @@ router.post('/invoices/manual', authenticateAdmin, uploadInvoice.single('pdf'), 
             [user_id, amount, pdfUrl, numero || null, invoice_type || 'C', cae || null, issued_at]
         );
 
-        // Registrar concepto si se indicó plan/notas (en campo facturante_id como workaround hasta tener campo dedicado)
-        if (plan || notes) {
+        // Registrar plan en el campo invoice_type si aplica (como referencia adicional)
+        if (plan) {
             await db.query(
                 `UPDATE invoices SET facturante_id = $1 WHERE id = $2`,
-                [`manual|plan:${plan||''}|notes:${notes||''}`, inv.id]
+                [`concepto:${plan}${notes ? '|notas:' + notes : ''}`, inv.id]
             );
         }
 

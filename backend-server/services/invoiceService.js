@@ -1,11 +1,16 @@
 /**
  * services/invoiceService.js
- * Gestión de facturas Facturante: encolar, procesar, reintentar.
+ * Gestión de facturas.
  *
- * Flujo:
+ * Flujo actual (manual):
  *   webhooks.js llama enqueueInvoice(paymentId) → inserta row con status='pending'
- *   processInvoice(invoiceId) → intenta emitir via Facturante
+ *   El admin sube el PDF desde el dashboard (sección Facturación)
+ *   → actualiza pdf_url, invoice_type, cae, numero, status='issued'
+ *
+ * Flujo futuro (automático — requiere contratar Facturante):
+ *   processInvoice(invoiceId) → emite via SOAP de Facturante
  *   cron invoice-retry (cada 1h) → releva pending con retry_count < 3
+ *   Activar descomentando el cron en server.js y configurando FACTURANTE_WSDL_URL
  */
 
 const db = require('../db');
@@ -39,12 +44,17 @@ async function enqueueInvoice(paymentId) {
 }
 
 /**
- * processInvoice — emite la factura via Facturante
- * Actualiza el row en invoices según resultado
+ * processInvoice — emite la factura via Facturante (REQUIERE FACTURANTE_WSDL_URL configurado)
+ * Actualiza el row en invoices según resultado.
+ * No llamar sin credenciales de Facturante — falla silenciosamente en status='failed'.
  *
  * @param {number} invoiceId
  */
 async function processInvoice(invoiceId) {
+  if (!process.env.FACTURANTE_WSDL_URL) {
+    logger.warn('[InvoiceService] processInvoice ignorado — FACTURANTE_WSDL_URL no configurado', { invoiceId });
+    return;
+  }
   const { rows: [inv] } = await db.query(
     `SELECT i.*, u.email, u.nombre, u.apellido, u.cuit, p.amount, p.plan
      FROM invoices i

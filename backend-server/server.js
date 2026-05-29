@@ -688,7 +688,6 @@ cron.schedule('30 11 * * *', async () => {
 
 // ─── Crons de Fase 5 — solo si PAYMENT_MODULE_ENABLED=true ──────────────────
 if (process.env.PAYMENT_MODULE_ENABLED === 'true') {
-    const { retryPendingInvoices } = require('./services/invoiceService');
 
     // Cobranza retry — cada 6 horas: reintenta suscripciones MP con pago fallido
     cron.schedule('0 */6 * * *', async () => {
@@ -715,17 +714,17 @@ if (process.env.PAYMENT_MODULE_ENABLED === 'true') {
         }
     }, { timezone: 'America/Argentina/Buenos_Aires' });
 
-    // Invoice retry — cada hora: reemite facturas Facturante con status='pending'
-    cron.schedule('0 * * * *', async () => {
-        logger.info('[CRON] invoice-retry: procesando facturas pendientes...');
-        try {
-            await retryPendingInvoices();
-        } catch (err) {
-            logger.error('[CRON] invoice-retry error:', err.message);
-        }
-    }, { timezone: 'America/Argentina/Buenos_Aires' });
+    // Invoice retry via Facturante — DESACTIVADO hasta contratar Facturante
+    // Para reactivar: descomentar cuando FACTURANTE_WSDL_URL esté configurado
+    // const { retryPendingInvoices } = require('./services/invoiceService');
+    // cron.schedule('0 * * * *', async () => {
+    //     if (!process.env.FACTURANTE_WSDL_URL) return; // no-op si no está configurado
+    //     logger.info('[CRON] invoice-retry: procesando facturas pendientes...');
+    //     try { await retryPendingInvoices(); }
+    //     catch (err) { logger.error('[CRON] invoice-retry error:', err.message); }
+    // }, { timezone: 'America/Argentina/Buenos_Aires' });
 
-    logger.info('💳 Módulo de pagos ACTIVO — crons de cobranza e invoices habilitados');
+    logger.info('💳 Módulo de pagos ACTIVO — cron de cobranza habilitado (Facturante: manual)');
 } else {
     logger.info('💳 Módulo de pagos DESHABILITADO (PAYMENT_MODULE_ENABLED=false)');
 }
