@@ -3078,15 +3078,11 @@ async function renderFacturacionAdmin() {
 
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                             <div>
-                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Tipo de comprobante *</label>
-                                <select id="mi-tipo"
-                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
-                                    <option value="C">Factura C</option>
-                                    <option value="B">Factura B</option>
-                                    <option value="A">Factura A</option>
-                                    <option value="NC_C">Nota de crédito C</option>
-                                    <option value="NC_B">Nota de crédito B</option>
-                                </select>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Tipo</label>
+                                <div style="padding:8px 12px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:600;color:#374151">
+                                    Factura C
+                                </div>
+                                <input type="hidden" id="mi-tipo" value="C">
                             </div>
                             <div>
                                 <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto (ARS) *</label>
@@ -3097,12 +3093,14 @@ async function renderFacturacionAdmin() {
 
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                             <div>
-                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número de factura</label>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número de factura *</label>
                                 <input id="mi-numero" type="text" placeholder="Ej: 0001-00000456"
                                     style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
                             </div>
                             <div>
-                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">CAE (AFIP)</label>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">
+                                    CAE <span style="font-weight:400;color:#9ca3af">(opcional)</span>
+                                </label>
                                 <input id="mi-cae" type="text" placeholder="12345678901234"
                                     style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace">
                             </div>
@@ -3225,24 +3223,22 @@ function pendingInvoiceRow(row) {
     <tr id="upload-row-${row.payment_id}" style="display:none;background:#fffbeb">
         <td colspan="5" style="padding:16px 20px">
             <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-                <div>
-                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Tipo de comprobante</label>
-                    <select id="tipo-${row.payment_id}"
-                        style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff">
-                        <option value="C">Factura C</option>
-                        <option value="B">Factura B</option>
-                        <option value="A">Factura A</option>
-                        <option value="NC_C">Nota de crédito C</option>
-                        <option value="NC_B">Nota de crédito B</option>
-                    </select>
+                <div style="display:flex;flex-direction:column;justify-content:flex-end">
+                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Tipo</label>
+                    <span style="display:inline-block;padding:7px 12px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:600;color:#374151">
+                        Factura C
+                    </span>
+                    <input type="hidden" id="tipo-${row.payment_id}" value="C">
                 </div>
                 <div>
-                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Número de factura</label>
+                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Número de factura *</label>
                     <input id="numero-${row.payment_id}" type="text" placeholder="Ej: 0001-00000123"
                         style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:160px">
                 </div>
                 <div>
-                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">CAE (AFIP)</label>
+                    <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">
+                        CAE <span style="font-weight:400;color:#9ca3af">(opcional)</span>
+                    </label>
                     <input id="cae-${row.payment_id}" type="text" placeholder="12345678901234"
                         style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:150px;font-family:monospace">
                 </div>
