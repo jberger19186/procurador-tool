@@ -3404,6 +3404,8 @@ document.addEventListener('click', e => {
     if (modal && e.target === modal) closeManualInvoiceModal();
 });
 
+let _invoiceUserResults = [];  // resultados de la última búsqueda
+
 async function searchUsersForInvoice(query) {
     clearTimeout(_userSearchTimeout);
     const dd = document.getElementById('mi-user-dropdown');
@@ -3412,9 +3414,11 @@ async function searchUsersForInvoice(query) {
         try {
             const data = await apiFetch(`/admin/users/search?q=${encodeURIComponent(query)}&limit=8`);
             const users = data?.users || [];
+            _invoiceUserResults = users;
             if (!users.length) { dd.style.display = 'none'; return; }
-            dd.innerHTML = users.map(u => `
-                <div onclick="selectUserForInvoice(${u.id},'${escHtml(u.email)}','${escHtml(u.nombre||'')}','${escHtml(u.apellido||'')}','${escHtml(u.cuit||'')}','${escHtml(JSON.stringify(u.domicilio||{}).replace(/'/g,"&#39;"))}')"
+            // Pasamos solo el índice — evita problemas de escaping con nombres/JSON
+            dd.innerHTML = users.map((u, idx) => `
+                <div onmousedown="selectUserForInvoice(${idx})"
                     style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6"
                     onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
                     <strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong>
@@ -3426,15 +3430,16 @@ async function searchUsersForInvoice(query) {
     }, 300);
 }
 
-function selectUserForInvoice(id, email, nombre, apellido, cuit, domJson) {
-    _manualInvoiceUserId = id;
-    document.getElementById('mi-user-search').value = email;
+function selectUserForInvoice(idx) {
+    const u = _invoiceUserResults[idx];
+    if (!u) return;
+    _manualInvoiceUserId = u.id;
+    document.getElementById('mi-user-search').value = u.email;
     document.getElementById('mi-user-dropdown').style.display = 'none';
-    let dom = {};
-    try { dom = JSON.parse(domJson); } catch(_) {}
+    const dom = u.domicilio || {};
     const domStr = [dom.calle, dom.numero, dom.localidad, dom.provincia].filter(Boolean).join(', ');
     const sel = document.getElementById('mi-user-selected');
-    sel.innerHTML = `✅ <strong>${escHtml(nombre)} ${escHtml(apellido)}</strong> · ${escHtml(email)}${cuit ? ` · CUIT: ${escHtml(cuit)}` : ''}${domStr ? ` · ${escHtml(domStr)}` : ''}`;
+    sel.innerHTML = `✅ <strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong> · ${escHtml(u.email)}${u.cuit ? ` · CUIT: ${escHtml(u.cuit)}` : ''}${domStr ? ` · ${escHtml(domStr)}` : ''}`;
     sel.style.display = '';
 }
 
