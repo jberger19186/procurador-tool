@@ -3070,7 +3070,8 @@ async function renderFacturacionAdmin() {
                                 <input id="mi-user-search" type="text" placeholder="Escribí el email del usuario…"
                                     autocomplete="off"
                                     style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"
-                                    oninput="searchUsersForInvoice(this.value)" />
+                                    oninput="searchUsersForInvoice(this.value)"
+                                    onkeydown="handleUserSearchKeydown(event)" />
                                 <div id="mi-user-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;max-height:180px;overflow-y:auto"></div>
                             </div>
                             <div id="mi-user-selected" style="display:none;margin-top:6px;padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#166534"></div>
@@ -3405,6 +3406,7 @@ document.addEventListener('click', e => {
 });
 
 let _invoiceUserResults = [];  // resultados de la última búsqueda
+let _invoiceUserActiveIdx = -1; // índice resaltado por teclado
 
 async function searchUsersForInvoice(query) {
     clearTimeout(_userSearchTimeout);
@@ -3415,19 +3417,54 @@ async function searchUsersForInvoice(query) {
             const data = await apiFetch(`/admin/users/search?q=${encodeURIComponent(query)}&limit=8`);
             const users = data?.users || [];
             _invoiceUserResults = users;
+            _invoiceUserActiveIdx = -1;
             if (!users.length) { dd.style.display = 'none'; return; }
-            // Pasamos solo el índice — evita problemas de escaping con nombres/JSON
-            dd.innerHTML = users.map((u, idx) => `
-                <div onmousedown="selectUserForInvoice(${idx})"
-                    style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6"
-                    onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
-                    <strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong>
-                    <span style="color:#6b7280;margin-left:6px">${escHtml(u.email)}</span>
-                    ${u.cuit ? `<span style="color:#6b7280;margin-left:6px;font-size:11px">CUIT: ${escHtml(u.cuit)}</span>` : ''}
-                </div>`).join('');
+            renderInvoiceUserDropdown();
             dd.style.display = '';
         } catch (_) { dd.style.display = 'none'; }
     }, 300);
+}
+
+function renderInvoiceUserDropdown() {
+    const dd = document.getElementById('mi-user-dropdown');
+    dd.innerHTML = _invoiceUserResults.map((u, idx) => `
+        <div data-idx="${idx}" onmousedown="selectUserForInvoice(${idx})"
+            style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6;background:${idx === _invoiceUserActiveIdx ? '#eff6ff' : '#fff'}"
+            onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='${idx === _invoiceUserActiveIdx ? '#eff6ff' : '#fff'}'">
+            <strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong>
+            <span style="color:#6b7280;margin-left:6px">${escHtml(u.email)}</span>
+            ${u.cuit ? `<span style="color:#6b7280;margin-left:6px;font-size:11px">CUIT: ${escHtml(u.cuit)}</span>` : ''}
+        </div>`).join('');
+}
+
+function handleUserSearchKeydown(event) {
+    const dd = document.getElementById('mi-user-dropdown');
+    if (dd.style.display === 'none' || !_invoiceUserResults.length) return;
+
+    if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        _invoiceUserActiveIdx = Math.min(_invoiceUserActiveIdx + 1, _invoiceUserResults.length - 1);
+        renderInvoiceUserDropdown();
+        scrollActiveIntoView();
+    } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        _invoiceUserActiveIdx = Math.max(_invoiceUserActiveIdx - 1, 0);
+        renderInvoiceUserDropdown();
+        scrollActiveIntoView();
+    } else if (event.key === 'Enter') {
+        if (_invoiceUserActiveIdx >= 0) {
+            event.preventDefault();
+            selectUserForInvoice(_invoiceUserActiveIdx);
+        }
+    } else if (event.key === 'Escape') {
+        dd.style.display = 'none';
+    }
+}
+
+function scrollActiveIntoView() {
+    const dd = document.getElementById('mi-user-dropdown');
+    const active = dd.querySelector(`[data-idx="${_invoiceUserActiveIdx}"]`);
+    if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
 function selectUserForInvoice(idx) {
