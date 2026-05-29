@@ -3094,7 +3094,8 @@ async function renderFacturacionAdmin() {
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                             <div>
                                 <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número de factura *</label>
-                                <input id="mi-numero" type="text" placeholder="Ej: 0001-00000456"
+                                <input id="mi-numero" type="text" placeholder="Ej: 1245 → 0001-00001245"
+                                    onblur="this.value = fmtNroFactura(this.value)"
                                     style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
                             </div>
                             <div>
@@ -3232,7 +3233,8 @@ function pendingInvoiceRow(row) {
                 </div>
                 <div>
                     <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Número de factura *</label>
-                    <input id="numero-${row.payment_id}" type="text" placeholder="Ej: 0001-00000123"
+                    <input id="numero-${row.payment_id}" type="text" placeholder="Ej: 1245 → 0001-00001245"
+                        onblur="this.value = fmtNroFactura(this.value)"
                         style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:160px">
                 </div>
                 <div>
@@ -3479,4 +3481,29 @@ async function submitManualInvoice() {
 function showMiError(msg) {
     const el = document.getElementById('mi-error');
     el.textContent = msg; el.style.display = '';
+}
+
+// ── Formateador de número de factura ─────────────────────────────────────────
+// Reglas:
+//   Si el usuario ingresa formato completo (0001-00000101) → se usa tal cual
+//   Si ingresa solo dígitos (ej: 1245) → se construye 0001-00001245
+//   Si ingresa con guion pero incompleto (ej: 0002-1245) → 0002-00001245
+//   Sucursal por defecto: 0001 | Número siempre 8 dígitos con ceros a la izquierda
+function fmtNroFactura(value) {
+    const v = (value || '').trim();
+    if (!v) return '';
+
+    // Formato completo exacto: 4 dígitos + guion + 8 dígitos
+    if (/^\d{4}-\d{8}$/.test(v)) return v;
+
+    if (v.includes('-')) {
+        const [parteA, parteB] = v.split('-');
+        const sucursal = parteA.replace(/\D/g, '').padStart(4, '0').slice(-4);
+        const numero   = parteB.replace(/\D/g, '').padStart(8, '0').slice(-8);
+        return `${sucursal}-${numero}`;
+    }
+
+    // Solo dígitos: sucursal 0001 + número con padding
+    const numero = v.replace(/\D/g, '').padStart(8, '0').slice(-8);
+    return `0001-${numero}`;
 }
