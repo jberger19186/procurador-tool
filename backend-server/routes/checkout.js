@@ -12,7 +12,7 @@
 const express = require('express');
 const router  = express.Router();
 const authenticateToken = require('../middleware/authenticateToken');
-const { createPreapproval, linkPreapproval, cancelSubscription } = require('../services/subscriptionService');
+const { createPreapproval, linkPreapproval, markPaymentConfigured, reactivateSubscription, cancelSubscription } = require('../services/subscriptionService');
 const logger  = require('../utils/logger');
 
 // ── Middleware: verificar feature flag ───────────────────────────────────────
@@ -53,22 +53,27 @@ router.post('/init', async (req, res) => {
 });
 
 // ── POST /usuarios/api/checkout/confirm ──────────────────────────────────────
-// Vincula el preapproval_id retornado por MP al usuario
-// El usuario llega aquí tras completar el checkout en MP
+// Vincula el preapproval_id retornado por MP al usuario.
+// Si preapproval_id está presente: lo verifica en MP y lo persiste.
+// Si no está (sandbox o MP no lo devuelve en el redirect): marca payment_provider
+// vía JWT. El external_subscription_id se completará con el primer webhook de pago.
 router.post('/confirm', async (req, res) => {
   const { preapproval_id } = req.body;
   const userId = req.user.id;
 
-  if (!preapproval_id) {
-    return res.status(400).json({ error: 'preapproval_id requerido' });
-  }
-
   try {
-    await linkPreapproval(userId, preapproval_id);
-    logger.info('[Checkout] Preapproval vinculado', { userId, preapproval_id });
+    if (preapproval_id) {
+      await linkPreapproval(userId, preapproval_id);
+      logger.info('[Checkout] Preapproval vinculado', { userId, preapproval_id });
+    } else {
+      // MP no devolvió preapproval_id (ocurre en sandbox y en algunos flujos de producción)
+      // Marcamos el provider vía JWT; el webhook lo completará con el ID real
+      await markPaymentConfigured(userId);
+      logger.info('[Checkout] Pago marcado como configurado vía retorno MP', { userId });
+    }
     res.json({ ok: true, message: 'Método de pago configurado. El primer cobro se procesará automáticamente.' });
   } catch (err) {
-    logger.error('[Checkout] Error vinculando preapproval', { userId, err: err.message });
+    logger.error('[Checkout] Error confirmando pago', { userId, err: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -85,6 +90,20 @@ router.post('/cancel', async (req, res) => {
   } catch (err) {
     logger.error('[Checkout] Error cancelando suscripción', { userId, err: err.message });
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /usuarios/api/checkout/reactivate ───────────────────────────────────
+// Deshace una cancelación programada (cancel_at) mientras aún no venció
+router.post('/reactivate', async (req, res) => {
+  const userId = req.user.id;
+  try {
+    await reactivateSubscription(userId);
+    logger.info('[Checkout] Suscripción reactivada', { userId });
+    res.json({ ok: true, message: 'Tu suscripción fue reactivada. Seguirá renovándose automáticamente.' });
+  } catch (err) {
+    logger.error('[Checkout] Error reactivando suscripción', { userId, err: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -110,7 +129,7 @@ router.get('/status', async (req, res) => {
       next_billing_date:      sub.next_billing_date,
       cancel_at:              sub.cancel_at,
       trial_bonus_until:      sub.trial_bonus_until,
-      has_payment_method:     !!sub.external_subscription_id,
+      has_payment_method:     !!sub.external_subscription_id || !!sub.payment_provider,
       payment_provider:       sub.payment_provider,
       last_payment_at:        sub.last_payment_at,
       usage_count:            sub.usage_count,

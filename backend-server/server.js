@@ -596,7 +596,18 @@ cron.schedule('20 11 * * *', async () => {
             JOIN subscriptions s ON u.id = s.user_id
             WHERE u.registration_status = 'active'
               AND s.cancel_at IS NOT NULL
-              AND s.cancel_at < NOW()
+              AND s.cancel_at < NOW() - INTERVAL '2 hours'
+              AND s.auto_renewal = FALSE
+              -- Verificación de seguridad: si llegó un pago aprobado después de cancel_at
+              -- (MP cobró aunque el preapproval no se canceló correctamente), applyRenewal
+              -- ya limpió cancel_at y restauró auto_renewal = TRUE, por lo que este registro
+              -- no aparecería acá. Doble protección: no cancelar si hubo cobro reciente.
+              AND NOT EXISTS (
+                SELECT 1 FROM payments p
+                WHERE p.user_id = u.id
+                  AND p.status = 'approved'
+                  AND p.created_at > s.cancel_at - INTERVAL '1 hour'
+              )
         `);
         for (const u of cancelled.rows) {
             await pool.query(`UPDATE users SET registration_status = 'cancelled', updated_at = NOW() WHERE id = $1`, [u.id]);

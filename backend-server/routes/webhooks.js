@@ -19,7 +19,7 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 const db      = require('../db');
-const { paymentClient } = require('../utils/mercadopago');
+const { paymentClient, preApprovalClient } = require('../utils/mercadopago');
 const { applyTrialBonus, applyRenewal } = require('../services/subscriptionService');
 const { enqueueInvoice }                = require('../services/invoiceService');
 const mailer  = require('../utils/mailer');
@@ -99,9 +99,12 @@ router.post('/mercadopago', verifyMPSignature, async (req, res) => {
 
       logger.info('[Webhooks] Procesando evento MP', { externalId, type });
 
-      if (type === 'payment') {
+      if (type === 'payment' || type === 'subscription_authorized_payment') {
+        // 'payment': pago directo
+        // 'subscription_authorized_payment': cobro autorizado dentro de una suscripción recurrente
         await handlePaymentEvent(data.id);
-      } else if (type === 'preapproval') {
+      } else if (type === 'preapproval' || type === 'subscription_preapproval') {
+        // MP puede enviar 'preapproval' o 'subscription_preapproval' según el contexto
         await handlePreapprovalEvent(data.id);
       } else {
         logger.info('[Webhooks] Tipo de evento no manejado', { type });
@@ -130,23 +133,45 @@ async function handlePaymentEvent(paymentId) {
   }
 
   const { status, payer, transaction_amount, metadata, date_approved } = payment;
-  const externalRef = payment.external_reference || '';
+  const externalRef   = payment.external_reference || '';
   const preapprovalId = payment.preapproval_id || metadata?.preapproval_id;
 
-  // Buscar suscripción por external_subscription_id o por email del pagador
-  const { rows: [sub] } = await db.query(
-    `SELECT s.id AS sub_id, s.plan, s.trial_bonus_until, s.status AS sub_status,
-            u.id AS user_id, u.email, u.cuit, u.nombre, u.apellido
-     FROM subscriptions s
-     JOIN users u ON u.id = s.user_id
-     WHERE s.external_subscription_id = $1
-        OR u.email = $2
-     ORDER BY s.id DESC LIMIT 1`,
-    [preapprovalId || '', payer?.email || '']
-  );
+  // Extraer userId de external_reference "user_{id}" si está disponible
+  const refUserId = externalRef.startsWith('user_') ? parseInt(externalRef.slice(5), 10) : null;
+
+  // Buscar suscripción por prioridad:
+  // 1. external_reference "user_{id}" — independiente del email de MP
+  // 2. external_subscription_id (preapproval ya vinculado)
+  // 3. email del pagador — fallback cuando los emails coinciden
+  let sub = null;
+
+  if (refUserId) {
+    const { rows } = await db.query(
+      `SELECT s.id AS sub_id, s.plan, s.trial_bonus_until, s.status AS sub_status,
+              u.id AS user_id, u.email, u.cuit, u.nombre, u.apellido
+       FROM subscriptions s JOIN users u ON u.id = s.user_id
+       WHERE u.id = $1 OR s.external_subscription_id = $2
+       ORDER BY s.id DESC LIMIT 1`,
+      [refUserId, preapprovalId || '']
+    );
+    sub = rows[0] || null;
+  }
 
   if (!sub) {
-    logger.warn('[Webhooks] Suscripción no encontrada para pago', { paymentId, preapprovalId, email: payer?.email });
+    const { rows } = await db.query(
+      `SELECT s.id AS sub_id, s.plan, s.trial_bonus_until, s.status AS sub_status,
+              u.id AS user_id, u.email, u.cuit, u.nombre, u.apellido
+       FROM subscriptions s JOIN users u ON u.id = s.user_id
+       WHERE s.external_subscription_id = $1
+          OR (u.email = $2 AND $2 <> '')
+       ORDER BY s.id DESC LIMIT 1`,
+      [preapprovalId || '', payer?.email || '']
+    );
+    sub = rows[0] || null;
+  }
+
+  if (!sub) {
+    logger.warn('[Webhooks] Suscripción no encontrada para pago', { paymentId, preapprovalId, email: payer?.email, externalRef });
     return;
   }
 
@@ -169,17 +194,38 @@ async function handlePaymentEvent(paymentId) {
     const nextBillingDate = new Date();
     nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
-    const isFistPayment = !sub.trial_bonus_until;
+    const isFirstPayment = !sub.trial_bonus_until;
 
-    if (isFistPayment) {
+    if (isFirstPayment) {
       // Primer pago → aplicar trial bonus (usage_limit = plan + 20)
       await applyTrialBonus(sub.sub_id, sub.plan, nextBillingDate);
       logger.info('[Webhooks] Primer pago aprobado — trial bonus aplicado', { userId: sub.user_id });
     } else {
-      // Renovación → sin bonus
+      // Renovación (o pago luego de fallo) → sin bonus, limpia gracia
       await applyRenewal(sub.sub_id, sub.plan, nextBillingDate);
-      logger.info('[Webhooks] Renovación aprobada', { userId: sub.user_id });
+      logger.info('[Webhooks] Renovación/recuperación aprobada', { userId: sub.user_id });
     }
+
+    // Marcar método de pago configurado en la suscripción
+    // (preapprovalId puede ser null en sandbox — usamos el paymentId como fallback)
+    await db.query(
+      `UPDATE subscriptions
+       SET payment_provider          = 'mercadopago',
+           external_subscription_id  = COALESCE(NULLIF(external_subscription_id, ''), $1),
+           updated_at                = NOW()
+       WHERE id = $2`,
+      [preapprovalId || `pay-${paymentId}`, sub.sub_id]
+    );
+
+    // Si la cuenta estaba suspendida por falta de pago → reactivar
+    // (puede ocurrir si el usuario pagó después de que venció la gracia)
+    await db.query(
+      `UPDATE users
+       SET registration_status = 'active', updated_at = NOW()
+       WHERE id = $1
+         AND registration_status IN ('suspended', 'suspended_plan_expired')`,
+      [sub.user_id]
+    );
 
     // Encolar factura (fire-and-forget)
     enqueueInvoice(savedPayment.id).catch(err =>
@@ -209,16 +255,81 @@ async function handlePaymentEvent(paymentId) {
 }
 
 async function handlePreapprovalEvent(preapprovalId) {
-  const preapproval = await db.query(
-    'SELECT id, status FROM subscriptions WHERE external_subscription_id = $1',
-    [String(preapprovalId)]
-  );
-  if (!preapproval.rows[0]) {
-    logger.warn('[Webhooks] Preapproval sin suscripción local', { preapprovalId });
+  // Consultar el preapproval en MP para obtener el email del pagador
+  let mpPreapproval;
+  try {
+    mpPreapproval = await preApprovalClient.get({ id: String(preapprovalId) });
+  } catch (err) {
+    logger.warn('[Webhooks] No se pudo obtener preapproval de MP', { preapprovalId, err: err.message });
     return;
   }
-  // Solo logueamos el evento — los cambios de estado se manejan via pago (handlePaymentEvent)
-  logger.info('[Webhooks] Evento preapproval registrado', { preapprovalId });
+
+  // MP puede devolver el email en distintos campos según la versión del SDK/plan
+  const payerEmail = mpPreapproval?.payer_email
+    || mpPreapproval?.payer?.email
+    || mpPreapproval?.summarized?.payer_email
+    || '';
+
+  // external_reference = "user_{userId}" — seteado por nosotros al generar el init_point
+  const externalRef  = mpPreapproval?.external_reference || '';
+  const refUserId    = externalRef.startsWith('user_') ? parseInt(externalRef.slice(5), 10) : null;
+
+  logger.info('[Webhooks] Preapproval data', {
+    preapprovalId, payerEmail, externalRef, refUserId,
+    status: mpPreapproval?.status,
+    planId: mpPreapproval?.preapproval_plan_id,
+    keys:   Object.keys(mpPreapproval || {}).join(',')
+  });
+
+  // Buscar suscripción por prioridad:
+  // 1. external_subscription_id ya vinculado exactamente (renovaciones)
+  // 2. external_reference "user_{id}" — funciona independientemente del email de MP
+  // 3. email del pagador — fallback cuando portal email = MP email
+  let sub = null;
+
+  if (refUserId) {
+    // Prioridad 1: user_id extraído de external_reference (el más confiable)
+    const { rows } = await db.query(
+      `SELECT s.id, s.status
+       FROM subscriptions s
+       WHERE s.user_id = $1
+         OR s.external_subscription_id = $2
+       ORDER BY s.id DESC LIMIT 1`,
+      [refUserId, String(preapprovalId)]
+    );
+    sub = rows[0] || null;
+  }
+
+  if (!sub && payerEmail) {
+    // Fallback: email del pagador (útil cuando portal email = MP email)
+    const { rows } = await db.query(
+      `SELECT s.id, s.status
+       FROM subscriptions s
+       JOIN users u ON u.id = s.user_id
+       WHERE u.email = $1
+          OR s.external_subscription_id = $2
+       ORDER BY s.id DESC LIMIT 1`,
+      [payerEmail, String(preapprovalId)]
+    );
+    sub = rows[0] || null;
+  }
+
+  if (!sub) {
+    logger.warn('[Webhooks] Preapproval sin suscripción local', { preapprovalId, payerEmail, externalRef });
+    return;
+  }
+
+  // Guardar el preapproval_id real: necesario para cancelar la suscripción vía API de MP
+  await db.query(
+    `UPDATE subscriptions
+     SET external_subscription_id = $1,
+         payment_provider          = 'mercadopago',
+         updated_at                = NOW()
+     WHERE id = $2`,
+    [String(preapprovalId), sub.id]
+  );
+
+  logger.info('[Webhooks] Preapproval ID vinculado a suscripción', { preapprovalId, subId: sub.id, externalRef, payerEmail });
 }
 
 module.exports = router;

@@ -307,7 +307,7 @@ router.get('/subscription/current', authenticateToken, async (req, res) => {
             cancelAt:           sub.cancel_at,
             trialBonusUntil:    sub.trial_bonus_until,
             paymentProvider:    sub.payment_provider,
-            hasPaymentMethod:   !!sub.external_subscription_id,
+            hasPaymentMethod:   !!sub.external_subscription_id || !!sub.payment_provider,
             lastPaymentAt:      sub.last_payment_at,
             usageCount:         sub.usage_count,
             usageLimit:         sub.usage_limit,

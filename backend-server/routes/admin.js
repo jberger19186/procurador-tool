@@ -2324,6 +2324,161 @@ router.post('/smoke-tests/report-extension', authenticateAdmin, (req, res) => {
     res.json({ success: true });
 });
 
+// ─── GET /admin/users/:userId/refund-preview ─────────────────────────────────
+// Calcula el monto de reembolso proporcional por días restantes en el período actual
+router.get('/users/:userId/refund-preview', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    try {
+        const { rows: [sub] } = await db.query(
+            `SELECT period_start, next_billing_date, payment_provider, external_subscription_id
+             FROM subscriptions WHERE user_id = $1`,
+            [userId]
+        );
+        if (!sub) return res.status(404).json({ error: 'Suscripción no encontrada' });
+
+        const { rows: [lastPayment] } = await db.query(
+            `SELECT amount, currency, created_at FROM payments
+             WHERE user_id = $1 AND status = 'approved'
+             ORDER BY created_at DESC LIMIT 1`,
+            [userId]
+        );
+
+        if (!lastPayment || !sub.period_start || !sub.next_billing_date) {
+            return res.json({ hasPayment: false, refundAmount: 0, currency: null, daysRemaining: 0, totalDays: 0 });
+        }
+
+        const now = new Date();
+        const periodStart = new Date(sub.period_start);
+        const periodEnd = new Date(sub.next_billing_date);
+        const totalDays = Math.max(1, Math.round((periodEnd - periodStart) / 86400000));
+        const daysRemaining = Math.max(0, Math.round((periodEnd - now) / 86400000));
+        const refundAmount = Math.round((daysRemaining / totalDays) * parseFloat(lastPayment.amount) * 100) / 100;
+
+        res.json({
+            hasPayment: true,
+            refundAmount,
+            currency: lastPayment.currency || 'ARS',
+            daysRemaining,
+            totalDays,
+            lastPaymentAmount: parseFloat(lastPayment.amount),
+            periodEnd: sub.next_billing_date
+        });
+    } catch (err) {
+        console.error('[refund-preview] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── POST /admin/users/:userId/extra-usage ────────────────────────────────────
+// Asigna usos extra de cortesía (price_total=0); descuenta de remaining_uses al usar
+router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const { extra_uses, reason, expires_at } = req.body || {};
+    const db = req.app.get('db');
+
+    const qty = parseInt(extra_uses, 10);
+    if (!qty || qty < 1 || qty > 1000) {
+        return res.status(400).json({ error: 'extra_uses debe ser un entero entre 1 y 1000' });
+    }
+    if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: 'El motivo es obligatorio' });
+    }
+
+    try {
+        const expiry = expires_at ? new Date(expires_at) : null;
+        if (expires_at && isNaN(expiry)) {
+            return res.status(400).json({ error: 'expires_at inválido' });
+        }
+
+        await db.query(
+            `INSERT INTO usage_extras (user_id, extra_uses, remaining_uses, reason, created_by_admin_id, expires_at, created_at)
+             VALUES ($1, $2, $2, $3, $4, $5, NOW())`,
+            [userId, qty, reason.trim(), req.user.id, expiry]
+        );
+        await db.query(
+            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'extra_usage_assigned', $3)`,
+            [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason })]
+        );
+        // Notificación in-app
+        await db.query(
+            `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'extra_usage_assigned', $2)`,
+            [userId, `Se te asignaron ${qty} usos adicionales de cortesía.`]
+        );
+        console.log(`🎁 ${qty} usos extra asignados a usuario ${userId} por admin ${req.user.id}: ${reason}`);
+        res.json({ success: true, extra_uses: qty });
+    } catch (err) {
+        console.error('[extra-usage POST] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── GET /admin/users/:userId/extra-usage ─────────────────────────────────────
+router.get('/users/:userId/extra-usage', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    try {
+        const { rows } = await db.query(
+            `SELECT ue.id, ue.extra_uses, ue.remaining_uses, ue.reason,
+                    ue.expires_at, ue.created_at, u.email AS assigned_by_email
+             FROM usage_extras ue
+             LEFT JOIN users u ON ue.created_by_admin_id = u.id
+             WHERE ue.user_id = $1
+             ORDER BY ue.created_at DESC`,
+            [userId]
+        );
+        res.json({ success: true, extras: rows });
+    } catch (err) {
+        console.error('[extra-usage GET] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── GET /admin/users/:userId/payments ────────────────────────────────────────
+router.get('/users/:userId/payments', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+    try {
+        const { rows } = await db.query(
+            `SELECT id, external_payment_id, amount, currency, status,
+                    payment_method, plan, period_start, period_end,
+                    refund_amount, refunded_at, created_at
+             FROM payments
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT $2`,
+            [userId, limit]
+        );
+        res.json({ success: true, payments: rows });
+    } catch (err) {
+        console.error('[admin payments GET] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── GET /admin/users/:userId/invoices ────────────────────────────────────────
+router.get('/users/:userId/invoices', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+    try {
+        const { rows } = await db.query(
+            `SELECT id, invoice_type, cae, numero, amount, pdf_url,
+                    status, retry_count, error_message, issued_at, created_at
+             FROM invoices
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT $2`,
+            [userId, limit]
+        );
+        res.json({ success: true, invoices: rows });
+    } catch (err) {
+        console.error('[admin invoices GET] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 // ─── GET /admin/settings ─────────────────────────────────────────────────────
 // Devuelve todos los valores de app_settings
 router.get('/settings', authenticateAdmin, async (req, res) => {

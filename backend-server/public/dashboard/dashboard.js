@@ -550,6 +550,17 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
+        <!-- Usos Extra -->
+        <div class="card section-gap">
+            <div class="card-header">
+                <h3>🎁 Usos Extra (cortesía)</h3>
+                <button class="btn btn-sm btn-primary" onclick="openGrantExtraModal(${u.id})">+ Asignar usos</button>
+            </div>
+            <div class="card-body">
+                <div id="extra-usage-list" style="font-size:13px;color:var(--text-muted)">Cargando...</div>
+            </div>
+        </div>
+
         <!-- Tickets del usuario -->
         <div class="card section-gap">
             <div class="card-header">
@@ -608,7 +619,7 @@ async function renderUserDetail(userId) {
         </div>
 
         <!-- Logs recientes -->
-        <div class="card">
+        <div class="card section-gap">
             <div class="card-header"><h3>📋 Últimas ejecuciones (${logs.length})</h3></div>
             <div class="card-body" style="padding:0">
                 ${logs.length === 0 ? '<div class="empty-state"><p>Sin ejecuciones</p></div>' : `
@@ -624,10 +635,29 @@ async function renderUserDetail(userId) {
                     </tbody></table>
                 </div>`}
             </div>
+        </div>
+
+        <!-- Historial de pagos -->
+        <div class="card section-gap">
+            <div class="card-header"><h3>💳 Historial de Pagos</h3></div>
+            <div class="card-body" style="padding:0">
+                <div id="payment-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
+            </div>
+        </div>
+
+        <!-- Historial de facturas -->
+        <div class="card section-gap">
+            <div class="card-header"><h3>🧾 Historial de Facturas</h3></div>
+            <div class="card-body" style="padding:0">
+                <div id="invoice-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
+            </div>
         </div>`;
 
-        // Cargar historial de ajustes
+        // Cargar secciones asíncronas
         loadAdjustmentHistory(userId);
+        loadExtraUsage(userId);
+        loadPaymentHistory(userId);
+        loadInvoiceHistory(userId);
     } catch (e) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
@@ -670,8 +700,7 @@ window.updateSub = async function(id) {
         setTimeout(() => navigate('user-detail', id), 1200);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
-window.adminSuspendUser = function(userId) {
-    // Build inline modal for suspend
+window.adminSuspendUser = async function(userId) {
     const existing = document.getElementById('suspend-modal');
     if (existing) existing.remove();
 
@@ -679,15 +708,27 @@ window.adminSuspendUser = function(userId) {
     modal.id = 'suspend-modal';
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
     modal.innerHTML = `
-        <div style="background:#fff;border-radius:10px;padding:28px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-            <h3 style="margin:0 0 16px;font-size:16px">Suspender usuario</h3>
-            <div style="margin-bottom:12px">
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo de suspensión <span style="color:red">*</span></label>
-                <textarea id="suspend-reason" rows="3" placeholder="Indicá el motivo de la suspensión..." style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical"></textarea>
+        <div style="background:#fff;border-radius:10px;padding:28px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+            <h3 style="margin:0 0 16px;font-size:16px">⏸ Suspender usuario</h3>
+            <div style="margin-bottom:14px">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">Tipo de suspensión</label>
+                <div style="display:flex;gap:8px">
+                    <label style="flex:1;border:2px solid #3b82f6;border-radius:8px;padding:10px 12px;cursor:pointer;background:#eff6ff">
+                        <input type="radio" name="suspend-mode" value="soft" checked style="accent-color:#3b82f6;margin-right:6px">
+                        <strong style="font-size:13px">Suave</strong>
+                        <p style="margin:4px 0 0;font-size:11px;color:#6b7280">Acceso pausado ahora. Facturación detenida hasta reactivación.</p>
+                    </label>
+                    <label style="flex:1;border:2px solid #e5e7eb;border-radius:8px;padding:10px 12px;cursor:pointer" id="hard-mode-label">
+                        <input type="radio" name="suspend-mode" value="hard" style="accent-color:#ef4444;margin-right:6px" onchange="loadRefundPreview(${userId})">
+                        <strong style="font-size:13px">Dura</strong>
+                        <p style="margin:4px 0 0;font-size:11px;color:#6b7280">Cancela cobro en MP inmediatamente.</p>
+                    </label>
+                </div>
             </div>
-            <div style="margin-bottom:20px;display:flex;align-items:center;gap:8px">
-                <input type="checkbox" id="suspend-billing-paused" checked style="width:16px;height:16px;accent-color:#3b82f6">
-                <label for="suspend-billing-paused" style="font-size:13px;cursor:pointer">Pausar facturación durante la suspensión</label>
+            <div id="refund-preview-area" style="display:none;margin-bottom:12px;padding:10px 12px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;font-size:12px"></div>
+            <div style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo <span style="color:red">*</span></label>
+                <textarea id="suspend-reason" rows="3" placeholder="Indicá el motivo de la suspensión..." style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical"></textarea>
             </div>
             <div id="suspend-alert"></div>
             <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -696,11 +737,46 @@ window.adminSuspendUser = function(userId) {
             </div>
         </div>`;
     document.body.appendChild(modal);
+
+    // Style radio button borders on change
+    modal.querySelectorAll('input[name="suspend-mode"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            modal.querySelectorAll('label[style*="border"]').forEach(l => {
+                l.style.borderColor = '#e5e7eb';
+                l.style.background = '';
+            });
+            const selected = modal.querySelector('input[name="suspend-mode"]:checked');
+            if (selected) {
+                const lbl = selected.closest('label');
+                lbl.style.borderColor = selected.value === 'hard' ? '#ef4444' : '#3b82f6';
+                lbl.style.background = selected.value === 'hard' ? '#fef2f2' : '#eff6ff';
+            }
+        });
+    });
+};
+
+window.loadRefundPreview = async function(userId) {
+    const area = document.getElementById('refund-preview-area');
+    if (!area) return;
+    area.style.display = 'block';
+    area.textContent = 'Calculando reembolso proporcional...';
+    try {
+        const data = await apiFetch(`/admin/users/${userId}/refund-preview`);
+        if (!data.hasPayment) {
+            area.innerHTML = '💡 Sin pagos aprobados. No corresponde reembolso.';
+        } else {
+            area.innerHTML = `💰 Reembolso proporcional estimado: <strong>${data.currency} ${data.refundAmount.toLocaleString('es-AR', {minimumFractionDigits:2})}</strong> (${data.daysRemaining} días restantes de ${data.totalDays}). Procesarlo manualmente en MercadoPago si corresponde.`;
+        }
+    } catch (e) {
+        area.innerHTML = 'No se pudo calcular el reembolso.';
+    }
 };
 
 window.doAdminSuspend = async function(userId) {
     const reason = document.getElementById('suspend-reason').value.trim();
-    const billing_paused = document.getElementById('suspend-billing-paused').checked;
+    const modeEl = document.querySelector('input[name="suspend-mode"]:checked');
+    const mode = modeEl ? modeEl.value : 'soft';
+    const billing_paused = (mode === 'soft');  // soft = pausar facturación; hard = cancelar MP
     const alertEl = document.getElementById('suspend-alert');
 
     if (!reason) {
@@ -734,6 +810,163 @@ window.resetUsage = async function(id) {
         setTimeout(() => navigate('user-detail', id), 1200);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
+
+// ── Extra Usage ────────────────────────────────────────────────────────────────
+async function loadExtraUsage(userId) {
+    const el = document.getElementById('extra-usage-list');
+    if (!el) return;
+    try {
+        const { extras } = await apiFetch(`/admin/users/${userId}/extra-usage`);
+        if (!extras || extras.length === 0) {
+            el.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">Sin usos extra asignados.</span>';
+            return;
+        }
+        const rows = extras.map(e => {
+            const active = !e.expires_at || new Date(e.expires_at) > new Date();
+            const badge = e.remaining_uses > 0 && active
+                ? `<span class="badge badge-green">${e.remaining_uses} restantes</span>`
+                : `<span class="badge badge-gray">Agotado</span>`;
+            return `<tr>
+                <td style="font-size:12px">${fmtDate(e.created_at)}</td>
+                <td style="text-align:center">${e.extra_uses}</td>
+                <td>${badge}</td>
+                <td style="font-size:12px">${escHtml(e.reason || '—')}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${e.expires_at ? fmtDate(e.expires_at) : '—'}</td>
+                <td style="font-size:11px;color:var(--text-muted)">${escHtml(e.assigned_by_email || '—')}</td>
+            </tr>`;
+        }).join('');
+        el.innerHTML = `<div class="table-wrapper"><table>
+            <thead><tr><th>Fecha</th><th>Usos</th><th>Estado</th><th>Motivo</th><th>Vence</th><th>Asignado por</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div>`;
+    } catch (e) {
+        el.innerHTML = `<span style="font-size:13px;color:var(--text-muted)">Error al cargar: ${escHtml(e.message)}</span>`;
+    }
+}
+
+window.openGrantExtraModal = function(userId) {
+    const existing = document.getElementById('extra-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'extra-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML = `
+        <div style="background:#fff;border-radius:10px;padding:28px;width:400px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+            <h3 style="margin:0 0 16px;font-size:16px">🎁 Asignar usos extra</h3>
+            <div style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad de usos <span style="color:red">*</span></label>
+                <input type="number" id="extra-qty" value="10" min="1" max="1000" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+            </div>
+            <div style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo <span style="color:red">*</span></label>
+                <input type="text" id="extra-reason" placeholder="Ej: Cortesía por problema técnico" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+            </div>
+            <div style="margin-bottom:16px">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Vencimiento (opcional)</label>
+                <input type="date" id="extra-expires" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+            </div>
+            <div id="extra-alert"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('extra-modal').remove()">Cancelar</button>
+                <button class="btn btn-primary btn-sm" onclick="doGrantExtra(${userId})">Asignar</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+};
+
+window.doGrantExtra = async function(userId) {
+    const extra_uses = parseInt(document.getElementById('extra-qty').value, 10);
+    const reason = document.getElementById('extra-reason').value.trim();
+    const expires_at = document.getElementById('extra-expires').value || null;
+    const alertEl = document.getElementById('extra-alert');
+
+    if (!reason) {
+        alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">El motivo es obligatorio.</div>';
+        return;
+    }
+    try {
+        await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', { extra_uses, reason, expires_at });
+        document.getElementById('extra-modal').remove();
+        showAlert(document.getElementById('ud-alert'), `🎁 ${extra_uses} usos extra asignados correctamente.`, 'success');
+        loadExtraUsage(userId);
+    } catch (e) {
+        alertEl.innerHTML = `<div class="alert alert-error" style="margin-bottom:8px">${escHtml(e.message)}</div>`;
+    }
+};
+
+// ── Payment History ────────────────────────────────────────────────────────────
+async function loadPaymentHistory(userId) {
+    const el = document.getElementById('payment-history-list');
+    if (!el) return;
+    try {
+        const { payments } = await apiFetch(`/admin/users/${userId}/payments`);
+        if (!payments || payments.length === 0) {
+            el.innerHTML = '<div class="empty-state"><p style="font-size:13px;color:var(--text-muted)">Sin pagos registrados.</p></div>';
+            return;
+        }
+        const statusBadgePayment = s => ({
+            approved: '<span class="badge badge-green">Aprobado</span>',
+            pending:  '<span class="badge badge-yellow">Pendiente</span>',
+            rejected: '<span class="badge badge-red">Rechazado</span>',
+            refunded: '<span class="badge badge-blue">Reembolsado</span>'
+        }[s] || `<span class="badge badge-gray">${s}</span>`);
+
+        const rows = payments.map(p => `<tr>
+            <td style="font-size:12px">${fmtDate(p.created_at)}</td>
+            <td><strong>${p.currency || 'ARS'} ${parseFloat(p.amount || 0).toLocaleString('es-AR', {minimumFractionDigits:2})}</strong></td>
+            <td>${statusBadgePayment(p.status)}</td>
+            <td style="font-size:11px;color:var(--text-muted)">${escHtml(p.plan || '—')}</td>
+            <td style="font-size:11px;color:var(--text-muted)">${escHtml(p.payment_method || '—')}</td>
+            ${p.refund_amount ? `<td style="font-size:11px;color:#ef4444">-${parseFloat(p.refund_amount).toLocaleString('es-AR',{minimumFractionDigits:2})}</td>` : '<td>—</td>'}
+            <td style="font-size:11px;color:var(--text-muted)">${escHtml(p.external_payment_id || '—')}</td>
+        </tr>`).join('');
+
+        el.innerHTML = `<div class="table-wrapper"><table>
+            <thead><tr><th>Fecha</th><th>Monto</th><th>Estado</th><th>Plan</th><th>Método</th><th>Reembolso</th><th>ID externo</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div>`;
+    } catch (e) {
+        el.innerHTML = `<div class="empty-state"><p style="font-size:13px;color:var(--text-muted)">Error al cargar pagos: ${escHtml(e.message)}</p></div>`;
+    }
+}
+
+// ── Invoice History ────────────────────────────────────────────────────────────
+async function loadInvoiceHistory(userId) {
+    const el = document.getElementById('invoice-history-list');
+    if (!el) return;
+    try {
+        const { invoices } = await apiFetch(`/admin/users/${userId}/invoices`);
+        if (!invoices || invoices.length === 0) {
+            el.innerHTML = '<div class="empty-state"><p style="font-size:13px;color:var(--text-muted)">Sin facturas registradas.</p></div>';
+            return;
+        }
+        const statusBadgeInvoice = s => ({
+            issued:  '<span class="badge badge-green">Emitida</span>',
+            pending: '<span class="badge badge-yellow">Pendiente</span>',
+            error:   '<span class="badge badge-red">Error</span>',
+            skipped: '<span class="badge badge-gray">Omitida</span>'
+        }[s] || `<span class="badge badge-gray">${s}</span>`);
+
+        const rows = invoices.map(inv => `<tr>
+            <td style="font-size:12px">${fmtDate(inv.created_at)}</td>
+            <td style="font-size:11px;color:var(--text-muted)">${escHtml(inv.invoice_type || 'FC')}</td>
+            <td>${statusBadgeInvoice(inv.status)}</td>
+            <td><strong>${inv.amount != null ? 'ARS ' + parseFloat(inv.amount).toLocaleString('es-AR', {minimumFractionDigits:2}) : '—'}</strong></td>
+            <td style="font-size:11px">${escHtml(inv.numero || '—')}</td>
+            <td style="font-size:11px;color:var(--text-muted)">${escHtml(inv.cae || '—')}</td>
+            <td>${inv.pdf_url ? `<a href="${escHtml(inv.pdf_url)}" target="_blank" class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px">PDF</a>` : '—'}</td>
+            <td style="font-size:11px;color:#ef4444">${inv.status === 'error' ? escHtml(inv.error_message || '') : (inv.retry_count > 0 ? `${inv.retry_count} reintentos` : '')}</td>
+        </tr>`).join('');
+
+        el.innerHTML = `<div class="table-wrapper"><table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Estado</th><th>Monto</th><th>Número</th><th>CAE</th><th>PDF</th><th>Detalle</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div>`;
+    } catch (e) {
+        el.innerHTML = `<div class="empty-state"><p style="font-size:13px;color:var(--text-muted)">Error al cargar facturas: ${escHtml(e.message)}</p></div>`;
+    }
+}
 
 window.deleteMonitorParte = async function(parteId, nombre, userId) {
     if (!confirm(`¿Eliminar la parte "${nombre}" y todos sus expedientes asociados? Esta acción no se puede deshacer.`)) return;

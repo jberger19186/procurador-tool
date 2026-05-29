@@ -219,6 +219,36 @@ async function initDashboard() {
     refreshNotifBadge();
     setInterval(refreshNotifBadge, 120000); // cada 2 min
 
+    // Retorno desde checkout MercadoPago → vincular preapproval y navegar a facturación
+    const pagoOkData = sessionStorage.getItem('show_pago_ok');
+    if (pagoOkData) {
+        sessionStorage.removeItem('show_pago_ok');
+        // Siempre llamamos a /confirm vía JWT para registrar el provider.
+        // Si MP devolvió preapproval_id: lo vinculamos con verificación en MP.
+        // Si no (sandbox y algunos casos de producción): marcamos payment_provider
+        // directamente por user_id; el webhook lo completará con el preapproval real.
+        try {
+            const { preapprovalId } = JSON.parse(pagoOkData);
+            await apiFetch('/usuarios/api/checkout/confirm', {
+                method: 'POST',
+                body: JSON.stringify({ preapproval_id: preapprovalId || undefined })
+            });
+        } catch (_) {}
+        // Recargar cuenta para que renderFact() vea el payment_provider actualizado
+        await loadAccount();
+        navigateTo('facturacion');
+        setTimeout(() => {
+            const banner = document.createElement('div');
+            banner.style.cssText = 'background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-weight:600;';
+            banner.textContent = '✅ ¡Método de pago configurado correctamente! Tu suscripción mensual está activa.';
+            const container = document.getElementById('facturacion-content')
+                           || document.getElementById('section-facturacion');
+            if (container) container.prepend(banner);
+            setTimeout(() => banner.remove(), 8000);
+        }, 500);
+        return;
+    }
+
     // Consumir pending_goto (de SSO o de ?goto= persistido en sessionStorage)
     const pendingGoto = sessionStorage.getItem('pending_goto');
     if (pendingGoto) {
@@ -1215,35 +1245,73 @@ async function renderFact() {
     const planChanges = acc.planChangesThisCycle ?? 0;
 
     // Card: Método de pago
+    const isCancelledExpired = rs === 'cancelled';
+    const isSuspendedPayment = rs === 'suspended' || (subData?.status === 'suspended' && subData?.paymentGraceEndsAt);
+
+    let paymentBody = '';
+
+    if (isCancelledExpired) {
+        // Suscripción vencida — permitir re-suscribirse desde cero
+        paymentBody = `
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px">
+                    <p style="font-size:13px;color:var(--text-muted);margin:0">Tu suscripción expiró. Podés iniciar una nueva suscripción configurando un método de pago.</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap">💳 Nueva suscripción</button>
+            </div>`;
+    } else if (isSuspendedPayment) {
+        // Suspendido por pago fallido — pedir actualización de medio de pago
+        paymentBody = `
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px">
+                    <p style="font-size:13px;color:#991b1b;margin:0;font-weight:500">⚠️ Pago rechazado. Actualizá tu método de pago para reactivar el acceso.</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap;background:#991b1b;border-color:#991b1b">Actualizar método de pago</button>
+            </div>`;
+    } else if (!hasMethod) {
+        // Sin método configurado
+        paymentBody = `
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px">
+                    <p style="font-size:13px;color:var(--text-muted);margin:0">No tenés un método de pago configurado. Configurá tu tarjeta para activar el cobro automático mensual.</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap">💳 Configurar método de pago</button>
+            </div>`;
+    } else {
+        // Método configurado
+        paymentBody = `
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                <div>
+                    <span class="badge badge-active" style="font-size:12px">${escapeHtml(provider || 'MercadoPago')}</span>
+                    <span style="font-size:12px;color:var(--text-muted);margin-left:8px">
+                        ${cancelAt ? 'Sin renovación automática' : 'Cobro automático activo'}
+                    </span>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="initCheckout()">Cambiar método</button>
+            </div>`;
+    }
+
+    // Bonus bienvenida
+    if (trialBonus && new Date(trialBonus) > new Date()) {
+        paymentBody += `
+            <div style="margin-top:14px;padding:10px 14px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:13px;color:#065f46">
+                🎁 <strong>Bonus de bienvenida:</strong> +20 usos de prueba incluidos en tu plan hasta el ${formatDate(trialBonus)}.
+            </div>`;
+    }
+
+    // Cancelación programada + botón reactivar
+    if (cancelAt) {
+        paymentBody += `
+            <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#991b1b;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                <span><strong>Cancelación programada:</strong> tu suscripción se cancela el ${formatDate(cancelAt)}. Seguís teniendo acceso hasta esa fecha.</span>
+                <button class="btn btn-outline btn-sm" onclick="confirmReactivateSubscription()" style="white-space:nowrap;border-color:#991b1b;color:#991b1b;background:#fff">↩ Reactivar</button>
+            </div>`;
+    }
+
     const paymentMethodCard = `
         <div class="card">
             <div class="card-header"><h3>Método de pago</h3></div>
-            <div class="card-body">
-                ${!hasMethod ? `
-                    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-                        <div style="flex:1;min-width:200px">
-                            <p style="font-size:13px;color:var(--text-muted);margin:0">No tenés un método de pago configurado. Configurá tu tarjeta para activar el cobro automático mensual.</p>
-                        </div>
-                        <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap">💳 Configurar método de pago</button>
-                    </div>
-                ` : `
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-                        <div>
-                            <span class="badge badge-active" style="font-size:12px">${escapeHtml(provider || 'MercadoPago')}</span>
-                            <span style="font-size:12px;color:var(--text-muted);margin-left:8px">Cobro automático activo</span>
-                        </div>
-                        <button class="btn btn-outline btn-sm" onclick="initCheckout()">Cambiar método</button>
-                    </div>
-                `}
-                ${trialBonus && new Date(trialBonus) > new Date() ? `
-                    <div style="margin-top:14px;padding:10px 14px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:13px;color:#065f46">
-                        🎁 <strong>Bonus de bienvenida:</strong> +20 usos de prueba incluidos en tu plan hasta el ${formatDate(trialBonus)}.
-                    </div>` : ''}
-                ${cancelAt ? `
-                    <div style="margin-top:14px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#991b1b">
-                        <strong>Cancelación programada:</strong> tu suscripción se cancela el ${formatDate(cancelAt)}. Seguís teniendo acceso hasta esa fecha.
-                    </div>` : ''}
-            </div>
+            <div class="card-body">${paymentBody}</div>
         </div>`;
 
     // Card: Resumen de suscripción
@@ -1265,7 +1333,7 @@ async function renderFact() {
                         <span style="font-size:13px;font-weight:500">${planChanges} / 2</span>
                     </div>
                 </div>
-                ${rs === 'active' && !cancelAt ? `
+                ${rs === 'active' && !cancelAt && hasMethod ? `
                     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
                         <button class="btn btn-outline btn-sm" style="color:#991b1b;border-color:#fca5a5" onclick="confirmCancelSubscription()">Cancelar suscripción</button>
                         <p style="font-size:11px;color:var(--text-muted);margin-top:6px">La cancelación es efectiva al finalizar el período actual.</p>
@@ -1279,10 +1347,10 @@ async function renderFact() {
     const paymentsRows = payments.length === 0
         ? `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Sin pagos registrados aún</td></tr>`
         : payments.map(p => `<tr>
-            <td style="font-size:13px;padding:8px 6px">${formatDate(p.created_at)}</td>
+            <td style="font-size:13px;padding:8px 6px 8px 20px">${formatDate(p.created_at)}</td>
             <td style="font-size:13px;padding:8px 6px;font-weight:500">$${Number(p.amount).toLocaleString('es-AR')} ${p.currency||'ARS'}</td>
             <td style="padding:8px 6px">${statusBadge(p.status)}</td>
-            <td style="font-size:12px;padding:8px 6px;color:var(--text-muted)">${escapeHtml(p.plan||'—')}</td>
+            <td style="font-size:12px;padding:8px 20px 8px 6px;color:var(--text-muted)">${escapeHtml(p.plan||'—')}</td>
           </tr>`).join('');
 
     const paymentsCard = `
@@ -1291,10 +1359,10 @@ async function renderFact() {
             <div class="card-body" style="padding:0">
                 <table style="width:100%;border-collapse:collapse">
                     <thead><tr style="border-bottom:1px solid var(--border)">
-                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Fecha</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px 10px 20px;font-weight:500">Fecha</th>
                         <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Monto</th>
                         <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Estado</th>
-                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Plan</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 20px 10px 6px;font-weight:500">Plan</th>
                     </tr></thead>
                     <tbody>${paymentsRows}</tbody>
                 </table>
@@ -1305,10 +1373,10 @@ async function renderFact() {
     const invoicesRows = invoices.length === 0
         ? `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Sin facturas emitidas aún</td></tr>`
         : invoices.map(inv => `<tr>
-            <td style="font-size:13px;padding:8px 6px">${inv.issued_at ? formatDate(inv.issued_at) : formatDate(inv.created_at)}</td>
+            <td style="font-size:13px;padding:8px 6px 8px 20px">${inv.issued_at ? formatDate(inv.issued_at) : formatDate(inv.created_at)}</td>
             <td style="font-size:13px;padding:8px 6px;font-weight:500">${inv.numero ? `Nro. ${escapeHtml(inv.numero)}` : '—'}</td>
             <td style="font-size:13px;padding:8px 6px">$${inv.amount ? Number(inv.amount).toLocaleString('es-AR') : '—'}</td>
-            <td style="padding:8px 6px">${inv.pdf_url
+            <td style="padding:8px 20px 8px 6px">${inv.pdf_url
                 ? `<a href="${escapeHtml(inv.pdf_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px">Ver PDF</a>`
                 : `<span style="font-size:12px;color:var(--text-muted)">${inv.status==='pending'?'Emitiendo…':inv.status==='failed'?'Error':'—'}</span>`}</td>
           </tr>`).join('');
@@ -1319,10 +1387,10 @@ async function renderFact() {
             <div class="card-body" style="padding:0">
                 <table style="width:100%;border-collapse:collapse">
                     <thead><tr style="border-bottom:1px solid var(--border)">
-                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Fecha</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px 10px 20px;font-weight:500">Fecha</th>
                         <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Número</th>
                         <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">Monto</th>
-                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 6px;font-weight:500">PDF</th>
+                        <th style="text-align:left;font-size:12px;color:var(--text-muted);padding:10px 20px 10px 6px;font-weight:500">PDF</th>
                     </tr></thead>
                     <tbody>${invoicesRows}</tbody>
                 </table>
@@ -1336,19 +1404,33 @@ async function renderFact() {
 async function initCheckout() {
     const acc = state.account;
     if (!acc) return;
+
     try {
         const res = await apiFetch('/usuarios/api/checkout/init', {
             method: 'POST',
-            body: JSON.stringify({ plan_name: acc.plan }),
+            body: JSON.stringify({ plan_name: acc.plan?.name || acc.plan }),
         });
         if (!res) return;
         if (res.status === 503) {
             alert('El módulo de pagos estará disponible muy pronto. Por ahora podés contactar soporte para gestionar tu suscripción.');
             return;
         }
-        if (!res.ok) { const d = await res.json(); alert(d.error || 'Error al iniciar el proceso de pago.'); return; }
+        if (!res.ok) {
+            const d = await res.json();
+            alert(d.error || 'Error al iniciar el proceso de pago.');
+            return;
+        }
         const data = await res.json();
-        if (data.init_point) window.open(data.init_point, '_blank', 'noopener');
+        if (data.init_point) {
+            // Guardar flag ANTES de navegar para que al volver (con o sin ?pago=ok)
+            // el portal sepa que el usuario pasó por el checkout de MP.
+            // Válido 30 minutos — cubre el tiempo normal de completar una suscripción.
+            localStorage.setItem('psc_checkout_pending', JSON.stringify({
+                plan: acc.plan?.name || acc.plan,
+                initiated: Date.now()
+            }));
+            window.location.href = data.init_point;
+        }
     } catch (e) {
         alert('Error de conexión. Intentá de nuevo más tarde.');
     }
@@ -1357,13 +1439,31 @@ async function initCheckout() {
 async function confirmCancelSubscription() {
     if (!confirm('¿Cancelar tu suscripción? La cancelación será efectiva al finalizar el período actual y no se te cobrará más.')) return;
     try {
-        const res = await apiFetch('/users/cancel', { method: 'POST' });
+        const res = await apiFetch('/usuarios/api/checkout/cancel', { method: 'POST' });
         if (!res) return;
         const data = await res.json();
         if (!res.ok) {
             alert(data.error || 'Error al cancelar la suscripción.');
         } else {
             alert('Suscripción cancelada. Seguirás teniendo acceso hasta el fin del período.');
+            await loadAccount();
+            renderFact();
+        }
+    } catch (e) {
+        alert('Error de conexión. Intentá de nuevo.');
+    }
+}
+
+async function confirmReactivateSubscription() {
+    if (!confirm('¿Reactivar tu suscripción? Se cancelará la baja programada y el cobro automático continuará normalmente.')) return;
+    try {
+        const res = await apiFetch('/usuarios/api/checkout/reactivate', { method: 'POST' });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'No se pudo reactivar la suscripción.');
+        } else {
+            alert('✅ Suscripción reactivada. El cobro automático continuará en la próxima fecha de renovación.');
             await loadAccount();
             renderFact();
         }
@@ -2020,9 +2120,36 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Capturar ?goto= de la URL (de links externos como emails) antes de cualquier flujo
     // Se persiste en sessionStorage para sobrevivir al ciclo de login normal
-    const incomingGoto = new URLSearchParams(window.location.search).get('goto');
+    const urlParams = new URLSearchParams(window.location.search);
+    const incomingGoto = urlParams.get('goto');
     if (incomingGoto) {
         sessionStorage.setItem('pending_goto', incomingGoto);
+    }
+
+    // Detectar retorno desde checkout de MercadoPago
+    // Caso 1: MP redirigió con ?pago=ok (flujo ideal)
+    if (urlParams.get('pago') === 'ok') {
+        const preapprovalId = urlParams.get('preapproval_id') || null;
+        sessionStorage.setItem('show_pago_ok', JSON.stringify({ preapprovalId }));
+        localStorage.removeItem('psc_checkout_pending'); // ya no necesitamos el flag
+        history.replaceState(null, '', window.location.pathname);
+    }
+
+    // Caso 2: usuario volvió manualmente sin ?pago=ok (cerró la pestaña, presionó back,
+    // copió la URL, etc.) — flag en localStorage detecta que inició el checkout
+    if (!sessionStorage.getItem('show_pago_ok')) {
+        const pendingRaw = localStorage.getItem('psc_checkout_pending');
+        if (pendingRaw) {
+            try {
+                const { initiated } = JSON.parse(pendingRaw);
+                const age = Date.now() - initiated;
+                // Válido entre 10s (tiempo mínimo en la página de MP) y 30 minutos
+                if (age > 10000 && age < 30 * 60 * 1000) {
+                    sessionStorage.setItem('show_pago_ok', JSON.stringify({ preapprovalId: null }));
+                }
+            } catch (_) {}
+            localStorage.removeItem('psc_checkout_pending');
+        }
     }
 
     // Auto-login desde Electron (token en hash #sso=..., sección ya capturada arriba)

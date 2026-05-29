@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-27
+> Última actualización: 2026-05-28
 
 ---
 
@@ -91,21 +91,116 @@ node scripts/generate-icon.js
   - **Script unificado:** `electron-app/scripts/smoke-test-pjn.js` — cubre Portal PJN (grupos D+E, 24 checks) Y Extensión Chrome (grupos F+G+H, 24 checks) → **48 checks totales**, 66 segundos
   - **Último resultado:** 48/48 ✅ (2026-05-27)
 
-### Próximo paso concreto
-**→ Fase 5:** Cobranza — MP + Facturante (plan completo en `docs/internal/proximos-pasos.md`)
+### Estado Fase 5 — Cobranza
+> Última actualización: 2026-05-28
 
-### Orden de diferidos (post-Fase 5)
-1. Actualizar imágenes extensión Chrome Web Store
-2. Code Signing Azure (iniciar en paralelo — tiene tiempos externos)
-3. Entorno staging
-4. Análisis de seguridad profundo
-5. Smoke tests CI GitHub Actions
-6. Limpiar CRX del backend (migrar 2 handlers en `main.js`)
-7. Activar BASIC/PRO/ENTERPRISE en DB — al lanzamiento público (`UPDATE plans SET active=true WHERE name IN ('BASIC','PRO','ENTERPRISE')`)
-8. Base de Conocimiento IA — con 20-30 tickets cerrados reales
+Infraestructura completa deployada en producción con `PAYMENT_MODULE_ENABLED=true` (sandbox activo).
+
+---
+
+### 🧪 Credenciales de sandbox MercadoPago
+> Solo para pruebas — NO usar en producción
+
+#### Cuentas de prueba MP
+| Rol | Usuario | Contraseña | UserID | Código verificación |
+|---|---|---|---|---|
+| **Vendedor** (Procurador SCW) | `TESTUSER3208446836555858` | `5pfW4wdMZj` | `3433287066` | `287066` |
+| **Comprador** (usuario que paga) | `TESTUSER4310268003253553318` | `zveOQA6aYI` | `3433287076` | `287076` |
+
+> Login vendedor en panel dev: https://www.mercadopago.com.ar/developers/panel/app
+
+#### Credenciales API (cuenta vendedor de prueba)
+| Variable | Valor |
+|---|---|
+| `MP_ACCESS_TOKEN` | `APP_USR-2400427986609750-052810-ae29cea74562fd33adb80b7692f21b08-3433287066` |
+| `MP_PUBLIC_KEY` | `APP_USR-346db40a-416e-4073-af44-1e0c130d152d` |
+| `MP_WEBHOOK_SECRET` | `a0c3ad4ce054760fc055939928ca6edd2eebd9d1a05faaecad09427ad8597fb5` |
+
+#### Planes MP (sandbox)
+| Plan | ID | Precio | init_point |
+|---|---|---|---|
+| `COMBO_PROMO` | `c4ff98a4b2244828a8be0a6d84085fb8` | $15.000 ARS | `https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=c4ff98a4b2244828a8be0a6d84085fb8` |
+| `EXTENSION_PROMO` | `f7cea2c32ae94576b254089ebf7371a4` | $1.500 ARS | `https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=f7cea2c32ae94576b254089ebf7371a4` |
+
+#### Tarjeta de prueba (para pagar como comprador)
+| Campo | Valor |
+|---|---|
+| Número | `5031 7557 3453 0604` |
+| Vencimiento | `11/30` |
+| CVV | `123` |
+| Nombre titular | `APRO` (aprueba automáticamente) |
+| DNI | `12345678` |
+
+---
+Para activar el módulo de pagos solo se necesitan las credenciales externas (ver pendientes B1-B3).
+
+**Implementado:**
+- DB: tablas `payments`, `invoices`, `usage_extras`, `webhook_events` + columnas nuevas en `subscriptions`
+- Backend: `routes/checkout.js`, `routes/webhooks.js`, `services/subscriptionService.js`, `services/invoiceService.js`
+- Admin: endpoints refund-preview, extra-usage (GET/POST), payments (GET), invoices (GET)
+- Portal usuario: card Método de Pago, historial de pagos, historial de facturas
+- Admin dashboard: card Usos Extra + modal, card Historial de Pagos, card Historial de Facturas, modal Suspensión mejorado (Suave/Dura + preview reembolso)
+- Crons: billing reminder (7d), grace period expiration, invoice retry, cobranza retry stub
+- Fix: `applyRenewal` limpia `payment_grace_ends_at` + webhook reactiva `registration_status` si estaba suspendido por pago
+
+---
+
+## 📋 Pendientes — Lista consolidada
+> Última revisión: 2026-05-28
+
+### 🔴 Requieren cuentas / contratos externos
+
+| # | Tarea | Detalle |
+|---|---|---|
+| ~~**B1**~~ | ~~**MercadoPago sandbox**~~ | ✅ Credenciales configuradas. Ver sección "Credenciales de sandbox" arriba. |
+| ~~**B2**~~ | ~~**Probar checkout end-to-end**~~ | ✅ Validado: checkout devuelve `init_point`, pago aprobado en sandbox (PayID `160575039911`), webhook llegó con 200, HMAC validado, procesamiento correcto. |
+| **B3** | **MercadoPago producción** | Una vez validado en sandbox → credenciales reales → `PAYMENT_MODULE_ENABLED=true` |
+| **C1** | **Contrato Facturante** | Facturación AFIP (Factura C). Sin esto las facturas quedan en `status=pending`. Ver `backend-server/utils/facturante.js` |
+| **AZ** | **Azure Trusted Signing** | Code signing del instalador `.exe`. Pasos: crear Trusted Signing Account → Certificate Profile (Public Trust, 1-3 días hábiles) → App Registration → 5 env vars → configurar electron-builder + GitHub Actions |
+
+---
+
+### 🟡 Infraestructura técnica (pueden hacerse ahora)
+
+| # | Tarea | Detalle | Urgencia |
+|---|---|---|---|
+| **D1** | **GRANT DEFAULT PRIVILEGES DB** | `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO procurador_user;` — evita grants manuales en futuras migraciones | Baja |
+| **D2** | **SSL api.procuradortool.com** | Vence **2026-06-29**. `certbot.timer` activo pero verificar que renueve: `ssh … "certbot renew --dry-run"` | Media |
+
+---
+
+### 🟠 Staging y Rollback (prerequisito antes del análisis de seguridad)
+
+| # | Tarea | Detalle |
+|---|---|---|
+| **ST-1** | **Entorno staging** | Segunda instancia del backend (mismo servidor, puerto 3444, PM2 proceso `procurador-staging`) apuntando a DB `procurador_db_staging`. Nginx: `staging-api.procuradortool.com` |
+| **ST-2** | **Mecanismo de rollback definido** | Documentar y validar el proceso: (1) git tags por release `v*` en producción, (2) `pm2 rollback procurador-api` para rollback de proceso, (3) scripts de migración DB reversibles (`migrations/XXX_rollback.sql`), (4) checklist de validación post-deploy |
+| **ST-3** | **Aprobación del procedimiento** | Ejecutar un rollback de prueba completo en staging antes de usar en producción |
+
+---
+
+### 🔵 Seguridad pre-comercialización (requiere staging aprobado)
+
+| # | Tarea | Detalle |
+|---|---|---|
+| **SEC-1** | **Análisis de seguridad profundo** | Revisar: autenticación JWT (algoritmos, expiración, blacklist), validación de inputs en todos los endpoints, rate limiting exhaustivo, HMAC webhook, secretos en env vars, permisos DB, headers HTTP (Helmet config), exposure de stack traces, machine ID binding, script encryption pipeline |
+| **SEC-2** | **Smoke tests CI en GitHub Actions** | Workflow que corre `smoke-test-pjn.js` + `dev-tools/smoke-payments.js` en cada push a `main` |
+| **SEC-3** | **Hardening de secretos** | Auditar que ningún secreto esté hardcodeado; mover cualquier valor fijo a env vars |
+
+---
+
+### ⚪ Diferidos al lanzamiento público
+
+| # | Tarea | Detalle |
+|---|---|---|
+| **L1** | **Activar planes BASIC/PRO/ENTERPRISE** | `UPDATE plans SET active=true WHERE name IN ('BASIC','PRO','ENTERPRISE')` — solo cuando estén los precios y el cobro funcionando |
+| **L2** | **Base de Conocimiento IA** | Alimentar el asistente con 20-30 tickets reales cerrados para mejorar respuestas |
+| **L3** | **Actualizar imágenes Chrome Web Store** | Screenshots y banner del listing en la store |
+
+---
 
 ### SSL api.procuradortool.com
-`certbot.timer` activo — renueva automáticamente 2×/día cuando faltan ≤30 días. **No requiere intervención manual.**
+`certbot.timer` activo — renueva automáticamente 2×/día cuando faltan ≤30 días. Vence 2026-06-29. Verificar con `certbot renew --dry-run` antes del 01/06.
 
 ---
 

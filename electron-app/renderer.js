@@ -2051,6 +2051,23 @@ async function loadAccountData() {
                         </div>
                         ${rem <= 5 ? `<div style="margin-top:7px;font-size:12px;color:#991b1b;font-weight:600">🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.</div>` : ''}
                     </div>`;
+            } else if (a.paymentProvider && a.cancelAt && new Date(a.cancelAt) > new Date() && a.registrationStatus === 'active') {
+                // Banner: cancelación programada
+                const fechaCancelacion = new Date(a.cancelAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                trialBannerEl.style.display = '';
+                trialBannerEl.innerHTML = `
+                    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                        <span style="font-size:20px">⚠️</span>
+                        <div style="flex:1">
+                            <div style="font-weight:600;color:#991b1b;font-size:13px">Cancelación programada</div>
+                            <div style="color:#7f1d1d;font-size:12px;margin-top:2px">Tu suscripción se cancela el ${fechaCancelacion}. Podés reactivarla desde el portal.</div>
+                        </div>
+                        <button id="btn-ir-portal-reactivar"
+                            style="background:#fff;border:1px solid #fca5a5;color:#991b1b;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
+                            Ver portal
+                        </button>
+                    </div>`;
+                document.getElementById('btn-ir-portal-reactivar')?.addEventListener('click', () => openPortalSection('facturacion'));
             } else if (!a.paymentProvider && a.registrationStatus === 'active') {
                 // Banner: sin método de pago
                 trialBannerEl.style.display = '';
@@ -2328,7 +2345,8 @@ async function checkSubscriptionStatusBanner() {
 
         const a    = result.account;
         const rs   = a.registrationStatus || a.registration_status;
-        const sub  = a.subscription || {};
+        // Los campos de suscripción vienen planos en `a` (no hay sub-objeto a.subscription)
+        const sub  = a.subscription || a;
 
         let msg    = null;
         let color  = null;
@@ -2357,12 +2375,18 @@ async function checkSubscriptionStatusBanner() {
             msg   = `${used}/${limit} usos de prueba utilizados — El administrador activará tu cuenta en breve${lowIcon}`;
             color = '#1d4ed8'; // azul
         } else if (rs === 'active') {
-            const expiryDays = daysUntil(sub.planExpiryDate);
+            const expiryDays  = daysUntil(sub.planExpiryDate);
             const billingDays = daysUntil(sub.nextBillingDate);
+            const cancelDays  = daysUntil(sub.cancelAt);
 
             if (!sub.paymentProvider) {
                 msg   = 'Configurá tu método de pago para evitar interrupciones';
                 color = '#b45309'; // amarillo
+            } else if (sub.cancelAt && cancelDays !== null && cancelDays >= 0) {
+                const fecha = new Date(sub.cancelAt).toLocaleDateString('es-AR');
+                msg   = `Cancelación programada el ${fecha}. Seguís con acceso hasta esa fecha`;
+                color = '#991b1b'; // rojo suave
+                showBtn = false;
             } else if (expiryDays !== null && expiryDays <= 30) {
                 const fecha = sub.planExpiryDate ? new Date(sub.planExpiryDate).toLocaleDateString('es-AR') : '?';
                 msg   = `Tu plan vence el ${fecha}. Seleccioná un nuevo plan`;
