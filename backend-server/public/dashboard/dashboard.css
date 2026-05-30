@@ -146,11 +146,19 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; display: fl
 }
 .login-box h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
 .login-box p { color: var(--text-muted); font-size: 14px; margin-bottom: 28px; }
-.login-box .brand-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 4px; }
-.login-box .logo-inline { width: 36px; height: 36px; border-radius: 8px; display: block; box-shadow: 0 4px 12px rgba(217,119,6,.25); }
-.login-box .brand-row h2 { margin: 0; }
-.login-box .brand-subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 22px; }
-#sidebar .logo h1 .logo-icon { width: 22px; height: 22px; border-radius: 5px; vertical-align: -5px; margin-right: 4px; }
+.login-box .brand-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 6px; }
+.login-box .logo-inline { width: 40px; height: 40px; border-radius: 8px; display: block; box-shadow: 0 4px 12px rgba(217,119,6,.25); }
+.login-box .brand-text { display: flex; flex-direction: column; line-height: 1.1; text-align: left; }
+.login-box .brand-name { font-size: 18px; font-weight: 700; color: #1a1a1a; letter-spacing: -.02em; }
+.login-box .brand-name b { color: #d97706; }
+.login-box .brand-sub { font-size: 11px; font-weight: 600; letter-spacing: .04em; color: #8a8a8a; margin-top: 3px; }
+.login-box .brand-subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 22px; margin-top: 10px; }
+#sidebar .logo .logo-row { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+#sidebar .logo .logo-icon { width: 28px; height: 28px; border-radius: 6px; display: block; flex-shrink: 0; }
+#sidebar .logo .logo-text { display: flex; flex-direction: column; line-height: 1.1; }
+#sidebar .logo .logo-name { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: -.02em; }
+#sidebar .logo .logo-name b { color: #f59e0b; }
+#sidebar .logo .logo-sub { font-size: 10px; font-weight: 600; letter-spacing: .04em; color: #94a3b8; margin-top: 3px; }
 
 /* ===== FORM ===== */
 .form-group { margin-bottom: 16px; }
