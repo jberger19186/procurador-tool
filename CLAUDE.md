@@ -7,7 +7,7 @@
 
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.14** — publicada en GitHub Releases (auto-updater activo)
-> Última sesión: 2026-05-29
+> Última sesión: 2026-05-30
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
@@ -35,6 +35,14 @@
   - **Portal — Mi Plan:** card de prueba idéntica cuando `registration_status = 'pending_activation'`
   - **Portal — Descargas:** extensión con enlace directo Chrome Web Store · app usa `/client/download/electron`
   - Releases: v2.7.10 → v2.7.11 → v2.7.12 → v2.7.13 → **v2.7.14** (Fase 5 cobranza: estados de pago/cancelación en banners)
+
+- ✅ **Branding unificado + reset de datos** (sesión 2026-05-30):
+  - Logo `icon128.png` de la extensión copiado a `public/assets/brand-icon.png` (y a `public/landing/brand-icon.png` porque la landing se sirve por Nginx, no por Express)
+  - Reemplazados todos los emojis `⚖️` por `<img>` del logo oficial en: landing (navbar/hero/footer), dashboard admin (login + sidebar), portal usuario (login + sidebar + cards de descarga)
+  - Marca consistente en logins y sidebars: "Procurador **TOOL**" (acento amber) + sublabel "Procurador SCW" — formato igual al de la landing
+  - Versión actualizada en landing (4 refs) y portal usuario: 2.7.6/2.7.13 → 2.7.14
+  - Reset completo de datos de prueba (usuarios + transaccionales) — solo quedan los 2 admins. Backup en servidor: `/tmp/backup_pre_reset_*.sql` + `/tmp/backup_pre_delete_user19_*.sql`
+  - Usuario `procuradortool@gmail.com` (id 19) eliminado para hacer pruebas desde cero
 
 - ✅ **Fase 5 cobranza — flujo completo + facturación manual** (sesión 2026-05-29):
   - Ciclo de vida de suscripción end-to-end validado en sandbox (alta → cancelación → reactivación → suspensión)
@@ -510,14 +518,14 @@ Cuando se genera y publica una nueva release de la app Electron, hacer estos pas
 
 1. Bumping de versión en `electron-app/package.json` (`"version"` + `"build.buildVersion"` si existe)
 2. `npm run release` en `electron-app/` → genera instalador y lo sube a GitHub Releases
-3. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea de versión en `download-item-desc` (ej: `v2.7.13`)
+3. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea de versión en `download-item-desc` (ej: `v2.7.14`)
    *(el link de descarga es dinámico via `/client/download/electron` → no necesita actualización)*
 4. Deploy `app.js` al servidor + `pm2 restart procurador-api`
 5. Hacer commit + push
 
 > **Nota sobre el link de descarga**: el portal usa `https://api.procuradortool.com/client/download/electron`
 > que consulta la GitHub API en tiempo real y redirige al `.exe` del último release.
-> Solo hay que actualizar el texto de versión visible (ej: `v2.7.13`), no la URL.
+> Solo hay que actualizar el texto de versión visible (ej: `v2.7.14`), no la URL.
 
 ---
 

@@ -1,6 +1,6 @@
 # Documentación interna — Estados, errores y flujos del sistema
 **Procurador SCW** · Uso interno del equipo  
-Última actualización: 2026-05-21
+Última actualización: 2026-05-30 (agregada sección — flujos de cobranza Fase 5)
 
 ---
 
@@ -528,3 +528,113 @@ npm run release
 # 2. Generar ZIP (excluir imagenes/)
 # 3. Subir manualmente a Chrome Web Store > Developer Dashboard
 ```
+
+---
+
+## Flujos de cobranza (Fase 5)
+
+> Implementación validada en sandbox MercadoPago el 2026-05-29. Ver `CLAUDE.md → Estado Fase 5` para detalle técnico.
+
+### Estados de suscripción relevantes para pagos
+
+| Campo en `subscriptions` | Significado |
+|---|---|
+| `payment_provider` | `'mercadopago'` cuando hay método de pago configurado, NULL si no |
+| `external_subscription_id` | ID real del preapproval en MP (necesario para cancelar vía API) |
+| `cancel_at` | Fecha de fin de período cuando hay cancelación programada |
+| `auto_renewal` | `TRUE` por default, `FALSE` cuando el usuario canceló |
+| `payment_grace_ends_at` | Fin del período de gracia (3 días) tras pago rechazado |
+| `last_payment_at` | Timestamp del último pago aprobado |
+| `trial_bonus_until` | Fin del período con bonus de bienvenida (+20 usos) |
+
+### Flujo de alta de suscripción
+
+```
+Usuario en portal → click "Configurar método de pago"
+  → POST /usuarios/api/checkout/init
+  → backend genera URL: mercadopago.com.ar/.../checkout?
+       preapproval_plan_id=...&external_reference=user_{id}&payer_email=...
+  → portal navega a esa URL (misma pestaña)
+  → usuario completa checkout en MP → MP redirige a back_url ?pago=ok
+  → portal detecta retorno (URL param o localStorage flag psc_checkout_pending)
+  → POST /usuarios/api/checkout/confirm
+  → markPaymentConfigured(userId) → payment_provider='mercadopago'
+  → webhook subscription_preapproval llega después → guarda external_subscription_id real
+  → webhook payment llega → applyTrialBonus() o applyRenewal() → usage_limit actualizado
+```
+
+### Identificación de usuario en webhooks (orden de prioridad)
+
+1. **`external_reference="user_{id}"`** — extraído del URL del checkout. Independiente del email de MP.
+2. **`external_subscription_id`** ya vinculado en DB — para renovaciones.
+3. **`payer_email`** del pagador ↔ email del portal — fallback cuando coinciden.
+4. Timing heuristic (preapproval reciente sin vincular) — último recurso, usado en `markPaymentConfigured`.
+
+> ⚠️ Esto resuelve el caso donde el usuario tiene distinto email en MP y en el portal.
+
+### Flujo de cancelación por el usuario
+
+```
+Usuario → "Cancelar suscripción" → POST /usuarios/api/checkout/cancel
+  → cancel_at = next_billing_date
+  → auto_renewal = FALSE
+  → preApprovalClient.update({ status: 'cancelled' }) en MP (solo si external_subscription_id es ID real, no placeholder pay-*)
+  → UI muestra banner rojo "Cancelación programada" + botón ↩ Reactivar
+
+Día = cancel_at (cron 08:20 ART):
+  → triple verificación: NOW() > cancel_at + 2h · auto_renewal=FALSE · NOT EXISTS pago aprobado reciente
+  → status='cancelled', registration_status='cancelled', acceso revocado
+```
+
+> El cobro del período en curso ya ocurrió al suscribirse. La cancelación solo afecta la **renovación**. El usuario conserva acceso hasta `cancel_at`.
+
+### Flujo de reactivación (deshacer cancelación)
+
+```
+Usuario antes de cancel_at → click "↩ Reactivar"
+  → POST /usuarios/api/checkout/reactivate
+  → reactivateSubscription(userId)
+       valida cancel_at NO NULL y NO vencido
+       preApprovalClient.update({ status: 'authorized' }) en MP
+  → cancel_at = NULL, auto_renewal = TRUE
+  → renovación automática continúa normal
+```
+
+### Flujo de pago rechazado → suspensión → recuperación
+
+```
+Renovación → MP rechaza el pago
+  → webhook payment status='rejected'
+  → payment_grace_ends_at = NOW() + 3 días
+  → suspension_cause = 'payment'
+  → email a usuario, banner en portal/app
+  → MP reintenta cobro cada 6h dentro del período de gracia
+
+Cobro recuperado dentro de gracia:
+  → webhook payment status='approved'
+  → applyRenewal(): limpia payment_grace_ends_at, restaura cancel_at=NULL, auto_renewal=TRUE
+  → users.registration_status = 'active' (si estaba suspendido por pago)
+
+Gracia vencida sin pago (cron 08:30 ART):
+  → status='suspended', registration_status='suspended'
+  → UI portal/app: "Pago fallido — Actualizá tu método de pago"
+  → usuario carga nuevo método → checkout MP → al pagar, cuenta se reactiva
+```
+
+### Facturación (modo manual actual)
+
+```
+Webhook payment status='approved'
+  → enqueueInvoice(paymentId) crea row en invoices con status='pending', pdf_url=NULL
+  → aparece en dashboard admin → 🧾 Facturación → tab "Pendientes"
+
+Admin genera factura en ARCA → descarga PDF →
+  → en dashboard sube PDF + número (autoformateo 1245→0001-00001245) + CAE (opcional)
+  → POST /admin/invoices/:id/upload o /admin/invoices/from-payment/:paymentId
+  → invoice pasa a status='issued', pdf_url=/invoices/factura_*.pdf
+  → portal del usuario muestra la factura instantáneamente
+```
+
+> **Facturas manuales** (sin pago asociado): admin → tab "Emitidas" → "＋ Nueva factura manual" → POST `/admin/invoices/manual` con `user_id`, `amount`, `issued_at`, PDF.
+
+> **Facturante automático:** desactivado (cron comentado, `processInvoice()` no-op si `FACTURANTE_WSDL_URL` vacío). Para activar: completar vars `FACTURANTE_*` en `.env`, descomentar cron en `server.js`, reiniciar con `--update-env`.

@@ -1,7 +1,7 @@
 # Próximos pasos — Handoff para sesiones nuevas
 
 > **Documento de continuidad.** Después de `/clear`, leer este archivo + CLAUDE.md da el contexto suficiente para retomar.
-> Última actualización: 2026-05-27 (Smoke tests 48/48 completo + pendientes unificados con CLAUDE.md)
+> Última actualización: 2026-05-30 (Branding unificado + reset datos · Fase 5 cobranza validada en sandbox)
 
 ---
 
@@ -9,12 +9,12 @@
 
 - **Fase 1 (Aplicación):** En curso — UI rediseñada, refactor pendiente
 - **Fase 2 (Backend):** Pendiente — backups programados, hardening secretos
-- **Fase 3 (Comercial):** 🔄 En curso — landing actualizada con precios ARS + branding suite/producto
+- **Fase 3 (Comercial):** 🔄 En curso — landing actualizada + branding unificado en landing/dashboard/portal
 - **Fase 4 (Soporte):** ✅ **CERRADA** (tag `fase4-completa`, commit `bc0ce2e`)
-- **Fase 5 (Cobranza):** **PRÓXIMA** — diseño completo abajo
+- **Fase 5 (Cobranza):** ✅ **Flujo completo validado en sandbox** — alta/cancelación/reactivación/suspensión funcionando; facturación manual operativa (PDF generado en ARCA y subido por admin); Facturante automático pendiente de contratar (B3 + C1)
 - **Fase 6 (Staging/Release seguro):** Pendiente
 
-### Versión Electron actual: **v2.7.13** (último release estable)
+### Versión Electron actual: **v2.7.14** (último release estable, GitHub Releases)
 
 ### Tags Git relevantes (rollback points)
 ```
@@ -128,11 +128,20 @@ Ver sección detallada abajo "PLAN FASE 5 — COBRANZA".
 
 ---
 
-## 💳 PLAN FASE 5 — COBRANZA (próximo a ejecutar)
+## 💳 PLAN FASE 5 — COBRANZA (✅ implementado · validado en sandbox)
 
-**Stack decidido:**
+> **Estado actual (2026-05-30):** flujo end-to-end funcionando con MercadoPago sandbox.
+> Falta: pasar a producción MP (B3 en CLAUDE.md) y contratar Facturante (C1).
+> La facturación opera en **modo manual** (admin sube PDF de ARCA al dashboard).
+>
+> Ver detalle completo en `CLAUDE.md → Estado Fase 5 — Cobranza` y los flujos en
+> `sistema-estados-flujos.md → Flujos de cobranza (Fase 5)`.
+>
+> El plan detallado abajo se conserva como referencia histórica del scope ejecutado.
+
+**Stack decidido (implementado):**
 - **Mercado Pago** como pasarela (cobertura local AR: tarjetas, Rapipago, Pago Fácil)
-- **Facturante** para facturación AFIP/ARCA electrónica
+- **Facturante** para facturación AFIP/ARCA electrónica — **DIFERIDO** (módulo desactivado, facturación manual operativa)
 - **PagoKit** (Hainrixz/agente-pagokit) como aid de scaffolding seguro
 
 ### Por qué este stack
