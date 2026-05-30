@@ -50,14 +50,23 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     box-shadow: 0 20px 60px rgba(0,0,0,.3);
 }
 
-.login-logo {
-    width: 76px;
-    height: 76px;
-    border-radius: 18px;
-    margin: 0 auto 12px;
-    display: block;
-    box-shadow: 0 6px 20px rgba(217,119,6,.3);
+.login-box .brand-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 4px;
 }
+
+.login-logo {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    display: block;
+    box-shadow: 0 4px 14px rgba(217,119,6,.3);
+}
+
+.login-box .brand-row h2 { margin: 0; }
 
 .sidebar-logo h1 .sidebar-logo-icon {
     width: 20px;
