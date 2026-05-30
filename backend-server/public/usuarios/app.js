@@ -796,7 +796,7 @@ function renderDownloads() {
     const extensionItem = `
         <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#f9fafb">
             <div class="download-item" style="border:none;border-radius:0;margin:0">
-                <div class="download-item-icon">⚖️</div>
+                <div class="download-item-icon"><img src="/assets/brand-icon.png" alt="" style="width:38px;height:38px;border-radius:8px;display:block"></div>
                 <div class="download-item-info">
                     <div class="download-item-title">Extensión Chrome — Procurador SCW</div>
                     <div class="download-item-desc">Completado automático de expedientes en SCW, Escritos, Notificaciones y DEOX</div>
@@ -817,7 +817,7 @@ function renderDownloads() {
             <div class="download-item-icon">⚖️</div>
             <div class="download-item-info">
                 <div class="download-item-title">App de escritorio — Procurador SCW <span style="font-size:11px;color:#9ca3af;font-weight:400">Windows</span></div>
-                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.13</div>
+                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.14</div>
             </div>
             <div class="download-item-actions">
                 <a class="btn btn-primary btn-sm"

@@ -51,8 +51,20 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
 }
 
 .login-logo {
-    font-size: 42px;
-    margin-bottom: 10px;
+    width: 76px;
+    height: 76px;
+    border-radius: 18px;
+    margin: 0 auto 12px;
+    display: block;
+    box-shadow: 0 6px 20px rgba(217,119,6,.3);
+}
+
+.sidebar-logo h1 .sidebar-logo-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    vertical-align: -4px;
+    margin-right: 4px;
 }
 
 .login-box h2 {
