@@ -26,7 +26,7 @@
   - **B-6** (`server.js`): `minVersion: TLSv1.2`. Probado: negocia TLS 1.3, rechaza TLS 1.1
   - **B-8** (`checkLicense.js`): BOM inicial eliminado
   - **B-7** verificado sin cambios (la API no pasa por Cloudflare; `trust proxy` ya correcto)
-  - Diferidos: B-2 (decisión de producto), B-5 (CSP, riesgo sin staging)
+  - Diferido: B-5 (CSP, riesgo de romper UI sin staging). (B-2 resuelto después — ver entrada de arriba)
   - Resguardo `sec-pre-b-group` · commit `da1eec6` · +18/-6 en 5 archivos · pruebas producción OK
 
 - ✅ **Correcciones de seguridad M-1 y M-2** (sesión 2026-06-01):
