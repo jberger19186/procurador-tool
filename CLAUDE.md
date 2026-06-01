@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-28
+> Última actualización: 2026-05-30
 
 ---
 
@@ -35,6 +35,13 @@
   - **Portal — Mi Plan:** card de prueba idéntica cuando `registration_status = 'pending_activation'`
   - **Portal — Descargas:** extensión con enlace directo Chrome Web Store · app usa `/client/download/electron`
   - Releases: v2.7.10 → v2.7.11 → v2.7.12 → v2.7.13 → **v2.7.14** (Fase 5 cobranza: estados de pago/cancelación en banners)
+
+- ✅ **Documentación para evaluación + auditoría de seguridad** (sesión 2026-05-30):
+  - **Informe de evaluación del proyecto** (`docs/informe-evaluacion-proyecto.md` + versión Word `docs/Informe-Evaluacion-Procurador-SCW.docx`): documento sin tecnicismos para socios. Conclusión: apto para iniciar Beta controlada.
+  - **Diagrama de flujo del ciclo de vida del usuario** (`docs/diagrama-flujo-usuario.md`): formato Mermaid, camino principal + caminos alternativos.
+  - **Informe de verificación de seguridad** (`docs/internal/informe-seguridad.md`): revisión del código real. 18 fortalezas, 2 puntos media (M-1: `authenticateAdmin` no chequea blacklist · M-2: comparación de firma webhook no timing-safe), 8 baja, 3 proceso. Veredicto: apto para Beta.
+  - **Plan de staging y rollback** (`docs/internal/plan-staging-rollback.md`): diseño de entorno staging (puerto 3444, db_staging, subdominio) + rollback en 3 capas + simulacro de validación.
+  - Generador Word reutilizable: `backend-server/dev-tools/gen-informe-word.js`
 
 - ✅ **Branding unificado + reset de datos** (sesión 2026-05-30):
   - Logo `icon128.png` de la extensión copiado a `public/assets/brand-icon.png` (y a `public/landing/brand-icon.png` porque la landing se sirve por Nginx, no por Express)
@@ -177,7 +184,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 ---
 
 ## 📋 Pendientes — Lista consolidada
-> Última revisión: 2026-05-29
+> Última revisión: 2026-05-30 · Resumen priorizado en `docs/internal/pendientes-prioritarios.md`
 
 ### 🔴 Requieren cuentas / contratos externos
 
@@ -210,13 +217,20 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 
 ---
 
-### 🔵 Seguridad pre-comercialización (requiere staging aprobado)
+### 🔵 Seguridad pre-comercialización
 
-| # | Tarea | Detalle |
-|---|---|---|
-| **SEC-1** | **Análisis de seguridad profundo** | Revisar: autenticación JWT (algoritmos, expiración, blacklist), validación de inputs en todos los endpoints, rate limiting exhaustivo, HMAC webhook, secretos en env vars, permisos DB, headers HTTP (Helmet config), exposure de stack traces, machine ID binding, script encryption pipeline |
-| **SEC-2** | **Smoke tests CI en GitHub Actions** | Workflow que corre `smoke-test-pjn.js` + `dev-tools/smoke-payments.js` en cada push a `main` |
-| **SEC-3** | **Hardening de secretos** | Auditar que ningún secreto esté hardcodeado; mover cualquier valor fijo a env vars |
+> Revisión de seguridad interna realizada el 2026-05-30 (`docs/internal/informe-seguridad.md`).
+> Resultado: base sólida, sin vulnerabilidades críticas ni inyección SQL. Apto para Beta.
+> Hallazgos correctivos abajo. SEC-1 (auditoría externa) sigue recomendado antes del público.
+
+| # | Tarea | Prioridad | Detalle |
+|---|---|---|---|
+| **M-1** | **`authenticateAdmin` no chequea blacklist** | 🟠 Media | El logout de admin no invalida su token hasta el vencimiento natural (8h). Fix: agregar `isBlacklisted()` en `routes/admin.js` (igual que `middleware/authenticateToken.js`). Resolver antes del público |
+| **M-2** | **Firma webhook no timing-safe** | 🟠 Media | `routes/webhooks.js` compara la firma con `!==`. Usar `crypto.timingSafeEqual`. Fix de 1 línea |
+| **B-1..B-8** | **Mejoras de robustez** | 🟡 Baja | Validar `JWT_SECRET` al arrancar · subir bcrypt a 12 · no loguear firma esperada · activar CSP en Helmet · TLS minVersion · verificar IP real tras Cloudflare · política de contraseñas más fuerte · limpiar BOM en `checkLicense.js`. Detalle en informe-seguridad.md §3 |
+| **SEC-1** | **Auditoría de seguridad externa** | — | Revisión profesional independiente antes del lanzamiento masivo |
+| **SEC-2** | **Smoke tests CI en GitHub Actions** | — | Workflow que corre `smoke-test-pjn.js` + `dev-tools/smoke-payments.js` en cada push a `main`, más `npm audit` (P-1) |
+| **SEC-3** | **Hardening de secretos** | — | ✅ Verificado: ningún secreto hardcodeado, `.env`/keys/certs correctamente en `.gitignore` |
 
 ---
 
