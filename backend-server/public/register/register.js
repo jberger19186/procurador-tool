@@ -137,7 +137,9 @@ function validateForm() {
 
     const pwd = get('password');
     if (!pwd) { setErr('password', 'Requerido'); valid = false; }
-    else if (pwd.length < 8) { setErr('password', 'Mínimo 8 caracteres'); valid = false; }
+    else if (pwd.length < 8) { setErr('password', 'La contraseña debe tener al menos 8 caracteres.'); valid = false; }
+    else if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) { setErr('password', 'Debe incluir al menos una letra y un número.'); valid = false; }
+    else if (email && pwd.toLowerCase() === email.toLowerCase()) { setErr('password', 'No puede ser igual a tu email.'); valid = false; }
 
     if (get('confirmPassword') !== pwd) { setErr('confirmPassword', 'Las contraseñas no coinciden'); valid = false; }
 

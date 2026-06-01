@@ -555,6 +555,11 @@ async function savePassword(e) {
         return;
     }
 
+    if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+        showAlert(alertEl, 'error', 'La contraseña debe incluir al menos una letra y un número.');
+        return;
+    }
+
     if (newPassword !== confirmPassword) {
         showAlert(alertEl, 'error', 'Las contraseñas no coinciden.');
         return;

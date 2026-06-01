@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
 const authenticateToken = require('../middleware/authenticateToken');
+const { validatePassword } = require('../utils/passwordPolicy');
 
 // ─── PUT /usuarios/api/profile ─────────────────────────────────────────────────
 // Actualizar datos personales del usuario autenticado
@@ -56,8 +57,9 @@ router.put('/password', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'La contraseña actual y la nueva son requeridas' });
     }
 
-    if (newPassword.length < 8) {
-        return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' });
+    const pwdCheck = validatePassword(newPassword, req.user.email || '');
+    if (!pwdCheck.valid) {
+        return res.status(400).json({ error: pwdCheck.error });
     }
 
     try {

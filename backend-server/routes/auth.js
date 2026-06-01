@@ -6,6 +6,7 @@ const router = express.Router();
 const { loginLimiter, registerLimiter } = require('../middleware/rateLimiter');
 const authenticateToken = require('../middleware/authenticateToken');
 const { blacklistToken } = require('../middleware/tokenBlacklist');
+const { validatePassword } = require('../utils/passwordPolicy');
 const mailer = require('../utils/mailer');
 const logger = require('../utils/logger');
 
@@ -145,8 +146,9 @@ router.post('/register', registerLimiter, async (req, res) => {
             return res.status(400).json({ error: 'El domicilio debe incluir calle, numeración, localidad y provincia' });
         }
 
-        if (password.length < 8) {
-            return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+        const pwdCheck = validatePassword(password, email);
+        if (!pwdCheck.valid) {
+            return res.status(400).json({ error: pwdCheck.error });
         }
 
         if (!validarCuit(cuit)) {
@@ -830,10 +832,9 @@ router.post('/change-password', authenticateToken, async (req, res) => {
             });
         }
 
-        if (newPassword.length < 8) {
-            return res.status(400).json({
-                error: 'La nueva contraseña debe tener al menos 8 caracteres'
-            });
+        const pwdCheck = validatePassword(newPassword, req.user.email || '');
+        if (!pwdCheck.valid) {
+            return res.status(400).json({ error: pwdCheck.error });
         }
 
         // Obtener usuario
@@ -1038,7 +1039,8 @@ router.get('/reset-password', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
     const { token, password } = req.body || {};
     if (!token || !password) return res.send(renderResetPage('error', 'Datos incompletos.'));
-    if (password.length < 8) return res.send(renderResetPage('error', 'La contraseña debe tener al menos 8 caracteres.'));
+    const pwdCheck = validatePassword(password);
+    if (!pwdCheck.valid) return res.send(renderResetPage('error', pwdCheck.error));
 
     const db = req.app.get('db');
     try {
@@ -1080,10 +1082,11 @@ function renderResetPage(type, messageOrToken) {
         <form method="POST" action="/auth/reset-password">
             <input type="hidden" name="token" value="${token}">
             <label>Nueva contraseña</label>
-            <input type="password" name="password" id="pwd" minlength="8" required placeholder="Mínimo 8 caracteres">
+            <input type="password" name="password" id="pwd" minlength="8" required placeholder="Mínimo 8 caracteres, una letra y un número">
+            <span style="font-size:11px;color:#8a8a8a;display:block;margin:3px 0 8px">Mínimo 8 caracteres, con al menos una letra y un número.</span>
             <label>Confirmar contraseña</label>
             <input type="password" id="confirm" placeholder="Repetí la contraseña">
-            <button type="submit" onclick="if(document.getElementById('pwd').value!==document.getElementById('confirm').value){alert('Las contraseñas no coinciden');return false}">Guardar contraseña</button>
+            <button type="submit" onclick="var p=document.getElementById('pwd').value;if(p.length<8){alert('La contraseña debe tener al menos 8 caracteres');return false}if(!/[a-zA-Z]/.test(p)||!/[0-9]/.test(p)){alert('La contraseña debe incluir al menos una letra y un número');return false}if(p!==document.getElementById('confirm').value){alert('Las contraseñas no coinciden');return false}">Guardar contraseña</button>
         </form>
         </div></body></html>`;
     }
