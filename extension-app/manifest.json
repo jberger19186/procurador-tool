@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Procurador SCW – Automatización PJN",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Automatizá la carga de expedientes en portales del PJN (SCW, Escritos, Notificaciones, DEOX). Parte de Procurador TOOL.",
   "permissions": [
     "scripting",

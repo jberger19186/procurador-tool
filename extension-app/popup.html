@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>PJN – Automatización</title>
+  <title>Procurador TOOL</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,24 +15,45 @@
       color: #1a1a1a;
     }
 
-    /* ── Header ── */
+    /* ── Header (marca Procurador TOOL) ── */
     .header {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      color: #111;
-      margin-bottom: 14px;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 9px;
+      margin-bottom: 16px;
     }
-    .header::before {
-      content: '';
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      background: #1a73e8;
-      border-radius: 50%;
+    .header-logo {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      display: block;
+      flex-shrink: 0;
+    }
+    .header-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+    }
+    .header-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: -0.01em;
+    }
+    .header-name b { color: #d97706; }
+    .header-sub {
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #8a8a8a;
+      margin-top: 2px;
+    }
+    .header-version {
+      font-size: 9.5px;
+      font-weight: 400;
+      color: #aaa;
+      margin-left: auto;
+      align-self: flex-start;
     }
 
     /* ── Vista login ── */
@@ -388,7 +409,14 @@
 </head>
 <body>
 
-  <div class="header">PJN &ndash; Automatización <span id="ext-version" style="font-size:9.5px;font-weight:400;color:#aaa;margin-left:4px"></span></div>
+  <div class="header">
+    <img src="icon128.png" alt="Procurador SCW" class="header-logo">
+    <div class="header-text">
+      <span class="header-name">Procurador <b>TOOL</b></span>
+      <span class="header-sub">Procurador SCW</span>
+    </div>
+    <span id="ext-version" class="header-version"></span>
+  </div>
 
   <!-- ── Vista: cargando ───────────────────────────────── -->
   <div id="view-loading">Verificando sesión…</div>
