@@ -31,7 +31,7 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 | ~~M-2~~ | ~~Comparación de firma de pagos no es timing-safe~~ | ✅ **Resuelto** (01/06) | `crypto.timingSafeEqual` en `routes/webhooks.js`. Validado en producción |
 | ~~B-1, B-3, B-4, B-6, B-8~~ | ~~Grupo seguro de robustez~~ | ✅ **Resueltos** (01/06) | JWT_SECRET validado al arrancar · bcrypt 10→12 · log webhook sin firma · TLS min 1.2 · BOM eliminado. Commit `da1eec6` |
 | ~~B-7~~ | ~~IP real tras Cloudflare~~ | ✅ **Verificado** | La API no pasa por Cloudflare; `trust proxy` ya es correcto. Sin cambios |
-| B-2 | **Política de contraseñas** | 🟡 Diferido | Decisión de producto. Mín. 8 chars aceptable para Beta |
+| ~~B-2~~ | ~~Política de contraseñas~~ | ✅ **Resuelto** (01/06) | Opción A: 8+ chars, letra+número, no común, no = email. Requisitos visibles + mensajes específicos. Commit `548f0e8` |
 | B-5 | **Activar CSP en Helmet** | 🟡 Diferido | Riesgo de romper UI sin staging. Hacer tras ST-1 |
 
 ---
@@ -67,7 +67,7 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 ```
 PRODUCTO          ████████████████████ 100%  Construido y publicado
 COBRANZA          ████████████████░░░░  90%  Validada en sandbox, falta MercadoPago real
-SEGURIDAD         ███████████████████░  95%  M-1/M-2 + grupo B resueltos · restan B-2/B-5 + auditoría externa
+SEGURIDAD         ███████████████████░  97%  M-1/M-2 + B (salvo B-5) resueltos · resta B-5 (CSP) + auditoría externa
 INFRA. SEGURA     ████████░░░░░░░░░░░░  40%  Falta staging + rollback operativo
 LISTO PARA BETA   ████████████████░░░░  ~90% Faltan los 3 imprescindibles del Bloque 1
 ```
@@ -76,10 +76,10 @@ LISTO PARA BETA   ████████████████░░░░  
 
 ## ✅ Recomendación de secuencia
 
-1. ~~M-1, M-2 + grupo B seguro (B-1, B-3, B-4, B-6, B-8) + B-7~~ ✅ **resueltos/verificados** (01/06)
+1. ~~M-1, M-2, B-1, B-2, B-3, B-4, B-6, B-8 + B-7~~ ✅ **resueltos/verificados** (01/06)
 2. **Esta semana:** Bloque 1 completo (MercadoPago real + verificar SSL + iniciar trámite de firma)
 3. **Arrancar la Beta** con 5-15 usuarios de confianza
 4. **Durante la Beta:** montar staging (ST-1/2/3) + activar `npm audit`
-5. **Antes del lanzamiento público:** B-5 (CSP, requiere staging) + B-2 (política de contraseñas) + auditoría externa (SEC-1)
+5. **Antes del lanzamiento público:** B-5 (CSP, requiere staging) + auditoría externa (SEC-1)
 
 > **Conclusión:** la Beta puede arrancar en **días**, no meses. El núcleo del producto y del cobro está terminado y probado.

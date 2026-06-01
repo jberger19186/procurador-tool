@@ -13,13 +13,13 @@ El backend tiene una **base de seguridad sólida** para una Beta controlada. Las
 
 Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a corregir. Ninguno es bloqueante para una Beta con usuarios de confianza.
 
-> ✅ **Actualización 01/06/2026:** los **2 puntos de prioridad media (M-1, M-2)** y **5 de prioridad baja (B-1, B-3, B-4, B-6, B-8)** ya fueron resueltos, probados y desplegados. **B-7 quedó verificado sin cambios** (la API no pasa por Cloudflare). Restan solo **B-2** (decisión de producto) y **B-5** (CSP, diferido hasta tener staging).
+> ✅ **Actualización 01/06/2026:** los **2 puntos de prioridad media (M-1, M-2)** y **6 de prioridad baja (B-1, B-2, B-3, B-4, B-6, B-8)** ya fueron resueltos, probados y desplegados. **B-7 quedó verificado sin cambios** (la API no pasa por Cloudflare). Resta solo **B-5** (CSP, diferido hasta tener staging para probar sin romper la UI).
 
 | Nivel | Cantidad | Estado |
 |---|---|---|
 | 🟢 Fortalezas confirmadas | 18 | — |
 | 🟠 Media | 2 | ✅ **Resueltos** (M-1, M-2) |
-| 🟡 Baja | 8 | ✅ 5 resueltos + 1 verificado (B-7) · 2 diferidos (B-2, B-5) |
+| 🟡 Baja | 8 | ✅ 6 resueltos + 1 verificado (B-7) · 1 diferido (B-5) |
 | ⚪ Proceso/recomendación | 3 | Pendientes |
 
 ---
@@ -89,7 +89,7 @@ Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a cor
 | # | Punto | Estado | Detalle / cómo se resolvió |
 |---|---|---|---|
 | ~~B-1~~ | ~~Sin validación de la clave secreta al arrancar~~ | ✅ Resuelto | `server.js` valida que `JWT_SECRET` exista y tenga ≥ 32 caracteres; si no, `process.exit(1)`. Probado: aborta con secret corto, arranca con válido |
-| B-2 | **Política de contraseñas básica** | 🟡 Diferido (decisión de producto) | Mín. 8 caracteres, sin complejidad. Aceptable para Beta. Endurecerlo afecta la UX del registro — se decide más adelante |
+| ~~B-2~~ | ~~Política de contraseñas básica~~ | ✅ Resuelto (01/06) | Helper `utils/passwordPolicy.js` (Opción A): mín. 8 chars + letra y número + no común + no igual al email. Aplicado en registro/reset/cambio. UX: requisitos visibles + mensajes específicos. No afecta login de usuarios existentes |
 | ~~B-3~~ | ~~Factor de costo de bcrypt en 10~~ | ✅ Resuelto | Subido a 12 en las 3 ocurrencias (`auth.js` ×2, `usuarios.js`). Hashes existentes (cost 10) siguen verificando correctamente |
 | ~~B-4~~ | ~~El log registra la firma esperada al fallar~~ | ✅ Resuelto | `webhooks.js` ya no loguea la firma esperada (solo el `requestId`) |
 | B-5 | **Política de seguridad de contenido (CSP) desactivada** | 🟡 Diferido (riesgo sin staging) | Activar CSP puede romper la UI (dashboard/portal/landing usan estilos/scripts inline). Se difiere hasta tener ambiente de staging para probar sin riesgo |
@@ -123,8 +123,8 @@ Las bases de seguridad están bien construidas y no se encontraron vulnerabilida
 
 | Cuándo | Tareas |
 |---|---|
-| ~~Antes de la Beta~~ | ✅ **M-1, M-2 + grupo B seguro (B-1, B-3, B-4, B-6, B-8) resueltos** · B-7 verificado (01/06/2026, commits `58b3163`, `da1eec6`) |
+| ~~Antes de la Beta~~ | ✅ **M-1, M-2, B-1, B-2, B-3, B-4, B-6, B-8 resueltos** · B-7 verificado (01/06/2026, commits `58b3163`, `da1eec6`, `548f0e8`) |
 | **Durante la Beta** | activar `npm audit` · montar staging |
-| **Antes del lanzamiento público** | B-5 (CSP, requiere staging) · B-2 (decisión de producto) · auditoría externa |
+| **Antes del lanzamiento público** | B-5 (CSP, requiere staging) · auditoría externa |
 
 *Informe basado en revisión de código al 30/05/2026. Para el detalle técnico exacto de cada punto, consultar con el equipo de desarrollo.*

@@ -12,6 +12,13 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
+- ✅ **B-2 — Política de contraseñas** (sesión 2026-06-01):
+  - Helper `utils/passwordPolicy.js` (Opción A): mín. 8 chars + al menos una letra y un número + no estar en lista de comunes + no ser igual al email
+  - Aplicado en los 4 puntos backend: registro, reset, change-password (`auth.js`) y cambio del portal (`usuarios.js`)
+  - UX estándar: requisitos visibles en los formularios + mensajes específicos según el requisito que falla (registro, portal, página de reset)
+  - **No afecta login de usuarios existentes** (el login usa `bcrypt.compare` sin política). Sin cambios de DB ni dependencias
+  - Resguardo `sec-pre-b2` · commit `548f0e8` · helper 12/12 pruebas, validado en producción
+
 - ✅ **Correcciones de seguridad — grupo B seguro** (sesión 2026-06-01):
   - **B-1** (`server.js`): valida `JWT_SECRET` al arrancar (≥32 chars), si no `process.exit(1)`
   - **B-3** (`auth.js`, `usuarios.js`): bcrypt cost 10→12 (3 ocurrencias). Hashes viejos siguen verificando
@@ -251,7 +258,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 | ~~**M-2**~~ | ~~Firma webhook no timing-safe~~ | ✅ Resuelto (01/06) | `crypto.timingSafeEqual` en `routes/webhooks.js` (con guarda de longitud). Validado en producción. Commit `58b3163` |
 | ~~**B-1,B-3,B-4,B-6,B-8**~~ | ~~Grupo seguro de robustez~~ | ✅ Resuelto (01/06) | JWT_SECRET validado al arrancar · bcrypt 10→12 · log webhook sin firma · TLS min 1.2 · BOM eliminado. Commit `da1eec6` |
 | ~~**B-7**~~ | ~~IP real tras Cloudflare~~ | ✅ Verificado | La API no pasa por Cloudflare; `trust proxy` ya correcto. Sin cambios |
-| **B-2** | **Política de contraseñas** | 🟡 Diferido | Decisión de producto. Mín. 8 chars aceptable para Beta |
+| ~~**B-2**~~ | ~~Política de contraseñas~~ | ✅ Resuelto (01/06) | `utils/passwordPolicy.js` (Opción A): 8+ chars, letra+número, no común, no = email. UX con requisitos visibles. Commit `548f0e8` |
 | **B-5** | **Activar CSP en Helmet** | 🟡 Diferido | Riesgo de romper UI sin staging. Hacer tras ST-1. Detalle en informe-seguridad.md §3 |
 | **SEC-1** | **Auditoría de seguridad externa** | — | Revisión profesional independiente antes del lanzamiento masivo |
 | **SEC-2** | **Smoke tests CI en GitHub Actions** | — | Workflow que corre `smoke-test-pjn.js` + `dev-tools/smoke-payments.js` en cada push a `main`, más `npm audit` (P-1) |
