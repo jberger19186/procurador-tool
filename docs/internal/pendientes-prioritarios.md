@@ -21,15 +21,15 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 
 ---
 
-## 🟠 Bloque 2 — Correcciones de seguridad (resolver antes del lanzamiento público)
+## 🟠 Bloque 2 — Correcciones de seguridad
 
-> No bloquean la Beta. Detalle completo en `docs/internal/informe-seguridad.md`.
+> Detalle completo en `docs/internal/informe-seguridad.md`.
 
-| # | Pendiente | Esfuerzo | Detalle |
+| # | Pendiente | Estado | Detalle |
 |---|---|---|---|
-| M-1 | **Logout de admin no invalida el token** | Muy bajo | Agregar chequeo de blacklist en `routes/admin.js`. Fix pequeño |
-| M-2 | **Comparación de firma de pagos no es timing-safe** | Muy bajo | Usar `crypto.timingSafeEqual` en `routes/webhooks.js`. 1 línea |
-| B-1..B-8 | **Mejoras de robustez varias** | Bajo | Validar `JWT_SECRET` al arrancar, activar CSP, subir bcrypt a 12, etc. (ver informe §3) |
+| ~~M-1~~ | ~~Logout de admin no invalida el token~~ | ✅ **Resuelto** (01/06) | Chequeo de blacklist agregado en `routes/admin.js`. Validado E2E en producción |
+| ~~M-2~~ | ~~Comparación de firma de pagos no es timing-safe~~ | ✅ **Resuelto** (01/06) | `crypto.timingSafeEqual` en `routes/webhooks.js`. Validado en producción |
+| B-1..B-8 | **Mejoras de robustez varias** | 🟡 Pendiente | Validar `JWT_SECRET` al arrancar, activar CSP, subir bcrypt a 12, etc. (ver informe §3) |
 
 ---
 
@@ -64,7 +64,7 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 ```
 PRODUCTO          ████████████████████ 100%  Construido y publicado
 COBRANZA          ████████████████░░░░  90%  Validada en sandbox, falta MercadoPago real
-SEGURIDAD         ████████████████░░░░  85%  Base sólida, faltan M-1/M-2 + auditoría externa
+SEGURIDAD         ██████████████████░░  90%  M-1/M-2 resueltos · faltan mejoras B-* + auditoría externa
 INFRA. SEGURA     ████████░░░░░░░░░░░░  40%  Falta staging + rollback operativo
 LISTO PARA BETA   ████████████████░░░░  ~90% Faltan los 3 imprescindibles del Bloque 1
 ```
@@ -73,10 +73,10 @@ LISTO PARA BETA   ████████████████░░░░  
 
 ## ✅ Recomendación de secuencia
 
-1. **Esta semana:** Bloque 1 completo (MercadoPago real + verificar SSL + iniciar trámite de firma)
-2. **En paralelo, rápido:** M-1 y M-2 (son correcciones de minutos)
+1. ~~M-1 y M-2~~ ✅ **resueltos** (01/06)
+2. **Esta semana:** Bloque 1 completo (MercadoPago real + verificar SSL + iniciar trámite de firma)
 3. **Arrancar la Beta** con 5-15 usuarios de confianza
 4. **Durante la Beta:** montar staging (ST-1/2/3) + activar `npm audit`
-5. **Antes del lanzamiento público:** resto de B-1..B-8 + auditoría externa (SEC-1)
+5. **Antes del lanzamiento público:** mejoras B-1..B-8 + auditoría externa (SEC-1)
 
 > **Conclusión:** la Beta puede arrancar en **días**, no meses. El núcleo del producto y del cobro está terminado y probado.

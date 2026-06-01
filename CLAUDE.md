@@ -12,6 +12,11 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
+- ✅ **Correcciones de seguridad M-1 y M-2** (sesión 2026-06-01):
+  - **M-1:** `authenticateAdmin` (`routes/admin.js`) ahora chequea la blacklist de tokens antes de `jwt.verify`. Antes el logout de admin no invalidaba el token hasta su vencimiento (8h). Validado E2E en producción (logout → 403 inmediato).
+  - **M-2:** la firma HMAC del webhook MP (`routes/webhooks.js`) se compara con `crypto.timingSafeEqual` (con guarda de longitud) en vez de `!==`. Evita timing attacks.
+  - Cambio quirúrgico: +15/-1 líneas en 2 archivos. Resguardo previo: tag `sec-pre-m1-m2`. Commit `58b3163`. 13/13 pruebas OK.
+
 - ✅ **Extensión Chrome v1.3.4 — header con marca Procurador TOOL** (sesión 2026-05-30):
   - Reemplazado el texto "PJN – Automatización" del popup por el logo `icon128` + "Procurador **TOOL**" (amber) + sublabel "Procurador SCW" — idéntico a los logins del portal
   - Solo tocó `popup.html` + versión del manifest (1.3.3 → 1.3.4). Sin cambios en lógica, permisos ni content scripts
@@ -232,8 +237,8 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 
 | # | Tarea | Prioridad | Detalle |
 |---|---|---|---|
-| **M-1** | **`authenticateAdmin` no chequea blacklist** | 🟠 Media | El logout de admin no invalida su token hasta el vencimiento natural (8h). Fix: agregar `isBlacklisted()` en `routes/admin.js` (igual que `middleware/authenticateToken.js`). Resolver antes del público |
-| **M-2** | **Firma webhook no timing-safe** | 🟠 Media | `routes/webhooks.js` compara la firma con `!==`. Usar `crypto.timingSafeEqual`. Fix de 1 línea |
+| ~~**M-1**~~ | ~~`authenticateAdmin` no chequea blacklist~~ | ✅ Resuelto (01/06) | Chequeo `isBlacklisted()` agregado en `routes/admin.js`. Validado E2E: logout admin → token 403 inmediato. Commit `58b3163` |
+| ~~**M-2**~~ | ~~Firma webhook no timing-safe~~ | ✅ Resuelto (01/06) | `crypto.timingSafeEqual` en `routes/webhooks.js` (con guarda de longitud). Validado en producción. Commit `58b3163` |
 | **B-1..B-8** | **Mejoras de robustez** | 🟡 Baja | Validar `JWT_SECRET` al arrancar · subir bcrypt a 12 · no loguear firma esperada · activar CSP en Helmet · TLS minVersion · verificar IP real tras Cloudflare · política de contraseñas más fuerte · limpiar BOM en `checkLicense.js`. Detalle en informe-seguridad.md §3 |
 | **SEC-1** | **Auditoría de seguridad externa** | — | Revisión profesional independiente antes del lanzamiento masivo |
 | **SEC-2** | **Smoke tests CI en GitHub Actions** | — | Workflow que corre `smoke-test-pjn.js` + `dev-tools/smoke-payments.js` en cada push a `main`, más `npm audit` (P-1) |

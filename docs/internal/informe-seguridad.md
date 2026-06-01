@@ -1,6 +1,6 @@
 # Informe de Verificación de Seguridad — Procurador SCW
 
-> **Fecha:** 30 de mayo de 2026
+> **Fecha:** 30 de mayo de 2026 · **Actualizado:** 01 de junio de 2026 (M-1 y M-2 resueltos)
 > **Alcance:** backend (API Express + PostgreSQL), autenticación, manejo de secretos, cifrado, pagos.
 > **Método:** revisión del código fuente real en producción (no automatizada).
 > **Tipo:** evaluación previa a Beta. No reemplaza una auditoría externa profesional antes del lanzamiento masivo.
@@ -11,14 +11,16 @@
 
 El backend tiene una **base de seguridad sólida** para una Beta controlada. Las prácticas fundamentales están bien implementadas: contraseñas cifradas, consultas a base de datos a prueba de inyección, secretos fuera del código, y autenticación con tokens.
 
-Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a corregir. Ninguno es bloqueante para una Beta con usuarios de confianza, pero **los 2 de prioridad media deberían resolverse antes del lanzamiento público**.
+Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a corregir. Ninguno es bloqueante para una Beta con usuarios de confianza.
 
-| Nivel | Cantidad | ¿Bloquea Beta? |
+> ✅ **Actualización 01/06/2026:** los **2 puntos de prioridad media (M-1 y M-2) ya fueron resueltos, probados y desplegados** en producción (commit `58b3163`). Detalle en la sección 2.
+
+| Nivel | Cantidad | Estado |
 |---|---|---|
 | 🟢 Fortalezas confirmadas | 18 | — |
-| 🟠 Media | 2 | No (resolver antes del público) |
-| 🟡 Baja | 8 | No |
-| ⚪ Proceso/recomendación | 3 | No |
+| 🟠 Media | 2 | ✅ **Resueltos** |
+| 🟡 Baja | 8 | Pendientes (no bloquean Beta) |
+| ⚪ Proceso/recomendación | 3 | Pendientes |
 
 ---
 
@@ -58,25 +60,25 @@ Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a cor
 
 ---
 
-## 2. Puntos a corregir — Prioridad MEDIA
+## 2. Puntos a corregir — Prioridad MEDIA ✅ RESUELTOS
 
-> Recomendado resolver **antes del lanzamiento público** (no bloquean la Beta).
+> Ambos corregidos, probados y desplegados el **01/06/2026** (commit `58b3163`, resguardo previo en tag `sec-pre-m1-m2`). Cambio quirúrgico: +15/-1 líneas en 2 archivos, sin alterar el resto del código.
 
-### 🟠 M-1 — El cierre de sesión no invalida los tokens de administrador
-**Qué pasa:** cuando un usuario común cierra sesión, su token queda inutilizable de inmediato (lista negra). Pero los endpoints de **administración** no consultan esa lista negra: un token de admin sigue siendo válido hasta su vencimiento natural (8 horas), aunque se haya cerrado sesión.
+### ✅ M-1 — El cierre de sesión no invalidaba los tokens de administrador
+**Qué pasaba:** cuando un usuario común cerraba sesión, su token quedaba inutilizable de inmediato (lista negra). Pero los endpoints de **administración** no consultaban esa lista negra: un token de admin seguía siendo válido hasta su vencimiento natural (8 horas), aunque se hubiera cerrado sesión.
 
-**Riesgo:** si un token de admin se filtra o queda en un dispositivo compartido, el "cerrar sesión" no lo corta realmente durante esas horas.
+**Cómo se corrigió:** se agregó la verificación de lista negra (`isBlacklisted`) en la función de autenticación de administrador (`routes/admin.js`), antes de validar el token — exactamente como ya lo hacían los usuarios comunes.
 
-**Cómo se corrige:** agregar la verificación de lista negra en la función de autenticación de administrador (la misma que ya usan los usuarios comunes). Cambio pequeño y de bajo riesgo.
+**Verificación (E2E en producción):** admin opera (200) → logout (token revocado) → el mismo token reintenta → **403 rechazado**. Antes seguía aceptándose durante 8 horas.
 
 ---
 
-### 🟠 M-2 — Comparación de firma de pagos no es "tiempo-constante"
-**Qué pasa:** al validar la firma de un webhook de MercadoPago, la comparación se hace con un operador común (`!==`) en lugar de una comparación de tiempo constante.
+### ✅ M-2 — Comparación de firma de pagos no era "tiempo-constante"
+**Qué pasaba:** al validar la firma de un webhook de MercadoPago, la comparación se hacía con un operador común (`!==`) en lugar de una comparación de tiempo constante, lo que teóricamente permitía un "ataque de temporización".
 
-**Riesgo:** teóricamente permite un "ataque de temporización" para adivinar la firma midiendo milisegundos de respuesta. En la práctica el riesgo es **muy bajo** (las firmas son cadenas hexadecimales largas), pero es una corrección estándar y trivial.
+**Cómo se corrigió:** se reemplazó por `crypto.timingSafeEqual` (con validación previa de longitud para evitar excepciones) en `routes/webhooks.js`.
 
-**Cómo se corrige:** usar la función `crypto.timingSafeEqual` para comparar las firmas. Una línea de cambio.
+**Verificación (producción):** firma válida → aceptada (200) · firma inválida → rechazada (401) · firma de longitud distinta → rechazada sin error.
 
 ---
 
@@ -111,9 +113,9 @@ Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a cor
 
 > **El sistema es apto para iniciar una Beta controlada con usuarios de confianza.**
 
-Las bases de seguridad están bien construidas y no se encontraron vulnerabilidades críticas ni de inyección. Los dos puntos de prioridad media (M-1 y M-2) son correcciones pequeñas que conviene aplicar pronto, y el resto son mejoras graduales de robustez.
+Las bases de seguridad están bien construidas y no se encontraron vulnerabilidades críticas ni de inyección. Los dos puntos de prioridad media (M-1 y M-2) **ya fueron resueltos** (01/06/2026), y el resto son mejoras graduales de robustez.
 
-**Antes del lanzamiento público (no de la Beta)** se recomienda: resolver M-1 y M-2, activar el escaneo de dependencias, montar el ambiente de staging, y considerar una auditoría externa.
+**Antes del lanzamiento público (no de la Beta)** se recomienda: activar el escaneo de dependencias, montar el ambiente de staging, completar las mejoras de prioridad baja, y considerar una auditoría externa.
 
 ---
 
@@ -121,7 +123,7 @@ Las bases de seguridad están bien construidas y no se encontraron vulnerabilida
 
 | Cuándo | Tareas |
 |---|---|
-| **Antes de la Beta** (opcional pero recomendado) | M-1 (logout admin), M-2 (comparación de firma) — son rápidas |
+| ~~Antes de la Beta~~ | ✅ **M-1 y M-2 resueltos** (01/06/2026, commit `58b3163`) |
 | **Durante la Beta** | B-1, B-4, B-5, B-7, B-8 · activar `npm audit` |
 | **Antes del lanzamiento público** | B-2, B-3, B-6 · auditoría externa · ambiente staging aprobado |
 
