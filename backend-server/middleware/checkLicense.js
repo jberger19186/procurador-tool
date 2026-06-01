@@ -1,4 +1,4 @@
-﻿async function checkLicense(req, res, next) {
+async function checkLicense(req, res, next) {
     const db = req.app.get('db');
     const userId = req.user.id;
 

@@ -72,7 +72,8 @@ function verifyMPSignature(req, res, next) {
                          crypto.timingSafeEqual(expectedBuf, receivedBuf);
 
   if (!signatureValid) {
-    logger.warn('[Webhooks] Firma MP inválida', { expected, received: v1 });
+    // B-4: no registrar la firma esperada (evita fuga en logs)
+    logger.warn('[Webhooks] Firma MP inválida', { requestId: xRequestId });
     return res.status(401).json({ error: 'firma inválida' });
   }
 

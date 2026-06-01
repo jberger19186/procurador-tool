@@ -186,7 +186,7 @@ router.post('/register', registerLimiter, async (req, res) => {
                 return res.status(400).json({ error: 'El CUIT ya está registrado en el sistema' });
             }
 
-            const hashedPassword = await bcrypt.hash(password, 10);
+            const hashedPassword = await bcrypt.hash(password, 12); // B-3: cost 12
             const token = crypto.randomBytes(32).toString('hex');
             const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hs
 
@@ -856,7 +856,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
         }
 
         // Hash de nueva contraseña
-        const newHashedPassword = await bcrypt.hash(newPassword, 10);
+        const newHashedPassword = await bcrypt.hash(newPassword, 12); // B-3: cost 12
 
         // Actualizar contraseña
         await db.query(`

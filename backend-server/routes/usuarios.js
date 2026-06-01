@@ -72,7 +72,7 @@ router.put('/password', authenticateToken, async (req, res) => {
             return res.status(401).json({ error: 'La contraseña actual es incorrecta' });
         }
 
-        const newHash = await bcrypt.hash(newPassword, 10);
+        const newHash = await bcrypt.hash(newPassword, 12); // B-3: cost 12
         await db.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
 
         res.json({ success: true, message: 'Contraseña actualizada correctamente' });

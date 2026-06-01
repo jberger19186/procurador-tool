@@ -13,6 +13,15 @@ const tokenBlacklist = require('./middleware/tokenBlacklist');
 
 const helmet = require('helmet');
 const app = express();
+
+// B-1: validar que JWT_SECRET exista y sea suficientemente fuerte antes de arrancar.
+// Sin esto, si la variable falta el servidor arrancaba y fallaba recién al primer login.
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    console.error('❌ FATAL: JWT_SECRET no configurado o demasiado corto (mínimo 32 caracteres).');
+    console.error('   Definí un JWT_SECRET robusto en el archivo .env antes de iniciar el servidor.');
+    process.exit(1);
+}
+
 const PORT = process.env.PORT || 3000;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 const SSL_KEY = process.env.SSL_KEY_PATH || path.join(__dirname, 'certs', 'key.pem');
@@ -396,7 +405,9 @@ async function init() {
             try {
                 const sslOptions = {
                     key: fs.readFileSync(SSL_KEY),
-                    cert: fs.readFileSync(SSL_CERT)
+                    cert: fs.readFileSync(SSL_CERT),
+                    // B-6: defensa en profundidad — rechazar versiones de TLS obsoletas (< 1.2)
+                    minVersion: 'TLSv1.2'
                 };
                 https.createServer(sslOptions, app).listen(HTTPS_PORT, () => {
                     console.log(`🔒 HTTPS corriendo en puerto ${HTTPS_PORT}`);
