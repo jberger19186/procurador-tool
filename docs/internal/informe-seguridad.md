@@ -13,13 +13,13 @@ El backend tiene una **base de seguridad sólida** para una Beta controlada. Las
 
 Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a corregir. Ninguno es bloqueante para una Beta con usuarios de confianza.
 
-> ✅ **Actualización 01/06/2026:** los **2 puntos de prioridad media (M-1 y M-2) ya fueron resueltos, probados y desplegados** en producción (commit `58b3163`). Detalle en la sección 2.
+> ✅ **Actualización 01/06/2026:** los **2 puntos de prioridad media (M-1, M-2)** y **5 de prioridad baja (B-1, B-3, B-4, B-6, B-8)** ya fueron resueltos, probados y desplegados. **B-7 quedó verificado sin cambios** (la API no pasa por Cloudflare). Restan solo **B-2** (decisión de producto) y **B-5** (CSP, diferido hasta tener staging).
 
 | Nivel | Cantidad | Estado |
 |---|---|---|
 | 🟢 Fortalezas confirmadas | 18 | — |
-| 🟠 Media | 2 | ✅ **Resueltos** |
-| 🟡 Baja | 8 | Pendientes (no bloquean Beta) |
+| 🟠 Media | 2 | ✅ **Resueltos** (M-1, M-2) |
+| 🟡 Baja | 8 | ✅ 5 resueltos + 1 verificado (B-7) · 2 diferidos (B-2, B-5) |
 | ⚪ Proceso/recomendación | 3 | Pendientes |
 
 ---
@@ -84,18 +84,18 @@ Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a cor
 
 ## 3. Puntos a corregir — Prioridad BAJA
 
-> Mejoras de robustez. Pueden hacerse de forma gradual.
+> **Actualización 01/06/2026:** el "Grupo Seguro" (B-1, B-3, B-4, B-6, B-8) fue resuelto, probado y desplegado (commit `da1eec6`, resguardo `sec-pre-b-group`). Quedan B-2, B-5 y B-7 con la situación indicada abajo.
 
-| # | Punto | Detalle | Recomendación |
+| # | Punto | Estado | Detalle / cómo se resolvió |
 |---|---|---|---|
-| B-1 | **Sin validación de la clave secreta al arrancar** | Si faltara la variable `JWT_SECRET`, el servidor arrancaría y fallaría recién al primer login | Validar al inicio que exista y tenga longitud mínima; si no, no arrancar |
-| B-2 | **Política de contraseñas básica** | Solo exige 8 caracteres mínimo, sin requisitos de complejidad | Aceptable para Beta; considerar exigir combinación de tipos o chequeo contra contraseñas filtradas |
-| B-3 | **Factor de costo de bcrypt en 10** | Es seguro, pero podría subirse a 12 para mayor resistencia | Subir a 12 (impacto mínimo en velocidad de login) |
-| B-4 | **El log registra la firma esperada al fallar** | Cuando una firma de webhook no coincide, se escribe la firma esperada en los registros del servidor | Quitar ese dato del log (fuga menor, solo visible internamente) |
-| B-5 | **Política de seguridad de contenido (CSP) desactivada** | Helmet está activo pero con CSP apagado | Activar una CSP básica para endurecer las páginas web servidas (dashboard, portal) ante XSS |
-| B-6 | **Sin versión mínima de TLS en el servidor directo** | El Express en el puerto interno no fija una versión mínima de cifrado (en producción está detrás de Nginx/Cloudflare que sí la fijan) | Definir versión mínima TLS 1.2 como defensa en profundidad |
-| B-7 | **Verificar cadena de IP real tras Cloudflare** | El rate limiting identifica por IP con `trust proxy: 1`; detrás de Cloudflare hay que asegurar que se use la IP real del cliente (no la de Cloudflare) | Confirmar que la IP real llega correctamente, para que los límites no se evadan ni se disparen de más |
-| B-8 | **Carácter invisible al inicio de un archivo** | `checkLicense.js` empieza con un carácter BOM (cosmético, sin impacto funcional) | Limpiar (orden de código) |
+| ~~B-1~~ | ~~Sin validación de la clave secreta al arrancar~~ | ✅ Resuelto | `server.js` valida que `JWT_SECRET` exista y tenga ≥ 32 caracteres; si no, `process.exit(1)`. Probado: aborta con secret corto, arranca con válido |
+| B-2 | **Política de contraseñas básica** | 🟡 Diferido (decisión de producto) | Mín. 8 caracteres, sin complejidad. Aceptable para Beta. Endurecerlo afecta la UX del registro — se decide más adelante |
+| ~~B-3~~ | ~~Factor de costo de bcrypt en 10~~ | ✅ Resuelto | Subido a 12 en las 3 ocurrencias (`auth.js` ×2, `usuarios.js`). Hashes existentes (cost 10) siguen verificando correctamente |
+| ~~B-4~~ | ~~El log registra la firma esperada al fallar~~ | ✅ Resuelto | `webhooks.js` ya no loguea la firma esperada (solo el `requestId`) |
+| B-5 | **Política de seguridad de contenido (CSP) desactivada** | 🟡 Diferido (riesgo sin staging) | Activar CSP puede romper la UI (dashboard/portal/landing usan estilos/scripts inline). Se difiere hasta tener ambiente de staging para probar sin riesgo |
+| ~~B-6~~ | ~~Sin versión mínima de TLS en el servidor directo~~ | ✅ Resuelto | `minVersion: 'TLSv1.2'` en `sslOptions`. Probado: negocia TLS 1.3, rechaza TLS 1.1 |
+| B-7 | **Verificar cadena de IP real tras Cloudflare** | ✅ Verificado (sin cambios) | `api.procuradortool.com` resuelve directo al droplet (142.93.64.94), **no pasa por Cloudflare**. Con Nginx + `trust proxy: 1` la IP real ya llega bien. No requiere cambios |
+| ~~B-8~~ | ~~Carácter invisible al inicio de un archivo~~ | ✅ Resuelto | BOM eliminado de `checkLicense.js` (sin alterar contenido) |
 
 ---
 
@@ -123,8 +123,8 @@ Las bases de seguridad están bien construidas y no se encontraron vulnerabilida
 
 | Cuándo | Tareas |
 |---|---|
-| ~~Antes de la Beta~~ | ✅ **M-1 y M-2 resueltos** (01/06/2026, commit `58b3163`) |
-| **Durante la Beta** | B-1, B-4, B-5, B-7, B-8 · activar `npm audit` |
-| **Antes del lanzamiento público** | B-2, B-3, B-6 · auditoría externa · ambiente staging aprobado |
+| ~~Antes de la Beta~~ | ✅ **M-1, M-2 + grupo B seguro (B-1, B-3, B-4, B-6, B-8) resueltos** · B-7 verificado (01/06/2026, commits `58b3163`, `da1eec6`) |
+| **Durante la Beta** | activar `npm audit` · montar staging |
+| **Antes del lanzamiento público** | B-5 (CSP, requiere staging) · B-2 (decisión de producto) · auditoría externa |
 
 *Informe basado en revisión de código al 30/05/2026. Para el detalle técnico exacto de cada punto, consultar con el equipo de desarrollo.*

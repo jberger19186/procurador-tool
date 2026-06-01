@@ -27,9 +27,12 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 
 | # | Pendiente | Estado | Detalle |
 |---|---|---|---|
-| ~~M-1~~ | ~~Logout de admin no invalida el token~~ | ✅ **Resuelto** (01/06) | Chequeo de blacklist agregado en `routes/admin.js`. Validado E2E en producción |
+| ~~M-1~~ | ~~Logout de admin no invalida el token~~ | ✅ **Resuelto** (01/06) | Chequeo de blacklist en `routes/admin.js`. Validado E2E en producción |
 | ~~M-2~~ | ~~Comparación de firma de pagos no es timing-safe~~ | ✅ **Resuelto** (01/06) | `crypto.timingSafeEqual` en `routes/webhooks.js`. Validado en producción |
-| B-1..B-8 | **Mejoras de robustez varias** | 🟡 Pendiente | Validar `JWT_SECRET` al arrancar, activar CSP, subir bcrypt a 12, etc. (ver informe §3) |
+| ~~B-1, B-3, B-4, B-6, B-8~~ | ~~Grupo seguro de robustez~~ | ✅ **Resueltos** (01/06) | JWT_SECRET validado al arrancar · bcrypt 10→12 · log webhook sin firma · TLS min 1.2 · BOM eliminado. Commit `da1eec6` |
+| ~~B-7~~ | ~~IP real tras Cloudflare~~ | ✅ **Verificado** | La API no pasa por Cloudflare; `trust proxy` ya es correcto. Sin cambios |
+| B-2 | **Política de contraseñas** | 🟡 Diferido | Decisión de producto. Mín. 8 chars aceptable para Beta |
+| B-5 | **Activar CSP en Helmet** | 🟡 Diferido | Riesgo de romper UI sin staging. Hacer tras ST-1 |
 
 ---
 
@@ -64,7 +67,7 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 ```
 PRODUCTO          ████████████████████ 100%  Construido y publicado
 COBRANZA          ████████████████░░░░  90%  Validada en sandbox, falta MercadoPago real
-SEGURIDAD         ██████████████████░░  90%  M-1/M-2 resueltos · faltan mejoras B-* + auditoría externa
+SEGURIDAD         ███████████████████░  95%  M-1/M-2 + grupo B resueltos · restan B-2/B-5 + auditoría externa
 INFRA. SEGURA     ████████░░░░░░░░░░░░  40%  Falta staging + rollback operativo
 LISTO PARA BETA   ████████████████░░░░  ~90% Faltan los 3 imprescindibles del Bloque 1
 ```

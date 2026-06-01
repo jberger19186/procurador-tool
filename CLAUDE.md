@@ -12,6 +12,16 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
+- ✅ **Correcciones de seguridad — grupo B seguro** (sesión 2026-06-01):
+  - **B-1** (`server.js`): valida `JWT_SECRET` al arrancar (≥32 chars), si no `process.exit(1)`
+  - **B-3** (`auth.js`, `usuarios.js`): bcrypt cost 10→12 (3 ocurrencias). Hashes viejos siguen verificando
+  - **B-4** (`webhooks.js`): el log de firma inválida ya no expone la firma esperada
+  - **B-6** (`server.js`): `minVersion: TLSv1.2`. Probado: negocia TLS 1.3, rechaza TLS 1.1
+  - **B-8** (`checkLicense.js`): BOM inicial eliminado
+  - **B-7** verificado sin cambios (la API no pasa por Cloudflare; `trust proxy` ya correcto)
+  - Diferidos: B-2 (decisión de producto), B-5 (CSP, riesgo sin staging)
+  - Resguardo `sec-pre-b-group` · commit `da1eec6` · +18/-6 en 5 archivos · pruebas producción OK
+
 - ✅ **Correcciones de seguridad M-1 y M-2** (sesión 2026-06-01):
   - **M-1:** `authenticateAdmin` (`routes/admin.js`) ahora chequea la blacklist de tokens antes de `jwt.verify`. Antes el logout de admin no invalidaba el token hasta su vencimiento (8h). Validado E2E en producción (logout → 403 inmediato).
   - **M-2:** la firma HMAC del webhook MP (`routes/webhooks.js`) se compara con `crypto.timingSafeEqual` (con guarda de longitud) en vez de `!==`. Evita timing attacks.
@@ -239,7 +249,10 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 |---|---|---|---|
 | ~~**M-1**~~ | ~~`authenticateAdmin` no chequea blacklist~~ | ✅ Resuelto (01/06) | Chequeo `isBlacklisted()` agregado en `routes/admin.js`. Validado E2E: logout admin → token 403 inmediato. Commit `58b3163` |
 | ~~**M-2**~~ | ~~Firma webhook no timing-safe~~ | ✅ Resuelto (01/06) | `crypto.timingSafeEqual` en `routes/webhooks.js` (con guarda de longitud). Validado en producción. Commit `58b3163` |
-| **B-1..B-8** | **Mejoras de robustez** | 🟡 Baja | Validar `JWT_SECRET` al arrancar · subir bcrypt a 12 · no loguear firma esperada · activar CSP en Helmet · TLS minVersion · verificar IP real tras Cloudflare · política de contraseñas más fuerte · limpiar BOM en `checkLicense.js`. Detalle en informe-seguridad.md §3 |
+| ~~**B-1,B-3,B-4,B-6,B-8**~~ | ~~Grupo seguro de robustez~~ | ✅ Resuelto (01/06) | JWT_SECRET validado al arrancar · bcrypt 10→12 · log webhook sin firma · TLS min 1.2 · BOM eliminado. Commit `da1eec6` |
+| ~~**B-7**~~ | ~~IP real tras Cloudflare~~ | ✅ Verificado | La API no pasa por Cloudflare; `trust proxy` ya correcto. Sin cambios |
+| **B-2** | **Política de contraseñas** | 🟡 Diferido | Decisión de producto. Mín. 8 chars aceptable para Beta |
+| **B-5** | **Activar CSP en Helmet** | 🟡 Diferido | Riesgo de romper UI sin staging. Hacer tras ST-1. Detalle en informe-seguridad.md §3 |
 | **SEC-1** | **Auditoría de seguridad externa** | — | Revisión profesional independiente antes del lanzamiento masivo |
 | **SEC-2** | **Smoke tests CI en GitHub Actions** | — | Workflow que corre `smoke-test-pjn.js` + `dev-tools/smoke-payments.js` en cada push a `main`, más `npm audit` (P-1) |
 | **SEC-3** | **Hardening de secretos** | — | ✅ Verificado: ningún secreto hardcodeado, `.env`/keys/certs correctamente en `.gitignore` |
