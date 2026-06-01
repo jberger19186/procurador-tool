@@ -76,10 +76,10 @@ LISTO PARA BETA   ████████████████░░░░  
 
 ## ✅ Recomendación de secuencia
 
-1. ~~M-1 y M-2~~ ✅ **resueltos** (01/06)
+1. ~~M-1, M-2 + grupo B seguro (B-1, B-3, B-4, B-6, B-8) + B-7~~ ✅ **resueltos/verificados** (01/06)
 2. **Esta semana:** Bloque 1 completo (MercadoPago real + verificar SSL + iniciar trámite de firma)
 3. **Arrancar la Beta** con 5-15 usuarios de confianza
 4. **Durante la Beta:** montar staging (ST-1/2/3) + activar `npm audit`
-5. **Antes del lanzamiento público:** mejoras B-1..B-8 + auditoría externa (SEC-1)
+5. **Antes del lanzamiento público:** B-5 (CSP, requiere staging) + B-2 (política de contraseñas) + auditoría externa (SEC-1)
 
 > **Conclusión:** la Beta puede arrancar en **días**, no meses. El núcleo del producto y del cobro está terminado y probado.
