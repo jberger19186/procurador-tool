@@ -7,9 +7,16 @@
 
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.14** — publicada en GitHub Releases (auto-updater activo)
+> Versión extensión Chrome: **1.3.4** — ZIP generado, pendiente subir al Chrome Web Store
 > Última sesión: 2026-05-30
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Extensión Chrome v1.3.4 — header con marca Procurador TOOL** (sesión 2026-05-30):
+  - Reemplazado el texto "PJN – Automatización" del popup por el logo `icon128` + "Procurador **TOOL**" (amber) + sublabel "Procurador SCW" — idéntico a los logins del portal
+  - Solo tocó `popup.html` + versión del manifest (1.3.3 → 1.3.4). Sin cambios en lógica, permisos ni content scripts
+  - Backup previo: tag `ext-pre-logo-v1.3.3` · cambio en tag `ext-logo-v1.3.4`
+  - ZIP listo: `pjn-extension-1.3.4.zip` (pendiente subir al store con cuenta jberger19186@gmail.com)
 
 - ✅ **Bloque 1 — Ícono oficial balanza dorada** (sesión 2026-05-23):
   - **Ícono:** ⚖️ emoji renderizado con Puppeteer → ICO multi-resolución (16/32/48/256px)
@@ -408,7 +415,7 @@ ProcuradorTool/
 │   └── keys/                              ⛔ claves RSA privadas (gitignored)
 │
 ├── extension-app/                         ← extensión Chrome MV3 (Chrome Web Store)
-│   ├── manifest.json                      v1.3.3
+│   ├── manifest.json                      v1.3.4
 │   ├── background.js                      service worker
 │   ├── popup.html · popup.js              UI principal
 │   ├── auth.js                            login + FLOW_ALIASES
@@ -501,7 +508,7 @@ git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" diff --name-only fase4-co
 | **Cloudflare** | CDN + WAF + SSL para procuradortool.com (landing) | — |
 | **GitHub** | Repositorio privado + GitHub Releases (distribución instalador) | jberger19186@gmail.com |
 | **Brevo** (ex Sendinblue) | SMTP transaccional — emails que salen con @procuradortool.com | jberger19186@gmail.com |
-| **Chrome Web Store** | Distribución extensión Chrome (v1.3.3 — aprobada ✅) | jberger19186@gmail.com / Publisher: Jonathan Berger |
+| **Chrome Web Store** | Distribución extensión Chrome (store: v1.3.3 ✅ · local: v1.3.4 pendiente subir) | jberger19186@gmail.com / Publisher: Jonathan Berger |
 | **Anthropic** | API de Claude Haiku para el chat IA del Asistente — ✅ activa en producción | console.anthropic.com |
 | **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-06-29) | sin cuenta — corre en el servidor |
 | **Azure Trusted Signing** | Code Signing del instalador .exe — ⬜ pendiente contratar | — |
@@ -979,7 +986,7 @@ Si hubiera que volver a este sistema:
 
 ---
 
-### Versión actual en store: 1.3.2
+### Versión en store: 1.3.3 (aprobada) · Versión local: 1.3.4 (ZIP listo, pendiente subir)
 ### Cuenta del store: jberger19186@gmail.com / Publisher: Jonathan Berger
 
 ### Permisos (sin `tabs`, sin `content_scripts *://*/*`)
