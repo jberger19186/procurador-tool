@@ -6,6 +6,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { getCacheStats, clearCache } = require('../utils/scriptEncryption');
 const { adminLimiter } = require('../middleware/rateLimiter');
+const { isBlacklisted } = require('../middleware/tokenBlacklist');
 const { sendTicketReplyEmail } = require('../utils/mailer');
 
 // ── Multer: almacenamiento de PDFs de facturas ────────────────────────────────
@@ -39,6 +40,12 @@ function authenticateAdmin(req, res, next) {
 
     if (!token) {
         return res.status(401).json({ error: 'Token no proporcionado' });
+    }
+
+    // M-1: invalidar tokens en blacklist (logout). Antes el logout de admin
+    // no surtía efecto hasta el vencimiento natural del token.
+    if (isBlacklisted(token)) {
+        return res.status(403).json({ error: 'Token invalidado' });
     }
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {

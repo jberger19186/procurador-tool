@@ -64,7 +64,14 @@ function verifyMPSignature(req, res, next) {
   const manifest = `id:${String(dataId).toLowerCase()};request-id:${xRequestId};ts:${ts};`;
   const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
 
-  if (expected !== v1) {
+  // M-2: comparación de tiempo constante (evita timing attacks).
+  // timingSafeEqual exige buffers de igual longitud → se valida la longitud primero.
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const receivedBuf = Buffer.from(v1, 'utf8');
+  const signatureValid = expectedBuf.length === receivedBuf.length &&
+                         crypto.timingSafeEqual(expectedBuf, receivedBuf);
+
+  if (!signatureValid) {
     logger.warn('[Webhooks] Firma MP inválida', { expected, received: v1 });
     return res.status(401).json({ error: 'firma inválida' });
   }
