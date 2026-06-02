@@ -587,6 +587,24 @@ ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot renew"
 
 ---
 
+## 📐 Operación — Staging y Rollback (documentos maestros)
+
+Para cualquier cambio (backend o app Electron), consultar:
+
+| Documento | Para qué |
+|---|---|
+| **`docs/internal/flujo-staging-rollback.md`** | **Visión general** (entrada): cómo se prueba y revierte cada componente (backend + Electron) |
+| **`docs/internal/runbook-comandos.md`** | **Comandos exactos** (copiar/pegar): backups, deploys, rollbacks y simulacros |
+| `docs/internal/plan-implementacion-staging.md` | Detalle del staging del backend (4 fases) |
+| `docs/internal/flujo-release-electron.md` | Detalle del release/rollback de la app Electron |
+| `ops/README.md` | Referencia de los scripts operativos (`backup-now.sh`, `restore-db.sh`, drills) |
+
+**Resumen operativo:**
+- **Backend:** desarrollar → probar en `staging-api.procuradortool.com` → backup pre-deploy → producción → rollback de 3 capas si falla.
+- **Electron:** desarrollar → probar local (`npm start`) → publicar Release → fix-forward si falla.
+
+---
+
 ## Checklist al publicar nueva versión Electron
 
 > Flujo completo (probar local, fix-forward, rollback, archivo de versiones): `docs/internal/flujo-release-electron.md`.
