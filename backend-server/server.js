@@ -28,7 +28,28 @@ const SSL_KEY = process.env.SSL_KEY_PATH || path.join(__dirname, 'certs', 'key.p
 const SSL_CERT = process.env.SSL_CERT_PATH || path.join(__dirname, 'certs', 'cert.pem');
 
 // Seguridad HTTP headers
-app.use(helmet({ contentSecurityPolicy: false }));
+// B-5: Content Security Policy (defensa en profundidad contra XSS).
+// Las páginas usan estilos y event handlers (onclick) inline → se permite
+// 'unsafe-inline' para style/script (incl. script-src-attr, que por defecto Helmet
+// pone en 'none' y bloquearía los onclick). El resto se restringe.
+app.use(helmet({
+    contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+            defaultSrc:    ["'self'"],
+            scriptSrc:     ["'self'", "'unsafe-inline'"],
+            scriptSrcAttr: ["'unsafe-inline'"],        // event handlers inline (onclick, etc.)
+            styleSrc:      ["'self'", "'unsafe-inline'"],
+            imgSrc:        ["'self'", "data:"],
+            fontSrc:       ["'self'", "data:"],
+            connectSrc:    ["'self'"],
+            objectSrc:     ["'none'"],
+            baseUri:       ["'self'"],
+            frameAncestors: ["'self'"],
+            formAction:    ["'self'"]
+        }
+    }
+}));
 
 // CORS — rutas públicas HTML (navegador) no tienen restricción de origen
 const allowedOrigins = process.env.ALLOWED_ORIGINS
