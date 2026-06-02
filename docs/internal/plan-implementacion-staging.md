@@ -166,14 +166,19 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 
 ## 8. Esfuerzo y orden
 
-| Fase | Tarea | Esfuerzo |
-|---|---|---|
-| A | Estructura de backups + scripts operativos (5.1, 5.2, 5.8, 5.9) | Bajo |
-| B | DB y configuración de staging (5.3–5.5) | Medio |
-| C | Nginx + SSL + protección de acceso (5.6, 5.7) | Medio |
-| D | Simulacro de rollback (ST-3) | Bajo (medio día) |
+| Fase | Tarea | Esfuerzo | Estado |
+|---|---|---|---|
+| A | Estructura de backups + scripts operativos (5.1, 5.2, 5.8, 5.9) | Bajo | ✅ **Completada (01/06)** |
+| B | DB y configuración de staging (5.3–5.5) | Medio | Pendiente |
+| C | Nginx + SSL + protección de acceso (5.6, 5.7) | Medio | Pendiente |
+| D | Simulacro de rollback (ST-3) | Bajo (medio día) | Pendiente |
 
-**Tiempo estimado total:** 1–2 jornadas de trabajo.
+**Tiempo estimado restante:** ~1 jornada.
+
+### Nota Fase A (completada)
+- El **backup diario ya existía** y es offsite (DO Spaces, 30 días) — mejor que lo planeado. No se duplicó.
+- Se agregaron `ops/backup-now.sh` (pre-deploy on-demand) y `ops/restore-db.sh` (restauración con red de seguridad), ambos **probados** (backup en prod real; restore E2E contra base descartable sin tocar producción).
+- Carpeta `/var/backups/procurador/predeploy/` para backups pre-deploy y pre-restore.
 
 ---
 
@@ -192,7 +197,7 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 
 ## 10. Próximo paso
 
-> **Este plan está listo para revisión. No se ejecutó ningún cambio en el servidor.**
-> A la espera de tu confirmación para comenzar por la **Fase A** (estructura de backups + scripts), que es la base de todo lo demás.
+> **Fase A completada y verificada (01/06/2026).** Backups pre-deploy + restauración operativos y probados.
+> Siguiente: **Fase B** — crear la base `procurador_db_staging` y el `.env.staging` (puerto 3444, MercadoPago sandbox).
 
-Cuando confirmes, procederemos con la metodología habitual: cada fase con su verificación, sin avanzar a la siguiente hasta validar la anterior.
+Continuamos con la metodología habitual: cada fase con su verificación, sin avanzar a la siguiente hasta validar la anterior.

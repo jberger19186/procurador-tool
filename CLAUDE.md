@@ -12,6 +12,14 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
+- ✅ **Staging Fase A — backups pre-deploy y restauración** (sesión 2026-06-01):
+  - **Hallazgo:** el backup diario ya existía (`backend-server/scripts/backup-db.js`, cron 03:00 → sube a DO Spaces, retención 30 días + copias locales en `/var/backups/procurador/`). Mejor que lo planeado (offsite). No se duplicó.
+  - **Nuevo `ops/backup-now.sh [prod|staging]`:** backup local on-demand pre-deploy, con guarda de integridad + rotación (últimos 10). Va a `/var/backups/procurador/predeploy/`. Probado en producción.
+  - **Nuevo `ops/restore-db.sh [prod|staging] <archivo> [--force]`:** rollback de la capa de datos. Antes de restaurar hace backup de seguridad de la base destino + confirmación tipeada para prod + recrea limpia preservando owner. **Probado E2E contra base descartable, producción intacta.**
+  - `.gitattributes` fuerza LF en `*.sh` (CRLF rompe bash en el servidor)
+  - Resguardos: backup Desktop `202606_01062026` + tag `pre-staging-2026-06-01`
+  - Plan completo: `docs/internal/plan-implementacion-staging.md`. **Pendiente:** Fase B (DB+config staging), Fase C (Nginx+SSL), Fase D (simulacro)
+
 - ✅ **B-2 — Política de contraseñas** (sesión 2026-06-01):
   - Helper `utils/passwordPolicy.js` (Opción A): mín. 8 chars + al menos una letra y un número + no estar en lista de comunes + no ser igual al email
   - Aplicado en los 4 puntos backend: registro, reset, change-password (`auth.js`) y cambio del portal (`usuarios.js`)
