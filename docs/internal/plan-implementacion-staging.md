@@ -170,7 +170,7 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 |---|---|---|---|
 | A | Estructura de backups + scripts operativos (5.1, 5.2, 5.8, 5.9) | Bajo | ✅ **Completada (01/06)** |
 | B | DB y configuración de staging (5.3–5.5) | Medio | ✅ **Completada (01/06)** |
-| C | Nginx + SSL + protección de acceso (5.6, 5.7) | Medio | Pendiente |
+| C | Nginx + SSL + protección de acceso (5.6, 5.7) | Medio | 🟡 **Preparada — bloqueada en DNS** |
 | D | Simulacro de rollback (ST-3) | Bajo (medio día) | Pendiente |
 
 **Tiempo estimado restante:** ~medio día (Fase C + D).
@@ -204,7 +204,23 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 
 ## 10. Próximo paso
 
-> **Fases A y B completadas y verificadas (01/06/2026).** Backups+restore operativos; staging corriendo aislado en puerto 3444 con su propia base.
-> Siguiente: **Fase C** — exponer staging públicamente (`staging-api.procuradortool.com` + SSL certbot + acceso restringido por usuario/contraseña) y **Fase D** (simulacro de rollback).
+> **Fases A y B completadas (01/06/2026).** Backups+restore operativos; staging corriendo aislado en puerto 3444.
+> **Fase C preparada pero BLOQUEADA en DNS** (ver abajo).
 
-Continuamos con la metodología habitual: cada fase con su verificación, sin avanzar a la siguiente hasta validar la anterior.
+### Nota Fase C (preparada — bloqueada en DNS)
+Preparado sin tocar el Nginx en ejecución (cero riesgo a producción):
+- `htpasswd` `/etc/nginx/.htpasswd-staging` creado (usuario `equipo`).
+- Config Nginx `ops/nginx-staging.conf` → desplegada en `/etc/nginx/sites-available/staging-procurador` **sin habilitar** (no está en `sites-enabled`). `nginx -t` pasa, producción intacta.
+
+**🔴 BLOQUEANTE — acción del usuario:** crear el registro DNS en Cloudflare:
+- Tipo **A** · Nombre **staging-api** · Contenido **142.93.64.94** · Proxy **"DNS only"** (nube gris, igual que `api`).
+
+**Finish tras DNS (lo ejecuto yo, ~5 min):**
+1. `ln -s /etc/nginx/sites-available/staging-procurador /etc/nginx/sites-enabled/`
+2. `nginx -t` (debe pasar)
+3. `certbot --nginx -d staging-api.procuradortool.com` (emite cert + bloque HTTPS)
+4. Agregar `auth_basic` al bloque HTTPS (tras certbot, para no romper el challenge ACME)
+5. `nginx -t && systemctl reload nginx`
+6. Verificar: `https://staging-api.procuradortool.com` pide usuario/contraseña y proxea a staging; producción intacta.
+
+Siguiente tras Fase C: **Fase D** (simulacro de rollback).
