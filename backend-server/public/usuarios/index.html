@@ -36,7 +36,11 @@
             </div>
             <div class="form-group">
                 <label for="login-password">Contraseña</label>
-                <input type="password" id="login-password" name="password" placeholder="••••••••" required autocomplete="current-password">
+                <div class="pw-wrap">
+                    <input type="password" id="login-password" name="password" placeholder="••••••••" required autocomplete="current-password">
+                    <button type="button" class="pw-toggle" aria-label="Mostrar contraseña"
+                            onclick="(function(b){var i=document.getElementById('login-password');var s=i.type==='password';i.type=s?'text':'password';b.textContent=s?'🙈':'👁';b.setAttribute('aria-label',s?'Ocultar contraseña':'Mostrar contraseña');})(this)">👁</button>
+                </div>
             </div>
             <div class="remember-row">
                 <label class="remember-check">

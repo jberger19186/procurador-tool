@@ -66,6 +66,12 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     box-shadow: 0 4px 14px rgba(217,119,6,.3);
 }
 
+/* Toggle mostrar/ocultar contraseña */
+.pw-wrap { position: relative; display: flex; align-items: center; }
+.pw-wrap input { width: 100%; padding-right: 44px; }
+.pw-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 17px; line-height: 1; padding: 4px; opacity: .65; }
+.pw-toggle:hover { opacity: 1; }
+
 .login-box .brand-text { display: flex; flex-direction: column; line-height: 1.1; text-align: left; }
 .login-box .brand-name { font-size: 18px; font-weight: 700; color: #1a1a1a; letter-spacing: -.02em; }
 .login-box .brand-name b { color: #d97706; }

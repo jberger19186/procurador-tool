@@ -9,7 +9,13 @@
 <body>
   <div class="page-wrapper">
     <header class="header">
-      <div class="logo">⚖️ Procurador SCW</div>
+      <div class="brand-row">
+        <img src="/assets/brand-icon.png" alt="" class="brand-logo">
+        <div class="brand-text">
+          <span class="brand-name">Procurador <b>TOOL</b></span>
+          <span class="brand-sub">Procurador SCW</span>
+        </div>
+      </div>
       <p class="tagline">Automatización judicial para estudios jurídicos</p>
     </header>
 
@@ -50,6 +56,7 @@
             <div class="field">
               <label for="confirmPassword">Confirmar contraseña *</label>
               <input id="confirmPassword" type="password" placeholder="Repetí la contraseña" autocomplete="new-password" />
+              <span class="pw-match" id="pw-match" style="display:none"></span>
               <span class="err" id="err-confirmPassword"></span>
             </div>
           </div>
@@ -181,13 +188,17 @@
         <div class="toc-row">
           <input id="toc" type="checkbox" />
           <label for="toc">
-            Acepto los <a href="https://api.procuradortool.com/terminos/" target="_blank">Términos y Condiciones</a> y la
-            <a href="https://api.procuradortool.com/privacidad/" target="_blank">Política de Privacidad</a> de Procurador SCW. *
+            Acepto los <a href="/terminos/">Términos y Condiciones</a> y la
+            <a href="/privacidad/">Política de Privacidad</a> de Procurador SCW. *
           </label>
         </div>
         <span class="err" id="err-toc"></span>
 
         <!-- BOTÓN -->
+        <div id="missingSummary" class="missing-summary" style="display:none">
+          <strong>Faltan completar estos campos:</strong>
+          <ul id="missingList"></ul>
+        </div>
         <div id="formError" class="form-error" style="display:none"></div>
         <button id="submitBtn" type="submit" class="btn-primary">
           <span id="btnText">Crear mi cuenta</span>
@@ -208,7 +219,7 @@
     </div>
 
     <footer class="footer">
-      ¿Ya tenés cuenta? <a href="/dashboard">Iniciar sesión</a>
+      ¿Ya tenés cuenta? <a href="/usuarios/">Iniciar sesión</a>
     </footer>
   </div>
 

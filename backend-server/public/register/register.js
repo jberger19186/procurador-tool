@@ -25,6 +25,55 @@ document.getElementById('cuit').addEventListener('input', function () {
     this.value = v;
 });
 
+// ─── Persistencia del borrador (conservar datos al ir a T&C / Privacidad) ──────
+// Guardamos los campos NO sensibles en sessionStorage. Las contraseñas NO se
+// persisten por seguridad; el navegador suele restaurarlas vía bfcache al volver.
+const DRAFT_FIELDS = ['nombre','apellido','email','cuit','calle','numero','piso','depto','localidad','provincia'];
+
+function saveDraft() {
+    try {
+        const draft = {};
+        DRAFT_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) draft[id] = el.value; });
+        draft.plan = selectedPlan;
+        draft.toc  = document.getElementById('toc')?.checked || false;
+        sessionStorage.setItem('reg_draft', JSON.stringify(draft));
+    } catch { /* sessionStorage no disponible: ignorar */ }
+}
+
+function restoreDraft() {
+    try {
+        const raw = sessionStorage.getItem('reg_draft');
+        if (!raw) return;
+        const draft = JSON.parse(raw);
+        DRAFT_FIELDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && draft[id] != null) el.value = draft[id];
+        });
+        if (draft.toc) { const t = document.getElementById('toc'); if (t) t.checked = true; }
+        if (draft.plan) selectPlan(draft.plan);   // se re-aplica cuando las cards ya están renderizadas
+    } catch { /* ignorar */ }
+}
+
+function clearDraft() { try { sessionStorage.removeItem('reg_draft'); } catch {} }
+
+// Guardar continuamente mientras el usuario completa el formulario
+document.getElementById('registerForm').addEventListener('input',  saveDraft);
+document.getElementById('registerForm').addEventListener('change', saveDraft);
+
+// ─── Indicador en vivo de coincidencia de contraseñas ─────────────────────────
+function updatePwMatch() {
+    const pwd  = document.getElementById('password').value;
+    const conf = document.getElementById('confirmPassword').value;
+    const el   = document.getElementById('pw-match');
+    if (!el) return;
+    if (!conf) { el.style.display = 'none'; el.textContent = ''; el.className = 'pw-match'; return; }
+    el.style.display = 'block';
+    if (pwd === conf) { el.textContent = '✓ Las contraseñas coinciden'; el.className = 'pw-match ok'; }
+    else              { el.textContent = '✗ Las contraseñas no coinciden'; el.className = 'pw-match bad'; }
+}
+document.getElementById('password').addEventListener('input', updatePwMatch);
+document.getElementById('confirmPassword').addEventListener('input', updatePwMatch);
+
 // ─── Cargar planes disponibles ────────────────────────────────────────────────
 async function loadPlans() {
     try {
@@ -121,45 +170,61 @@ function clearErr(id) { setErr(id, ''); }
 
 function validateForm() {
     let valid = true;
+    const missing = [];   // resumen de campos faltantes/ inválidos
 
     const fields = ['nombre','apellido','email','password','confirmPassword','cuit','calle','numero','localidad','provincia'];
     fields.forEach(id => clearErr(id));
     clearErr('plan'); clearErr('toc');
 
     const get = id => document.getElementById(id)?.value.trim() || '';
+    // Marca error en el campo, suma al resumen y baja la bandera de validez
+    const fail = (id, fieldErr, summaryLabel) => { setErr(id, fieldErr); missing.push(summaryLabel); valid = false; };
 
-    if (!get('nombre')) { setErr('nombre', 'Requerido'); valid = false; }
-    if (!get('apellido')) { setErr('apellido', 'Requerido'); valid = false; }
+    if (!get('nombre'))   fail('nombre', 'Requerido', 'Nombre');
+    if (!get('apellido')) fail('apellido', 'Requerido', 'Apellido');
 
     const email = get('email');
-    if (!email) { setErr('email', 'Requerido'); valid = false; }
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setErr('email', 'Email inválido'); valid = false; }
+    if (!email) fail('email', 'Requerido', 'Email');
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('email', 'Email inválido', 'Email (formato inválido)');
 
     const pwd = get('password');
-    if (!pwd) { setErr('password', 'Requerido'); valid = false; }
-    else if (pwd.length < 8) { setErr('password', 'La contraseña debe tener al menos 8 caracteres.'); valid = false; }
-    else if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) { setErr('password', 'Debe incluir al menos una letra y un número.'); valid = false; }
-    else if (email && pwd.toLowerCase() === email.toLowerCase()) { setErr('password', 'No puede ser igual a tu email.'); valid = false; }
+    if (!pwd) fail('password', 'Requerido', 'Contraseña');
+    else if (pwd.length < 8) fail('password', 'La contraseña debe tener al menos 8 caracteres.', 'Contraseña (mínimo 8 caracteres)');
+    else if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) fail('password', 'Debe incluir al menos una letra y un número.', 'Contraseña (una letra y un número)');
+    else if (email && pwd.toLowerCase() === email.toLowerCase()) fail('password', 'No puede ser igual a tu email.', 'Contraseña (no puede ser igual al email)');
 
-    if (get('confirmPassword') !== pwd) { setErr('confirmPassword', 'Las contraseñas no coinciden'); valid = false; }
+    if (get('confirmPassword') !== pwd) fail('confirmPassword', 'Las contraseñas no coinciden', 'Confirmar contraseña (no coincide)');
 
     const cuit = get('cuit');
-    if (!cuit) { setErr('cuit', 'Requerido'); valid = false; }
-    else if (!validarCuit(cuit)) { setErr('cuit', 'CUIT/CUIL inválido'); valid = false; }
+    if (!cuit) fail('cuit', 'Requerido', 'CUIT / CUIL');
+    else if (!validarCuit(cuit)) fail('cuit', 'CUIT/CUIL inválido', 'CUIT / CUIL (inválido)');
 
-    if (!get('calle'))    { setErr('calle', 'Requerido'); valid = false; }
-    if (!get('numero'))   { setErr('numero', 'Requerido'); valid = false; }
-    if (!get('localidad')){ setErr('localidad', 'Requerido'); valid = false; }
-    if (!get('provincia')){ setErr('provincia', 'Seleccioná una provincia'); valid = false; }
+    if (!get('calle'))     fail('calle', 'Requerido', 'Calle');
+    if (!get('numero'))    fail('numero', 'Requerido', 'Numeración');
+    if (!get('localidad')) fail('localidad', 'Requerido', 'Localidad');
+    if (!get('provincia')) fail('provincia', 'Seleccioná una provincia', 'Provincia');
 
-    if (!selectedPlan) { setErr('plan', 'Seleccioná un plan'); valid = false; }
+    if (!selectedPlan) { setErr('plan', 'Seleccioná un plan'); missing.push('Seleccionar un plan'); valid = false; }
 
     if (!document.getElementById('toc').checked) {
         setErr('toc', 'Debés aceptar los Términos y Condiciones');
+        missing.push('Aceptar los Términos y Condiciones');
         valid = false;
     }
 
+    renderMissingSummary(missing);
     return valid;
+}
+
+// Resumen visual de campos faltantes (arriba del botón)
+function renderMissingSummary(missing) {
+    const box  = document.getElementById('missingSummary');
+    const list = document.getElementById('missingList');
+    if (!box || !list) return;
+    if (!missing.length) { box.style.display = 'none'; list.innerHTML = ''; return; }
+    list.innerHTML = missing.map(m => `<li>${m}</li>`).join('');
+    box.style.display = 'block';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ─── Submit ───────────────────────────────────────────────────────────────────
@@ -203,6 +268,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         const data = await res.json();
 
         if (res.ok && data.success) {
+            clearDraft();   // registro exitoso: descartar borrador guardado
             document.getElementById('view-form').style.display = 'none';
             document.getElementById('view-success').style.display = 'block';
             document.getElementById('successMsg').textContent =
@@ -249,5 +315,6 @@ function showFormError(msg) {
             return;
         }
     } catch { /* si falla la consulta, muestra el formulario igual */ }
-    loadPlans();
+    await loadPlans();
+    restoreDraft();   // restaura datos si el usuario fue a T&C/Privacidad y volvió
 })();
