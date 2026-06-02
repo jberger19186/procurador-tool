@@ -1098,10 +1098,12 @@ router.get('/stats/overview', authenticateAdmin, async (req, res) => {
             ORDER BY user_count DESC
         `);
 
-        // Usuarios pendientes de activación
+        // Usuarios pendientes de activación (email verificado, esperando que el admin los active).
+        // Antes contaba 'pending_email' (no verificados) y 'pending_payment' (estado inexistente),
+        // por lo que un usuario que verificaba su email dejaba de contarse → la card mostraba 0.
         const pendingResult = await db.query(`
             SELECT COUNT(*) as total FROM users
-            WHERE registration_status IN ('pending_email','pending_payment')
+            WHERE registration_status = 'pending_activation'
         `);
 
         res.json({
