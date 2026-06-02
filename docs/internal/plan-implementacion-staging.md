@@ -169,16 +169,23 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 | Fase | Tarea | Esfuerzo | Estado |
 |---|---|---|---|
 | A | Estructura de backups + scripts operativos (5.1, 5.2, 5.8, 5.9) | Bajo | ✅ **Completada (01/06)** |
-| B | DB y configuración de staging (5.3–5.5) | Medio | Pendiente |
+| B | DB y configuración de staging (5.3–5.5) | Medio | ✅ **Completada (01/06)** |
 | C | Nginx + SSL + protección de acceso (5.6, 5.7) | Medio | Pendiente |
 | D | Simulacro de rollback (ST-3) | Bajo (medio día) | Pendiente |
 
-**Tiempo estimado restante:** ~1 jornada.
+**Tiempo estimado restante:** ~medio día (Fase C + D).
 
 ### Nota Fase A (completada)
 - El **backup diario ya existía** y es offsite (DO Spaces, 30 días) — mejor que lo planeado. No se duplicó.
 - Se agregaron `ops/backup-now.sh` (pre-deploy on-demand) y `ops/restore-db.sh` (restauración con red de seguridad), ambos **probados** (backup en prod real; restore E2E contra base descartable sin tocar producción).
 - Carpeta `/var/backups/procurador/predeploy/` para backups pre-deploy y pre-restore.
+
+### Nota Fase B (completada)
+- Base `procurador_db_staging` creada desde backup de producción (26 tablas).
+- Proceso PM2 `procurador-staging` en **modo fork, puerto 3444** (HTTP 3001), cargando `.env.staging` por preload (`-r dotenv/config`). Sin secretos en `ecosystem.config.js`.
+- `.env.staging` (server-only): overrides de DB/puertos/NODE_ENV + **MercadoPago fijado en sandbox** (no cambia aunque prod pase a MP real en B3).
+- **Aislamiento probado:** una escritura en staging (users 3→4) no afectó producción (siguió en 3). `pm2 save` para persistir ante reinicios.
+- **Pendiente Fase C:** staging hoy solo es accesible internamente (`localhost:3444` en el servidor). Falta el subdominio público `staging-api.procuradortool.com` + SSL + acceso restringido.
 
 ---
 
@@ -197,7 +204,7 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 
 ## 10. Próximo paso
 
-> **Fase A completada y verificada (01/06/2026).** Backups pre-deploy + restauración operativos y probados.
-> Siguiente: **Fase B** — crear la base `procurador_db_staging` y el `.env.staging` (puerto 3444, MercadoPago sandbox).
+> **Fases A y B completadas y verificadas (01/06/2026).** Backups+restore operativos; staging corriendo aislado en puerto 3444 con su propia base.
+> Siguiente: **Fase C** — exponer staging públicamente (`staging-api.procuradortool.com` + SSL certbot + acceso restringido por usuario/contraseña) y **Fase D** (simulacro de rollback).
 
 Continuamos con la metodología habitual: cada fase con su verificación, sin avanzar a la siguiente hasta validar la anterior.

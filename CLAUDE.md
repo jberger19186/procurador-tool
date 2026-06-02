@@ -12,6 +12,13 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
+- ✅ **Staging Fase B — proceso aislado en puerto 3444** (sesión 2026-06-01):
+  - Base `procurador_db_staging` creada desde backup de prod (26 tablas)
+  - PM2 `procurador-staging` (modo **fork**, puerto 3444 / HTTP 3001) cargando `.env.staging` por preload `-r dotenv/config`. Sin secretos en `ecosystem.config.js`
+  - `.env.staging` (server-only, gitignored): overrides DB/puertos/NODE_ENV + **MercadoPago fijado en sandbox** (no cambia aunque prod pase a MP real en B3)
+  - **Aislamiento probado:** escritura en staging (users 3→4) no afectó prod (siguió en 3). `pm2 save` persiste ambos procesos
+  - Pendiente: Fase C (subdominio público `staging-api` + SSL + acceso restringido), Fase D (simulacro)
+
 - ✅ **Staging Fase A — backups pre-deploy y restauración** (sesión 2026-06-01):
   - **Hallazgo:** el backup diario ya existía (`backend-server/scripts/backup-db.js`, cron 03:00 → sube a DO Spaces, retención 30 días + copias locales en `/var/backups/procurador/`). Mejor que lo planeado (offsite). No se duplicó.
   - **Nuevo `ops/backup-now.sh [prod|staging]`:** backup local on-demand pre-deploy, con guarda de integridad + rotación (últimos 10). Va a `/var/backups/procurador/predeploy/`. Probado en producción.
