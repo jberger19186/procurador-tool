@@ -23,7 +23,9 @@ module.exports = {
             // Sin secretos acá — solo la ruta al archivo de entorno de staging.
             name: 'procurador-staging',
             script: 'server.js',
-            cwd: '/var/www/procurador/backend-server',
+            // Directorio de código PROPIO de staging (aislado de producción):
+            // permite probar cambios de código sin afectar /var/www/procurador.
+            cwd: '/var/www/procurador-staging/backend-server',
             node_args: '-r dotenv/config',
             exec_mode: 'fork',
             instances: 1,
@@ -31,7 +33,7 @@ module.exports = {
             watch: false,
             max_memory_restart: '300M',
             env: {
-                DOTENV_CONFIG_PATH: '/var/www/procurador/backend-server/.env.staging'
+                DOTENV_CONFIG_PATH: '/var/www/procurador-staging/backend-server/.env.staging'
             },
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             error_file: '/var/log/procurador/staging-error.log',
