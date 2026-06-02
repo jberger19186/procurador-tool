@@ -76,7 +76,11 @@
 | `PRO` | electron | TBD | 200 proc · 50 inf · 10 partes | No |
 | `ENTERPRISE` | electron | TBD | Ilimitado · 50 partes | No |
 
-**Trial:** 20 ejecuciones, 365 días, status `pending_activation`. Al agotar → `rejected` vía cron.
+**Trial (qué incluye al verificar el email):**
+- **App Electron:** 20 ejecuciones (`usage_limit=20`, contador `usage_count`). Cada ejecución suma +1. Gateado por `checkLicense`: `suspended` + `pending_activation` + `usage_count < usage_limit`. Al agotar → `rejected` vía cron.
+- **Extensión Chrome:** habilitada durante el trial (desde 02/06/2026) con los flujos del plan (COMBO_PROMO y EXTENSION_PROMO traen los 5). **No consume** los 20 usos — se rige por los flujos del plan. Gateada en `extension-login` y `/auth/refresh`: `active` OR (`suspended` + `pending_activation`).
+- Estados bloqueados para la extensión (siguen sin acceso): `pending_email`, `rejected`, `suspended_admin`, `suspended_plan_expired`, `cancelled`, y `suspended` por pago fallido (sin `pending_activation`).
+- Tras la activación/pago (status `active`), el flujo normal continúa igual.
 
 ---
 
