@@ -12,7 +12,7 @@ flowchart TD
     A([🌐 Usuario visita<br/>procuradortool.com]) --> B[📝 Completa formulario<br/>de registro]
     B --> C[📧 Recibe email<br/>de verificación]
     C --> D{Verifica<br/>email?}
-    D -- Sí --> E[⏳ Cuenta en espera<br/>de activación<br/><b>+ 20 usos de prueba</b>]
+    D -- Sí --> E[⏳ Cuenta en espera<br/>de activación<br/><b>+ 20 usos de prueba (app)</b><br/>+ extensión habilitada]
     D -- No --> X1[❌ Cuenta sin verificar<br/>no puede operar]
 
     E --> F{Admin<br/>aprueba?}
@@ -88,7 +88,7 @@ flowchart LR
 | Estado | Significado | Acceso al servicio |
 |---|---|:---:|
 | 📧 **Pendiente verificación** | Usuario se registró pero no clickeó el email | ❌ |
-| ⏳ **Pendiente activación** | Email verificado, 20 usos de prueba activos | ✅ (limitado) |
+| ⏳ **Pendiente activación** | Email verificado · 20 usos de prueba (app Electron) + extensión de Chrome habilitada | ✅ (limitado) |
 | ✅ **Activa** | Suscripción al día, cobro automático funcionando | ✅ |
 | 📅 **Cancelación programada** | El usuario canceló, sigue con acceso hasta fin del período | ✅ (hasta fecha) |
 | ⏰ **En período de gracia** | Pago rechazado, MP reintenta 3 días | ✅ |
@@ -103,7 +103,7 @@ flowchart LR
 ## 💡 Puntos clave para presentar
 
 1. **Activación manual por admin** — control humano antes de habilitar la cuenta (filtro anti-fraude / cumplimiento)
-2. **20 usos de prueba** antes del primer cobro — el usuario evalúa el producto antes de pagar
+2. **20 usos de prueba** (app Electron) + **extensión de Chrome habilitada** antes del primer cobro — el usuario evalúa el producto completo antes de pagar
 3. **Bonus de bienvenida** — +20 usos extra el primer mes pago, mejora retención inicial
 4. **Cobro automático mensual** vía MercadoPago — sin intervención manual
 5. **Gracia de 3 días** ante pago rechazado — evita perder clientes por errores transitorios
@@ -127,3 +127,18 @@ Pegar el código Mermaid en un bloque de código tipo `mermaid` y se renderiza a
 
 **Opción 4 — VS Code:**
 Instalar la extensión "Markdown Preview Mermaid Support" → preview del .md → captura.
+
+---
+
+## 📄 Generar PDF (con los dos diagramas + tabla)
+
+Hay un generador listo que renderiza los diagramas Mermaid y produce
+`docs/diagrama-flujo-usuario.pdf` (A4 horizontal, una sección por página):
+
+```powershell
+node docs/gen-diagrama-pdf.js
+```
+
+- Usa el Chrome del sistema vía puppeteer (de `electron-app`).
+- La primera vez descarga `_mermaid.min.js` automáticamente (queda cacheado, está en `.gitignore`).
+- Si editás los diagramas de arriba, actualizá también el código embebido en `gen-diagrama-pdf.js` y volvé a correrlo.

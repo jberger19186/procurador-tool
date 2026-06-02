@@ -954,7 +954,9 @@ BASIC            → app: 50 proc · 10 inf · 3 partes activas
 PRO              → app: 200 proc · 50 inf · 10 partes activas
 ENTERPRISE       → app: ilimitado · 50 partes activas
 ```
-Nuevos usuarios reciben 20 ejecuciones de prueba por 365 días (estado "suspended" hasta activación manual por admin).
+Nuevos usuarios reciben 20 ejecuciones de prueba por 365 días para la **app Electron** (estado "suspended" + `registration_status='pending_activation'` hasta activación manual por admin).
+
+**Extensión durante el trial (desde 2026-06-02):** apenas el usuario verifica su email, la **extensión de Chrome** queda habilitada durante el período de prueba con los flujos de su plan (COMBO_PROMO y EXTENSION_PROMO traen los 5). La extensión **no consume** los 20 usos (esos son solo de la app). Gateado en `extension-login` y `/auth/refresh` (`routes/auth.js`): permiten `status='active'` OR (`status='suspended'` AND `registration_status='pending_activation'`). Estados bloqueados (pago fallido, rechazado, cancelado, suspendido por admin/plan) siguen sin acceso a la extensión.
 
 ### Arquitectura de usage_limit / usage_count
 

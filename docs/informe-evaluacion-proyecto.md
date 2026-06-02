@@ -61,7 +61,7 @@ El proyecto se organizó en 5 fases. Este es el estado real de cada una:
 ### ✅ El recorrido completo del usuario
 Desde que una persona se registra hasta que opera mes a mes, todo el circuito está implementado y probado:
 - Registro con verificación por email
-- Período de prueba de 20 usos gratuitos
+- Período de prueba de 20 usos gratuitos en la app + extensión de Chrome habilitada
 - Activación con control administrativo (filtro de seguridad)
 - Configuración del medio de pago
 - Cobro automático mensual

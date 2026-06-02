@@ -77,3 +77,7 @@ tests/**/__pycache__/
 *.tmp
 *.temp
 .cache/
+
+# ─── Generador de diagramas (vendored mermaid + temporales) ──
+docs/_mermaid.min.js
+docs/_diagrama_tmp.html

@@ -54,7 +54,9 @@ Al registrarte, recibís un email de verificación en la casilla con la que te r
 
 ### Período de prueba
 
-Los nuevos usuarios reciben **20 ejecuciones de prueba** válidas por 365 días. Durante este período podés usar la app completa sin restricciones de funcionalidad.
+Los nuevos usuarios reciben **20 ejecuciones de prueba** válidas por 365 días para la **app de Electron** (procuración, informes, monitor), sin restricciones de funcionalidad.
+
+Además, apenas verificás tu email, **la extensión de Chrome queda habilitada durante el período de prueba** con los flujos de tu plan (COMBO_PROMO y EXTENSION_PROMO incluyen los 5 flujos). El uso de la extensión **no descuenta** los 20 usos de prueba: esos 20 son exclusivos de la app de Electron.
 
 El contador de uso aparece en:
 - **App Electron → Mi Cuenta**: card amarilla con contador `X / 20 usos utilizados` y barra de progreso
