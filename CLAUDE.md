@@ -12,6 +12,14 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
+- ✅ **Staging Fase C — exposición pública con SSL + acceso restringido** (sesión 2026-06-01):
+  - DNS `staging-api.procuradortool.com` → 142.93.64.94 (Cloudflare, DNS only)
+  - Nginx: bloque `staging-procurador` proxea a `:3444`, SSL via certbot (vence 2026-08-31, auto-renovación), HTTP→HTTPS
+  - **Basic auth** (usuario `equipo`, `/etc/nginx/.htpasswd-staging`) — solo el equipo accede
+  - Verificado: sin auth→401, con auth→200, HTTP→301, **producción intacta**
+  - Acceso: **https://staging-api.procuradortool.com** · config en `ops/nginx-staging.conf`
+  - Pendiente: Fase D (simulacro de rollback)
+
 - ✅ **Staging Fase B — proceso aislado en puerto 3444** (sesión 2026-06-01):
   - Base `procurador_db_staging` creada desde backup de prod (26 tablas)
   - PM2 `procurador-staging` (modo **fork**, puerto 3444 / HTTP 3001) cargando `.env.staging` por preload `-r dotenv/config`. Sin secretos en `ecosystem.config.js`

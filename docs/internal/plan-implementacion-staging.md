@@ -170,7 +170,7 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 |---|---|---|---|
 | A | Estructura de backups + scripts operativos (5.1, 5.2, 5.8, 5.9) | Bajo | ✅ **Completada (01/06)** |
 | B | DB y configuración de staging (5.3–5.5) | Medio | ✅ **Completada (01/06)** |
-| C | Nginx + SSL + protección de acceso (5.6, 5.7) | Medio | 🟡 **Preparada — bloqueada en DNS** |
+| C | Nginx + SSL + protección de acceso (5.6, 5.7) | Medio | ✅ **Completada (01/06)** |
 | D | Simulacro de rollback (ST-3) | Bajo (medio día) | Pendiente |
 
 **Tiempo estimado restante:** ~medio día (Fase C + D).
@@ -204,23 +204,15 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 
 ## 10. Próximo paso
 
-> **Fases A y B completadas (01/06/2026).** Backups+restore operativos; staging corriendo aislado en puerto 3444.
-> **Fase C preparada pero BLOQUEADA en DNS** (ver abajo).
+> **Fases A, B y C completadas (01/06/2026).** Staging accesible públicamente, protegido y aislado.
+> Siguiente y último: **Fase D** (simulacro de rollback).
 
-### Nota Fase C (preparada — bloqueada en DNS)
-Preparado sin tocar el Nginx en ejecución (cero riesgo a producción):
-- `htpasswd` `/etc/nginx/.htpasswd-staging` creado (usuario `equipo`).
-- Config Nginx `ops/nginx-staging.conf` → desplegada en `/etc/nginx/sites-available/staging-procurador` **sin habilitar** (no está en `sites-enabled`). `nginx -t` pasa, producción intacta.
+### Nota Fase C (completada)
+- DNS `staging-api.procuradortool.com` → 142.93.64.94 (Cloudflare, DNS only). Creado por el usuario.
+- Bloque Nginx habilitado (`ops/nginx-staging.conf`), SSL emitido por certbot (vence 2026-08-31, renovación automática), HTTP→HTTPS 301.
+- **Protección de acceso (basic auth):** usuario `equipo`, archivo `/etc/nginx/.htpasswd-staging`.
+- **Verificado:** sin credenciales → 401 · con credenciales → 200 · HTTP→HTTPS → 301 · producción intacta (200 sin auth).
 
-**🔴 BLOQUEANTE — acción del usuario:** crear el registro DNS en Cloudflare:
-- Tipo **A** · Nombre **staging-api** · Contenido **142.93.64.94** · Proxy **"DNS only"** (nube gris, igual que `api`).
-
-**Finish tras DNS (lo ejecuto yo, ~5 min):**
-1. `ln -s /etc/nginx/sites-available/staging-procurador /etc/nginx/sites-enabled/`
-2. `nginx -t` (debe pasar)
-3. `certbot --nginx -d staging-api.procuradortool.com` (emite cert + bloque HTTPS)
-4. Agregar `auth_basic` al bloque HTTPS (tras certbot, para no romper el challenge ACME)
-5. `nginx -t && systemctl reload nginx`
-6. Verificar: `https://staging-api.procuradortool.com` pide usuario/contraseña y proxea a staging; producción intacta.
-
-Siguiente tras Fase C: **Fase D** (simulacro de rollback).
+### Acceso a staging
+- URL: **https://staging-api.procuradortool.com** (usuario/contraseña — credenciales con el equipo).
+- Internamente en el servidor: `https://localhost:3444`.
