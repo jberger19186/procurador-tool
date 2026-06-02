@@ -1,6 +1,6 @@
 # Pendientes Prioritarios — Procurador SCW
 
-> **Última actualización:** 30 de mayo de 2026
+> **Última actualización:** 02 de junio de 2026
 > Resumen ejecutivo de lo más importante. La lista completa y detallada está en `CLAUDE.md → Pendientes`.
 
 ---
@@ -47,7 +47,7 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 | ~~ST-3~~ | ~~Simulacro de rollback~~ | ✅ **Resuelto** (01/06) | Drills `ops/drill-rollback.sh` (datos, 3s) y `drill-code-rollback.sh` (código, 5s). Prod intacta. Reutilizables |
 | P-1 | **Escaneo automático de dependencias** | 🟡 Pendiente | `npm audit` periódico, idealmente en CI |
 
-> ✅ **Staging y rollback completos.** Esto desbloquea B-5 (CSP se puede probar en staging con "modo reporte" sin riesgo).
+> ✅ **Staging y rollback completos y probados.** Entorno gemelo operativo. Estrenado con B-5 (CSP) que recorrió el flujo staging→producción.
 
 ---
 
@@ -68,20 +68,20 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 
 ```
 PRODUCTO          ████████████████████ 100%  Construido y publicado
-COBRANZA          ████████████████░░░░  90%  Validada en sandbox, falta MercadoPago real
-SEGURIDAD         ████████████████████ 100%  M-1/M-2 + B-1..B-8 resueltos · solo queda auditoría externa (opcional, pre-masivo)
-INFRA. SEGURA     ████████░░░░░░░░░░░░  40%  Falta staging + rollback operativo
-LISTO PARA BETA   ████████████████░░░░  ~90% Faltan los 3 imprescindibles del Bloque 1
+COBRANZA          ████████████████░░░░  90%  Validada en sandbox, falta MercadoPago real (Bloque 1)
+SEGURIDAD         ████████████████████ 100%  M-1/M-2 + B-1..B-8 resueltos · solo queda auditoría externa (opcional)
+INFRA. SEGURA     ███████████████████░  95%  Staging + rollback completos y probados · resta solo npm audit (P-1)
+LISTO PARA BETA   ██████████████████░░  ~95% Faltan los 3 imprescindibles del Bloque 1
 ```
 
 ---
 
 ## ✅ Recomendación de secuencia
 
-1. ~~M-1, M-2, B-1, B-2, B-3, B-4, B-6, B-8 + B-7~~ ✅ **resueltos/verificados** (01/06)
-2. **Esta semana:** Bloque 1 completo (MercadoPago real + verificar SSL + iniciar trámite de firma)
+1. ~~Toda la seguridad (M-1, M-2, B-1..B-8) + staging y rollback (ST-1/2/3)~~ ✅ **resueltos** (01/06)
+2. **Ahora — Bloque 1 (lo único imprescindible para la Beta):** activar MercadoPago real + verificar/renovar SSL + iniciar trámite de firma del `.exe`
 3. **Arrancar la Beta** con 5-15 usuarios de confianza
-4. **Durante la Beta:** montar staging (ST-1/2/3) + activar `npm audit`
-5. **Antes del lanzamiento público:** B-5 (CSP, requiere staging) + auditoría externa (SEC-1)
+4. **Durante la Beta:** activar `npm audit` (P-1)
+5. **Antes del lanzamiento masivo:** auditoría de seguridad externa (SEC-1)
 
-> **Conclusión:** la Beta puede arrancar en **días**, no meses. El núcleo del producto y del cobro está terminado y probado.
+> **Conclusión:** la Beta puede arrancar en **días**. Lo que falta son **3 tareas externas/de gestión** (Bloque 1), no desarrollo. La seguridad y la infraestructura de despliegue seguro están completas.
