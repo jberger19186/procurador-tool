@@ -630,13 +630,22 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
             return res.status(403).json({ error: blockedExtStatuses[user.registration_status] });
         }
 
-        // Verificar suscripción activa y obtener flujos habilitados del plan
+        // Verificar suscripción y obtener flujos habilitados del plan.
+        // Acceso permitido si: (a) suscripción activa, o (b) período de prueba
+        // (email verificado → pending_activation), para que el usuario pueda
+        // probar la extensión durante el trial. Los pagos fallidos (suspended sin
+        // pending_activation) y demás estados bloqueados ya se filtraron arriba.
         const subResult = await db.query(`
             SELECT s.plan, s.status, s.expires_at,
                    COALESCE(p.extension_flows, '[]'::jsonb) AS extension_flows
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
+            JOIN users u2 ON u2.id = s.user_id
+            WHERE s.user_id = $1 AND s.expires_at > NOW()
+              AND (
+                s.status = 'active'
+                OR (s.status = 'suspended' AND u2.registration_status = 'pending_activation')
+              )
         `, [user.id]);
 
         if (subResult.rows.length === 0) {
@@ -763,9 +772,9 @@ router.post('/refresh', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     try {
-        // Verificar que el usuario aún existe y tiene suscripción activa
+        // Verificar que el usuario aún existe y tiene suscripción activa o en prueba
         const userResult = await db.query(`
-            SELECT u.id, u.email, u.role, s.status, s.expires_at
+            SELECT u.id, u.email, u.role, u.registration_status, s.status, s.expires_at
             FROM users u
             LEFT JOIN subscriptions s ON u.id = s.user_id
             WHERE u.id = $1
@@ -777,8 +786,12 @@ router.post('/refresh', authenticateToken, async (req, res) => {
 
         const user = userResult.rows[0];
 
-        // Verificar suscripción activa
-        if (!user.status || user.status !== 'active') {
+        // Permitir renovar el token si la suscripción está activa, o si está en
+        // período de prueba (suspended + pending_activation). Así la extensión/app
+        // en trial no se cae al expirar el token.
+        const isActiveSub = user.status === 'active';
+        const isTrialSub  = user.status === 'suspended' && user.registration_status === 'pending_activation';
+        if (!isActiveSub && !isTrialSub) {
             return res.status(403).json({
                 error: 'Suscripción no activa',
                 action: 'subscribe'
