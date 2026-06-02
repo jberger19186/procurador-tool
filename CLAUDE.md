@@ -12,6 +12,12 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
+- ✅ **B-5 — CSP activada (primer cambio probado en staging→prod)** (sesión 2026-06-01):
+  - Content Security Policy en Helmet (`server.js`): defensa en profundidad contra XSS
+  - `'unsafe-inline'` + `script-src-attr 'unsafe-inline'` por los onclick/estilos inline; restringe object-src, base-uri, frame-ancestors, form-action, connect-src
+  - **Primer cambio que recorrió el flujo completo de staging:** generado → probado en `staging-api` (Playwright: login/portal/dashboard renderizan, onclick inline dispara bajo CSP, 0 violaciones) → desplegado a producción y verificado
+  - **🔒 Toda la seguridad cerrada:** M-1, M-2, B-1..B-8 resueltos. Solo queda auditoría externa (opcional, pre-masivo). Resguardo `sec-pre-b5`, commit `f034bae`
+
 - ✅ **Staging Fase D + PLAN COMPLETO — simulacros de rollback** (sesión 2026-06-01):
   - **Fix de aislamiento:** prod y staging compartían directorio de código → staging movido a `/var/www/procurador-staging/backend-server` (código propio, node_modules por symlink). Ahora se pueden probar cambios de código sin tocar prod
   - **Simulacro datos** (`ops/drill-rollback.sh`): corrupción de staging → `restore-db.sh` → 100% recuperado en 3 s, prod intacta
@@ -288,7 +294,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 | ~~**B-1,B-3,B-4,B-6,B-8**~~ | ~~Grupo seguro de robustez~~ | ✅ Resuelto (01/06) | JWT_SECRET validado al arrancar · bcrypt 10→12 · log webhook sin firma · TLS min 1.2 · BOM eliminado. Commit `da1eec6` |
 | ~~**B-7**~~ | ~~IP real tras Cloudflare~~ | ✅ Verificado | La API no pasa por Cloudflare; `trust proxy` ya correcto. Sin cambios |
 | ~~**B-2**~~ | ~~Política de contraseñas~~ | ✅ Resuelto (01/06) | `utils/passwordPolicy.js` (Opción A): 8+ chars, letra+número, no común, no = email. UX con requisitos visibles. Commit `548f0e8` |
-| **B-5** | **Activar CSP en Helmet** | 🟡 Diferido | Riesgo de romper UI sin staging. Hacer tras ST-1. Detalle en informe-seguridad.md §3 |
+| ~~**B-5**~~ | ~~Activar CSP en Helmet~~ | ✅ Resuelto (01/06) | CSP activa. Probado en staging (onclick/estilos inline OK, 0 violaciones) → producción. Commit `f034bae`. Tradeoff: `'unsafe-inline'` por handlers/estilos inline |
 | **SEC-1** | **Auditoría de seguridad externa** | — | Revisión profesional independiente antes del lanzamiento masivo |
 | **SEC-2** | **Smoke tests CI en GitHub Actions** | — | Workflow que corre `smoke-test-pjn.js` + `dev-tools/smoke-payments.js` en cada push a `main`, más `npm audit` (P-1) |
 | **SEC-3** | **Hardening de secretos** | — | ✅ Verificado: ningún secreto hardcodeado, `.env`/keys/certs correctamente en `.gitignore` |

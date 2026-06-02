@@ -32,7 +32,7 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 | ~~B-1, B-3, B-4, B-6, B-8~~ | ~~Grupo seguro de robustez~~ | ✅ **Resueltos** (01/06) | JWT_SECRET validado al arrancar · bcrypt 10→12 · log webhook sin firma · TLS min 1.2 · BOM eliminado. Commit `da1eec6` |
 | ~~B-7~~ | ~~IP real tras Cloudflare~~ | ✅ **Verificado** | La API no pasa por Cloudflare; `trust proxy` ya es correcto. Sin cambios |
 | ~~B-2~~ | ~~Política de contraseñas~~ | ✅ **Resuelto** (01/06) | Opción A: 8+ chars, letra+número, no común, no = email. Requisitos visibles + mensajes específicos. Commit `548f0e8` |
-| B-5 | **Activar CSP en Helmet** | 🟡 Diferido | Riesgo de romper UI sin staging. Hacer tras ST-1 con método "modo reporte". Ver `informe-b5-csp.md` |
+| ~~B-5~~ | ~~Activar CSP en Helmet~~ | ✅ **Resuelto** (01/06) | CSP activa. Generado en staging → probado (onclick/estilos inline OK, 0 violaciones) → producción. Commit `f034bae` |
 
 ---
 
@@ -69,7 +69,7 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 ```
 PRODUCTO          ████████████████████ 100%  Construido y publicado
 COBRANZA          ████████████████░░░░  90%  Validada en sandbox, falta MercadoPago real
-SEGURIDAD         ███████████████████░  97%  M-1/M-2 + B (salvo B-5) resueltos · resta B-5 (CSP) + auditoría externa
+SEGURIDAD         ████████████████████ 100%  M-1/M-2 + B-1..B-8 resueltos · solo queda auditoría externa (opcional, pre-masivo)
 INFRA. SEGURA     ████████░░░░░░░░░░░░  40%  Falta staging + rollback operativo
 LISTO PARA BETA   ████████████████░░░░  ~90% Faltan los 3 imprescindibles del Bloque 1
 ```
