@@ -5,6 +5,26 @@
 
 ---
 
+## ⚠️ Directorio de trabajo — LEER PRIMERO
+
+**Trabajá siempre sobre el repo principal:**
+```
+C:\Users\JONATHAN\source\repos\ProcuradorTool
+```
+
+A veces el contexto de la sesión te ubica en un **worktree vinculado** dentro de
+`C:\Users\JONATHAN\source\repos\ProcuradorTool\.claude\worktrees\<nombre>\`.
+Ese worktree es un checkout aparte (su `.git` es un archivo, no una carpeta) y **no es
+la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.md`,
+`docs/`) deja los cambios huérfanos: no llegan al commit que esperás.
+
+**Reglas:**
+- Para editar/commitear, usá rutas absolutas al repo principal (la de arriba), **no** la del worktree.
+- Antes de commitear, verificá con `git -C "C:\Users\JONATHAN\source\repos\ProcuradorTool" status` que los cambios estén en el repo correcto.
+- **Nunca uses `git add -A` / `git add .`** desde la raíz: arrastra el worktree embebido (aparece como submódulo `mode 160000`), configs de `.claude/` y screenshots de `tests/`. Agregá los archivos **explícitamente por nombre**.
+
+---
+
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.14** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.4** — ZIP generado, pendiente subir al Chrome Web Store
