@@ -589,14 +589,21 @@ ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot renew"
 
 ## Checklist al publicar nueva versión Electron
 
+> Flujo completo (probar local, fix-forward, rollback, archivo de versiones): `docs/internal/flujo-release-electron.md`.
+
 Cuando se genera y publica una nueva release de la app Electron, hacer estos pasos **en orden**:
 
+0. **Probar la versión sin instalar:** `npm start` (corre desde el código) y/o `npm run build:dir` (build real sin instalador). No publicar sin probar.
 1. Bumping de versión en `electron-app/package.json` (`"version"` + `"build.buildVersion"` si existe)
-2. `npm run release` en `electron-app/` → genera instalador y lo sube a GitHub Releases
-3. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea de versión en `download-item-desc` (ej: `v2.7.14`)
+2. **`git tag electron-vX.Y.Z` + push del tag** (fija el código fuente de esta versión, necesario para rollback / fix-forward)
+3. `npm run release` en `electron-app/` → genera instalador y lo sube a GitHub Releases
+4. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea de versión en `download-item-desc` (ej: `v2.7.14`)
    *(el link de descarga es dinámico via `/client/download/electron` → no necesita actualización)*
-4. Deploy `app.js` al servidor + `pm2 restart procurador-api`
-5. Hacer commit + push
+5. Deploy `app.js` al servidor + `pm2 restart procurador-api`
+6. Hacer commit + push
+
+> **Rollback de la app:** estrategia **fix-forward** — re-publicar el código bueno con una versión mayor nueva (el auto-updater no degrada). Detalle en `docs/internal/flujo-release-electron.md` §5.
+> **Backup de versiones:** automático — GitHub Releases conserva cada `.exe` publicado + el git tag conserva el código fuente.
 
 > **Nota sobre el link de descarga**: el portal usa `https://api.procuradortool.com/client/download/electron`
 > que consulta la GitHub API en tiempo real y redirige al `.exe` del último release.
