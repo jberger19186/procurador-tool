@@ -1,6 +1,6 @@
 # Manual de usuario — Procurador SCW
-**Versión 2.7.12** · Para abogados y procuradores  
-Última actualización: 2026-05-26
+**Versión 2.7.14** · Para abogados y procuradores  
+Última actualización: 2026-06-02
 
 ---
 

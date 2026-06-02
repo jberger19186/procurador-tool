@@ -1,8 +1,11 @@
 # Plan de Staging y Rollback — Procurador SCW
 
-> **Fecha:** 30 de mayo de 2026
+> **Fecha:** 30 de mayo de 2026 · **⚠️ Documento conceptual histórico.**
+> **✅ Ya implementado (02/06/2026).** Este es el diseño conceptual original. Para el estado real y el uso, ver:
+> - **`flujo-staging-rollback.md`** (visión general) · **`runbook-comandos.md`** (comandos) · **`plan-implementacion-staging.md`** (las 4 fases ejecutadas).
+>
 > **Objetivo:** poder probar cada mejora en un entorno seguro **antes** de aplicarla en producción, y poder **volver atrás rápidamente** si algo falla.
-> **Cubre los pendientes:** ST-1 (entorno staging), ST-2 (mecanismo de rollback), ST-3 (validación del procedimiento).
+> **Cubrió los pendientes:** ST-1 (entorno staging), ST-2 (mecanismo de rollback), ST-3 (validación del procedimiento) — todos resueltos.
 
 ---
 

@@ -1,14 +1,14 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-05-30
+> Última actualización: 2026-06-02
 
 ---
 
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.14** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.4** — ZIP generado, pendiente subir al Chrome Web Store
-> Última sesión: 2026-05-30
+> Última sesión: 2026-06-02 (seguridad 100% · staging+rollback completos · documentación consolidada)
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
@@ -45,7 +45,7 @@
   - **Nuevo `ops/restore-db.sh [prod|staging] <archivo> [--force]`:** rollback de la capa de datos. Antes de restaurar hace backup de seguridad de la base destino + confirmación tipeada para prod + recrea limpia preservando owner. **Probado E2E contra base descartable, producción intacta.**
   - `.gitattributes` fuerza LF en `*.sh` (CRLF rompe bash en el servidor)
   - Resguardos: backup Desktop `202606_01062026` + tag `pre-staging-2026-06-01`
-  - Plan completo: `docs/internal/plan-implementacion-staging.md`. **Pendiente:** Fase B (DB+config staging), Fase C (Nginx+SSL), Fase D (simulacro)
+  - Plan completo: `docs/internal/plan-implementacion-staging.md`. (Fases B/C/D también completadas — ver entradas de arriba)
 
 - ✅ **B-2 — Política de contraseñas** (sesión 2026-06-01):
   - Helper `utils/passwordPolicy.js` (Opción A): mín. 8 chars + al menos una letra y un número + no estar en lista de comunes + no ser igual al email
@@ -61,7 +61,7 @@
   - **B-6** (`server.js`): `minVersion: TLSv1.2`. Probado: negocia TLS 1.3, rechaza TLS 1.1
   - **B-8** (`checkLicense.js`): BOM inicial eliminado
   - **B-7** verificado sin cambios (la API no pasa por Cloudflare; `trust proxy` ya correcto)
-  - Diferido: B-5 (CSP, riesgo de romper UI sin staging). (B-2 resuelto después — ver entrada de arriba)
+  - (B-2 y B-5 resueltos después en sus propias entradas — ver arriba. Seguridad: 100%)
   - Resguardo `sec-pre-b-group` · commit `da1eec6` · +18/-6 en 5 archivos · pruebas producción OK
 
 - ✅ **Correcciones de seguridad M-1 y M-2** (sesión 2026-06-01):

@@ -1,7 +1,7 @@
 # Próximos pasos — Handoff para sesiones nuevas
 
 > **Documento de continuidad.** Después de `/clear`, leer este archivo + CLAUDE.md da el contexto suficiente para retomar.
-> Última actualización: 2026-05-30 (Branding unificado + reset datos · Fase 5 cobranza validada en sandbox)
+> Última actualización: 2026-06-02 (Seguridad 100% + Staging/Rollback completos · Fase 5 cobranza validada en sandbox)
 
 ---
 
@@ -12,7 +12,7 @@
 - **Fase 3 (Comercial):** 🔄 En curso — landing actualizada + branding unificado en landing/dashboard/portal
 - **Fase 4 (Soporte):** ✅ **CERRADA** (tag `fase4-completa`, commit `bc0ce2e`)
 - **Fase 5 (Cobranza):** ✅ **Flujo completo validado en sandbox** — alta/cancelación/reactivación/suspensión funcionando; facturación manual operativa (PDF generado en ARCA y subido por admin); Facturante automático pendiente de contratar (B3 + C1)
-- **Fase 6 (Staging/Release seguro):** Pendiente
+- **Fase 6 (Staging/Release seguro):** ✅ **Completa** — staging gemelo (`staging-api`, puerto 3444), backups pre-deploy, rollback de 3 capas probado con simulacros, seguridad 100% (M-1/M-2 + B-1..B-8). Ver `flujo-staging-rollback.md` + `runbook-comandos.md`
 
 ### Versión Electron actual: **v2.7.14** (último release estable, GitHub Releases)
 

@@ -1,7 +1,7 @@
 # Informe breve — B-5: Política de Seguridad de Contenido (CSP)
 
 > **Fecha:** 01 de junio de 2026
-> **Estado:** único punto de seguridad pendiente. Diferido hasta tener ambiente de staging.
+> **✅ Estado (actualizado 02/06):** RESUELTO. La CSP se activó tras montar staging: se probó en `staging-api` (login/portal/dashboard renderizan, onclick inline dispara, 0 violaciones) y se pasó a producción (commit `f034bae`). Este informe explica el contexto/decisión; ya está implementado.
 
 ---
 

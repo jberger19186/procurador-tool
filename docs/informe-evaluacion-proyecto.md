@@ -1,9 +1,16 @@
 # Informe de Evaluación del Proyecto — Procurador SCW
 ### Preparación para lanzamiento de prueba (Beta) con usuarios reales
 
-> **Fecha:** 30 de mayo de 2026
+> **Fecha:** 30 de mayo de 2026 · **Actualizado:** 02 de junio de 2026
 > **Destinatarios:** Socios y dirección
 > **Objetivo del informe:** evaluar el estado real del proyecto y determinar si está listo para iniciar una etapa de prueba controlada con usuarios reales.
+
+> ✅ **Actualización (02/06/2026) — avances desde la versión original del informe:**
+> Dos puntos que figuraban como "preparación post-Beta" ya fueron **completados anticipadamente**, lo que refuerza la posición del proyecto:
+> 1. **Endurecimiento de seguridad completo** — se revisó y corrigió la totalidad de los puntos de seguridad detectados (autenticación, contraseñas, cifrado de comunicaciones, política anti-XSS, etc.). Solo resta una auditoría externa opcional antes de la escala masiva.
+> 2. **Ambiente de pruebas (staging) + recuperación ante fallas** — se montó un entorno gemelo aislado del de producción para probar cambios sin riesgo, con respaldos automáticos y un procedimiento de "vuelta atrás" probado. Esto reduce significativamente el riesgo operativo de la Beta.
+>
+> Con esto, **los únicos pendientes para abrir la Beta son trámites externos** (activar cobros reales y firmar digitalmente el instalador). El resto está listo.
 
 ---
 

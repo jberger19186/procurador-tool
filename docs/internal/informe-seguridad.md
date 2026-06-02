@@ -13,14 +13,14 @@ El backend tiene una **base de seguridad sólida** para una Beta controlada. Las
 
 Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a corregir. Ninguno es bloqueante para una Beta con usuarios de confianza.
 
-> ✅ **Actualización 01/06/2026:** los **2 puntos de prioridad media (M-1, M-2)** y **6 de prioridad baja (B-1, B-2, B-3, B-4, B-6, B-8)** ya fueron resueltos, probados y desplegados. **B-7 quedó verificado sin cambios** (la API no pasa por Cloudflare). Resta solo **B-5** (CSP, diferido hasta tener staging para probar sin romper la UI).
+> ✅ **Actualización 02/06/2026:** **TODOS los puntos correctivos resueltos.** Los 2 de prioridad media (M-1, M-2) y los 8 de prioridad baja (B-1, B-2, B-3, B-4, B-5, B-6, B-8 + B-7 verificado) fueron resueltos, probados y desplegados. **B-5 (CSP)** se resolvió estrenando el flujo staging→producción. Solo resta la **auditoría externa** (proceso, opcional pre-masivo).
 
 | Nivel | Cantidad | Estado |
 |---|---|---|
 | 🟢 Fortalezas confirmadas | 18 | — |
 | 🟠 Media | 2 | ✅ **Resueltos** (M-1, M-2) |
-| 🟡 Baja | 8 | ✅ 6 resueltos + 1 verificado (B-7) · 1 diferido (B-5) |
-| ⚪ Proceso/recomendación | 3 | Pendientes |
+| 🟡 Baja | 8 | ✅ **Todos resueltos** (B-1..B-8; B-7 verificado sin cambios) |
+| ⚪ Proceso/recomendación | 3 | Pendientes (auditoría externa, npm audit, staging ✅) |
 
 ---
 
@@ -84,7 +84,7 @@ Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a cor
 
 ## 3. Puntos a corregir — Prioridad BAJA
 
-> **Actualización 01/06/2026:** el "Grupo Seguro" (B-1, B-3, B-4, B-6, B-8) fue resuelto, probado y desplegado (commit `da1eec6`, resguardo `sec-pre-b-group`). Quedan B-2, B-5 y B-7 con la situación indicada abajo.
+> **Actualización 02/06/2026:** **TODOS resueltos.** Grupo Seguro (B-1, B-3, B-4, B-6, B-8) commit `da1eec6` · B-2 (contraseñas) commit `548f0e8` · B-5 (CSP) commit `f034bae` · B-7 verificado sin cambios. Detalle en cada fila.
 
 | # | Punto | Estado | Detalle / cómo se resolvió |
 |---|---|---|---|
@@ -92,7 +92,7 @@ Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a cor
 | ~~B-2~~ | ~~Política de contraseñas básica~~ | ✅ Resuelto (01/06) | Helper `utils/passwordPolicy.js` (Opción A): mín. 8 chars + letra y número + no común + no igual al email. Aplicado en registro/reset/cambio. UX: requisitos visibles + mensajes específicos. No afecta login de usuarios existentes |
 | ~~B-3~~ | ~~Factor de costo de bcrypt en 10~~ | ✅ Resuelto | Subido a 12 en las 3 ocurrencias (`auth.js` ×2, `usuarios.js`). Hashes existentes (cost 10) siguen verificando correctamente |
 | ~~B-4~~ | ~~El log registra la firma esperada al fallar~~ | ✅ Resuelto | `webhooks.js` ya no loguea la firma esperada (solo el `requestId`) |
-| B-5 | **Política de seguridad de contenido (CSP) desactivada** | 🟡 Diferido (riesgo sin staging) | Activar CSP puede romper la UI (dashboard/portal/landing usan estilos/scripts inline). Se difiere hasta tener ambiente de staging para probar sin riesgo |
+| ~~B-5~~ | ~~Política de seguridad de contenido (CSP) desactivada~~ | ✅ Resuelto (01/06) | CSP activada en Helmet. Probada primero en staging (login/portal/dashboard renderizan, onclick inline dispara, 0 violaciones) → producción. Tradeoff: `'unsafe-inline'` + `script-src-attr` por los handlers/estilos inline; igual restringe object-src, base-uri, frame-ancestors, form-action |
 | ~~B-6~~ | ~~Sin versión mínima de TLS en el servidor directo~~ | ✅ Resuelto | `minVersion: 'TLSv1.2'` en `sslOptions`. Probado: negocia TLS 1.3, rechaza TLS 1.1 |
 | B-7 | **Verificar cadena de IP real tras Cloudflare** | ✅ Verificado (sin cambios) | `api.procuradortool.com` resuelve directo al droplet (142.93.64.94), **no pasa por Cloudflare**. Con Nginx + `trust proxy: 1` la IP real ya llega bien. No requiere cambios |
 | ~~B-8~~ | ~~Carácter invisible al inicio de un archivo~~ | ✅ Resuelto | BOM eliminado de `checkLicense.js` (sin alterar contenido) |
@@ -113,18 +113,18 @@ Se identificaron **2 puntos de prioridad media** y **8 de prioridad baja** a cor
 
 > **El sistema es apto para iniciar una Beta controlada con usuarios de confianza.**
 
-Las bases de seguridad están bien construidas y no se encontraron vulnerabilidades críticas ni de inyección. Los dos puntos de prioridad media (M-1 y M-2) **ya fueron resueltos** (01/06/2026), y el resto son mejoras graduales de robustez.
+Las bases de seguridad están bien construidas y no se encontraron vulnerabilidades críticas ni de inyección. **Todos los puntos correctivos (M-1, M-2, B-1..B-8) ya fueron resueltos** (01-02/06/2026), incluido el ambiente de staging y el rollback.
 
-**Antes del lanzamiento público (no de la Beta)** se recomienda: activar el escaneo de dependencias, montar el ambiente de staging, completar las mejoras de prioridad baja, y considerar una auditoría externa.
+**Antes del lanzamiento masivo (no de la Beta)** lo único recomendado que resta es: activar el escaneo de dependencias (`npm audit`) y considerar una **auditoría de seguridad externa** independiente.
 
 ---
 
-## Anexo — Plan de remediación sugerido
+## Anexo — Plan de remediación (estado final)
 
-| Cuándo | Tareas |
-|---|---|
-| ~~Antes de la Beta~~ | ✅ **M-1, M-2, B-1, B-2, B-3, B-4, B-6, B-8 resueltos** · B-7 verificado (01/06/2026, commits `58b3163`, `da1eec6`, `548f0e8`) |
-| **Durante la Beta** | activar `npm audit` · montar staging |
-| **Antes del lanzamiento público** | B-5 (CSP, requiere staging) · auditoría externa |
+| Cuándo | Tareas | Estado |
+|---|---|---|
+| Antes de la Beta | M-1, M-2, B-1..B-8 + staging + rollback | ✅ **Completado** (commits `58b3163`, `da1eec6`, `548f0e8`, `f034bae`) |
+| Durante la Beta | activar `npm audit` (P-1) | Pendiente |
+| Antes del lanzamiento masivo | auditoría de seguridad externa (SEC-1) | Pendiente (opcional) |
 
-*Informe basado en revisión de código al 30/05/2026. Para el detalle técnico exacto de cada punto, consultar con el equipo de desarrollo.*
+*Informe basado en revisión de código al 30/05/2026, actualizado con remediaciones al 02/06/2026. Para el detalle técnico exacto de cada punto, consultar con el equipo de desarrollo.*
