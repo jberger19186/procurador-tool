@@ -171,7 +171,9 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 | A | Estructura de backups + scripts operativos (5.1, 5.2, 5.8, 5.9) | Bajo | ✅ **Completada (01/06)** |
 | B | DB y configuración de staging (5.3–5.5) | Medio | ✅ **Completada (01/06)** |
 | C | Nginx + SSL + protección de acceso (5.6, 5.7) | Medio | ✅ **Completada (01/06)** |
-| D | Simulacro de rollback (ST-3) | Bajo (medio día) | Pendiente |
+| D | Simulacro de rollback (ST-3) | Bajo (medio día) | ✅ **Completada (01/06)** |
+
+> **🎉 PLAN DE STAGING COMPLETADO (01/06/2026).** Las 4 fases ejecutadas y verificadas.
 
 **Tiempo estimado restante:** ~medio día (Fase C + D).
 
@@ -216,3 +218,18 @@ Antes de confiar en el sistema, se ensaya el peor caso **en staging**:
 ### Acceso a staging
 - URL: **https://staging-api.procuradortool.com** (usuario/contraseña — credenciales con el equipo).
 - Internamente en el servidor: `https://localhost:3444`.
+
+### Nota Fase D (completada)
+Antes del simulacro se detectó y corrigió que prod y staging compartían directorio de código → staging ahora corre de `/var/www/procurador-staging/backend-server` (aislamiento real de código).
+
+Simulacros ejecutados (scripts reutilizables en `ops/`, solo sobre staging):
+- **`drill-rollback.sh`** (capa datos): corrupción de emails → `restore-db.sh` → recuperación 100% en **3 s**. Producción intacta.
+- **`drill-code-rollback.sh`** (capa código): rotura del server de staging (000) → producción sigue 200 → restaurar archivo + reinicio → recuperación en **5 s**.
+- Capa proceso: `pm2 restart` (implícito en ambos).
+
+**Resultado:** rollback bidireccional probado end-to-end. Producción nunca en riesgo. Los drills quedan como simulacros periódicos de recuperación.
+
+### Uso operativo del staging (de ahora en más)
+1. Desarrollar local → desplegar a `/var/www/procurador-staging/backend-server` → probar en `staging-api`.
+2. Si pasa: `ops/backup-now.sh prod` → desplegar a `/var/www/procurador/backend-server` → `pm2 restart procurador-api` → checklist.
+3. Si falla en prod: `ops/restore-db.sh prod <backup>` (datos) y/o restaurar código del tag estable + reinicio.

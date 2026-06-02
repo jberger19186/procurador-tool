@@ -40,12 +40,14 @@ El proyecto está **construido y validado en sandbox**. Lo que separa al product
 
 > Necesario antes del lanzamiento masivo. Plan completo en `docs/internal/plan-staging-rollback.md`.
 
-| # | Pendiente | Esfuerzo | Detalle |
+| # | Pendiente | Estado | Detalle |
 |---|---|---|---|
-| ST-1 | **Montar ambiente de staging** | Medio | Entorno gemelo: puerto 3444, `procurador_db_staging`, subdominio `staging-api`. Configuración de una vez |
-| ST-2 | **Definir mecanismo de rollback** | Bajo | Etiquetas Git + scripts de reversión DB + backup automático pre-deploy. Documentado en el plan |
-| ST-3 | **Simulacro de rollback** | Bajo | Romper algo a propósito en staging y validar la vuelta atrás. Medio día |
-| P-1 | **Escaneo automático de dependencias** | Bajo | `npm audit` periódico, idealmente en CI |
+| ~~ST-1~~ | ~~Montar ambiente de staging~~ | ✅ **Resuelto** (01/06) | Entorno gemelo aislado: `staging-api.procuradortool.com`, puerto 3444, `procurador_db_staging`, código propio. SSL + basic auth |
+| ~~ST-2~~ | ~~Definir mecanismo de rollback~~ | ✅ **Resuelto** (01/06) | Scripts `ops/`: `backup-now.sh`, `restore-db.sh` + backups pre-deploy. Rollback de 3 capas documentado |
+| ~~ST-3~~ | ~~Simulacro de rollback~~ | ✅ **Resuelto** (01/06) | Drills `ops/drill-rollback.sh` (datos, 3s) y `drill-code-rollback.sh` (código, 5s). Prod intacta. Reutilizables |
+| P-1 | **Escaneo automático de dependencias** | 🟡 Pendiente | `npm audit` periódico, idealmente en CI |
+
+> ✅ **Staging y rollback completos.** Esto desbloquea B-5 (CSP se puede probar en staging con "modo reporte" sin riesgo).
 
 ---
 

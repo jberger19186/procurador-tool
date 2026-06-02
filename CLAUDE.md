@@ -12,6 +12,12 @@
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
+- ✅ **Staging Fase D + PLAN COMPLETO — simulacros de rollback** (sesión 2026-06-01):
+  - **Fix de aislamiento:** prod y staging compartían directorio de código → staging movido a `/var/www/procurador-staging/backend-server` (código propio, node_modules por symlink). Ahora se pueden probar cambios de código sin tocar prod
+  - **Simulacro datos** (`ops/drill-rollback.sh`): corrupción de staging → `restore-db.sh` → 100% recuperado en 3 s, prod intacta
+  - **Simulacro código** (`ops/drill-code-rollback.sh`): staging roto (000) → prod sigue 200 → restaurar + reinicio → 5 s
+  - **🎉 PLAN DE STAGING COMPLETO (4 fases).** Entorno gemelo aislado, accesible en `staging-api.procuradortool.com`, con backups pre-deploy, restore probado y rollback bidireccional verificado. Uso operativo documentado en `docs/internal/plan-implementacion-staging.md`
+
 - ✅ **Staging Fase C — exposición pública con SSL + acceso restringido** (sesión 2026-06-01):
   - DNS `staging-api.procuradortool.com` → 142.93.64.94 (Cloudflare, DNS only)
   - Nginx: bloque `staging-procurador` proxea a `:3444`, SSL via certbot (vence 2026-08-31, auto-renovación), HTTP→HTTPS
