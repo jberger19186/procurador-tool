@@ -136,7 +136,7 @@ children.push(new Table({
   width: { size: 6400, type: WidthType.DXA }, columnWidths: [2000, 4400],
   alignment: AlignmentType.CENTER,
   rows: [
-    ['Fecha', '30 de mayo de 2026'],
+    ['Fecha', '30 de mayo de 2026 · actualizado 02 de junio de 2026'],
     ['Destinatarios', 'Socios y dirección'],
     ['Propósito', 'Evaluar el estado del proyecto y la viabilidad de iniciar una Beta'],
   ].map(([k, v]) => new TableRow({ children: [
@@ -144,6 +144,29 @@ children.push(new Table({
     cell(v, { w: 4400, fill: ALT_BG })
   ]}))
 }));
+// Nota de actualización (02/06)
+children.push(spacer(160));
+children.push(new Paragraph({
+  shading: { fill: GREEN_BG, type: ShadingType.CLEAR },
+  border: { left: { style: BorderStyle.SINGLE, size: 18, color: GREEN, space: 8 } },
+  spacing: { before: 80, after: 120, line: 276 }, indent: { left: 160, right: 160 },
+  children: [
+    new TextRun({ text: 'Actualización (02/06/2026) — avances desde la versión original: ', bold: true, size: 22, color: '064E3B' }),
+    new TextRun({ text: 'dos puntos que figuraban como preparación post-Beta ya fueron completados anticipadamente, lo que refuerza la posición del proyecto:', size: 22, color: '064E3B' }),
+  ]
+}));
+children.push(new Paragraph({ numbering: { reference: 'steps', level: 0 }, spacing: { after: 80 }, indent: { left: 540, hanging: 260 },
+  children: [
+    new TextRun({ text: 'Endurecimiento de seguridad completo', bold: true, color: DARK, size: 22 }),
+    new TextRun({ text: ' — se revisó y corrigió la totalidad de los puntos de seguridad detectados. Solo resta una auditoría externa opcional antes de la escala masiva.', size: 22, color: GRAY }),
+  ] }));
+children.push(new Paragraph({ numbering: { reference: 'steps', level: 0 }, spacing: { after: 80 }, indent: { left: 540, hanging: 260 },
+  children: [
+    new TextRun({ text: 'Ambiente de pruebas (staging) + recuperación ante fallas', bold: true, color: DARK, size: 22 }),
+    new TextRun({ text: ' — entorno gemelo aislado para probar cambios sin riesgo, con respaldos automáticos y un procedimiento de “vuelta atrás” probado. Reduce significativamente el riesgo operativo de la Beta.', size: 22, color: GRAY }),
+  ] }));
+children.push(new Paragraph({ spacing: { before: 40, after: 80, line: 276 }, indent: { left: 160 },
+  children: [new TextRun({ text: 'Con esto, los únicos pendientes para abrir la Beta son trámites externos (activar cobros reales y firmar digitalmente el instalador).', italics: true, size: 22, color: GRAY })] }));
 children.push(new Paragraph({ children: [new PageBreak()] }));
 
 // 1. Resumen ejecutivo ----------------------------------------------------------
