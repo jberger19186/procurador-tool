@@ -151,6 +151,10 @@
 
 > UMA de referencia: **$95.626 ARS** (CSJN vigente a 2026-05-23)
 
+### Captación de clientes (Beta)
+> Plan para conseguir los primeros 50 clientes con el precio fundador ($15.000/mes): **`docs/plan-captacion-clientes.md`**.
+> Enfoque: red cercana → Instagram (credibilidad) → colegios/asociaciones → referidos. Prueba clave: video "antes/después". Objeción de confianza = argumento de venta ("las contraseñas del PJN nunca pasan por nuestros servidores").
+
 ### Toggle registro público — cómo funciona
 ```
 DB: app_settings WHERE key = 'allow_public_register'  ← fuente de verdad
