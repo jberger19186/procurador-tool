@@ -589,7 +589,25 @@ ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot renew"
 
 ## 📐 Operación — Staging y Rollback (documentos maestros)
 
-Para cualquier cambio (backend o app Electron), consultar:
+### Coordenadas de los entornos (datos estables)
+
+| | Producción | Staging |
+|---|---|---|
+| **URL pública** | `api.procuradortool.com` | `staging-api.procuradortool.com` |
+| **Puerto HTTPS** | 3443 | 3444 |
+| **Puerto HTTP** | 3000 (redirige) | 3001 |
+| **Base de datos** | `procurador_db` | `procurador_db_staging` |
+| **Proceso PM2** | `procurador-api` (cluster) | `procurador-staging` (fork) |
+| **Directorio código** | `/var/www/procurador/backend-server` | `/var/www/procurador-staging/backend-server` |
+| **Archivo entorno** | `.env` | `.env.staging` (overrides + MP sandbox fijo) |
+| **Acceso** | público | basic auth — usuario `equipo`, `/etc/nginx/.htpasswd-staging` |
+| **MercadoPago** | sandbox (real al activar B3) | **sandbox fijo** (nunca real) |
+| **SSL** | certbot (vence 2026-06-29) | certbot (vence 2026-08-31) |
+
+> **Backups:** diario automático 03:00 → DO Spaces (30d) + local `/var/backups/procurador/`. On-demand pre-deploy: `ops/backup-now.sh`. Restauración: `ops/restore-db.sh`.
+> **Scripts ops en el servidor:** `/var/www/procurador/ops/` (`backup-now.sh`, `restore-db.sh`, `drill-rollback.sh`, `drill-code-rollback.sh`).
+
+### Documentos de detalle
 
 | Documento | Para qué |
 |---|---|
