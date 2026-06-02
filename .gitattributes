@@ -1,0 +1,2 @@
+# Forzar LF en scripts shell — corren en el servidor Linux y CRLF rompe bash.
+*.sh text eol=lf
