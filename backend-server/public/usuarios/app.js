@@ -210,6 +210,11 @@ async function initDashboard() {
 
     await loadAccount();
 
+    // Si la cuenta no se pudo cargar (token de un usuario borrado/sesión inválida),
+    // loadAccount ya cerró sesión y mostró el login. No seguimos inicializando para
+    // no dejar un dashboard vacío ni disparar llamadas con una sesión inexistente.
+    if (!state.account) return;
+
     // Gap 1+2 — Mostrar banner si email no verificado
     if (state.account && !state.account.emailVerified) {
         showEmailVerificationBanner();
@@ -320,9 +325,12 @@ async function resendVerification() {
 async function loadAccount() {
     try {
         const res = await apiFetch('/client/account');
-        if (!res || !res.ok) return;
+        if (!res) return;                      // apiFetch ya cerró sesión (401) y mostró el login
+        // Si la cuenta no se pudo cargar (404 usuario inexistente/borrado, u otro
+        // error), no dejamos un dashboard vacío: cerramos sesión y mostramos el login.
+        if (!res.ok) { doLogout(); return; }
         const data = await res.json();
-        if (!data.success) return;
+        if (!data.success) { doLogout(); return; }
 
         state.account = data.account;
         renderTopbar();
