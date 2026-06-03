@@ -221,9 +221,20 @@
         buildDOM();
         showStep(0);
         document.addEventListener('keydown', onKeyDown);
+        window.addEventListener('resize', onResize);
     }
 
     window.startAppTour = startTour;
+
+    // Si la ventana cambia de tamaño mientras el tour está activo, reubicar la card
+    // del paso actual (evita que quede mal posicionada si la ventana se redimensiona).
+    let _resizeTimer = null;
+    function onResize() {
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(() => {
+            if (document.getElementById('__tour_card')) showStep(currentStep);
+        }, 80);
+    }
 
     // ─── DOM ──────────────────────────────────────────────────────────────────
     function destroyDOM() {
@@ -231,6 +242,7 @@
         document.getElementById('__tour_spotlight')?.remove();
         document.getElementById('__tour_card')?.remove();
         document.removeEventListener('keydown', onKeyDown);
+        window.removeEventListener('resize', onResize);
     }
 
     function buildDOM() {
@@ -382,12 +394,11 @@
         }
 
         // Re-mide y reubica varias veces: la animación de expansión del sidebar
-        // dura 0.22s, así que medir antes de que termine deja la card mal ubicada
-        // (superpuesta o debajo). Las pasadas tardías (>220ms) garantizan que la
-        // medición final sea sobre el layout ya asentado.
+        // dura 0.22s y, en la primera apertura del tour, el layout/ventana puede
+        // tardar más en asentarse. Las pasadas tardías garantizan que la medición
+        // final sea sobre el layout ya estable (1ra y 2da aparición consistentes).
         requestAnimationFrame(reposition);
-        setTimeout(reposition, 280);
-        setTimeout(reposition, 500);
+        [120, 300, 600, 1000].forEach(ms => setTimeout(reposition, ms));
     }
 
     // ─── Navegación ───────────────────────────────────────────────────────────
