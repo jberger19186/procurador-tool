@@ -190,6 +190,11 @@
     let currentStep = 0;
     let overlay, spotlight, card;
 
+    // Transiciones (deben coincidir con las de buildDOM). Se usan para restaurar la
+    // animación luego de aplicar correcciones instantáneas (snap) sin vaivén visible.
+    const SPOT_TRANSITION = 'all 0.32s cubic-bezier(0.4,0,0.2,1)';
+    const CARD_TRANSITION = 'left 0.3s cubic-bezier(0.4,0,0.2,1),top 0.3s cubic-bezier(0.4,0,0.2,1)';
+
     // ─── Init ─────────────────────────────────────────────────────────────────
     // El tour NO se auto-inicia. Se dispara únicamente cuando el usuario lo pide:
     //  • eligió "Mostrar tour" al terminar el onboarding → evento 'show-tour' → startAppTour()
@@ -336,11 +341,13 @@
         if (hasTarget && !firstRect) { nextStep(); return; }
 
         const PAD = 8;
+        // La 1ra pasada anima la entrada (movimiento suave desde el paso anterior);
+        // las correcciones posteriores se aplican SIN transición (snap) para que no
+        // se vea el "vaivén" mientras el layout termina de asentarse.
+        let firstPass = true;
 
-        // Mide de nuevo el rect en cada pasada (el layout puede no estar asentado:
-        // expand del sidebar, reflow del texto de la card, etc.) y reubica spotlight + card.
         function reposition() {
-            let rect = step.targets
+            const rect = step.targets
                 ? getBoundingBox(step.targets)
                 : (step.target ? (document.querySelector(step.target)?.getBoundingClientRect() || null) : null);
 
@@ -348,61 +355,62 @@
             const CARD_H = card.offsetHeight || 220;
             const GAP    = 14;
 
+            // Calcular estilos destino del spotlight y de la card
+            let spot, cardLeft, cardTop;
             if (!rect) {
-                // Sin target → card centrada, spotlight invisible
-                Object.assign(spotlight.style, { left: '0px', top: '0px', width: '0px', height: '0px' });
-                Object.assign(card.style, {
-                    left: `${Math.round((window.innerWidth  - CARD_W) / 2)}px`,
-                    top:  `${Math.round((window.innerHeight - CARD_H) / 2)}px`,
-                });
-                return;
-            }
-
-            Object.assign(spotlight.style, {
-                left:   `${rect.left   - PAD}px`,
-                top:    `${rect.top    - PAD}px`,
-                width:  `${rect.width  + PAD * 2}px`,
-                height: `${rect.height + PAD * 2}px`,
-            });
-
-            const spaceBelow = window.innerHeight - rect.top - rect.height - PAD - GAP;
-            const spaceAbove = rect.top           - PAD - GAP;
-            const spaceRight = window.innerWidth  - rect.right - PAD - GAP;
-
-            let cx, cy;
-
-            if (step.preferRight) {
-                // Pasos del sidebar (izquierda): la card va SIEMPRE a la derecha,
-                // centrada verticalmente sobre el bloque de forma proporcional.
-                // Anclamos al borde derecho del SIDEBAR (ancho estable por CSS) y no
-                // al bounding box de los items: en el primer render ese box puede
-                // medirse mal (items sin estilar = ancho completo) y mandaba la card
-                // al borde derecho de la pantalla. El sidebar siempre mide bien.
-                const sb = document.querySelector('.sidebar');
-                const sbRect = sb && sb.getBoundingClientRect();
-                const anchorRight = (sbRect && sbRect.width > 0) ? sbRect.right : rect.right;
-                cx = anchorRight + PAD + GAP;
-                cy = rect.top + rect.height / 2 - CARD_H / 2;
-            } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
-                cx = rect.left + rect.width / 2 - CARD_W / 2;
-                cy = rect.top + rect.height + PAD + GAP;
+                spot = { left: '0px', top: '0px', width: '0px', height: '0px' };
+                cardLeft = `${Math.round((window.innerWidth  - CARD_W) / 2)}px`;
+                cardTop  = `${Math.round((window.innerHeight - CARD_H) / 2)}px`;
             } else {
-                cx = rect.left + rect.width / 2 - CARD_W / 2;
-                cy = rect.top - PAD - GAP - CARD_H;
+                spot = {
+                    left:   `${rect.left   - PAD}px`,
+                    top:    `${rect.top    - PAD}px`,
+                    width:  `${rect.width  + PAD * 2}px`,
+                    height: `${rect.height + PAD * 2}px`,
+                };
+                const spaceBelow = window.innerHeight - rect.top - rect.height - PAD - GAP;
+                const spaceAbove = rect.top           - PAD - GAP;
+                let cx, cy;
+                if (step.preferRight) {
+                    // Pasos del sidebar (izquierda): card SIEMPRE a la derecha, centrada
+                    // verticalmente. Anclada al borde derecho del SIDEBAR (ancho estable
+                    // por CSS), no al bounding box de los items (que en el primer render
+                    // puede medirse mal y mandar la card al borde de la pantalla).
+                    const sb = document.querySelector('.sidebar');
+                    const sbRect = sb && sb.getBoundingClientRect();
+                    const anchorRight = (sbRect && sbRect.width > 0) ? sbRect.right : rect.right;
+                    cx = anchorRight + PAD + GAP;
+                    cy = rect.top + rect.height / 2 - CARD_H / 2;
+                } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
+                    cx = rect.left + rect.width / 2 - CARD_W / 2;
+                    cy = rect.top + rect.height + PAD + GAP;
+                } else {
+                    cx = rect.left + rect.width / 2 - CARD_W / 2;
+                    cy = rect.top - PAD - GAP - CARD_H;
+                }
+                cx = Math.max(8, Math.min(cx, window.innerWidth  - CARD_W - 8));
+                cy = Math.max(8, Math.min(cy, window.innerHeight - CARD_H - 8));
+                cardLeft = `${cx}px`;
+                cardTop  = `${cy}px`;
             }
 
-            cx = Math.max(8, Math.min(cx, window.innerWidth  - CARD_W - 8));
-            cy = Math.max(8, Math.min(cy, window.innerHeight - CARD_H - 8));
-
-            Object.assign(card.style, { left: `${cx}px`, top: `${cy}px` });
+            const snap = !firstPass;
+            firstPass = false;
+            if (snap) { spotlight.style.transition = 'none'; card.style.transition = 'none'; }
+            Object.assign(spotlight.style, spot);
+            Object.assign(card.style, { left: cardLeft, top: cardTop });
+            if (snap) {
+                void card.offsetWidth;   // reflow: el snap toma efecto sin animar
+                spotlight.style.transition = SPOT_TRANSITION;
+                card.style.transition = CARD_TRANSITION;
+            }
         }
 
-        // Re-mide y reubica varias veces: la animación de expansión del sidebar
-        // dura 0.22s y, en la primera apertura del tour, el layout/ventana puede
-        // tardar más en asentarse. Las pasadas tardías garantizan que la medición
-        // final sea sobre el layout ya estable (1ra y 2da aparición consistentes).
+        // 1ra pasada (rAF): anima la entrada. Las siguientes corrigen con snap una vez
+        // que el layout se asentó (la animación del sidebar dura 0.22s y, en la 1ra
+        // apertura del tour, el layout tarda algo más en estabilizarse).
         requestAnimationFrame(reposition);
-        [120, 300, 600, 1000].forEach(ms => setTimeout(reposition, ms));
+        [160, 380, 700].forEach(ms => setTimeout(reposition, ms));
     }
 
     // ─── Navegación ───────────────────────────────────────────────────────────
