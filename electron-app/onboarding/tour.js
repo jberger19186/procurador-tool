@@ -372,12 +372,16 @@
             let cx, cy;
 
             if (step.preferRight) {
-                // Pasos del sidebar (izquierda): la card va SIEMPRE a la derecha del
-                // bloque, centrada verticalmente sobre él de forma proporcional.
-                // (No se condiciona a spaceRight: a la derecha del sidebar siempre
-                // hay lugar, y el cálculo de espacio daba resultados inconsistentes
-                // según el estado de la animación, dejando la card debajo/superpuesta.)
-                cx = rect.right + PAD + GAP;
+                // Pasos del sidebar (izquierda): la card va SIEMPRE a la derecha,
+                // centrada verticalmente sobre el bloque de forma proporcional.
+                // Anclamos al borde derecho del SIDEBAR (ancho estable por CSS) y no
+                // al bounding box de los items: en el primer render ese box puede
+                // medirse mal (items sin estilar = ancho completo) y mandaba la card
+                // al borde derecho de la pantalla. El sidebar siempre mide bien.
+                const sb = document.querySelector('.sidebar');
+                const sbRect = sb && sb.getBoundingClientRect();
+                const anchorRight = (sbRect && sbRect.width > 0) ? sbRect.right : rect.right;
+                cx = anchorRight + PAD + GAP;
                 cy = rect.top + rect.height / 2 - CARD_H / 2;
             } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
                 cx = rect.left + rect.width / 2 - CARD_W / 2;
