@@ -34,6 +34,7 @@ router.post('/verify-session', authenticateToken, async (req, res) => {
         // Verificar que el usuario aún existe y tiene suscripción activa
         const result = await db.query(`
             SELECT u.id, u.email, u.role, u.machine_id, u.cuit,
+                   u.registration_status,
                    s.plan, s.status, s.expires_at, s.usage_count, s.usage_limit,
                    p.plan_type
             FROM users u
@@ -48,8 +49,12 @@ router.post('/verify-session', authenticateToken, async (req, res) => {
 
         const user = result.rows[0];
 
-        // Verificar suscripción
-        if (!user.plan || user.status !== 'active') {
+        // Verificar suscripción. Permite el TRIAL (suspended + pending_activation):
+        // el usuario tiene 20 ejecuciones de prueba en la app antes de la activación.
+        // Mismo criterio que checkLicense y los endpoints de extensión.
+        const isActiveSub = user.status === 'active';
+        const isTrialSub  = user.status === 'suspended' && user.registration_status === 'pending_activation';
+        if (!user.plan || (!isActiveSub && !isTrialSub)) {
             return res.status(403).json({
                 error: 'No tienes una suscripción activa',
                 action: 'subscribe'
