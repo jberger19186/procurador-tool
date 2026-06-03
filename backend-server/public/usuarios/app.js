@@ -833,7 +833,7 @@ function renderDownloads() {
             <div class="download-item-icon">⚖️</div>
             <div class="download-item-info">
                 <div class="download-item-title">App de escritorio — Procurador SCW <span style="font-size:11px;color:#9ca3af;font-weight:400">Windows</span></div>
-                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.14</div>
+                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.15</div>
             </div>
             <div class="download-item-actions">
                 <button class="btn btn-primary btn-sm" onclick="downloadElectron(this)">⬇ Descargar instalador</button>
@@ -1614,6 +1614,7 @@ const AYUDA_FAQ_ITEMS = [
     { cat: 'extension', q: '¿Para qué sirve la extensión?', a: 'La extensión autocompleta el número de expediente (jurisdicción, número y año) en los módulos del PJN: SCW, Escritos, Notificaciones y DEOX, evitando la escritura manual.' },
     { cat: 'extension', q: '¿La extensión funciona sin la app Electron?', a: 'Sí. Con el plan EXTENSION_PROMO tenés acceso solo a la extensión sin necesitar instalar la app de escritorio.' },
     { cat: 'extension', q: '¿Chrome muestra un aviso al instalar la extensión?', a: 'Es normal para extensiones nuevas. Hacé click en "Continuar a la instalación". No indica ningún riesgo — la extensión está aprobada por Google.' },
+    { cat: 'extension', q: 'En el flujo de Escritos 1, ¿por qué Chrome me pide permiso para abrir ventanas o pestañas?', a: 'En Escritos 1 el sitio del PJN abre una ventana/pestaña nueva para continuar con la presentación. Es probable que Chrome muestre un aviso de "ventanas emergentes bloqueadas" o pida permiso. Hacé click en "Permitir" (o tocá el ícono que aparece en la barra de direcciones y elegí "Permitir siempre" para sso/escritos.pjn.gov.ar) para que la extensión pueda completar el expediente y abrir la pestaña correctamente.' },
     // --- CUENTA Y PLAN ---
     { cat: 'cuenta', q: '¿Cómo cambio de plan?', a: 'Ingresá a "Mi Plan" en el panel lateral y hacé click en "Ver planes disponibles". Los cambios se aplican de inmediato o al inicio del próximo ciclo.' },
     { cat: 'cuenta', q: '¿Puedo usar la app en más de una computadora?', a: 'No. La licencia está vinculada a un dispositivo. Para cambiar de equipo, contactá al soporte.' },

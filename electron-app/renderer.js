@@ -126,7 +126,8 @@ if (window.electronAPI?.onShowTour) {
 
 if (window.electronAPI?.onSkipTour) {
     window.electronAPI.onSkipTour(() => {
-        localStorage.setItem('psc_tour_shown', '1');
+        // Marca el tour como ya visto usando la MISMA key que tour.js (psc_tour_shown_v4).
+        localStorage.setItem('psc_tour_shown_v4', '1');
     });
 }
 
@@ -505,6 +506,7 @@ const FAQ_ITEMS = [
     { cat: 'extension', q: '¿Para qué sirve la extensión?', a: 'La extensión autocompleta el número de expediente (jurisdicción, número y año) en los módulos del PJN: SCW, Escritos, Notificaciones y DEOX, evitando la escritura manual.' },
     { cat: 'extension', q: '¿La extensión funciona sin la app Electron?', a: 'Sí. Con el plan EXTENSION_PROMO tenés acceso solo a la extensión sin necesitar instalar la app de escritorio.' },
     { cat: 'extension', q: '¿Chrome muestra un aviso al instalar la extensión?', a: 'Es normal para extensiones nuevas. Hacé click en "Continuar a la instalación". No indica ningún riesgo — la extensión está aprobada por Google.' },
+    { cat: 'extension', q: 'En el flujo de Escritos 1, ¿por qué Chrome me pide permiso para abrir ventanas o pestañas?', a: 'En Escritos 1 el sitio del PJN abre una ventana/pestaña nueva para continuar con la presentación. Es probable que Chrome muestre un aviso de "ventanas emergentes bloqueadas" o pida permiso. Hacé click en "Permitir" (o tocá el ícono que aparece en la barra de direcciones y elegí "Permitir siempre" para sso/escritos.pjn.gov.ar) para que la extensión pueda completar el expediente y abrir la pestaña correctamente.' },
     // --- CUENTA Y PLAN ---
     { cat: 'cuenta', q: '¿Cómo cambio de plan?', a: 'Abrí el portal web en api.procuradortool.com/usuarios/, ingresá a "Mi Plan" y hacé click en "Ver planes disponibles". Los cambios se aplican de inmediato o al inicio del próximo ciclo.' },
     { cat: 'cuenta', q: '¿Puedo usar la app en más de una computadora?', a: 'No. La licencia está vinculada a un dispositivo. Para cambiar de equipo, contactá al soporte.' },

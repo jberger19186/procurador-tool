@@ -12,7 +12,7 @@
     const TOUR_KEY  = 'psc_tour_shown_v4';
     const STORE_URL = 'https://chromewebstore.google.com/detail/pjn-%E2%80%93-automatizaci%C3%B3n/aodnfemklhciagaglpggnclmbdhnhbme';
 
-    // ─── Pasos del tour (13 pasos) ────────────────────────────────────────────
+    // ─── Pasos del tour (14 pasos) ────────────────────────────────────────────
     const STEPS = [
         // ── 1 ──────────────────────────────────────────────────────────────
         {
@@ -129,6 +129,15 @@
         },
         // ── 13 (NUEVO) ──────────────────────────────────────────────────────
         {
+            targets: ['#btnSidebarTour', '#btnSidebarAsistente'],
+            title: 'Ayuda — tour y asistente IA',
+            text:  '• <strong>Ver tour</strong> — volvé a recorrer esta guía cuando quieras<br>'
+                 + '• <strong>Asistente IA</strong> — resolvé dudas sobre la app, tu plan o el PJN con ayuda automática',
+            setup: expandSidebar,
+            preferRight: true,
+        },
+        // ── 14 ──────────────────────────────────────────────────────────────
+        {
             target: '#userChip',
             title: 'Tu cuenta — plan y soporte',
             text:  'El <strong>chip de usuario</strong> al pie del panel muestra tu cuenta activa, el plan contratado, el uso del período y acceso directo a soporte técnico.',
@@ -179,14 +188,33 @@
     let overlay, spotlight, card;
 
     // ─── Init ─────────────────────────────────────────────────────────────────
-    function init() {
-        if (localStorage.getItem(TOUR_KEY)) return;
-        setTimeout(startTour, 1800);
+    // El tour NO se auto-inicia. Se dispara únicamente cuando el usuario lo pide:
+    //  • eligió "Mostrar tour" al terminar el onboarding → evento 'show-tour' → startAppTour()
+    //  • clic en "Ver tour" del panel lateral → startAppTour()
+    // (Antes un setTimeout lo lanzaba siempre, ignorando la elección del usuario.)
+    function init() { /* sin auto-inicio */ }
+
+    // Banners globales que se superponen con el tour (se ocultan mientras dura).
+    const BANNER_IDS = ['quota-banner', 'subscription-status-banner', 'promo-banner'];
+    const _bannerPrevDisplay = {};
+
+    function hideBanners() {
+        BANNER_IDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { _bannerPrevDisplay[id] = el.style.display; el.style.display = 'none'; }
+        });
+    }
+    function restoreBanners() {
+        BANNER_IDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && _bannerPrevDisplay[id] !== undefined) el.style.display = _bannerPrevDisplay[id];
+        });
     }
 
     function startTour() {
         currentStep = 0;
         destroyDOM();
+        hideBanners();   // cerrar banners de usos/estado para que el tour se vea bien
         buildDOM();
         showStep(0);
         document.addEventListener('keydown', onKeyDown);
@@ -368,6 +396,7 @@
     function endTour() {
         localStorage.setItem(TOUR_KEY, '1');
         destroyDOM();
+        restoreBanners();   // volver a mostrar los banners ocultados al iniciar
     }
 
     function onKeyDown(e) {
