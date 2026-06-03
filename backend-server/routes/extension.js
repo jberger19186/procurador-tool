@@ -191,8 +191,10 @@ router.get('/electron-token', authenticateToken, (req, res) => {
     res.json({ token });
 });
 
-// GET /api/extension/electron-download?token=xxx — descarga directa sin blob
-router.get('/electron-download', (req, res) => {
+// GET /api/extension/electron-download?token=xxx — descarga directa sin blob.
+// El token (60s, un solo uso) reemplaza al header Authorization para que la
+// navegación del navegador (que no envía Bearer) pueda descargar el instalador.
+router.get('/electron-download', async (req, res) => {
     const token = req.query.token;
     if (!token) return res.status(401).json({ error: 'Token requerido' });
     const entry = _dlTokens.get(token);
@@ -202,14 +204,28 @@ router.get('/electron-download', (req, res) => {
     }
     _dlTokens.delete(token); // uso único
 
+    // 1) Si hay instalador local servido por el backend, usarlo.
     const zipPath = path.join(__dirname, '..', 'downloads', 'ProcuradorSCW-Setup.zip');
     const exePath = path.join(__dirname, '..', 'downloads', 'ProcuradorSCW-Setup.exe');
-    if (fs.existsSync(zipPath)) {
-        res.download(zipPath, 'ProcuradorSCW-Setup.zip');
-    } else if (fs.existsSync(exePath)) {
-        res.download(exePath, 'ProcuradorSCW-Setup.exe');
-    } else {
-        res.status(404).json({ error: 'El instalador no está disponible aún. Contactá a soporte.' });
+    if (fs.existsSync(zipPath)) return res.download(zipPath, 'ProcuradorSCW-Setup.zip');
+    if (fs.existsSync(exePath)) return res.download(exePath, 'ProcuradorSCW-Setup.exe');
+
+    // 2) Si no, redirigir al último instalador publicado en GitHub Releases.
+    try {
+        const https = require('https');
+        const data = await new Promise((resolve, reject) => {
+            const r2 = https.get(
+                'https://api.github.com/repos/jberger19186/procurador-tool/releases/latest',
+                { headers: { 'User-Agent': 'procurador-api', 'Accept': 'application/vnd.github+json' } },
+                (r) => { let b = ''; r.on('data', c => b += c); r.on('end', () => resolve(JSON.parse(b))); }
+            );
+            r2.on('error', reject);
+        });
+        const asset = data.assets?.find(a => a.name.endsWith('.exe') && !a.name.endsWith('.blockmap'));
+        if (!asset) return res.status(404).json({ error: 'El instalador no está disponible aún. Contactá a soporte.' });
+        return res.redirect(asset.browser_download_url);
+    } catch (e) {
+        return res.status(500).json({ error: 'Error al obtener el instalador.' });
     }
 });
 

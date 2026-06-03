@@ -205,7 +205,8 @@ async function sendWelcomeEmail(email, nombre, planName) {
         emailLayout(`
           ${p(`Hola <strong>${nombre}</strong>,`)}
           ${p(`Tu email fue verificado correctamente. Tu cuenta con el plan <strong>${planName}</strong> está pendiente de activación por el administrador.`)}
-          ${infoBox(`<strong>Mientras tanto</strong>, podés usar la aplicación con <strong>20 ejecuciones de prueba</strong> gratuitas.`)}
+          ${infoBox(`<strong>Ya podés empezar.</strong> Desde tu <strong>panel de usuario</strong> (sección <em>Mi Plan → Descargas</em>) podés instalar la <strong>extensión de Chrome</strong> y descargar la <strong>app de escritorio</strong>. La app incluye <strong>20 ejecuciones de prueba</strong> gratuitas durante el período de prueba.`)}
+          ${p(`Ingresá a tu panel de usuario: <a href="https://api.procuradortool.com/usuarios/" style="color:#d97706">api.procuradortool.com/usuarios/</a>`)}
           ${p('Te notificaremos por email cuando tu suscripción sea activada.')}
         `)
     );

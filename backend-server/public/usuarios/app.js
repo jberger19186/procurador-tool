@@ -796,7 +796,10 @@ function renderDownloads() {
 
     const planType = (acc.planType || '').toLowerCase();
     const planName = (acc.plan?.displayName || acc.plan?.name || '').toLowerCase();
-    const hasElectron = planType.includes('electron') || planName.includes('electron');
+    // La app de escritorio aplica a los planes que la incluyen: electron (BASIC/PRO/
+    // ENTERPRISE) y combo (COMBO_PROMO). EXTENSION_PROMO (extension) no la incluye.
+    const hasElectron = ['electron', 'combo'].includes(planType)
+        || planType.includes('electron') || planName.includes('electron') || planName.includes('combo');
 
     const extensionItem = `
         <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#f9fafb">
@@ -825,9 +828,7 @@ function renderDownloads() {
                 <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.14</div>
             </div>
             <div class="download-item-actions">
-                <a class="btn btn-primary btn-sm"
-                   href="https://api.procuradortool.com/client/download/electron"
-                   rel="noopener">⬇ Descargar instalador</a>
+                <button class="btn btn-primary btn-sm" onclick="downloadElectron(this)">⬇ Descargar instalador</button>
             </div>
         </div>` : '';
 
@@ -835,22 +836,23 @@ function renderDownloads() {
 }
 
 
-async function downloadElectron() {
-    const btn = event.currentTarget;
-    btn.disabled = true;
-    btn.textContent = 'Preparando...';
+async function downloadElectron(btn) {
+    btn = btn || (typeof event !== 'undefined' ? event.currentTarget : null);
+    const original = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparando...'; }
     try {
+        // Pide un token de 1 solo uso (autenticado) y luego navega a la descarga
+        // con el token en la query: la navegación del navegador no envía el header
+        // Authorization, por eso no se puede linkear directo al endpoint protegido.
         const res = await apiFetch('/api/extension/electron-token');
         if (!res || !res.ok) throw new Error('No disponible');
         const { token } = await res.json();
         // Descarga directa — el navegador muestra su barra de progreso nativa
         window.location.href = `/api/extension/electron-download?token=${token}`;
-        btn.textContent = '⬇ Descargar';
-        setTimeout(() => { btn.disabled = false; }, 3000);
+        if (btn) { btn.textContent = original; setTimeout(() => { btn.disabled = false; }, 3000); }
     } catch (e) {
         alert(e.message || 'Error al descargar. Intentá de nuevo.');
-        btn.disabled = false;
-        btn.textContent = '⬇ Descargar';
+        if (btn) { btn.disabled = false; btn.textContent = original; }
     }
 }
 

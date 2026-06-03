@@ -610,6 +610,8 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     try {
+        // Permite la extensión durante el trial: active OR (suspended + pending_activation).
+        // Mismo criterio que /auth/extension-login y /auth/refresh.
         const result = await db.query(`
             SELECT s.plan, s.status, s.expires_at,
                    s.usage_count, s.usage_limit,
@@ -618,7 +620,12 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
                    p.promo_max_users, p.promo_used_count, p.promo_alert_days
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
+            JOIN users u ON u.id = s.user_id
+            WHERE s.user_id = $1 AND s.expires_at > NOW()
+              AND (
+                s.status = 'active'
+                OR (s.status = 'suspended' AND u.registration_status = 'pending_activation')
+              )
         `, [userId]);
 
         if (result.rows.length === 0) {
