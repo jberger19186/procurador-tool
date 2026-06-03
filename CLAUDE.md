@@ -26,7 +26,7 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.15** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.16** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.4** — ZIP generado, pendiente subir al Chrome Web Store
 > Última sesión: 2026-06-02 (seguridad 100% · staging+rollback completos · documentación consolidada)
 
@@ -118,7 +118,7 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
   - **Electron — Mi Cuenta:** card de prueba con contador `X/20 utilizados` + barra de progreso coloreada (verde/naranja/rojo)
   - **Portal — Mi Plan:** card de prueba idéntica cuando `registration_status = 'pending_activation'`
   - **Portal — Descargas:** extensión con enlace directo Chrome Web Store · app usa `/client/download/electron`
-  - Releases: … → v2.7.13 → v2.7.14 → **v2.7.15** (tour bajo demanda + banners ocultos en tour + paso "Ayuda IA" + FAQ Escritos 1)
+  - Releases: … → v2.7.14 → v2.7.15 (tour bajo demanda + banners ocultos + paso "Ayuda IA" + FAQ Escritos 1) → **v2.7.16** (autofill password SCW: selector por placeholder, robusto en Chrome 148)
 
 - ✅ **Documentación para evaluación + auditoría de seguridad** (sesión 2026-05-30):
   - **Informe de evaluación del proyecto** (`docs/informe-evaluacion-proyecto.md` + versión Word `docs/Informe-Evaluacion-Procurador-SCW.docx`): documento sin tecnicismos para socios. Conclusión: apto para iniciar Beta controlada.

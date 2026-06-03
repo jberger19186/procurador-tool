@@ -288,8 +288,14 @@ async function main() {
     console.log(`📝 Completando sitio: ${sitio}`);
     await actualizarOverlay(page, `Completando sitio: ${sitio}...`);
 
-    // Chrome 130+ usa "Sitio web", versiones anteriores usaban "Sitio"
-    const siteSelectors = ['input[aria-label="Sitio web"]', 'input[aria-label="Sitio"]', 'input[aria-label="Site"]', 'input[aria-label="Website"]'];
+    // El label del campo cambia entre versiones/idiomas de Chrome ("Sitio web",
+    // "Sitio", "Site", "Website"). El placeholder "example.com" es estable en
+    // todas las versiones recientes (Chrome 148 incluido) → se prueba primero.
+    const siteSelectors = [
+        'input[placeholder="example.com"]',
+        'input[aria-label="Sitio web"]', 'input[aria-label="Sitio"]',
+        'input[aria-label="Site"]', 'input[aria-label="Website"]'
+    ];
     let focusedSite = false;
     for (const sel of siteSelectors) {
         focusedSite = await focusEnShadowDOM(page, sel);
