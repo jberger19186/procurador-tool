@@ -204,13 +204,9 @@ router.get('/electron-download', async (req, res) => {
     }
     _dlTokens.delete(token); // uso único
 
-    // 1) Si hay instalador local servido por el backend, usarlo.
-    const zipPath = path.join(__dirname, '..', 'downloads', 'ProcuradorSCW-Setup.zip');
-    const exePath = path.join(__dirname, '..', 'downloads', 'ProcuradorSCW-Setup.exe');
-    if (fs.existsSync(zipPath)) return res.download(zipPath, 'ProcuradorSCW-Setup.zip');
-    if (fs.existsSync(exePath)) return res.download(exePath, 'ProcuradorSCW-Setup.exe');
-
-    // 2) Si no, redirigir al último instalador publicado en GitHub Releases.
+    // Siempre redirige al ÚLTIMO instalador publicado en GitHub Releases — misma
+    // fuente que usa el auto-updater de la app. (No se sirven archivos locales:
+    // un instalador viejo en downloads/ entregaría una versión desactualizada.)
     try {
         const https = require('https');
         const data = await new Promise((resolve, reject) => {
