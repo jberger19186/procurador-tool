@@ -193,7 +193,10 @@ function validateForm() {
     else if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) fail('password', 'Debe incluir al menos una letra y un número.', 'Contraseña (una letra y un número)');
     else if (email && pwd.toLowerCase() === email.toLowerCase()) fail('password', 'No puede ser igual a tu email.', 'Contraseña (no puede ser igual al email)');
 
-    if (get('confirmPassword') !== pwd) fail('confirmPassword', 'Las contraseñas no coinciden', 'Confirmar contraseña (no coincide)');
+    // El campo "confirmar" se apoya SOLO en el indicador en vivo (#pw-match), no en
+    // el error estático del campo (que quedaba pegado aunque después coincidieran).
+    if (!get('confirmPassword'))         { updatePwMatch(); missing.push('Confirmar contraseña'); valid = false; }
+    else if (get('confirmPassword') !== pwd) { updatePwMatch(); missing.push('Confirmar contraseña (no coincide)'); valid = false; }
 
     const cuit = get('cuit');
     if (!cuit) fail('cuit', 'Requerido', 'CUIT / CUIL');
