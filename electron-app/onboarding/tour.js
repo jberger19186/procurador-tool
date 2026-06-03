@@ -313,44 +313,42 @@
         nextBtn.textContent   = idx === STEPS.length - 1 ? '✓ Finalizar' : 'Siguiente →';
         prevBtn.style.display = idx === 0 ? 'none' : '';
 
-        // ── Resolver bounding box ──────────────────────────────────────────
-        let rect = null;
-
-        if (step.targets) {
-            rect = getBoundingBox(step.targets);
-        } else if (step.target) {
-            const el = document.querySelector(step.target);
-            if (el) rect = el.getBoundingClientRect();
-        }
-
-        if (!rect) {
-            if (step.targets || step.target) { nextStep(); return; }
-            // Sin target → card centrada, spotlight invisible
-            Object.assign(spotlight.style, { left: '0px', top: '0px', width: '0px', height: '0px' });
-            requestAnimationFrame(() => {
-                const cw = 318, ch = card.offsetHeight || 220;
-                Object.assign(card.style, {
-                    left: `${Math.round((window.innerWidth  - cw) / 2)}px`,
-                    top:  `${Math.round((window.innerHeight - ch) / 2)}px`,
-                });
-            });
-            return;
-        }
+        // ── Si hay target pero no se encuentra, saltar el paso ──────────────
+        const hasTarget = !!(step.targets || step.target);
+        const firstRect = step.targets
+            ? getBoundingBox(step.targets)
+            : (step.target ? (document.querySelector(step.target)?.getBoundingClientRect() || null) : null);
+        if (hasTarget && !firstRect) { nextStep(); return; }
 
         const PAD = 8;
 
-        Object.assign(spotlight.style, {
-            left:   `${rect.left   - PAD}px`,
-            top:    `${rect.top    - PAD}px`,
-            width:  `${rect.width  + PAD * 2}px`,
-            height: `${rect.height + PAD * 2}px`,
-        });
+        // Mide de nuevo el rect en cada pasada (el layout puede no estar asentado:
+        // expand del sidebar, reflow del texto de la card, etc.) y reubica spotlight + card.
+        function reposition() {
+            let rect = step.targets
+                ? getBoundingBox(step.targets)
+                : (step.target ? (document.querySelector(step.target)?.getBoundingClientRect() || null) : null);
 
-        // ── Posicionar card ────────────────────────────────────────────────
-        requestAnimationFrame(() => {
             const CARD_W = 318;
             const CARD_H = card.offsetHeight || 220;
             const GAP    = 14;
+
+            if (!rect) {
+                // Sin target → card centrada, spotlight invisible
+                Object.assign(spotlight.style, { left: '0px', top: '0px', width: '0px', height: '0px' });
+                Object.assign(card.style, {
+                    left: `${Math.round((window.innerWidth  - CARD_W) / 2)}px`,
+                    top:  `${Math.round((window.innerHeight - CARD_H) / 2)}px`,
+                });
+                return;
+            }
+
+            Object.assign(spotlight.style, {
+                left:   `${rect.left   - PAD}px`,
+                top:    `${rect.top    - PAD}px`,
+                width:  `${rect.width  + PAD * 2}px`,
+                height: `${rect.height + PAD * 2}px`,
+            });
 
             const spaceBelow = window.innerHeight - rect.top - rect.height - PAD - GAP;
             const spaceAbove = rect.top           - PAD - GAP;
@@ -359,18 +357,13 @@
             let cx, cy;
 
             if (step.preferRight && spaceRight >= CARD_W + 8) {
-                // Card a la derecha del spotlight (sidebar items)
+                // Card a la derecha del bloque, centrada verticalmente sobre él
                 cx = rect.right + PAD + GAP;
-                // Para rects muy altos (multi-target), centrar en viewport
-                cy = rect.height > CARD_H * 2
-                    ? (window.innerHeight - CARD_H) / 2
-                    : rect.top + rect.height / 2 - CARD_H / 2;
+                cy = rect.top + rect.height / 2 - CARD_H / 2;
             } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
-                // Debajo
                 cx = rect.left + rect.width / 2 - CARD_W / 2;
                 cy = rect.top + rect.height + PAD + GAP;
             } else {
-                // Arriba
                 cx = rect.left + rect.width / 2 - CARD_W / 2;
                 cy = rect.top - PAD - GAP - CARD_H;
             }
@@ -379,7 +372,12 @@
             cy = Math.max(8, Math.min(cy, window.innerHeight - CARD_H - 8));
 
             Object.assign(card.style, { left: `${cx}px`, top: `${cy}px` });
-        });
+        }
+
+        requestAnimationFrame(reposition);
+        // Segunda pasada: re-mide cuando el layout ya se asentó (evita que la card
+        // quede superpuesta sobre los elementos, ej. paso "Historial").
+        setTimeout(reposition, 220);
     }
 
     // ─── Navegación ───────────────────────────────────────────────────────────
