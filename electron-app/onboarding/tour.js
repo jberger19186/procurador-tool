@@ -167,6 +167,9 @@
             const el = document.querySelector(sel);
             if (!el) return;
             const r = el.getBoundingClientRect();
+            // Ignorar elementos sin tamaño (ocultos o sin layout aún): distorsionan
+            // el bounding box (ej. items del sidebar colapsado / en transición).
+            if (r.width === 0 && r.height === 0) return;
             minLeft   = Math.min(minLeft,   r.left);
             minTop    = Math.min(minTop,     r.top);
             maxRight  = Math.max(maxRight,  r.right);
@@ -356,8 +359,12 @@
 
             let cx, cy;
 
-            if (step.preferRight && spaceRight >= CARD_W + 8) {
-                // Card a la derecha del bloque, centrada verticalmente sobre él
+            if (step.preferRight) {
+                // Pasos del sidebar (izquierda): la card va SIEMPRE a la derecha del
+                // bloque, centrada verticalmente sobre él de forma proporcional.
+                // (No se condiciona a spaceRight: a la derecha del sidebar siempre
+                // hay lugar, y el cálculo de espacio daba resultados inconsistentes
+                // según el estado de la animación, dejando la card debajo/superpuesta.)
                 cx = rect.right + PAD + GAP;
                 cy = rect.top + rect.height / 2 - CARD_H / 2;
             } else if (spaceBelow >= CARD_H || spaceBelow >= spaceAbove) {
@@ -374,10 +381,13 @@
             Object.assign(card.style, { left: `${cx}px`, top: `${cy}px` });
         }
 
+        // Re-mide y reubica varias veces: la animación de expansión del sidebar
+        // dura 0.22s, así que medir antes de que termine deja la card mal ubicada
+        // (superpuesta o debajo). Las pasadas tardías (>220ms) garantizan que la
+        // medición final sea sobre el layout ya asentado.
         requestAnimationFrame(reposition);
-        // Segunda pasada: re-mide cuando el layout ya se asentó (evita que la card
-        // quede superpuesta sobre los elementos, ej. paso "Historial").
-        setTimeout(reposition, 220);
+        setTimeout(reposition, 280);
+        setTimeout(reposition, 500);
     }
 
     // ─── Navegación ───────────────────────────────────────────────────────────
