@@ -756,6 +756,51 @@ Get-Content "backend-server/dev-tools/reset-test-data.sql" | ssh -i "C:/Users/JO
 ```
 > Si cambian los IDs de usuarios a conservar, editar las listas `IN (...)` del script. Último reset: 2026-05-29 (backup `backup_pre_reset_20260529_154533.sql`).
 
+### Reset de la app Electron (onboarding / datos de usuario)
+
+> **Contexto importante:** la app se ejecuta desde el código fuente (`npm start` en `electron-app/`), **no está instalada como ejecutable en el sistema** (no hay entrada en el registro de Windows ni desinstalador NSIS). Los datos de usuario viven en tres carpetas de AppData.
+
+**Directorios de datos de la app:**
+| Carpeta | Contenido |
+|---|---|
+| `%LOCALAPPDATA%\procurador-electron-updater` | `onboarding_complete.json`, `psc_accounts.enc`, `config_proceso.json`, perfil Chrome dedicado (`ChromeProfile/`), caché, logs, updater |
+| `%APPDATA%\procurador-electron` | datos Roaming de Electron |
+| `%LOCALAPPDATA%\ProcuradorSCW` | caché local de la app |
+
+#### Opción A — Solo resetear el onboarding (más rápido)
+Conserva la sesión activa y todos los demás datos. Solo borra el flag de onboarding completado:
+```powershell
+Remove-Item "$env:LOCALAPPDATA\procurador-electron-updater\onboarding_complete.json" -Force
+```
+Al abrir la app arranca el onboarding, con la sesión ya iniciada.
+
+#### Opción B — Reset completo de datos (sin reinstalar)
+Borra sesión, caché, accounts, perfil Chrome dedicado y onboarding. La app queda como la primera vez que se abrió:
+```powershell
+Remove-Item "$env:LOCALAPPDATA\procurador-electron-updater" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:APPDATA\procurador-electron"              -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:LOCALAPPDATA\ProcuradorSCW"               -Recurse -Force -ErrorAction SilentlyContinue
+```
+Al abrir la app: login → onboarding desde cero.
+
+#### Opción C — Reset total (equivale a primera instalación)
+Como la app corre desde el repo (no instalada), "reinstalar" = borrar datos + volver a `npm start`:
+```powershell
+# 1. Borrar todos los datos
+Remove-Item "$env:LOCALAPPDATA\procurador-electron-updater" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:APPDATA\procurador-electron"              -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:LOCALAPPDATA\ProcuradorSCW"               -Recurse -Force -ErrorAction SilentlyContinue
+
+# 2. "Reinstalar" = correr la app de nuevo
+cd C:\Users\JONATHAN\source\repos\ProcuradorTool\electron-app
+npm start
+```
+Si en el futuro la app se distribuye como instalador `.exe` (NSIS), agregar como paso 0:
+```powershell
+# Solo si hay instalador en el sistema:
+& "$env:LOCALAPPDATA\Programs\Procurador SCW\Uninstall Procurador SCW.exe" /S
+```
+
 ### Backup completo del proyecto
 Cuando el usuario pide un backup, crear una carpeta en el escritorio con el formato:
 `YYYYMM_DDMMYYYY_ProcuradorTool`
