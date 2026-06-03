@@ -172,6 +172,14 @@ function p(text) {
     return `<p style="font-size:15px;color:#1a1a1a;line-height:1.6;margin:0 0 14px">${text}</p>`;
 }
 
+// Aclaración de que el portal pide login manual (los emails no abren sesión solos).
+// redirectText (opcional): a dónde lo lleva el ?goto= después de ingresar.
+function loginNote(redirectText) {
+    return `<p style="font-size:12px;color:#6b7280;margin:14px 0 0">
+      El botón te lleva al portal web — ingresá con tu email y contraseña${redirectText ? `, y ${redirectText}` : ''}.
+    </p>`;
+}
+
 // ─────────────────────────────────────────────
 //  EMAILS
 // ─────────────────────────────────────────────
@@ -206,7 +214,8 @@ async function sendWelcomeEmail(email, nombre, planName) {
           ${p(`Hola <strong>${nombre}</strong>,`)}
           ${p(`Tu email fue verificado correctamente. Tu cuenta con el plan <strong>${planName}</strong> está pendiente de activación por el administrador.`)}
           ${infoBox(`<strong>Ya podés empezar.</strong> Desde tu <strong>panel de usuario</strong> (sección <em>Mi Plan → Descargas</em>) podés instalar la <strong>extensión de Chrome</strong> y descargar la <strong>app de escritorio</strong>. La app incluye <strong>20 ejecuciones de prueba</strong> gratuitas durante el período de prueba.`)}
-          ${p(`Ingresá a tu panel de usuario: <a href="https://api.procuradortool.com/usuarios/" style="color:#d97706">api.procuradortool.com/usuarios/</a>`)}
+          ${btnPrimary(`${PORTAL_URL}?goto=plan`, 'Ir a mi panel de usuario →')}
+          ${loginNote('llegarás directo a la sección de descargas')}
           ${p('Te notificaremos por email cuando tu suscripción sea activada.')}
         `)
     );
@@ -258,7 +267,8 @@ async function sendActivationEmail(email, nombre) {
         emailLayout(`
           ${p(`Hola <strong>${nombre}</strong>,`)}
           ${infoBox('<strong>✅ ¡Tu cuenta está activa!</strong> Ya podés usar todas las funciones de tu plan sin límite de usos de prueba.', '#16a34a')}
-          ${btnPrimary(PORTAL_URL, 'Ver mi plan en el portal →')}
+          ${btnPrimary(`${PORTAL_URL}?goto=plan`, 'Ver mi plan en el portal →')}
+          ${loginNote('verás el estado de tu plan')}
         `, '#16a34a')
     );
 }
@@ -342,7 +352,8 @@ async function sendBillingReminderEmail(email, nombre, nextBillingDate) {
           ${p(`Hola <strong>${nombre}</strong>,`)}
           ${p(`Tu suscripción se renueva automáticamente el <strong>${fecha}</strong>.`)}
           ${p('Si querés cambiar tu plan o método de pago, hacelo desde el portal antes de esa fecha.')}
-          ${btnPrimary(PORTAL_URL, 'Ir al portal →')}
+          ${btnPrimary(`${PORTAL_URL}?goto=facturacion`, 'Ir a facturación →')}
+          ${loginNote('podrás cambiar tu plan o método de pago')}
         `)
     );
 }
@@ -417,7 +428,8 @@ async function sendPaymentFailedEmail(email, graceEndDate) {
         <h2>⚠️ Tu pago no pudo procesarse</h2>
         <p>Hubo un problema al cobrar tu suscripción de Procurador SCW.</p>
         <p>Tenés tiempo hasta el <strong>${fecha}</strong> para actualizar tu método de pago antes de que se suspenda el acceso.</p>
-        <p><a href="${process.env.APP_BASE_URL || 'https://procuradortool.com'}/portal" style="display:inline-block;background:#d97706;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Actualizar método de pago</a></p>
+        <p><a href="${PORTAL_URL}?goto=facturacion" style="display:inline-block;background:#d97706;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Actualizar método de pago</a></p>
+        <p style="color:#8a8a8a;font-size:12px;">El botón te lleva al portal web — ingresá con tu email y contraseña para actualizar tu método de pago.</p>
     `;
     return sendEmail(email, 'Acción requerida: actualizá tu método de pago — Procurador SCW', html);
 }
