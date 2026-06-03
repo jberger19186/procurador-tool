@@ -105,8 +105,9 @@ router.get('/scripts/check/:scriptName', authenticateToken, async (req, res) => 
     try {
         // Verificar suscripción activa (mismo criterio que el download)
         const subResult = await db.query(`
-            SELECT 1 FROM subscriptions
-            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+            SELECT 1 FROM subscriptions s JOIN users u ON u.id = s.user_id
+            WHERE s.user_id = $1 AND s.expires_at > NOW()
+              AND (s.status = 'active' OR (s.status = 'suspended' AND u.registration_status = 'pending_activation'))
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -147,8 +148,9 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
     try {
         // Verificar suscripción activa
         const subResult = await db.query(`
-            SELECT * FROM subscriptions
-            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+            SELECT s.* FROM subscriptions s JOIN users u ON u.id = s.user_id
+            WHERE s.user_id = $1 AND s.expires_at > NOW()
+              AND (s.status = 'active' OR (s.status = 'suspended' AND u.registration_status = 'pending_activation'))
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -230,8 +232,9 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
     try {
         // Verificar suscripción
         const subResult = await db.query(`
-            SELECT plan FROM subscriptions
-            WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+            SELECT s.plan FROM subscriptions s JOIN users u ON u.id = s.user_id
+            WHERE s.user_id = $1 AND s.expires_at > NOW()
+              AND (s.status = 'active' OR (s.status = 'suspended' AND u.registration_status = 'pending_activation'))
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -281,13 +284,20 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
     }[subsystem] || null;
 
     try {
-        // Verificar suscripción activa
+        // Verificar suscripción. Permite el TRIAL (suspended + pending_activation):
+        // las ejecuciones de prueba SÍ deben contar contra los 20 usos.
         const subResult = await db.query(`
             SELECT s.*, p.proc_executions_limit, p.informe_limit, p.monitor_novedades_limit,
-                   p.proc_expedientes_limit, p.batch_executions_limit, p.batch_expedientes_limit
+                   p.proc_expedientes_limit, p.batch_executions_limit, p.batch_expedientes_limit,
+                   u.registration_status
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
+            JOIN users u ON u.id = s.user_id
+            WHERE s.user_id = $1 AND s.expires_at > NOW()
+              AND (
+                s.status = 'active'
+                OR (s.status = 'suspended' AND u.registration_status = 'pending_activation')
+              )
         `, [userId]);
 
         if (subResult.rows.length === 0) {
@@ -338,7 +348,6 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
                     SET ${usageCol} = ${usageCol} + 1,
                         usage_count = usage_count + 1
                     WHERE user_id = $1
-                      AND status = 'active'
                       AND expires_at > NOW()
                       AND (${usageCol} + COALESCE(${bonusColName}, 0)) < $2
                     RETURNING ${usageCol}, usage_count
@@ -350,7 +359,6 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
                     SET ${usageCol} = ${usageCol} + 1,
                         usage_count = usage_count + 1
                     WHERE user_id = $1
-                      AND status = 'active'
                       AND expires_at > NOW()
                     RETURNING ${usageCol}, usage_count
                 `;
@@ -366,7 +374,7 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
             // Backward compat: solo incrementar usage_count global
             await db.query(`
                 UPDATE subscriptions SET usage_count = usage_count + 1
-                WHERE user_id = $1 AND status = 'active' AND expires_at > NOW()
+                WHERE user_id = $1 AND expires_at > NOW()
                   AND usage_count < usage_limit
             `, [userId]);
         }
@@ -575,7 +583,9 @@ router.get('/batch-limits', authenticateToken, async (req, res) => {
                    p.batch_executions_limit, p.batch_expedientes_limit
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.status = 'active' AND s.expires_at > NOW()
+            JOIN users u ON u.id = s.user_id
+            WHERE s.user_id = $1 AND s.expires_at > NOW()
+              AND (s.status = 'active' OR (s.status = 'suspended' AND u.registration_status = 'pending_activation'))
         `, [userId]);
 
         if (result.rows.length === 0) {
