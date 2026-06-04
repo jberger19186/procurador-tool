@@ -2557,9 +2557,12 @@ function cargarConfiguracion() {
         posiblesRutas.forEach(ruta => console.error(`   - ${ruta}`));
 
         const defaultConfigPath = path.join(app.getPath('userData'), 'config_proceso.json');
+        // Fecha de hoy en DD/MM/YYYY como fecha límite por defecto (la primera vez).
+        const hoy = new Date();
+        const fechaHoy = `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
         const configDefault = {
             "general": {
-                "fechaLimite": "01/11/2025",
+                "fechaLimite": fechaHoy,
                 "identificador": "27320694359",
                 "maxMovimientos": 15,
                 "buscarEnTodos": true
@@ -2579,6 +2582,9 @@ function cargarConfiguracion() {
             "visor": {
                 "abrirAutomaticamente": true,
                 "navegadorPredeterminado": true
+            },
+            "seguridad": {
+                "modoHeadless": true
             },
             "notificaciones": {
                 "activadas": true,

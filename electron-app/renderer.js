@@ -1433,6 +1433,17 @@ function setupProcessListeners() {
         if (rutaExcel) addLog('info', `📊 Excel generado: ${rutaExcel}`);
         if (rutaHTML)  addLog('info', `🌐 Visor HTML generado: ${rutaHTML}`);
         showNotification(`Reportes batch generados: ${exitosos}/${total} expedientes`, 'success');
+        // Auto-abrir el visor HTML del informe si está configurado
+        if (rutaHTML && currentConfig?.visor?.abrirAutomaticamente) {
+            setTimeout(async () => {
+                try {
+                    await window.electronAPI.openFile(rutaHTML);
+                    addLog('info', '🌐 Visor de informe abierto automáticamente');
+                } catch (e) {
+                    addLog('warning', `⚠️ Error al abrir visor de informe: ${e.message}`);
+                }
+            }, 1500);
+        }
     });
 
     window.electronAPI.onProcessFinished((result) => {
@@ -1463,9 +1474,10 @@ function setupProcessListeners() {
                     setTimeout(() => switchMonitorTab('monitor-novedades'), 300);
                 }
             } else if (!isInforme) {
-                // Abrir visor de procuración (solo para Ejecutar/Procurar, nunca para Informe)
-                const abrirVisorCheck = document.getElementById('abrirVisor');
-                if (abrirVisorCheck && abrirVisorCheck.checked) {
+                // Abrir visor de procuración (solo para Ejecutar/Procurar, nunca para Informe).
+                // Bug previo: chequeaba getElementById('abrirVisor') (id inexistente) → nunca abría.
+                // Ahora usa el valor real de la configuración.
+                if (currentConfig?.visor?.abrirAutomaticamente) {
                     setTimeout(async () => {
                         try {
                             const visorResult = await window.electronAPI.getVisorPath();
