@@ -1,6 +1,6 @@
 # Documentación interna — Estados, errores y flujos del sistema
 **Procurador SCW** · Uso interno del equipo  
-Última actualización: 2026-05-30 (agregada sección — flujos de cobranza Fase 5)
+Última actualización: 2026-06-04 (gating de acceso en 2 niveles + candado CUIT/verify-session)
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Estado | Descripción | Puede iniciar sesión | Puede ejecutar |
 |---|---|---|---|
-| `pending_email` | Registrado, email sin verificar | No | No |
+| `pending_email` | Registrado, email sin verificar | **Sí** (sesión + onboarding, incl. autocompletado de CUIT) | No — requiere email verificado |
 | `pending_activation` | Email verificado, pendiente de aprobación por admin. Sigue en trial de 20 usos (app + extensión) hasta configurar el pago. | Sí | Sí (trial hasta 20 usos) |
 | `active` | Cuenta aprobada. Sigue en trial si `payment_provider IS NULL`; con pago → límites del plan. | Sí | Sí (trial o plan según pago) |
 | `rejected` | Rechazado por admin | No | No |
@@ -81,11 +81,32 @@
 
 **Trial = hasta configurar el método de pago (modelo desde 06/2026):**
 El trial son **20 usos** (`usage_limit=20`, contador `usage_count`) que rigen **mientras `payment_provider IS NULL`** (no se configuró el pago), sin importar el `status`.
-- **App Electron:** cada ejecución suma +1 a `usage_count` (y al contador por subsistema). Gateado por `verify-session` + `run-process` (`remaining = usage_limit - usage_count > 0`) + `log-execution`. Endpoints permiten `active` OR (`suspended` + `pending_activation`).
+- **App Electron:** cada ejecución suma +1 a `usage_count` (y al contador por subsistema). El acceso se controla en **dos niveles** (ver «Consistencia de gating» más abajo): **sesión/identidad** (`verify-session`, `login` — permiten también `pending_email`) y **ejecución/cupo** (`run-process` con `remaining = usage_limit - usage_count > 0` + `log-execution`, que requieren email verificado: `active` OR `suspended`+`pending_activation`).
 - **Extensión Chrome:** habilitada durante el trial con los flujos del plan (COMBO_PROMO y EXTENSION_PROMO traen los 5). **Atada al cupo de la app:** mientras `payment_provider IS NULL`, la extensión sólo funciona si `usage_count < usage_limit`. Al agotar los 20 → la extensión **también se bloquea** (403). Gateado en `extension-login`, `/auth/refresh` y `/client/extension-auth` con: `(payment_provider IS NOT NULL OR usage_count < usage_limit)`.
 - **Activación por admin:** SOLO aprueba la cuenta (`registration_status='active'`, `status='active'`). **No** asigna el plan ni resetea los usos: el usuario sigue con el trial de 20 hasta el pago.
 - **Configurar método de pago** (`payment_provider` pasa a no-null, vía `applyTrialBonus`): se asignan los **límites del plan** (sin +20 de bienvenida), `usage_count` arranca en **0** y se elimina el trial. La extensión pasa a funcionar sin tope de usos (según flujos del plan).
-- Estados bloqueados (app y extensión): `pending_email`, `rejected`, `suspended_admin`, `suspended_plan_expired`, `cancelled`, y `suspended` por pago fallido (sin `pending_activation`).
+- **Bloqueados de ejecución/cupo** (Nivel B): `pending_email` (hasta verificar el email), `rejected`, `suspended_admin`, `suspended_plan_expired`, `cancelled`, y `suspended` por pago fallido (sin `pending_activation`).
+- **Bloqueados de sesión** (Nivel A): solo los terminales `rejected`, `suspended_admin`, `suspended_plan_expired`, `cancelled`. `pending_email` y `pending_activation` **sí** pueden iniciar sesión y hacer onboarding (incluido el autocompletado del CUIT).
+
+---
+
+## 2.1. Consistencia de gating de acceso — candado anti-regresión
+
+El acceso se controla en **dos niveles que NO comparten criterio**. Si cambiás uno, mantené coherentes **todos** los endpoints de ese nivel.
+
+**Nivel A — Sesión e identidad** (no consume cupo ni dispara automatizaciones; leer el propio CUIT y configurar la contraseña PJN local es inofensivo). Permite `active` **o trial** (`suspended` con usos), bloqueando solo estados terminales. Incluye `pending_email` y `pending_activation`.
+- `POST /auth/login` → `routes/auth.js` (`blockedStatuses` + suscripción `active|suspended`)
+- `POST /client/verify-session` → `routes/client.js` (`isBlocked` + `isActiveSub|isTrialSub`)
+- `POST /auth/portal-login` → portal web (estados no terminales)
+
+**Nivel B — Ejecución y cupo** (consume `usage_count`, dispara automatizaciones reales contra el PJN). Requiere **email verificado**: `active` o (`suspended` + `pending_activation`) con usos disponibles. `pending_email` **no** puede ejecutar (evita abuso con emails falsos quemando los 20 usos).
+- `checkLicense.js` (middleware de las rutas de ejecución)
+- `POST /client/scripts/log-execution` → `routes/client.js`
+- Extensión: `extension-login`, `/auth/refresh`, `/client/extension-auth`
+
+**Regla:** un cambio de criterio en un nivel debe replicarse en TODOS sus endpoints. No mezclar criterios entre niveles.
+
+**Bug histórico (2026-06-04) — no repetir:** `verify-session` (Nivel A) quedó solo con `active`/`pending_activation`, mientras el login ya permitía `pending_email`. Efecto: el handler `agregar contraseña SCW` (onboarding y configuración, en `main.js`) lee el CUIT del usuario vía `verify-session`; al recibir 403 el `cuit` llegaba vacío al script `agregarPasswordSCW.js` → el formulario del gestor de Chrome cargaba el **sitio** pero **no el campo Usuario (CUIT)**. Fix: alinear `verify-session` con el login (commit `237cb56`). **El CUIT es identidad, no cupo: leerlo no debe depender del estado de la suscripción.**
 
 ---
 
