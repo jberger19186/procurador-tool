@@ -26,7 +26,7 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.17** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.18** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.4** — ZIP generado, pendiente subir al Chrome Web Store
 > Última sesión: 2026-06-02 (seguridad 100% · staging+rollback completos · documentación consolidada)
 
@@ -118,8 +118,8 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
   - **Electron — Mi Cuenta:** card de prueba con contador `X/20 utilizados` + barra de progreso coloreada (verde/naranja/rojo)
   - **Portal — Mi Plan:** card de prueba idéntica cuando `registration_status = 'pending_activation'`
   - **Portal — Descargas:** extensión con enlace directo Chrome Web Store · app usa `/client/download/electron`
-  - Releases: … → v2.7.15 → v2.7.16 (autofill password SCW robusto en Chrome 148) → **v2.7.17** (tour paso 10: card anclada al sidebar, sin superposición ni vaivén)
-  - Backend (sin release, ya en prod): trial puede ejecutar la app y **cuenta los 20 usos** (verify-session, scripts/check·download·available, log-execution, batch-limits permiten `suspended`+`pending_activation`)
+  - Releases: … → v2.7.16 → v2.7.17 (tour paso 10) → **v2.7.18** (headless por defecto, fecha límite=hoy, visor auto-abre proc+informe, mensajes X/20)
+  - Backend (sin release, ya en prod): **modelo trial-hasta-pago** — 20 usos compartidos app+extensión hasta configurar el pago; admin solo aprueba; al pagar plan + contador a 0. Extensión atada al cupo del trial. Cron de trial agotado ya no rechaza (notifica).
 
 - ✅ **Documentación para evaluación + auditoría de seguridad** (sesión 2026-05-30):
   - **Informe de evaluación del proyecto** (`docs/informe-evaluacion-proyecto.md` + versión Word `docs/Informe-Evaluacion-Procurador-SCW.docx`): documento sin tecnicismos para socios. Conclusión: apto para iniciar Beta controlada.
