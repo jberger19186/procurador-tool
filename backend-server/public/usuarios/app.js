@@ -390,10 +390,14 @@ function renderStatusBanner() {
         }
     }
 
-    // Método de pago faltante (active)
+    // Método de pago faltante (active) — sigue en período de prueba (20 usos compartidos)
     if (rs === 'active' && !acc.paymentProvider) {
+        const used  = acc.usageCount ?? 0;
+        const limit = acc.usageLimit ?? 20;
+        const rem   = limit - used;
+        const alerta = rem <= 5 ? ' 🔴' : '';
         banner.style.background = '#b45309';
-        bannerText.textContent = 'Configurá tu método de pago en Facturación para evitar interrupciones.';
+        bannerText.textContent = `Usás tus usos de prueba: ${used}/${limit} — configurá tu método de pago para acceder a los límites de tu plan${alerta}`;
         banner.style.display = 'flex';
         return;
     }
@@ -705,14 +709,22 @@ function renderPlan() {
         expiredAlert.remove();
     }
 
-    // Trial info box — solo para pending_activation
+    // Trial info box — período de prueba (20 usos) mientras no haya método de pago.
+    // Aplica a pending_activation (recién verificado el email) y a active sin pago (activado por admin).
     let trialBox = document.getElementById('trial-info-box');
-    if (rs === 'pending_activation') {
+    const inTrial = !acc.paymentProvider && (rs === 'pending_activation' || rs === 'active');
+    if (inTrial) {
         const trialUsed  = acc.usageCount ?? 0;
-        const trialLimit = 20;
+        const trialLimit = acc.usageLimit ?? 20;
         const trialRem   = Math.max(0, trialLimit - trialUsed);
         const pctTrial   = Math.min(100, Math.round((trialUsed / trialLimit) * 100));
         const barColor   = trialRem <= 5 ? '#dc2626' : trialRem <= 10 ? '#d97706' : '#16a34a';
+        const subLabel   = rs === 'pending_activation'
+            ? 'Tu cuenta está pendiente de activación por el administrador'
+            : 'Configurá tu método de pago para acceder a los límites de tu plan';
+        const lowMsg     = rs === 'pending_activation'
+            ? '🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.'
+            : '🔴 Quedan pocos usos. Configurá tu método de pago para seguir usando la app y la extensión.';
 
         if (!trialBox) {
             trialBox = document.createElement('div');
@@ -725,14 +737,14 @@ function renderPlan() {
                 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
                     <div>
                         <span style="font-size:13px;font-weight:700;color:#92400e">⏳ Período de prueba</span>
-                        <span style="font-size:12px;color:#78350f;margin-left:8px">Tu cuenta está pendiente de activación por el administrador</span>
+                        <span style="font-size:12px;color:#78350f;margin-left:8px">${subLabel}</span>
                     </div>
                     <span style="font-size:20px;font-weight:800;color:${barColor}">${trialUsed} <span style="font-size:13px;font-weight:500;color:#92400e">/ ${trialLimit} usos utilizados</span></span>
                 </div>
                 <div style="background:#fde68a;border-radius:4px;height:8px;overflow:hidden">
                     <div style="height:100%;width:${pctTrial}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
                 </div>
-                ${trialRem <= 5 ? `<p style="margin:8px 0 0;font-size:12px;color:#991b1b;font-weight:600">🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.</p>` : ''}
+                ${trialRem <= 5 ? `<p style="margin:8px 0 0;font-size:12px;color:#991b1b;font-weight:600">${lowMsg}</p>` : ''}
             </div>`;
     } else if (trialBox) {
         trialBox.remove();
