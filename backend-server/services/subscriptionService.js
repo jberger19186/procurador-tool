@@ -126,10 +126,11 @@ async function applyTrialBonus(subscriptionId, planName, nextBillingDate) {
   const limits = PLAN_LIMITS[planName];
   if (!limits) throw new Error(`Plan desconocido: ${planName}`);
 
-  // usage_limit sube a proc (o novedades para EXTENSION_PROMO) + 20 trial
-  // Para simplificar, el campo genérico usage_limit refleja proc + bonus
+  // Modelo trial-hasta-pago: al configurar el pago se asignan los límites del PLAN
+  // (sin el +20 del trial) y el contador arranca limpio en 0. Los 20 usos del trial
+  // se eliminan: a partir de acá rige el plan.
   const baseProcLimit = limits.proc > 0 ? limits.proc : limits.novedades;
-  const newUsageLimit = baseProcLimit + 20;
+  const newUsageLimit = baseProcLimit;
 
   await db.query(
     `UPDATE subscriptions

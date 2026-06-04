@@ -292,10 +292,12 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
 
         const u = userResult.rows[0];
 
-        // FASE 5: Al activar, usage_limit se mantiene en 20 (trial).
-        // El límite real del plan se aplica recién con el primer pago aprobado
-        // (webhook payment.approved → applyTrialBonus en subscriptionService.js).
-        // Solo si PAYMENT_MODULE_ENABLED=false (modo legacy sin cobro) se sube al límite del plan.
+        // Modelo trial-hasta-pago: la activación por admin SOLO APRUEBA la cuenta.
+        // El usuario sigue en el TRIAL (20 usos) hasta que configure su método de
+        // pago; recién ahí se le asignan los límites del plan (webhook → applyTrialBonus).
+        // Por eso NO se resetea usage_count (el trial es 20 usos en total hasta el pago)
+        // y usage_limit se mantiene en 20. Solo en modo legacy sin cobro
+        // (PAYMENT_MODULE_ENABLED=false) se sube directo al límite del plan.
         const paymentEnabled = process.env.PAYMENT_MODULE_ENABLED === 'true';
         const planLimit = u.proc_executions_limit > 0 ? u.proc_executions_limit : 9999;
         const usageLimit = paymentEnabled ? 20 : planLimit;
@@ -306,10 +308,12 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
             WHERE id = $1
         `, [userId]);
 
+        // Sin cobro (legacy) reseteamos el contador al pasar al plan; con cobro
+        // mantenemos el progreso del trial (no se resetea usage_count).
         await client.query(`
             UPDATE subscriptions
             SET status = 'active',
-                usage_count = 0,
+                usage_count = ${paymentEnabled ? 'usage_count' : '0'},
                 usage_limit = $1,
                 expires_at = NOW() + ($2 || ' days')::INTERVAL,
                 period_start = NOW(),
@@ -328,7 +332,7 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
         );
         await client.query(
             `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'account_activated', $2)`,
-            [userId, 'Tu cuenta fue activada. Ya podés usar todas las funciones de tu plan.']
+            [userId, 'Tu cuenta fue aprobada. Seguís con tus usos de prueba; configurá tu método de pago para acceder a los límites de tu plan.']
         );
 
         await client.query('COMMIT');

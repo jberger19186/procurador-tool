@@ -637,6 +637,7 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
         // pending_activation) y demás estados bloqueados ya se filtraron arriba.
         const subResult = await db.query(`
             SELECT s.plan, s.status, s.expires_at,
+                   s.payment_provider, s.usage_count, s.usage_limit,
                    COALESCE(p.extension_flows, '[]'::jsonb) AS extension_flows
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
@@ -651,6 +652,16 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
         if (subResult.rows.length === 0) {
             return res.status(403).json({
                 error: 'No tenés una suscripción activa',
+                action: 'subscribe'
+            });
+        }
+
+        // Trial-hasta-pago: si no configuró método de pago, la extensión sólo sirve
+        // mientras queden usos del trial (mismo cupo de 20 que la app Electron).
+        const _s = subResult.rows[0];
+        if (!_s.payment_provider && (_s.usage_count >= _s.usage_limit)) {
+            return res.status(403).json({
+                error: `Agotaste tus ${_s.usage_limit} usos de prueba (${_s.usage_count}/${_s.usage_limit}). Configurá tu método de pago para seguir usando la extensión y la app.`,
                 action: 'subscribe'
             });
         }
@@ -774,7 +785,8 @@ router.post('/refresh', authenticateToken, async (req, res) => {
     try {
         // Verificar que el usuario aún existe y tiene suscripción activa o en prueba
         const userResult = await db.query(`
-            SELECT u.id, u.email, u.role, u.registration_status, s.status, s.expires_at
+            SELECT u.id, u.email, u.role, u.registration_status, s.status, s.expires_at,
+                   s.payment_provider, s.usage_count, s.usage_limit
             FROM users u
             LEFT JOIN subscriptions s ON u.id = s.user_id
             WHERE u.id = $1
@@ -794,6 +806,15 @@ router.post('/refresh', authenticateToken, async (req, res) => {
         if (!isActiveSub && !isTrialSub) {
             return res.status(403).json({
                 error: 'Suscripción no activa',
+                action: 'subscribe'
+            });
+        }
+
+        // Trial-hasta-pago: sin método de pago, el token sólo se renueva mientras
+        // queden usos del trial (la extensión/app dejan de funcionar al agotarlos).
+        if (!user.payment_provider && (user.usage_count >= user.usage_limit)) {
+            return res.status(403).json({
+                error: `Agotaste tus ${user.usage_limit} usos de prueba. Configurá tu método de pago para continuar.`,
                 action: 'subscribe'
             });
         }

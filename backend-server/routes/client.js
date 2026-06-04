@@ -629,7 +629,7 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
         // Mismo criterio que /auth/extension-login y /auth/refresh.
         const result = await db.query(`
             SELECT s.plan, s.status, s.expires_at,
-                   s.usage_count, s.usage_limit,
+                   s.usage_count, s.usage_limit, s.payment_provider,
                    COALESCE(p.extension_flows, '[]'::jsonb) AS extension_flows,
                    p.plan_type, p.promo_type, p.promo_end_date,
                    p.promo_max_users, p.promo_used_count, p.promo_alert_days
@@ -651,6 +651,15 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
         }
 
         const sub = result.rows[0];
+
+        // Trial-hasta-pago: sin método de pago, la extensión sólo sirve mientras
+        // queden usos del trial (mismo cupo que la app). Al agotarse, se bloquea.
+        if (!sub.payment_provider && ((sub.usage_count || 0) >= (sub.usage_limit || 0))) {
+            return res.status(403).json({
+                error: `Agotaste tus ${sub.usage_limit} usos de prueba. Configurá tu método de pago para seguir usando la extensión.`,
+                action: 'subscribe'
+            });
+        }
         const usageLimit = sub.usage_limit || 0;
         const usageCount = sub.usage_count || 0;
         const usagePercent = usageLimit > 0 ? Math.round((usageCount / usageLimit) * 100) : 0;
