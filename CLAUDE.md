@@ -528,6 +528,7 @@ ProcuradorTool/
 │   └── internal/                          documentación interna
 │       ├── proximos-pasos.md              ⭐ handoff de continuidad (leer post-/clear)
 │       ├── sistema-estados-flujos.md      flujos técnicos (IA, email, IPC, deploy)
+│       ├── plan-pruebas-app-electron.md   plan de prueba app Electron (test integral + prompt)
 │       ├── mejoras-futuras.md             ideas diferidas (KB, borradores masivos)
 │       └── rollback-fase4.md              procedimientos de restore Fase 4
 │
