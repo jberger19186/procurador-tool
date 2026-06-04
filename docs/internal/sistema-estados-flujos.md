@@ -76,11 +76,13 @@
 | `PRO` | electron | TBD | 200 proc · 50 inf · 10 partes | No |
 | `ENTERPRISE` | electron | TBD | Ilimitado · 50 partes | No |
 
-**Trial (qué incluye al verificar el email):**
-- **App Electron:** 20 ejecuciones (`usage_limit=20`, contador `usage_count`). Cada ejecución suma +1. Gateado por `checkLicense`: `suspended` + `pending_activation` + `usage_count < usage_limit`. Al agotar → `rejected` vía cron.
-- **Extensión Chrome:** habilitada durante el trial (desde 02/06/2026) con los flujos del plan (COMBO_PROMO y EXTENSION_PROMO traen los 5). **No consume** los 20 usos — se rige por los flujos del plan. Gateada en `extension-login` y `/auth/refresh`: `active` OR (`suspended` + `pending_activation`).
-- Estados bloqueados para la extensión (siguen sin acceso): `pending_email`, `rejected`, `suspended_admin`, `suspended_plan_expired`, `cancelled`, y `suspended` por pago fallido (sin `pending_activation`).
-- Tras la activación/pago (status `active`), el flujo normal continúa igual.
+**Trial = hasta configurar el método de pago (modelo desde 06/2026):**
+El trial son **20 usos** (`usage_limit=20`, contador `usage_count`) que rigen **mientras `payment_provider IS NULL`** (no se configuró el pago), sin importar el `status`.
+- **App Electron:** cada ejecución suma +1 a `usage_count` (y al contador por subsistema). Gateado por `verify-session` + `run-process` (`remaining = usage_limit - usage_count > 0`) + `log-execution`. Endpoints permiten `active` OR (`suspended` + `pending_activation`).
+- **Extensión Chrome:** habilitada durante el trial con los flujos del plan (COMBO_PROMO y EXTENSION_PROMO traen los 5). **Atada al cupo de la app:** mientras `payment_provider IS NULL`, la extensión sólo funciona si `usage_count < usage_limit`. Al agotar los 20 → la extensión **también se bloquea** (403). Gateado en `extension-login`, `/auth/refresh` y `/client/extension-auth` con: `(payment_provider IS NOT NULL OR usage_count < usage_limit)`.
+- **Activación por admin:** SOLO aprueba la cuenta (`registration_status='active'`, `status='active'`). **No** asigna el plan ni resetea los usos: el usuario sigue con el trial de 20 hasta el pago.
+- **Configurar método de pago** (`payment_provider` pasa a no-null, vía `applyTrialBonus`): se asignan los **límites del plan** (sin +20 de bienvenida), `usage_count` arranca en **0** y se elimina el trial. La extensión pasa a funcionar sin tope de usos (según flujos del plan).
+- Estados bloqueados (app y extensión): `pending_email`, `rejected`, `suspended_admin`, `suspended_plan_expired`, `cancelled`, y `suspended` por pago fallido (sin `pending_activation`).
 
 ---
 

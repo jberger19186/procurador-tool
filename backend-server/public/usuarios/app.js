@@ -1288,7 +1288,7 @@ async function renderFact() {
         paymentBody = `
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
                 <div style="flex:1;min-width:200px">
-                    <p style="font-size:13px;color:var(--text-muted);margin:0">No tenés un método de pago configurado. Configurá tu tarjeta para activar el cobro automático mensual.</p>
+                    <p style="font-size:13px;color:var(--text-muted);margin:0">No tenés un método de pago configurado. Estás usando tus usos de prueba: <strong>${acc.usageCount ?? 0}/${acc.usageLimit ?? 20}</strong>. Al configurar el pago se te asignan los límites de tu plan y el contador arranca limpio.</p>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap">💳 Configurar método de pago</button>
             </div>`;
@@ -1598,6 +1598,7 @@ const AYUDA_FAQ_ITEMS = [
     { cat: 'procuracion', q: '¿Cuánto tarda la procuración?', a: 'Depende de la cantidad de expedientes y la velocidad del PJN. Con conexión normal, cada expediente tarda entre 5 y 15 segundos.' },
     { cat: 'procuracion', q: '¿Puedo usar la computadora mientras procura?', a: 'Sí, pero evitá usar Chrome durante la ejecución. El sistema opera Chrome en segundo plano; interrumpirlo puede causar errores.' },
     { cat: 'procuracion', q: '¿Puedo procurar con fecha personalizada?', a: 'Sí. Usá el botón "Procurar con fecha…" para seleccionar un rango de fechas distinto al predeterminado.' },
+    { cat: 'procuracion', q: '¿Qué significa la fecha límite de procuración?', a: 'Es la fecha hasta la cual se buscan expedientes para agregar al informe de procuración. Para confirmar que se consultó hasta el límite, por cada sección incluida en la procuración (letrado, parte, autorizado, favoritos) vas a ver al menos 1 expediente con fecha anterior a la fecha límite: eso indica que se revisó hasta el último expediente que cumple la condición de la fecha y se verificó el expediente inmediato anterior a esa fecha para la sección consultada.' },
     // --- INFORME ---
     { cat: 'informe', q: '¿Cómo genero un informe?', a: 'Click en "Informe" en el sidebar. Podés procesar un expediente individual ingresando el número o un lote cargando un archivo Excel con la lista.' },
     { cat: 'informe', q: '¿Qué formato debe tener el Excel para informe en lote?', a: 'Una columna con encabezado "expediente" y los números en el formato estándar del PJN (ej: 12345/2023). Descargá la plantilla desde la sección Informe.' },
@@ -1620,7 +1621,7 @@ const AYUDA_FAQ_ITEMS = [
     { cat: 'cuenta', q: '¿Puedo usar la app en más de una computadora?', a: 'No. La licencia está vinculada a un dispositivo. Para cambiar de equipo, contactá al soporte.' },
     { cat: 'cuenta', q: '¿Cómo cancelo mi suscripción?', a: 'En la sección "Facturación" de este portal, hacé click en "Cancelar suscripción". Conservás el acceso hasta fin del período pago.' },
     { cat: 'cuenta', q: '¿Dónde veo cuántas ejecuciones me quedan?', a: 'En la sección "Mi Plan" de este portal o en la sección "Mi Cuenta" de la app Electron.' },
-    { cat: 'cuenta', q: '¿Qué pasa cuando se vence el trial?', a: 'Al agotar las 20 ejecuciones de prueba, la cuenta queda pendiente de activación. El admin revisa y activa (o rechaza) manualmente.' },
+    { cat: 'cuenta', q: '¿Qué es el período de prueba y qué pasa cuando se agota?', a: 'Al verificar tu email recibís 20 usos de prueba para la app y la extensión de Chrome habilitada. Esos 20 usos rigen hasta que configures tu método de pago. Al agotarlos, la app deja de ejecutar y la extensión también se bloquea (la extensión funciona mientras te queden usos de prueba). Para continuar, configurá tu método de pago: se te asignan los límites de tu plan y el contador arranca limpio (se eliminan los 20 del trial).' },
     // --- ERRORES FRECUENTES ---
     { cat: 'errores', q: '¿Qué significa que el login al PJN falló?', a: 'El sistema no pudo ingresar al SCW. Verificá que Chrome tenga guardada la contraseña (botón "Agregar contraseña SCW" en la app). Si la contraseña del PJN cambió, actualizala en Chrome primero.' },
     { cat: 'errores', q: '¿Por qué se colgó el proceso?', a: 'Podés detenerlo con el botón "Detener". Si se repite, revisá que Chrome no tenga otras pestañas abiertas del PJN bloqueando el acceso y que tu sesión PJN esté vigente.' },

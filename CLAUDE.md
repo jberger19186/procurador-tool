@@ -1020,9 +1020,13 @@ BASIC            → app: 50 proc · 10 inf · 3 partes activas
 PRO              → app: 200 proc · 50 inf · 10 partes activas
 ENTERPRISE       → app: ilimitado · 50 partes activas
 ```
-Nuevos usuarios reciben 20 ejecuciones de prueba por 365 días para la **app Electron** (estado "suspended" + `registration_status='pending_activation'` hasta activación manual por admin).
-
-**Extensión durante el trial (desde 2026-06-02):** apenas el usuario verifica su email, la **extensión de Chrome** queda habilitada durante el período de prueba con los flujos de su plan (COMBO_PROMO y EXTENSION_PROMO traen los 5). La extensión **no consume** los 20 usos (esos son solo de la app). Gateado en `extension-login` y `/auth/refresh` (`routes/auth.js`): permiten `status='active'` OR (`status='suspended'` AND `registration_status='pending_activation'`). Estados bloqueados (pago fallido, rechazado, cancelado, suspendido por admin/plan) siguen sin acceso a la extensión.
+**Modelo de trial — "hasta configurar el método de pago" (desde 2026-06-04):**
+Al verificar el email, el usuario recibe **20 usos de prueba** (`usage_limit=20`) que rigen **mientras `payment_provider IS NULL`** (no configuró el pago), sin importar el `status`. Esos 20 usos son **compartidos por la app Electron y la extensión**:
+- **App Electron:** cada ejecución suma a `usage_count`. Bloquea al llegar a 20 (`remaining<=0` en `run-process`).
+- **Extensión Chrome:** habilitada con los flujos del plan, pero **atada al cupo**: mientras no haya pago, sólo funciona si `usage_count < usage_limit`. Al agotar los 20, la extensión **también se bloquea** (403). Gateado en `extension-login`, `/auth/refresh` y `/client/extension-auth`: `(payment_provider IS NOT NULL OR usage_count < usage_limit)`.
+- **Activación por admin:** SOLO aprueba (`status='active'`); **no** asigna el plan ni resetea usos (sigue el trial de 20 hasta el pago).
+- **Configurar método de pago** (`applyTrialBonus`): asigna los **límites del plan** (sin +20 de bienvenida), `usage_count=0`, se elimina el trial. La extensión pasa a funcionar sin tope de usos.
+- Estados bloqueados (app+extensión): `pending_email`, `rejected`, `suspended_admin`, `suspended_plan_expired`, `cancelled`, y `suspended` por pago fallido.
 
 ### Arquitectura de usage_limit / usage_count
 

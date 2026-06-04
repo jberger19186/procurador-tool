@@ -490,6 +490,7 @@ const FAQ_ITEMS = [
     { cat: 'procuracion', q: '¿Cuánto tarda la procuración?', a: 'Depende de la cantidad de expedientes y la velocidad del PJN. Con conexión normal, cada expediente tarda entre 5 y 15 segundos.' },
     { cat: 'procuracion', q: '¿Puedo usar la computadora mientras procura?', a: 'Sí, pero evitá usar Chrome durante la ejecución. El sistema opera Chrome en segundo plano; interrupirlo puede causar errores.' },
     { cat: 'procuracion', q: '¿Puedo procurar con fecha personalizada?', a: 'Sí. Usá el botón "Procurar con fecha…" para seleccionar un rango de fechas distinto al predeterminado.' },
+    { cat: 'procuracion', q: '¿Qué significa la fecha límite de procuración?', a: 'Es la fecha hasta la cual se buscan expedientes para agregar al informe de procuración. Para confirmar que se consultó hasta el límite, por cada sección incluida en la procuración (letrado, parte, autorizado, favoritos) vas a ver al menos 1 expediente con fecha anterior a la fecha límite: eso indica que se revisó hasta el último expediente que cumple la condición de la fecha y se verificó el expediente inmediato anterior a esa fecha para la sección consultada.' },
     // --- INFORME ---
     { cat: 'informe', q: '¿Cómo genero un informe?', a: 'Click en "Informe" en el sidebar. Podés procesar un expediente individual ingresando el número o un lote cargando un archivo Excel con la lista.' },
     { cat: 'informe', q: '¿Qué formato debe tener el Excel para informe en lote?', a: 'Una columna con encabezado "expediente" y los números en el formato estándar del PJN (ej: 12345/2023). Descargá la plantilla desde la sección Informe.' },
@@ -512,8 +513,8 @@ const FAQ_ITEMS = [
     { cat: 'cuenta', q: '¿Puedo usar la app en más de una computadora?', a: 'No. La licencia está vinculada a un dispositivo. Para cambiar de equipo, contactá al soporte.' },
     { cat: 'cuenta', q: '¿Cómo cancelo mi suscripción?', a: 'Ingresá al portal web en api.procuradortool.com/usuarios/, sección "Facturación", y hacé click en "Cancelar suscripción". Conservás el acceso hasta fin del período pago.' },
     { cat: 'cuenta', q: '¿Dónde veo cuántas ejecuciones me quedan?', a: 'En la sección "Mi Cuenta" de la app (ícono de usuario en la barra lateral) o en el portal web, sección "Mi Plan".' },
-    { cat: 'cuenta', q: '¿Qué es el período de prueba?', a: 'Al verificar tu email recibís 20 ejecuciones gratuitas válidas por 365 días. Podés usar toda la funcionalidad sin restricciones. El contador aparece en la sección Mi Cuenta (arriba a la derecha) y en el portal web → Mi Plan.' },
-    { cat: 'cuenta', q: '¿Qué pasa cuando se agotan los usos de prueba?', a: 'Al llegar a 20 ejecuciones, la cuenta queda en espera de activación. El administrador revisa y activa manualmente. Si necesitás continuar antes, abrí un ticket de soporte.' },
+    { cat: 'cuenta', q: '¿Qué es el período de prueba?', a: 'Al verificar tu email recibís 20 usos de prueba para la app de Electron y la extensión de Chrome habilitada. Esos 20 usos rigen hasta que configures tu método de pago; al configurarlo se te asignan los límites de tu plan y el contador arranca limpio (se eliminan los 20 del trial). El contador aparece en Mi Cuenta y en el portal web → Mi Plan.' },
+    { cat: 'cuenta', q: '¿Qué pasa cuando se agotan los usos de prueba?', a: 'Al llegar a los 20 usos, la app deja de ejecutar y la extensión de Chrome también se bloquea: la extensión funciona mientras te queden usos de prueba de la app. Para seguir usándolas, configurá tu método de pago — se te asignan los límites de tu plan y el contador empieza de cero.' },
     // --- ERRORES FRECUENTES ---
     { cat: 'errores', q: '¿Por qué dice "Verificá tu email para usar la aplicación"?', a: 'Tu cuenta requiere verificación de email antes de poder ejecutar procesos. Revisá tu casilla (incluyendo spam) y hacé click en el enlace del email que te enviamos al registrarte. Si no lo encontrás, podés reenviarlo desde el portal web.' },
     { cat: 'errores', q: '¿Qué significa que el login al PJN falló?', a: 'El sistema no pudo ingresar al SCW. Verificá que Chrome tenga guardada la contraseña (botón "Agregar contraseña SCW" en la app). Si la contraseña del PJN cambió, actualizala en Chrome primero.' },
@@ -2089,8 +2090,8 @@ async function loadAccountData() {
                     <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
                         <span style="font-size:20px">⚠️</span>
                         <div style="flex:1">
-                            <div style="font-weight:600;color:#856404;font-size:13px">Sin método de pago configurado</div>
-                            <div style="color:#6c5700;font-size:12px;margin-top:2px">Configurá tu método de pago para continuar usando el servicio sin interrupciones.</div>
+                            <div style="font-weight:600;color:#856404;font-size:13px">Usás tus usos de prueba: ${a.usageCount ?? 0}/${a.usageLimit ?? 20}</div>
+                            <div style="color:#6c5700;font-size:12px;margin-top:2px">Al configurar tu método de pago se te asignan los límites de tu plan y el contador arranca limpio. La extensión también funciona mientras te queden usos de prueba.</div>
                         </div>
                         <button id="btn-ir-portal-cuenta"
                             style="background:#ffc107;border:none;color:#333;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
@@ -2098,18 +2099,6 @@ async function loadAccountData() {
                         </button>
                     </div>`;
                 document.getElementById('btn-ir-portal-cuenta')?.addEventListener('click', () => openPortalSection('facturacion'));
-            } else if (a.paymentProvider && a.trialBonusUntil && new Date(a.trialBonusUntil) > new Date()) {
-                // Banner: bonus de bienvenida activo
-                const bonusDate = new Date(a.trialBonusUntil).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                trialBannerEl.style.display = '';
-                trialBannerEl.innerHTML = `
-                    <div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
-                        <span style="font-size:20px">🎁</span>
-                        <div style="flex:1">
-                            <div style="font-weight:600;color:#065f46;font-size:13px">Bonus de bienvenida activo</div>
-                            <div style="color:#047857;font-size:12px;margin-top:2px">Tenés +20 usos de prueba sumados a tu plan, válidos hasta el ${bonusDate}.</div>
-                        </div>
-                    </div>`;
             } else {
                 trialBannerEl.style.display = 'none';
                 trialBannerEl.innerHTML = '';
@@ -2394,7 +2383,8 @@ async function checkSubscriptionStatusBanner() {
             const cancelDays  = daysUntil(sub.cancelAt);
 
             if (!sub.paymentProvider) {
-                msg   = 'Configurá tu método de pago para evitar interrupciones';
+                const u = sub.usageCount ?? 0, l = sub.usageLimit ?? 20;
+                msg   = `Usás tus usos de prueba: ${u}/${l} — configurá tu método de pago para acceder a los límites de tu plan`;
                 color = '#b45309'; // amarillo
             } else if (sub.cancelAt && cancelDays !== null && cancelDays >= 0) {
                 const fecha = new Date(sub.cancelAt).toLocaleDateString('es-AR');

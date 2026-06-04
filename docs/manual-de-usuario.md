@@ -54,17 +54,20 @@ Al registrarte, recibís un email de verificación en la casilla con la que te r
 
 ### Período de prueba
 
-Los nuevos usuarios reciben **20 ejecuciones de prueba** válidas por 365 días para la **app de Electron** (procuración, informes, monitor), sin restricciones de funcionalidad.
+Al verificar tu email recibís **20 usos de prueba** que rigen **hasta que configures tu método de pago**. Esos 20 usos son **compartidos por la app de Electron y la extensión de Chrome**:
 
-Además, apenas verificás tu email, **la extensión de Chrome queda habilitada durante el período de prueba** con los flujos de tu plan (COMBO_PROMO y EXTENSION_PROMO incluyen los 5 flujos). El uso de la extensión **no descuenta** los 20 usos de prueba: esos 20 son exclusivos de la app de Electron.
+- **App de Electron** (procuración, informes, monitor): cada ejecución descuenta de los 20.
+- **Extensión de Chrome**: queda habilitada con los flujos de tu plan (COMBO_PROMO y EXTENSION_PROMO incluyen los 5). **Funciona mientras te queden usos de prueba de la app**: cuando se agotan los 20, la extensión también se bloquea.
+
+Cuando **configurás tu método de pago**, se te asignan los **límites de tu plan** y el contador **arranca limpio en 0** (se eliminan los 20 del trial). A partir de ahí la extensión funciona sin tope de usos (según los flujos de tu plan).
 
 El contador de uso aparece en:
-- **App Electron → Mi Cuenta**: card amarilla con contador `X / 20 usos utilizados` y barra de progreso
+- **App Electron → Mi Cuenta**: card con contador `X / 20 usos utilizados` y barra de progreso
 - **Portal web → Mi Plan**: misma información
 
-La activación final de la cuenta es manual — el administrador revisa y activa (o rechaza) dentro de las 24-48 horas hábiles de haberte registrado.
+La aprobación de la cuenta es manual — el administrador revisa y aprueba (o rechaza) dentro de las 24-48 horas hábiles. **La aprobación no consume ni resetea tus usos**: seguís con tu trial de 20 hasta configurar el pago.
 
-> **Nota:** el período de prueba se inicia automáticamente al verificar tu email. No necesitás configurar ningún método de pago para comenzar a usarlo.
+> **Nota:** el período de prueba se inicia automáticamente al verificar tu email. No necesitás configurar un método de pago para empezar a usarlo — pero al configurarlo accedés a los límites completos de tu plan.
 
 ---
 
@@ -104,6 +107,8 @@ Accede automáticamente al SCW del PJN y procura todos tus expedientes.
 - **Procurar todos:** procura el rango de fechas configurado por defecto
 - **Procurar seleccionados:** elegí expedientes específicos de la lista antes de ejecutar
 - **Procurar con fecha personalizada:** seleccioná un rango de fechas distinto
+
+**Fecha límite de procuración:** es la fecha **hasta la cual se buscan expedientes** para agregar al informe de procuración. La primera vez, la app la fija en la **fecha de hoy**; si la cambiás, se respeta la tuya. Para que puedas confirmar que se consultó hasta el límite, por **cada sección incluida** en la procuración (letrado, parte, autorizado, favoritos) vas a ver **al menos 1 expediente con fecha anterior** a la fecha límite: eso indica que se revisó hasta el último expediente que cumple la condición de la fecha y se verificó el expediente inmediato anterior a esa fecha para la sección consultada.
 
 > **Importante:** no uses Chrome manualmente mientras el sistema está ejecutando. Podés seguir trabajando en otras aplicaciones sin problema.
 

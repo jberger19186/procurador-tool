@@ -506,27 +506,34 @@ cron.schedule('0 3 1 * *', async () => {
 
 const mailerCron = require('./utils/mailer');
 
-// 5a. Bloqueo automático al agotar trial — cada hora
+// 5a. Aviso al agotar el trial — cada hora.
+// Modelo trial-hasta-pago: al agotar los 20 usos NO se rechaza la cuenta (el
+// usuario puede configurar el pago para continuar). Solo se notifica UNA vez
+// (guardado por el user_event 'trial_exhausted_blocked'). Los runtime gates
+// (run-process / extensión) ya bloquean la ejecución mientras no haya pago.
 cron.schedule('0 * * * *', async () => {
     try {
         const exhausted = await pool.query(`
             SELECT u.id, u.email, u.nombre
             FROM users u
             JOIN subscriptions s ON u.id = s.user_id
-            WHERE u.registration_status = 'pending_activation'
+            WHERE s.payment_provider IS NULL
               AND s.usage_count >= s.usage_limit
+              AND u.registration_status NOT IN ('pending_email','rejected','cancelled')
+              AND NOT EXISTS (
+                SELECT 1 FROM user_events e
+                WHERE e.user_id = u.id AND e.event_type = 'trial_exhausted_blocked'
+              )
         `);
         for (const u of exhausted.rows) {
-            await pool.query(`UPDATE users SET registration_status = 'rejected', updated_at = NOW() WHERE id = $1`, [u.id]);
-            await pool.query(`UPDATE subscriptions SET status = 'cancelled', updated_at = NOW() WHERE user_id = $1`, [u.id]);
             await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'trial_exhausted_blocked')`, [u.id]);
             await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'trial_exhausted', $2)`,
-                [u.id, 'Tus usos de prueba se agotaron. Tu acceso ha sido bloqueado.']);
+                [u.id, 'Agotaste tus 20 usos de prueba. Configurá tu método de pago para acceder a los límites de tu plan y seguir usando la app y la extensión.']);
             mailerCron.sendTrialExhaustedEmail(u.email, u.nombre).catch(() => {});
         }
-        if (exhausted.rowCount > 0) logger.info(`[CRON] trial_exhausted: ${exhausted.rowCount} usuarios bloqueados`);
+        if (exhausted.rowCount > 0) logger.info(`[CRON] trial_exhausted: ${exhausted.rowCount} usuarios notificados (sin rechazo)`);
     } catch (err) {
-        logger.error('[CRON] Error en bloqueo trial agotado:', err.message);
+        logger.error('[CRON] Error en aviso de trial agotado:', err.message);
     }
 }, { timezone: 'America/Argentina/Buenos_Aires' });
 

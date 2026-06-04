@@ -12,16 +12,16 @@ flowchart TD
     A([🌐 Usuario visita<br/>procuradortool.com]) --> B[📝 Completa formulario<br/>de registro]
     B --> C[📧 Recibe email<br/>de verificación]
     C --> D{Verifica<br/>email?}
-    D -- Sí --> E[⏳ Cuenta en espera<br/>de activación<br/><b>+ 20 usos de prueba (app)</b><br/>+ extensión habilitada]
+    D -- Sí --> E[⏳ Trial: <b>20 usos</b><br/>app + extensión<br/>hasta configurar el pago]
     D -- No --> X1[❌ Cuenta sin verificar<br/>no puede operar]
 
     E --> F{Admin<br/>aprueba?}
-    F -- Sí --> G[✅ Cuenta activa<br/>continúa con 20 usos de prueba]
+    F -- Sí --> G[✅ Cuenta aprobada<br/>sigue con el trial de 20 usos]
     F -- No --> X2[❌ Cuenta rechazada]
 
     G --> H[💳 Usuario configura<br/>método de pago<br/>en MercadoPago]
-    H --> I[💰 Primer cobro<br/>mensual aprobado]
-    I --> J[🎁 Bonus de bienvenida:<br/>límite del plan + 20 usos extra]
+    H --> I[💰 Pago configurado / cobro aprobado]
+    I --> J[🧹 Se asignan límites del plan<br/>contador a 0 · se elimina el trial]
 
     J --> K[🚀 Operación normal:<br/>procuración · informes · monitor]
     K --> L[🔄 Renovación automática<br/>mes a mes]
@@ -88,7 +88,7 @@ flowchart LR
 | Estado | Significado | Acceso al servicio |
 |---|---|:---:|
 | 📧 **Pendiente verificación** | Usuario se registró pero no clickeó el email | ❌ |
-| ⏳ **Pendiente activación** | Email verificado · 20 usos de prueba (app Electron) + extensión de Chrome habilitada | ✅ (limitado) |
+| ⏳ **Pendiente activación / trial** | Email verificado · 20 usos de prueba compartidos por app + extensión, hasta configurar el pago | ✅ (limitado) |
 | ✅ **Activa** | Suscripción al día, cobro automático funcionando | ✅ |
 | 📅 **Cancelación programada** | El usuario canceló, sigue con acceso hasta fin del período | ✅ (hasta fecha) |
 | ⏰ **En período de gracia** | Pago rechazado, MP reintenta 3 días | ✅ |
@@ -103,8 +103,8 @@ flowchart LR
 ## 💡 Puntos clave para presentar
 
 1. **Activación manual por admin** — control humano antes de habilitar la cuenta (filtro anti-fraude / cumplimiento)
-2. **20 usos de prueba** (app Electron) + **extensión de Chrome habilitada** antes del primer cobro — el usuario evalúa el producto completo antes de pagar
-3. **Bonus de bienvenida** — +20 usos extra el primer mes pago, mejora retención inicial
+2. **20 usos de prueba compartidos** (app Electron + extensión de Chrome) hasta configurar el pago — el usuario evalúa el producto completo antes de pagar; al agotar los 20, ambas se bloquean
+3. **Al configurar el pago** — se asignan los límites del plan y el contador arranca limpio (se elimina el trial)
 4. **Cobro automático mensual** vía MercadoPago — sin intervención manual
 5. **Gracia de 3 días** ante pago rechazado — evita perder clientes por errores transitorios
 6. **Cancelación amigable** — el usuario puede cancelar y reactivar antes del fin del período
