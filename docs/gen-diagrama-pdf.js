@@ -13,14 +13,14 @@ const happyPath = `flowchart TD
     A([🌐 Usuario visita<br/>procuradortool.com]) --> B[📝 Completa formulario<br/>de registro]
     B --> C[📧 Recibe email<br/>de verificación]
     C --> D{Verifica<br/>email?}
-    D -- Sí --> E["⏳ Cuenta en espera<br/>de activación<br/><b>+ 20 usos de prueba app</b><br/>+ extensión habilitada"]
+    D -- Sí --> E["⏳ Trial: <b>20 usos</b><br/>app + extensión<br/>hasta configurar el pago"]
     D -- No --> X1[❌ Cuenta sin verificar<br/>no puede operar]
     E --> F{Admin<br/>aprueba?}
-    F -- Sí --> G[✅ Cuenta activa<br/>continúa con 20 usos de prueba]
+    F -- Sí --> G[✅ Cuenta aprobada<br/>sigue con el trial de 20 usos]
     F -- No --> X2[❌ Cuenta rechazada]
     G --> H[💳 Usuario configura<br/>método de pago<br/>en MercadoPago]
-    H --> I[💰 Primer cobro<br/>mensual aprobado]
-    I --> J[🎁 Bonus de bienvenida:<br/>límite del plan + 20 usos extra]
+    H --> I[💰 Pago configurado / cobro aprobado]
+    I --> J[🧹 Se asignan límites del plan<br/>contador a 0 · se elimina el trial]
     J --> K[🚀 Operación normal:<br/>procuración · informes · monitor]
     K --> L[🔄 Renovación automática<br/>mes a mes]
     L --> K
@@ -100,7 +100,7 @@ const html = `<!DOCTYPE html>
   <table>
     <tr><th>Estado</th><th>Significado</th><th>Acceso</th></tr>
     <tr><td>📧 Pendiente verificación</td><td>Registrado pero no clickeó el email</td><td>❌</td></tr>
-    <tr><td>⏳ Pendiente activación</td><td>Email verificado · 20 usos de prueba (app) + extensión de Chrome habilitada</td><td>✅ limitado</td></tr>
+    <tr><td>⏳ Pendiente activación / trial</td><td>Email verificado · 20 usos de prueba compartidos por app + extensión, hasta configurar el pago</td><td>✅ limitado</td></tr>
     <tr><td>✅ Activa</td><td>Suscripción al día, cobro automático funcionando</td><td>✅</td></tr>
     <tr><td>📅 Cancelación programada</td><td>Canceló, sigue con acceso hasta fin del período</td><td>✅ hasta fecha</td></tr>
     <tr><td>⏰ En período de gracia</td><td>Pago rechazado, MP reintenta 3 días</td><td>✅</td></tr>
