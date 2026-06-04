@@ -9,9 +9,9 @@
 | Estado | Descripción | Puede iniciar sesión | Puede ejecutar |
 |---|---|---|---|
 | `pending_email` | Registrado, email sin verificar | No | No |
-| `pending_activation` | Email verificado, pendiente de activación por admin | Sí | Sí (hasta agotar trial) |
-| `active` | Cuenta activa | Sí | Sí (según plan) |
-| `rejected` | Rechazado por admin o trial agotado | No | No |
+| `pending_activation` | Email verificado, pendiente de aprobación por admin. Sigue en trial de 20 usos (app + extensión) hasta configurar el pago. | Sí | Sí (trial hasta 20 usos) |
+| `active` | Cuenta aprobada. Sigue en trial si `payment_provider IS NULL`; con pago → límites del plan. | Sí | Sí (trial o plan según pago) |
+| `rejected` | Rechazado por admin | No | No |
 | `suspended_admin` | Suspendido manualmente por admin | No | No |
 | `suspended_plan_expired` | Plan vencido (cron diario) | No | No |
 | `cancelled` | Suscripción cancelada y período vencido | No | No |
@@ -24,14 +24,17 @@
       │ verifica email
       ▼
   pending_activation ────────────────────────────────────────┐
-      │ admin activa                   │ admin rechaza (block) │
+      │ admin aprueba                  │ admin rechaza (block) │
       ▼                                ▼                       │
     active                          rejected                  │
+      │  (sigue en trial hasta pagar)                          │
       │                                                        │
-      │ trial agotado (cron)                                   │
-      │ (usage_count >= usage_limit y status="pending_activation")
-      └──────────────────────────────────────────────────────▶ rejected
-      │
+      │ trial agotado sin pago (cron)                          │
+      │ → SOLO notifica, NO rechaza.                           │
+      │ El usuario puede configurar el pago para continuar.    │
+      │                                                        │
+      │ admin suspende
+      ▼
       │ admin suspende
       ▼
   suspended_admin

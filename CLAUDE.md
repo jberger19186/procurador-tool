@@ -1489,6 +1489,9 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - Sin fecha → procura hoy; con fecha → procura desde esa fecha (`runProcessCustomDate`)
 - Sincronización bidireccional con el campo "Fecha límite" del modal de Configuración
 - Guarda en `config.general.fechaLimite` automáticamente al cambiar
+- **v2.7.18:** `fechaLimite` por defecto = **fecha de hoy** dinámica (antes estaba hardcodeada a `01/11/2025`)
+- **v2.7.18:** config inicial incluye `seguridad: { modoHeadless: true }` → headless **activo por defecto** al instalar
+- **v2.7.18:** visor auto-abre al terminar procuración (bug fix: usaba `getElementById('abrirVisor')` inexistente; ahora usa `config.visor.abrirAutomaticamente`). Informe batch también auto-abre el visor HTML.
 - Nueva función `runProcessFromSidebarFecha()` en `renderer.js`
 - Tour actualizado: paso 4 resalta Procurar + campo + Por lote con spotlight conjunto
 
