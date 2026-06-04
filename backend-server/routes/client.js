@@ -49,12 +49,17 @@ router.post('/verify-session', authenticateToken, async (req, res) => {
 
         const user = result.rows[0];
 
-        // Verificar suscripción. Permite el TRIAL (suspended + pending_activation):
-        // el usuario tiene 20 ejecuciones de prueba en la app antes de la activación.
-        // Mismo criterio que checkLicense y los endpoints de extensión.
+        // Verificar suscripción. Alineado con el login (auth.js): se bloquean los
+        // estados terminales/administrativos y se permite tanto la suscripción
+        // activa como el TRIAL (suspended con usos disponibles), sin importar si el
+        // registro está en pending_email o pending_activation. Así el handler de
+        // onboarding/configuración puede leer el CUIT del usuario en cualquiera de
+        // esos estados (la app ya permite el login en ellos).
+        const blockedStatuses = ['rejected', 'suspended_admin', 'suspended_plan_expired', 'cancelled'];
+        const isBlocked   = blockedStatuses.includes(user.registration_status);
         const isActiveSub = user.status === 'active';
-        const isTrialSub  = user.status === 'suspended' && user.registration_status === 'pending_activation';
-        if (!user.plan || (!isActiveSub && !isTrialSub)) {
+        const isTrialSub  = user.status === 'suspended' && user.usage_count < user.usage_limit;
+        if (!user.plan || isBlocked || (!isActiveSub && !isTrialSub)) {
             return res.status(403).json({
                 error: 'No tienes una suscripción activa',
                 action: 'subscribe'
