@@ -2522,7 +2522,7 @@ router.get('/users/:userId/invoices', authenticateAdmin, async (req, res) => {
     try {
         const { rows } = await db.query(
             `SELECT id, invoice_type, cae, numero, amount, pdf_url,
-                    status, retry_count, error_message, issued_at, created_at
+                    status, retry_count, last_error AS error_message, issued_at, created_at
              FROM invoices
              WHERE user_id = $1
              ORDER BY created_at DESC
