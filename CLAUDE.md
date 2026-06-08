@@ -1304,6 +1304,13 @@ Si el resultado es `False`, la automatización **no puede autofill** y el usuari
 | Campos `usage_count` / `usage_limit` en DB | Afectan directamente las cuotas de todos los clientes |
 | `manifest.json` de la extensión | No sincronizar entre `extension-app/` dev y producción — tienen diferencias intencionales |
 
+### 🔑 Regla de secretos — NUNCA versionar credenciales
+> **Ningún secreto va en archivos versionados** (CLAUDE.md, docs, código). Esto incluye: tokens MercadoPago (sandbox **y** producción), `MP_WEBHOOK_SECRET`, `JWT_SECRET`, claves RSA/AES, API keys (Anthropic, Brevo), passwords de DB.
+> - Los valores vivos viven **solo** en el `.env` del server (gitignored): prod `/var/www/procurador/backend-server/.env` · staging `.env.staging`.
+> - En la documentación se referencia **dónde** está el valor, nunca el valor en sí (ej: "ver `.env.staging` en el server").
+> - ⚠️ **Al activar B3 (MercadoPago producción):** el token real va directo al `.env` del server por SSH — **jamás** en CLAUDE.md ni en ningún commit.
+> - Antecedente: el 2026-06-08 GitGuardian detectó el token MP **sandbox** que estuvo en CLAUDE.md (commit `cb305d4`, 29/05). Se removió (commit `74e6c00`) y se **rotó** el token + webhook secret. Por eso esta regla.
+
 ---
 
 ## 📋 Pendientes — Prioridad actual
