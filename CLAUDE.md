@@ -222,11 +222,13 @@ Ciclo de vida de suscripción funcionando end-to-end: alta → cobro → cancela
 > Login vendedor en panel dev: https://www.mercadopago.com.ar/developers/panel/app
 
 #### Credenciales API (cuenta vendedor de prueba)
-| Variable | Valor |
+> ⚠️ **No pegar las credenciales reales acá.** Los valores vivos viven solo en `backend-server/.env.staging` (server, gitignored). Para verlos: `ssh … "grep MP_ /var/www/procurador-staging/backend-server/.env.staging"`. Histórico: el token sandbox que estuvo acá fue rotado tras la alerta de GitGuardian (2026-06-08).
+
+| Variable | Dónde está el valor |
 |---|---|
-| `MP_ACCESS_TOKEN` | `APP_USR-2400427986609750-052810-ae29cea74562fd33adb80b7692f21b08-3433287066` |
-| `MP_PUBLIC_KEY` | `APP_USR-346db40a-416e-4073-af44-1e0c130d152d` |
-| `MP_WEBHOOK_SECRET` | `a0c3ad4ce054760fc055939928ca6edd2eebd9d1a05faaecad09427ad8597fb5` |
+| `MP_ACCESS_TOKEN` | `.env.staging` (server) — token sandbox del vendedor de prueba |
+| `MP_PUBLIC_KEY` | `.env.staging` (server) — clave pública sandbox |
+| `MP_WEBHOOK_SECRET` | `.env.staging` (server) — secreto del webhook sandbox |
 
 #### Planes MP (sandbox)
 | Plan | ID | Precio | init_point |
