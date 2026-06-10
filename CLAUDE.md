@@ -275,7 +275,8 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 ---
 
 ## 📋 Pendientes — Lista consolidada
-> Última revisión: 2026-05-30 · Resumen priorizado en `docs/internal/pendientes-prioritarios.md`
+> Última revisión: 2026-06-10 · Resumen priorizado en `docs/internal/pendientes-prioritarios.md`
+> ⭐ **Revisión integral 2026-06-10:** `docs/internal/revision-integral-2026-06-10.md` — auditoría real (npm audit + escaneo de código), plan de corrección priorizado, plan de marketing para la salida Beta (COMBO_PROMO + EXTENSION_PROMO) y pendientes consolidados (sección 6). **Consultar ese doc junto con esta lista al revisar pendientes.**
 
 ### 🔴 Requieren cuentas / contratos externos
 
@@ -295,6 +296,9 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 |---|---|---|---|
 | **D1** | **GRANT DEFAULT PRIVILEGES DB** | `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO procurador_user;` — evita grants manuales en futuras migraciones | Baja |
 | **D2** | **SSL api.procuradortool.com** | Vence **2026-06-29**. `certbot.timer` activo pero verificar que renueve: `ssh … "certbot renew --dry-run"` | Media |
+| **D3** | **`npm audit fix` (sin --force)** | Backend + Electron tienen deps con CVEs (backend: 7 high · electron: 1 critical en dev/build + 5 high). Correr `npm audit fix` en staging → probar → prod. Detalle en revisión integral §2 | Media |
+| **D4** | **`npm audit fix --force` controlado** | Deps con breaking changes (mercadopago/uuid, axios, undici). Probar flujo de pagos completo en staging después de actualizar. Pre-lanzamiento público | Baja |
+| **D5** | **Limpiar temporales del repo** | Borrar `backend-server/test_legal_tmp.js`, `test_legal_full_tmp.js`, `seed_legal_tmp.js` (código muerto del seed legal) | Baja |
 
 ---
 
