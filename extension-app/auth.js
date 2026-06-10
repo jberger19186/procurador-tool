@@ -81,7 +81,7 @@ async function extLogin(email, password) {
       scheduleTokenRefresh();
       return { success: true, email, enabledFlows };
     }
-    return { success: false, error: data.error || 'Error de autenticación' };
+    return { success: false, error: data.error || 'Error de autenticación', action: data.action || null };
   } catch (e) {
     console.error('[PJN-ext] extLogin error:', e);
     return { success: false, error: 'No se pudo conectar con el servidor' };

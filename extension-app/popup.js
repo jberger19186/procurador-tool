@@ -334,6 +334,18 @@ document.getElementById('btn-login-submit').addEventListener('click', async () =
     showMainView(session2.valid ? session2.enabledFlows : result.enabledFlows, session2.plan);
   } else {
     showMsg('login-msg', result.error || 'Error de autenticación', 'err');
+    // Si el bloqueo es de suscripción/trial, ofrecer ir al portal de usuarios
+    if (result.action === 'subscribe') {
+      const msgEl = document.getElementById('login-msg');
+      const a = document.createElement('a');
+      a.textContent = 'Ir al portal de usuarios →';
+      a.style.cssText = 'display:block;margin-top:5px;font-weight:600;color:inherit;text-decoration:underline;cursor:pointer';
+      a.addEventListener('click', () => {
+        chrome.tabs.create({ url: 'https://api.procuradortool.com/usuarios/' });
+        window.close();
+      });
+      msgEl.appendChild(a);
+    }
   }
 });
 
