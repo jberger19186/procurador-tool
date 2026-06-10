@@ -637,6 +637,7 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
         const result = await db.query(`
             SELECT s.plan, s.status, s.expires_at,
                    s.usage_count, s.usage_limit, s.payment_provider,
+                   u.registration_status,
                    COALESCE(p.extension_flows, '[]'::jsonb) AS extension_flows,
                    p.plan_type, p.promo_type, p.promo_end_date,
                    p.promo_max_users, p.promo_used_count, p.promo_alert_days
@@ -652,7 +653,7 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
 
         if (result.rows.length === 0) {
             return res.status(403).json({
-                error: 'No tienes una suscripción activa',
+                error: 'No tenés una suscripción activa. Ingresá al portal de usuarios para ver el estado de tu cuenta.',
                 action: 'subscribe'
             });
         }
@@ -662,10 +663,10 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
         // Trial-hasta-pago: sin método de pago, la extensión sólo sirve mientras
         // queden usos del trial (mismo cupo que la app). Al agotarse, se bloquea.
         if (!sub.payment_provider && ((sub.usage_count || 0) >= (sub.usage_limit || 0))) {
-            return res.status(403).json({
-                error: `Agotaste tus ${sub.usage_limit} usos de prueba. Configurá tu método de pago para seguir usando la extensión.`,
-                action: 'subscribe'
-            });
+            const _msg = sub.registration_status === 'pending_activation'
+                ? `Agotaste tus ${sub.usage_limit} usos de prueba. Tu cuenta está pendiente de activación por el equipo — te avisaremos por email cuando esté lista.`
+                : `Agotaste tus ${sub.usage_limit} usos de prueba. Configurá tu método de pago desde el portal para seguir usando la extensión.`;
+            return res.status(403).json({ error: _msg, action: 'subscribe' });
         }
         const usageLimit = sub.usage_limit || 0;
         const usageCount = sub.usage_count || 0;

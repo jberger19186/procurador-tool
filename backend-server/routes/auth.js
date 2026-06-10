@@ -525,7 +525,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
         if (subResult.rows.length === 0) {
             return res.status(403).json({
-                error: 'No tenés una suscripción activa',
+                error: 'No tenés una suscripción activa. Ingresá al portal de usuarios para ver el estado de tu cuenta.',
                 action: 'subscribe'
             });
         }
@@ -651,19 +651,21 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
 
         if (subResult.rows.length === 0) {
             return res.status(403).json({
-                error: 'No tenés una suscripción activa',
+                error: 'No tenés una suscripción activa. Ingresá al portal de usuarios para ver el estado de tu cuenta.',
                 action: 'subscribe'
             });
         }
 
         // Trial-hasta-pago: si no configuró método de pago, la extensión sólo sirve
         // mientras queden usos del trial (mismo cupo de 20 que la app Electron).
+        // El mensaje depende del estado: pending_activation → falta la activación del
+        // admin (no puede configurar el pago todavía); active → configurar el pago.
         const _s = subResult.rows[0];
         if (!_s.payment_provider && (_s.usage_count >= _s.usage_limit)) {
-            return res.status(403).json({
-                error: `Agotaste tus ${_s.usage_limit} usos de prueba (${_s.usage_count}/${_s.usage_limit}). Configurá tu método de pago para seguir usando la extensión y la app.`,
-                action: 'subscribe'
-            });
+            const _msg = user.registration_status === 'pending_activation'
+                ? `Agotaste tus ${_s.usage_limit} usos de prueba (${_s.usage_count}/${_s.usage_limit}). Tu cuenta está pendiente de activación por el equipo — te avisaremos por email cuando esté lista.`
+                : `Agotaste tus ${_s.usage_limit} usos de prueba (${_s.usage_count}/${_s.usage_limit}). Configurá tu método de pago desde el portal para seguir usando la extensión y la app.`;
+            return res.status(403).json({ error: _msg, action: 'subscribe' });
         }
 
         const sub = subResult.rows[0];
@@ -813,10 +815,10 @@ router.post('/refresh', authenticateToken, async (req, res) => {
         // Trial-hasta-pago: sin método de pago, el token sólo se renueva mientras
         // queden usos del trial (la extensión/app dejan de funcionar al agotarlos).
         if (!user.payment_provider && (user.usage_count >= user.usage_limit)) {
-            return res.status(403).json({
-                error: `Agotaste tus ${user.usage_limit} usos de prueba. Configurá tu método de pago para continuar.`,
-                action: 'subscribe'
-            });
+            const _msg = user.registration_status === 'pending_activation'
+                ? `Agotaste tus ${user.usage_limit} usos de prueba. Tu cuenta está pendiente de activación por el equipo — te avisaremos por email cuando esté lista.`
+                : `Agotaste tus ${user.usage_limit} usos de prueba. Configurá tu método de pago desde el portal para continuar.`;
+            return res.status(403).json({ error: _msg, action: 'subscribe' });
         }
 
         const now = new Date();
