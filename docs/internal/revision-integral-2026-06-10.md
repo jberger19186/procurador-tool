@@ -141,7 +141,7 @@ La objeción será *"¿es seguro darles acceso al PJN?"*. **Convertila en argume
 - [ ] **Dependencias:** `npm audit fix` en backend + electron, probado en staging.
 - [ ] **Marketing:** grabar los 2 videos antes/después.
 - [ ] **Marketing:** armar lista de red cercana + primeros 10 DMs.
-- [ ] **Subir extensión v1.3.4** al Chrome Web Store (ZIP listo).
+- [x] **Subir extensión v1.3.4** al Chrome Web Store — ✅ hecho (2026-06-10).
 - [ ] **Limpiar temporales:** `test_legal_tmp.js`, `test_legal_full_tmp.js`, `seed_legal_tmp.js`.
 
 ### 🟡 Pre-lanzamiento público
@@ -155,7 +155,7 @@ La objeción será *"¿es seguro darles acceso al PJN?"*. **Convertila en argume
 - [ ] **D1 — GRANT DEFAULT PRIVILEGES** en DB.
 - [ ] **F-3 — Redundancia / snapshot** del droplet.
 - [ ] **L2 — Base de Conocimiento IA** (20-30 tickets reales).
-- [ ] **L3 — Actualizar imágenes del listing** en Chrome Web Store.
+- [x] **L3 — Actualizar imágenes del listing** en Chrome Web Store — ✅ hecho (2026-06-10).
 - [ ] **GitGuardian:** marcar alerta del 2026-06-08 como *Resolved*.
 
 ---

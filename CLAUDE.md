@@ -26,9 +26,9 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.18** — publicada en GitHub Releases (auto-updater activo)
-> Versión extensión Chrome: **1.3.4** — ZIP generado, pendiente subir al Chrome Web Store
-> Última sesión: 2026-06-02 (seguridad 100% · staging+rollback completos · documentación consolidada)
+> Versión app Electron: **2.7.20** — publicada en GitHub Releases (auto-updater activo)
+> Versión extensión Chrome: **1.3.4** — ✅ publicada en Chrome Web Store, imágenes del listing actualizadas (2026-06-10)
+> Última sesión: 2026-06-10 (incidente GitGuardian resuelto · revisión integral · v2.7.19/2.7.20 con mejoras UX · extensión 1.3.4 al store)
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
@@ -93,7 +93,7 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
   - Reemplazado el texto "PJN – Automatización" del popup por el logo `icon128` + "Procurador **TOOL**" (amber) + sublabel "Procurador SCW" — idéntico a los logins del portal
   - Solo tocó `popup.html` + versión del manifest (1.3.3 → 1.3.4). Sin cambios en lógica, permisos ni content scripts
   - Backup previo: tag `ext-pre-logo-v1.3.3` · cambio en tag `ext-logo-v1.3.4`
-  - ZIP listo: `pjn-extension-1.3.4.zip` (pendiente subir al store con cuenta jberger19186@gmail.com)
+  - ✅ Subida al Chrome Web Store (2026-06-10) junto con las imágenes nuevas del listing
 
 - ✅ **Bloque 1 — Ícono oficial balanza dorada** (sesión 2026-05-23):
   - **Ícono:** ⚖️ emoji renderizado con Puppeteer → ICO multi-resolución (16/32/48/256px)
@@ -338,7 +338,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 |---|---|---|
 | **L1** | **Activar planes BASIC/PRO/ENTERPRISE** | `UPDATE plans SET active=true WHERE name IN ('BASIC','PRO','ENTERPRISE')` — solo cuando estén los precios y el cobro funcionando |
 | **L2** | **Base de Conocimiento IA** | Alimentar el asistente con 20-30 tickets reales cerrados para mejorar respuestas |
-| **L3** | **Actualizar imágenes Chrome Web Store** | Screenshots y banner del listing en la store |
+| ~~**L3**~~ | ~~**Actualizar imágenes Chrome Web Store**~~ | ✅ Hecho (2026-06-10): imágenes del listing actualizadas junto con la subida de la v1.3.4 |
 
 ---
 
@@ -600,7 +600,7 @@ git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" diff --name-only fase4-co
 | **Cloudflare** | CDN + WAF + SSL para procuradortool.com (landing) | — |
 | **GitHub** | Repositorio privado + GitHub Releases (distribución instalador) | jberger19186@gmail.com |
 | **Brevo** (ex Sendinblue) | SMTP transaccional — emails que salen con @procuradortool.com | jberger19186@gmail.com |
-| **Chrome Web Store** | Distribución extensión Chrome (store: v1.3.3 ✅ · local: v1.3.4 pendiente subir) | jberger19186@gmail.com / Publisher: Jonathan Berger |
+| **Chrome Web Store** | Distribución extensión Chrome (store: v1.3.4 ✅ · imágenes listing actualizadas 2026-06-10) | jberger19186@gmail.com / Publisher: Jonathan Berger |
 | **Anthropic** | API de Claude Haiku para el chat IA del Asistente — ✅ activa en producción | console.anthropic.com |
 | **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-06-29) | sin cuenta — corre en el servidor |
 | **Azure Trusted Signing** | Code Signing del instalador .exe — ⬜ pendiente contratar | — |
@@ -1172,7 +1172,7 @@ Si hubiera que volver a este sistema:
 
 ---
 
-### Versión en store: 1.3.3 (aprobada) · Versión local: 1.3.4 (ZIP listo, pendiente subir)
+### Versión en store: 1.3.4 ✅ (subida 2026-06-10, imágenes del listing actualizadas) · Versión local: 1.3.4
 ### Cuenta del store: jberger19186@gmail.com / Publisher: Jonathan Berger
 
 ### Permisos (sin `tabs`, sin `content_scripts *://*/*`)
@@ -1488,7 +1488,7 @@ Sesión 2026-04-24 — fixes acumulados en versiones 2.4.2 → 2.4.10:
 - Extensión publicada y aprobada en Chrome Web Store (v1.3.3 — branding actualizado)
 - Onboarding actualizado con enlace directo a la store
 - Aviso sobre warning de Chrome al instalar incluido en onboarding
-- ⏸️ **Actualizar imágenes en Chrome Web Store** — las capturas del listing deben reflejar la UI actual (diferido)
+- ✅ **Actualizar imágenes en Chrome Web Store** — hecho (2026-06-10) junto con la subida de la v1.3.4
 - ⏸️ **Limpiar distribución CRX del backend** — diferido: `main.js` sigue llamando a `/api/extension/version` y `/api/extension/download`; para limpiar hay que migrar esos handlers. No urgente — la ruta sigue funcionando.
 
 #### 1.3b Rediseño visual de los visores HTML ✅ COMPLETADO (sesión 2026-04-24)
