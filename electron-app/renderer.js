@@ -2868,10 +2868,9 @@ function setupProcurarCustomModal() {
         // Si hay truncación, el botón ya muestra "Confirmar de todas formas" — ejecutar con líneas truncadas
         const lineasAEjecutar = _procurarCustomLinesTruncated || _procurarCustomLines;
         closeModal('modalProcurarCustom');
-        // Sin fecha cargada → usar la de hoy (evita error del script por fecha faltante)
-        const fechaEfectiva = fecha || hoyDDMMYYYY();
-        if (!fecha) addLog('info', `📅 Sin fecha límite cargada — se usa la fecha de hoy: ${fechaEfectiva}`);
-        await runProcurarCustom(lineasAEjecutar, fechaEfectiva);
+        // Sin fecha el script NO filtra: trae todos los movimientos (comportamiento intencional)
+        if (!fecha) addLog('info', '📅 Sin fecha límite — se traerán todos los movimientos (sin filtro de fecha)');
+        await runProcurarCustom(lineasAEjecutar, fecha || null);
     });
 }
 
