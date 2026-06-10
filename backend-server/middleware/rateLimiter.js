@@ -86,7 +86,9 @@ const scriptExecutionLimiter = rateLimit({
 // Rate limiter para descarga de scripts
 const scriptDownloadLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 minutos
-    max: 50, // Máximo 50 descargas cada 5 minutos
+    // 150: cada login descarga ~12 scripts y el limiter cuenta por IP — varios
+    // usuarios tras el mismo router (estudio jurídico) comparten el cupo.
+    max: 150, // Máximo 150 descargas cada 5 minutos
     message: {
         error: 'Demasiadas descargas de scripts. Por favor espera un momento.',
         action: 'slow_down'
