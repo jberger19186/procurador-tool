@@ -26,11 +26,19 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.20** — publicada en GitHub Releases (auto-updater activo)
-> Versión extensión Chrome: **1.3.4** — ✅ publicada en Chrome Web Store, imágenes del listing actualizadas (2026-06-10)
-> Última sesión: 2026-06-10 (incidente GitGuardian resuelto · revisión integral · v2.7.19/2.7.20 con mejoras UX · extensión 1.3.4 al store)
+> Versión app Electron: **2.7.22** — publicada en GitHub Releases (auto-updater activo)
+> Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
+> Última sesión: 2026-06-10 (incidente GitGuardian resuelto · revisión integral · releases v2.7.19→22 · extensión 1.3.4 publicada + 1.3.5 enviada)
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-10 — incidente de seguridad + mejoras UX + 4 releases** :
+  - **🔒 Incidente GitGuardian cerrado:** token MP sandbox removido de CLAUDE.md (`74e6c00`), credenciales **rotadas** (token + webhook secret) en panel MP, `.env.staging` y `.env` prod actualizados, validado E2E (checkout staging HTTP 200). Regla de secretos agregada a "Zonas protegidas" (`0fa0521`)
+  - **📋 Revisión integral** (`docs/internal/revision-integral-2026-06-10.md`): auditoría real (npm audit + escaneo SQLi/eval/CORS/TLS), plan de corrección, plan de marketing Beta, pendientes consolidados. Nuevos pendientes D3/D4 (npm audit fix) y D5 (limpiar temporales)
+  - **App Electron v2.7.19→2.7.22** (mejoras UX): fecha límite default = hoy en procuración sidebar (batch sin fecha = sin filtro, trae todo) · scrollbars horizontales finas (consola, modales, monitor) · link al portal en mensaje "sin suscripción" del login · botón 👁 mostrar/ocultar contraseña · modal batch sin línea "Ejecuciones restantes" (confundía con el trial) · opciones "Archivos" del modal informe deshabilitadas "(próximamente)"
+  - **Backend (activo en prod sin release):** `log-execution` solo computa usos en ejecuciones **exitosas** (errores/detenciones no consumen trial; quedan en `usage_logs`) · rate limit descarga scripts 50→**150**/5min (cuenta por IP; estudios con varios usuarios compartían cupo) · mensajes de trial agotado según estado: `pending_activation` → "pendiente de activación por el equipo" / `active` sin pago → "configurá tu método de pago" (extension-login, refresh, extension-auth)
+  - **Extensión v1.3.5:** link "Ir al portal de usuarios →" en errores de suscripción/trial (`action: 'subscribe'`). ZIP `pjn-extension-1.3.5.zip` subido al store, pendiente aprobación
+  - Backup completo del día en Desktop (`202606_10062026_ProcuradorTool`)
 
 - ✅ **B-5 — CSP activada (primer cambio probado en staging→prod)** (sesión 2026-06-01):
   - Content Security Policy en Helmet (`server.js`): defensa en profundidad contra XSS
@@ -506,7 +514,7 @@ ProcuradorTool/
 │   └── keys/                              ⛔ claves RSA privadas (gitignored)
 │
 ├── extension-app/                         ← extensión Chrome MV3 (Chrome Web Store)
-│   ├── manifest.json                      v1.3.4
+│   ├── manifest.json                      v1.3.5
 │   ├── background.js                      service worker
 │   ├── popup.html · popup.js              UI principal
 │   ├── auth.js                            login + FLOW_ALIASES
@@ -600,7 +608,7 @@ git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" diff --name-only fase4-co
 | **Cloudflare** | CDN + WAF + SSL para procuradortool.com (landing) | — |
 | **GitHub** | Repositorio privado + GitHub Releases (distribución instalador) | jberger19186@gmail.com |
 | **Brevo** (ex Sendinblue) | SMTP transaccional — emails que salen con @procuradortool.com | jberger19186@gmail.com |
-| **Chrome Web Store** | Distribución extensión Chrome (store: v1.3.4 ✅ · imágenes listing actualizadas 2026-06-10) | jberger19186@gmail.com / Publisher: Jonathan Berger |
+| **Chrome Web Store** | Distribución extensión Chrome (store: v1.3.4 ✅ · v1.3.5 ⏳ en revisión de Google) | jberger19186@gmail.com / Publisher: Jonathan Berger |
 | **Anthropic** | API de Claude Haiku para el chat IA del Asistente — ✅ activa en producción | console.anthropic.com |
 | **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-06-29) | sin cuenta — corre en el servidor |
 | **Azure Trusted Signing** | Code Signing del instalador .exe — ⬜ pendiente contratar | — |
@@ -1172,7 +1180,7 @@ Si hubiera que volver a este sistema:
 
 ---
 
-### Versión en store: 1.3.4 ✅ (subida 2026-06-10, imágenes del listing actualizadas) · Versión local: 1.3.4
+### Versión en store: 1.3.4 ✅ · v1.3.5 subida 2026-06-10, ⏳ en revisión de Google · Versión local: 1.3.5 (link al portal en errores de suscripción)
 ### Cuenta del store: jberger19186@gmail.com / Publisher: Jonathan Berger
 
 ### Permisos (sin `tabs`, sin `content_scripts *://*/*`)
