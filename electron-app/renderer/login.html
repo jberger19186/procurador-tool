@@ -58,11 +58,18 @@
                         <span class="label-icon">🔒</span>
                         Contraseña
                     </label>
-                    <input type="password"
-                           id="password"
-                           placeholder="••••••••"
-                           required
-                           autocomplete="current-password">
+                    <div class="password-wrap">
+                        <input type="password"
+                               id="password"
+                               placeholder="••••••••"
+                               required
+                               autocomplete="current-password">
+                        <button type="button"
+                                id="togglePassword"
+                                class="toggle-password"
+                                aria-label="Mostrar contraseña"
+                                tabindex="-1">👁</button>
+                    </div>
                 </div>
 
                 <!-- Recordar mis datos -->

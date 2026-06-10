@@ -375,8 +375,10 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
             if (updateResult.rows.length === 0 && effectiveLimit !== null) {
                 return res.status(403).json({ error: 'Límite alcanzado', action: 'upgrade' });
             }
-        } else {
-            // Backward compat: solo incrementar usage_count global
+        } else if (success) {
+            // Backward compat: solo incrementar usage_count global.
+            // Solo cuentan las ejecuciones EXITOSAS — errores y detenciones del usuario
+            // no consumen usos (quedan registradas en usage_logs igualmente).
             await db.query(`
                 UPDATE subscriptions SET usage_count = usage_count + 1
                 WHERE user_id = $1 AND expires_at > NOW()

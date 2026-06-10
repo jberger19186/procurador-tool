@@ -320,13 +320,24 @@ function switchCfgTab(name) {
 }
 
 // ============ SIDEBAR ============
+// Fecha de hoy en formato DD/MM/YYYY (default cuando el usuario no consigna fecha límite)
+function hoyDDMMYYYY() {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
 function setupSidebar() {
     // Mapa data-action → función
     const actions = {
         'procurar-hoy':   () => {
-            const fecha = document.getElementById('sidebarFechaLimite')?.value?.trim() || '';
-            if (fecha) runProcessFromSidebarFecha(fecha);
-            else       runProcess();
+            let fecha = document.getElementById('sidebarFechaLimite')?.value?.trim() || '';
+            if (!fecha) {
+                fecha = hoyDDMMYYYY();
+                const f = document.getElementById('sidebarFechaLimite');
+                if (f) f.value = fecha;
+                addLog('info', `📅 Sin fecha límite cargada — se usa la fecha de hoy: ${fecha}`);
+            }
+            runProcessFromSidebarFecha(fecha);
         },
         'procurar-lote':  () => showProcurarCustomModal(),
         'informe':        () => openInformeModal(),
@@ -2857,7 +2868,10 @@ function setupProcurarCustomModal() {
         // Si hay truncación, el botón ya muestra "Confirmar de todas formas" — ejecutar con líneas truncadas
         const lineasAEjecutar = _procurarCustomLinesTruncated || _procurarCustomLines;
         closeModal('modalProcurarCustom');
-        await runProcurarCustom(lineasAEjecutar, fecha || null);
+        // Sin fecha cargada → usar la de hoy (evita error del script por fecha faltante)
+        const fechaEfectiva = fecha || hoyDDMMYYYY();
+        if (!fecha) addLog('info', `📅 Sin fecha límite cargada — se usa la fecha de hoy: ${fechaEfectiva}`);
+        await runProcurarCustom(lineasAEjecutar, fechaEfectiva);
     });
 }
 

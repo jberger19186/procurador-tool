@@ -11,6 +11,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('loginCloseBtn')
         ?.addEventListener('click', () => window.electronAPI?.closeWindow());
 
+    // Toggle mostrar/ocultar contraseña
+    document.getElementById('togglePassword')?.addEventListener('click', (e) => {
+        const input = document.getElementById('password');
+        const btn = e.currentTarget;
+        const visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        btn.textContent = visible ? '👁' : '🙈';
+        btn.setAttribute('aria-label', visible ? 'Mostrar contraseña' : 'Ocultar contraseña');
+    });
+
     // Verificar que electronAPI esté disponible
     if (typeof window.electronAPI === 'undefined') {
         console.error('❌ electronAPI no está disponible');
@@ -270,7 +280,14 @@ async function handleLogin(email, password) {
                 } else if (result.error.includes('vinculada a otro dispositivo')) {
                     errorMsg = 'Esta cuenta está vinculada a otro dispositivo. Contacte al administrador.';
                 } else if (result.error.includes('suscripción')) {
-                    errorMsg = 'No tiene una suscripción activa. Contacte al administrador.';
+                    showErrorHTML(
+                        'No tenés una suscripción activa. ' +
+                        '<a href="https://api.procuradortool.com/usuarios/" target="_blank" ' +
+                        'style="color:inherit;font-weight:700;text-decoration:underline;">' +
+                        'Ingresá al portal</a> para ver el estado de tu suscripción y configurar tu plan.'
+                    );
+                    setLoading(false);
+                    return;
                 } else if (result.error.includes('conexión') || result.error.includes('ECONNREFUSED')) {
                     errorMsg = 'No se puede conectar al servidor. Verifique su conexión.';
                 } else {

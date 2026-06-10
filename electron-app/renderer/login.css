@@ -178,6 +178,38 @@ body {
         color: var(--text-muted);
     }
 
+/* ============ TOGGLE MOSTRAR/OCULTAR CONTRASEÑA ============ */
+.password-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+    .password-wrap input {
+        width: 100%;
+        padding-right: 2.4rem;
+        box-sizing: border-box;
+    }
+
+.toggle-password {
+    position: absolute;
+    right: 0.6rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+    padding: 2px;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+    .toggle-password:hover {
+        opacity: 1;
+    }
+
 /* ============ ERROR MESSAGE ============ */
 .error-message {
     background: var(--error-bg);
