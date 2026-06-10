@@ -2912,7 +2912,7 @@ async function _actualizarAvisoBatchLimits(totalCargados) {
         } else if (maxExp !== null) {
             // Dentro del límite, mostrar info positiva
             avisoEl.className = 'batch-limit-aviso batch-limit-ok';
-            avisoEl.innerHTML = `✅ ${totalCargados} expediente${totalCargados !== 1 ? 's' : ''} — dentro del límite por ejecución (máx. ${maxExp}).<br><span style="font-size:11px;color:#6b7280">Ejecuciones restantes en el período: <strong>${b.executions.remaining ?? '∞'}</strong> de ${b.executions.limit ?? '∞'}</span>`;
+            avisoEl.innerHTML = `✅ ${totalCargados} expediente${totalCargados !== 1 ? 's' : ''} — dentro del límite por ejecución (máx. ${maxExp}).`;
             avisoEl.style.display = '';
             const btn = document.getElementById('btnConfirmProcurarCustom');
             btn.disabled = false;
@@ -2920,7 +2920,7 @@ async function _actualizarAvisoBatchLimits(totalCargados) {
         } else {
             // Sin límite de expedientes
             avisoEl.className = 'batch-limit-aviso batch-limit-ok';
-            avisoEl.innerHTML = `✅ ${totalCargados} expediente${totalCargados !== 1 ? 's' : ''} listos.<br><span style="font-size:11px;color:#6b7280">Ejecuciones restantes en el período: <strong>${b.executions.remaining ?? '∞'}</strong> de ${b.executions.limit ?? '∞'}</span>`;
+            avisoEl.innerHTML = `✅ ${totalCargados} expediente${totalCargados !== 1 ? 's' : ''} listos.`;
             avisoEl.style.display = '';
         }
     } catch (_) {

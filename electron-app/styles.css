@@ -561,7 +561,7 @@ body {
   line-height: 1.85;
   background: var(--bg-base);
 }
-.console-output::-webkit-scrollbar { width: 5px; }
+.console-output::-webkit-scrollbar { width: 5px; height: 5px; }
 .console-output::-webkit-scrollbar-track { background: transparent; }
 .console-output::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
@@ -837,7 +837,7 @@ body {
   overflow-y: auto;
   flex: 1;
 }
-.modal-body::-webkit-scrollbar { width: 4px; }
+.modal-body::-webkit-scrollbar { width: 4px; height: 4px; }
 .modal-body::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 
 .modal-footer {
