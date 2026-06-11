@@ -1091,6 +1091,32 @@ ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
   "sudo -u postgres psql procurador_db -c \"SELECT s.user_id, s.status, u.registration_status, s.payment_provider, s.usage_count, s.usage_limit, s.proc_usage, s.informe_usage FROM subscriptions s JOIN users u ON u.id=s.user_id WHERE s.user_id=<id>;\""
 ```
 
+### Quitar partes del Monitor de un usuario (limpiar para probar)
+
+La app **no deja borrar una parte entre las 24 h y los 30 días** desde su creación (regla anti-abuso en `routes/monitor.js`: borrable dentro de las 24 h de gracia **o** pasados 30 días). El mensaje de error incluye la fecha exacta de habilitación. Para **pruebas** se borra directo en la DB, que **saltea esa regla** (aplica solo al endpoint).
+
+Borrado **limpio** (las FK lo resuelven solas): `monitor_expedientes` cae por `ON DELETE CASCADE`, `monitor_consultas_log` queda en `SET NULL` (el log histórico se conserva sin huérfanos). La cuenta de partes se refleja en el límite `monitor_partes` de la app en la próxima lectura.
+
+```bash
+# Ver las partes de un usuario
+ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
+  "sudo -u postgres psql procurador_db -c \"SELECT id, nombre_parte, activo, fecha_creacion FROM monitor_partes WHERE user_id=<id> ORDER BY id;\""
+
+# Borrar UNA parte por id
+ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
+  "sudo -u postgres psql procurador_db -c \"DELETE FROM monitor_partes WHERE id=<parteId> AND user_id=<id>;\""
+
+# Borrar VARIAS por id
+ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
+  "sudo -u postgres psql procurador_db -c \"DELETE FROM monitor_partes WHERE user_id=<id> AND id IN (<id1>,<id2>,<id3>);\""
+
+# Limpiar TODAS las partes de un usuario
+ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
+  "sudo -u postgres psql procurador_db -c \"DELETE FROM monitor_partes WHERE user_id=<id>;\""
+```
+
+> Alternativa sin tocar SQL: marcar `activo=false` (`UPDATE monitor_partes SET activo=false WHERE id=<parteId>;`) libera el cupo de `monitor_partes` sin borrar el historial — útil si querés conservar los expedientes ya detectados.
+
 ---
 
 ## Sistema de diseño (UI)
