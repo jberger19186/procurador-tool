@@ -19,12 +19,20 @@ function getLimitePlanFallback(plan) {
 // Obtener límites del plan desde la BD (con fallback a hardcoded)
 async function getLimitesFromDB(db, userId) {
     try {
+        // Incluye el trial (suspended + pending_activation) — mismo criterio que
+        // extension-login / extension-auth: el usuario en prueba usa los límites
+        // reales de su plan, no el fallback BASIC.
         const result = await db.query(`
             SELECT s.plan, s.monitor_partes_bonus, s.monitor_novedades_bonus,
                    p.monitor_partes_limit, p.monitor_novedades_limit
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
-            WHERE s.user_id = $1 AND s.status = 'active'
+            JOIN users u ON u.id = s.user_id
+            WHERE s.user_id = $1
+              AND (
+                s.status = 'active'
+                OR (s.status = 'suspended' AND u.registration_status = 'pending_activation')
+              )
             ORDER BY s.id DESC LIMIT 1
         `, [userId]);
 
