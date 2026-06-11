@@ -509,17 +509,22 @@ router.post('/login', loginLimiter, async (req, res) => {
             return res.status(403).json(blockedStatuses[user.registration_status]);
         }
 
-        // Verificar suscripción — permite: active O trial (suspended + pending_activation + usos restantes)
+        // Verificar suscripción — permite: active O trial (suspended + pending_activation).
+        // El trial puede entrar AUNQUE haya agotado los usos: el login solo da acceso a la
+        // app para ver el estado de la cuenta; las ejecuciones se bloquean del lado del
+        // servidor (middleware checkLicense: 403 cuando usage_count >= usage_limit).
         const subResult = await db.query(`
             SELECT s.*, p.promo_type, p.promo_end_date, p.promo_max_users,
                    p.promo_used_count, p.promo_alert_days, p.plan_type
             FROM subscriptions s
             LEFT JOIN plans p ON s.plan_id = p.id
+            JOIN users u ON u.id = s.user_id
             WHERE s.user_id = $1
+              AND s.expires_at > NOW()
               AND (
-                (s.status = 'active' AND s.expires_at > NOW())
+                s.status = 'active'
                 OR
-                (s.status = 'suspended' AND s.usage_count < s.usage_limit AND s.expires_at > NOW())
+                (s.status = 'suspended' AND u.registration_status = 'pending_activation')
               )
         `, [user.id]);
 

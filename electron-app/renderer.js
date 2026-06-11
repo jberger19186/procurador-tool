@@ -2075,7 +2075,7 @@ async function loadAccountData() {
                         <div style="background:#fde68a;border-radius:4px;height:7px;overflow:hidden">
                             <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
                         </div>
-                        ${rem <= 5 ? `<div style="margin-top:7px;font-size:12px;color:#991b1b;font-weight:600">🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.</div>` : ''}
+                        ${rem <= 5 ? `<div style="margin-top:7px;font-size:12px;color:#991b1b;font-weight:600">${rem <= 0 ? '🔴 Ya consumiste tus usos. Contactá al administrador para activar tu cuenta.' : '🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.'}</div>` : ''}
                     </div>`;
             } else if (a.paymentProvider && a.cancelAt && new Date(a.cancelAt) > new Date() && a.registrationStatus === 'active') {
                 // Banner: cancelación programada

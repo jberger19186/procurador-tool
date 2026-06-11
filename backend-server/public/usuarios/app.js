@@ -722,9 +722,14 @@ function renderPlan() {
         const subLabel   = rs === 'pending_activation'
             ? 'Tu cuenta está pendiente de activación por el administrador'
             : 'Configurá tu método de pago para acceder a los límites de tu plan';
+        const exhausted  = trialRem <= 0;
         const lowMsg     = rs === 'pending_activation'
-            ? '🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.'
-            : '🔴 Quedan pocos usos. Configurá tu método de pago para seguir usando la app y la extensión.';
+            ? (exhausted
+                ? '🔴 Ya consumiste tus usos. Contactá al administrador para activar tu cuenta.'
+                : '🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.')
+            : (exhausted
+                ? '🔴 Ya consumiste tus usos. Configurá tu método de pago para seguir usando la app y la extensión.'
+                : '🔴 Quedan pocos usos. Configurá tu método de pago para seguir usando la app y la extensión.');
 
         if (!trialBox) {
             trialBox = document.createElement('div');
