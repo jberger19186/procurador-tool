@@ -26,11 +26,18 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.22** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.23** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-10 (incidente GitGuardian resuelto · revisión integral · releases v2.7.19→22 · extensión 1.3.4 publicada + 1.3.5 enviada)
+> Última sesión: 2026-06-11 (login del trial agotado · mensaje "ya consumiste tus usos" · límites por subsistema para cuentas pagas · release v2.7.23 · limpieza de partes de prueba)
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-11 — acceso del trial agotado + enforcement de límites pagos (release v2.7.23)** :
+  - **Login del trial agotado (backend, ya en prod):** `/auth/login` ahora deja entrar a la app a un usuario en trial (`suspended` + `pending_activation`) **aunque haya consumido los 20 usos** — solo para ver el estado de la cuenta. Las ejecuciones siguen bloqueadas server-side por `checkLicense` (403 cuando `usage_count >= usage_limit`). Antes la query exigía `usage_count < usage_limit` → daba 403 "No tenés una suscripción activa". Validado en staging con un trial 20/20 simulado. Commit `c256360`
+  - **Mensaje de tope alcanzado (portal `app.js` + app `renderer.js`):** al agotar el cupo, el aviso decía "Quedan pocos usos"; ahora cuando `rem<=0` dice **"Ya consumiste tus usos. Contactá al administrador para activar tu cuenta."** (1–5 usos restantes sigue diciendo "Quedan pocos usos")
+  - **Límites por subsistema para cuentas PAGAS (app v2.7.23):** nuevo `checkSubsystemLimit()` en `main.js` — pre-chequea `proc`/`informe`/`monitor_novedades` en `run-process`, `run-process-custom-date`, `run-informe` y `run-monitoreo` vía `/client/account`. **Antes** el único freno era el contador global (`usage_limit=999999` para pagos) que nunca disparaba: el script corría igual y el 403 de `log-execution` se ignoraba. **Ahora** un pago que agotó (ej.) sus 50 procuraciones se frena ANTES de correr con mensaje claro "Alcanzaste el límite de X de tu plan: usados/límite". **El trial NO se ve afectado:** el check se saltea si `payment_provider` es null (el trial se rige por el cupo global de 20 compartidos para cualquier mezcla). `renderer.js`: los avisos `action:'upgrade'` muestran el mensaje real en el toast. Commit `69ed65a`, tag `electron-v2.7.23`
+  - **Mantenimiento:** limpieza de las 15 partes de prueba del monitor de `procuradortool@gmail.com` (id 230) directo en DB
+  - El **acceso a la app nunca se cierra** por agotar ejecuciones (ni trial ni pago): solo los estados terminales (`rejected`, `cancelled`, `suspended_admin`, `suspended_plan_expired`) bloquean el login
 
 - ✅ **Sesión 2026-06-10 — incidente de seguridad + mejoras UX + 4 releases** :
   - **🔒 Incidente GitGuardian cerrado:** token MP sandbox removido de CLAUDE.md (`74e6c00`), credenciales **rotadas** (token + webhook secret) en panel MP, `.env.staging` y `.env` prod actualizados, validado E2E (checkout staging HTTP 200). Regla de secretos agregada a "Zonas protegidas" (`0fa0521`)
