@@ -1063,6 +1063,34 @@ Al verificar el email, el usuario recibe **20 usos de prueba** (`usage_limit=20`
 - `usage_count` siempre se incrementa (trial y activo) — sirve como contador histórico total.
 - El admin puede sobreescribir `usage_limit` manualmente desde la ficha de usuario ("Global (límite total)") o usar "🔓 Ilimitado".
 
+### Probar cuotas/límites tocando la DB (refleja en la app sin re-login)
+
+Los endpoints que la app usa para leer usos/límites **no cachean** (consultan la DB en vivo en cada request): `/client/verify-session` (global), `/client/account` (por subsistema), `/client/batch-limits`. Por eso **cualquier cambio en la DB se refleja en la app Electron en la próxima lectura, sin reiniciar ni cerrar sesión** (el token JWT no depende de los usos).
+
+**Cuándo re-lee la app:** al abrir **Mi Cuenta** o **Estadísticas** (`/client/account`), y al tocar **Procurar/Informe/Monitor** (`verifySession` + `checkSubsystemLimit` corren *antes* de ejecutar → permiten o bloquean según la DB del momento). Basta con reabrir la vista o disparar la acción.
+
+**Qué columna tocar** (tabla `subscriptions`, salvo aclaración):
+
+| Escenario | SQL |
+|---|---|
+| Trial — usos consumidos | `UPDATE subscriptions SET usage_count=<N> WHERE user_id=<id>;` |
+| Trial — tope | `UPDATE subscriptions SET usage_limit=<N> WHERE user_id=<id>;` |
+| Pago — usos de un subsistema | `UPDATE subscriptions SET proc_usage=<N> WHERE user_id=<id>;` (`proc_usage`/`batch_usage`/`informe_usage`/`monitor_novedades_usage`) |
+| Pago — límite SOLO de un usuario | `UPDATE subscriptions SET proc_bonus=<N> WHERE user_id=<id>;` (se suma al límite del plan; `*_bonus`) |
+
+> ⚠️ Los límites base (`proc_executions_limit`, `informe_limit`, `monitor_novedades_limit`, etc.) viven en la tabla **`plans`** y son **compartidos por todos los usuarios del plan**. Para tunear un solo usuario usá las columnas `*_bonus` de su `subscription`, **nunca** edites `plans` (afecta a todos).
+
+**Mensajes esperables según el estado** (para validar visualmente):
+- Trial `usage_count < usage_limit`, faltando 1–5: banner 🔴 *"Quedan pocos usos. Contactá al administrador para activar tu cuenta."*
+- Trial `usage_count = usage_limit` (ej. 20/20): banner 🔴 *"Ya consumiste tus usos…"* + al ejecutar, *"Has alcanzado el límite de ejecuciones de tu plan…"* (la sesión **sigue viva**, no da "No autenticado")
+- Pago con un subsistema agotado: al ejecutar ese módulo, *"Alcanzaste el límite de procuraciones/informes/… de tu plan: usados/límite"* (el trial NO ve este check — se rige por el global)
+
+```bash
+# Atajo: ver el estado actual de un usuario
+ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
+  "sudo -u postgres psql procurador_db -c \"SELECT s.user_id, s.status, u.registration_status, s.payment_provider, s.usage_count, s.usage_limit, s.proc_usage, s.informe_usage FROM subscriptions s JOIN users u ON u.id=s.user_id WHERE s.user_id=<id>;\""
+```
+
 ---
 
 ## Sistema de diseño (UI)
