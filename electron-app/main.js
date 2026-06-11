@@ -1042,6 +1042,41 @@ async function releaseExecutionLock() {
     } catch (_) { /* best-effort */ }
 }
 
+// ─── Pre-chequeo de límite por subsistema ────────────────────────────────────
+// Para cuentas pagas el límite real es por subsistema (proc/informe/monitor), no
+// el contador global (usage_limit=999999). El check global de remaining nunca frena
+// a un pago, así que acá consultamos el remaining específico vía /client/account.
+// Devuelve { blocked, error } — ante error de red NO bloquea (el backend igual
+// frena en log-execution). Equivale al pre-chequeo que ya existe para batch.
+async function checkSubsystemLimit(subsystem, planName) {
+    try {
+        const acc = await authManager.backendClient.getAccount();
+        if (!acc?.success) return { blocked: false };
+        // Solo cuentas PAGAS se rigen por límites de subsistema. El trial (sin método
+        // de pago) usa el cupo GLOBAL de 20 usos compartidos para cualquier mezcla de
+        // subsistemas — ese tope lo aplica el check de remaining global en cada handler.
+        if (!acc.account?.paymentProvider) return { blocked: false };
+        const u = acc.account?.usage?.[subsystem];
+        if (!u || u.unlimited || u.remaining === null || u.remaining === undefined) {
+            return { blocked: false };
+        }
+        if (u.remaining <= 0) {
+            const nombre = {
+                proc: 'procuraciones',
+                informe: 'informes',
+                monitor_novedades: 'consultas de monitoreo'
+            }[subsystem] || 'ejecuciones';
+            return {
+                blocked: true,
+                error: `Alcanzaste el límite de ${nombre} de tu plan${planName ? ` (${planName})` : ''}: ${u.used}/${u.limit} usados en este período. El acceso a la app sigue disponible; los usos se renuevan al inicio del próximo período o podés pedir un ajuste a soporte.`
+            };
+        }
+        return { blocked: false };
+    } catch (_) {
+        return { blocked: false };
+    }
+}
+
 // ─── Handler run-process ─────────────────────────────────────────────────────
 
 // Handler: run-process
@@ -1071,6 +1106,11 @@ ipcMain.handle('run-process', async (event, options = {}) => {
                 error: `Has alcanzado el límite de ejecuciones de tu plan (${sub.plan}). Actualiza tu suscripción para continuar.`,
                 action: 'upgrade'
             };
+        }
+        // Pre-chequeo por subsistema (cuentas pagas: el global no frena)
+        const procLimitCheck = await checkSubsystemLimit('proc', sub?.plan);
+        if (procLimitCheck.blocked) {
+            return { success: false, error: procLimitCheck.error, action: 'upgrade' };
         }
 
         // Verificar CUIT registrado en BD
@@ -1153,6 +1193,11 @@ ipcMain.handle('run-process-custom-date', async (event, fecha) => {
                 error: `Has alcanzado el límite de ejecuciones de tu plan (${sub.plan}). Actualiza tu suscripción para continuar.`,
                 action: 'upgrade'
             };
+        }
+        // Pre-chequeo por subsistema (cuentas pagas: el global no frena)
+        const procDateLimitCheck = await checkSubsystemLimit('proc', sub?.plan);
+        if (procDateLimitCheck.blocked) {
+            return { success: false, error: procDateLimitCheck.error, action: 'upgrade' };
         }
 
         // Verificar CUIT registrado en BD
@@ -1742,6 +1787,11 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
         if (!cuit) {
             return { success: false, error: 'No tenés un CUIT registrado en el sistema.' };
         }
+        // Pre-chequeo por subsistema (cuentas pagas: el global no frena)
+        const informeLimitCheck = await checkSubsystemLimit('informe', sessionInfo?.subscription?.plan);
+        if (informeLimitCheck.blocked) {
+            return { success: false, error: informeLimitCheck.error, action: 'upgrade' };
+        }
 
         // ── MODO INDIVIDUAL ──────────────────────────────────────────
         if (!isBatch) {
@@ -2174,6 +2224,11 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
     try {
         if (!authManager.isAuthenticated()) {
             return { success: false, error: 'No autenticado' };
+        }
+        // Pre-chequeo por subsistema (cuentas pagas: el global no frena)
+        const monLimitCheck = await checkSubsystemLimit('monitor_novedades', null);
+        if (monLimitCheck.blocked) {
+            return { success: false, error: monLimitCheck.error, action: 'upgrade' };
         }
 
         const token   = authManager.backendClient.token;

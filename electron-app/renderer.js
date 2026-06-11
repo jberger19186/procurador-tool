@@ -1041,7 +1041,8 @@ async function runProcess() {
         if (!result.success) {
             addLog('error', `❌ Error: ${result.error}`);
             setProcessRunning(false);
-            showNotification('Error al iniciar proceso', 'error');
+            if (result.action === 'upgrade') showNotification(result.error, 'warning');
+            else showNotification('Error al iniciar proceso', 'error');
         }
     } catch (error) {
         addLog('error', `❌ Error inesperado: ${error.message}`);
@@ -1091,7 +1092,8 @@ async function runProcessCustomDate() {
         if (!result.success) {
             addLog('error', `❌ Error: ${result.error}`);
             setProcessRunning(false);
-            showNotification('Error al iniciar proceso', 'error');
+            if (result.action === 'upgrade') showNotification(result.error, 'warning');
+            else showNotification('Error al iniciar proceso', 'error');
         }
     } catch (error) {
         addLog('error', `❌ Error inesperado: ${error.message}`);
@@ -1132,7 +1134,8 @@ async function runProcessFromSidebarFecha(fecha) {
         if (!result.success) {
             addLog('error', `❌ Error: ${result.error}`);
             setProcessRunning(false);
-            showNotification('Error al iniciar proceso', 'error');
+            if (result.action === 'upgrade') showNotification(result.error, 'warning');
+            else showNotification('Error al iniciar proceso', 'error');
         }
     } catch (error) {
         addLog('error', `❌ Error inesperado: ${error.message}`);
@@ -3587,7 +3590,8 @@ async function runMonitoreo(modo, partes) {
         if (!result.success) {
             addLog('error', 'Error: ' + result.error);
             setProcessRunning(false);
-            showNotification('Error al iniciar el monitoreo', 'error');
+            if (result.action === 'upgrade') showNotification(result.error, 'warning');
+            else showNotification('Error al iniciar el monitoreo', 'error');
         } else if (result.totalNuevos > 0) {
             showNotification(result.totalNuevos + ' novedad(es) detectada(s)', 'success');
         }
