@@ -806,8 +806,13 @@ router.post('/refresh', authenticateToken, async (req, res) => {
         const user = userResult.rows[0];
 
         // Permitir renovar el token si la suscripción está activa, o si está en
-        // período de prueba (suspended + pending_activation). Así la extensión/app
-        // en trial no se cae al expirar el token.
+        // período de prueba (suspended + pending_activation). El refresh es capa de
+        // SESIÓN, no de cuota: un trial agotado (20/20) sigue renovando el token para
+        // mantener la sesión viva (ver el estado de la cuenta, mensaje claro). El
+        // bloqueo de ejecuciones lo aplican run-process/checkLicense/log-execution, y
+        // el de la extensión lo aplican extension-login/extension-auth (que SÍ gatean
+        // por usos). Si acá se gateara por usos, el heartbeat de la app dejaría
+        // sessionVerified=false al agotarse → "No autenticado" confuso y app trabada.
         const isActiveSub = user.status === 'active';
         const isTrialSub  = user.status === 'suspended' && user.registration_status === 'pending_activation';
         if (!isActiveSub && !isTrialSub) {
@@ -815,15 +820,6 @@ router.post('/refresh', authenticateToken, async (req, res) => {
                 error: 'Suscripción no activa',
                 action: 'subscribe'
             });
-        }
-
-        // Trial-hasta-pago: sin método de pago, el token sólo se renueva mientras
-        // queden usos del trial (la extensión/app dejan de funcionar al agotarlos).
-        if (!user.payment_provider && (user.usage_count >= user.usage_limit)) {
-            const _msg = user.registration_status === 'pending_activation'
-                ? `Agotaste tus ${user.usage_limit} usos de prueba. Tu cuenta está pendiente de activación por el equipo — te avisaremos por email cuando esté lista.`
-                : `Agotaste tus ${user.usage_limit} usos de prueba. Configurá tu método de pago desde el portal para continuar.`;
-            return res.status(403).json({ error: _msg, action: 'subscribe' });
         }
 
         const now = new Date();

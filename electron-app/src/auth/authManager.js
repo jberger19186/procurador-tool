@@ -165,6 +165,12 @@ class AuthManager {
                 if (!result.success) {
                     console.warn('⚠️ Heartbeat fallido');
                     this.sessionVerified = false;
+                } else {
+                    // Auto-recuperación: si un fallo transitorio previo dejó la sesión
+                    // marcada como no verificada, un refresh+heartbeat exitoso la
+                    // restaura (evita que la app quede trabada en "No autenticado" hasta
+                    // reiniciar tras un parpadeo de red o un 403 temporal).
+                    this.sessionVerified = true;
                 }
             } catch (error) {
                 console.error('❌ Error en heartbeat:', error);

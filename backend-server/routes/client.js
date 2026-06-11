@@ -51,14 +51,16 @@ router.post('/verify-session', authenticateToken, async (req, res) => {
 
         // Verificar suscripción. Alineado con el login (auth.js): se bloquean los
         // estados terminales/administrativos y se permite tanto la suscripción
-        // activa como el TRIAL (suspended con usos disponibles), sin importar si el
-        // registro está en pending_email o pending_activation. Así el handler de
-        // onboarding/configuración puede leer el CUIT del usuario en cualquiera de
-        // esos estados (la app ya permite el login en ellos).
+        // activa como el TRIAL (suspended + pending_activation), SIN importar si quedan
+        // usos. La verificación de sesión es capa de SESIÓN, no de cuota: un trial
+        // agotado (20/20) mantiene la sesión viva para ver el estado de la cuenta; el
+        // bloqueo de ejecuciones lo aplican run-process/checkLicense/log-execution con
+        // un mensaje claro. Si acá se gateara por usos, al agotarse el token deja de
+        // verificarse → la app muestra "No autenticado" (confuso) y queda trabada.
         const blockedStatuses = ['rejected', 'suspended_admin', 'suspended_plan_expired', 'cancelled'];
         const isBlocked   = blockedStatuses.includes(user.registration_status);
         const isActiveSub = user.status === 'active';
-        const isTrialSub  = user.status === 'suspended' && user.usage_count < user.usage_limit;
+        const isTrialSub  = user.status === 'suspended' && user.registration_status === 'pending_activation';
         if (!user.plan || isBlocked || (!isActiveSub && !isTrialSub)) {
             return res.status(403).json({
                 error: 'No tienes una suscripción activa',
