@@ -228,11 +228,11 @@ async function renderOverview() {
             <div><h2>Resumen del sistema</h2><p>Estado actual de la plataforma</p></div>
         </div>
         <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" onclick="navigate('users')" style="cursor:pointer" title="Ver usuarios">
                 <div class="stat-icon">👥</div>
                 <div class="stat-body"><div class="stat-value">${s.totalUsers}</div><div class="stat-label">Usuarios registrados</div></div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="navigate('users')" style="cursor:pointer" title="Ver usuarios">
                 <div class="stat-icon">✅</div>
                 <div class="stat-body"><div class="stat-value">${s.activeSubscriptions}</div><div class="stat-label">Suscripciones activas</div></div>
             </div>
@@ -248,7 +248,7 @@ async function renderOverview() {
                 <div class="stat-icon">📈</div>
                 <div class="stat-body"><div class="stat-value">${successPct}%</div><div class="stat-label">Tasa de éxito (hoy)</div></div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" onclick="navigate('tickets')" style="cursor:pointer" title="Ver tickets">
                 <div class="stat-icon">🎫</div>
                 <div class="stat-body"><div class="stat-value">${openTickets}</div><div class="stat-label">Tickets abiertos</div></div>
             </div>
