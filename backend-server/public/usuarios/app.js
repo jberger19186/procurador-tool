@@ -2185,6 +2185,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Logout button
     document.getElementById('btn-logout').addEventListener('click', doLogout);
 
+    // Ojito mostrar/ocultar contraseña (campos de Cambiar contraseña en Mi Perfil)
+    document.querySelectorAll('.toggle-password').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const input = document.getElementById(btn.dataset.target);
+            if (!input) return;
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            btn.textContent = show ? '🙈' : '👁';
+        });
+    });
+
     // Botón "Usar otra cuenta"
     document.getElementById('btn-other-account').addEventListener('click', () => {
         document.getElementById('login-email').value = '';

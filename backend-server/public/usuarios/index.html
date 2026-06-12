@@ -198,17 +198,26 @@
                         <form id="password-form" novalidate>
                             <div class="form-group">
                                 <label for="current-password">Contraseña actual</label>
-                                <input type="password" id="current-password" name="currentPassword" placeholder="••••••••" autocomplete="current-password">
+                                <div class="password-wrap">
+                                    <input type="password" id="current-password" name="currentPassword" placeholder="••••••••" autocomplete="current-password">
+                                    <button type="button" class="toggle-password" data-target="current-password" tabindex="-1" title="Mostrar/ocultar contraseña">👁</button>
+                                </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="new-password">Nueva contraseña</label>
-                                    <input type="password" id="new-password" name="newPassword" placeholder="Mínimo 8 caracteres, una letra y un número" autocomplete="new-password">
+                                    <div class="password-wrap">
+                                        <input type="password" id="new-password" name="newPassword" placeholder="Mínimo 8 caracteres, una letra y un número" autocomplete="new-password">
+                                        <button type="button" class="toggle-password" data-target="new-password" tabindex="-1" title="Mostrar/ocultar contraseña">👁</button>
+                                    </div>
                                     <span style="font-size:11px;color:var(--text-muted);display:block;margin-top:3px">Mínimo 8 caracteres, con al menos una letra y un número.</span>
                                 </div>
                                 <div class="form-group">
                                     <label for="confirm-password">Confirmar contraseña</label>
-                                    <input type="password" id="confirm-password" name="confirmPassword" placeholder="Repetí la nueva" autocomplete="new-password">
+                                    <div class="password-wrap">
+                                        <input type="password" id="confirm-password" name="confirmPassword" placeholder="Repetí la nueva" autocomplete="new-password">
+                                        <button type="button" class="toggle-password" data-target="confirm-password" tabindex="-1" title="Mostrar/ocultar contraseña">👁</button>
+                                    </div>
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-primary" id="btn-save-password">Cambiar contraseña</button>

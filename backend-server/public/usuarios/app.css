@@ -1409,3 +1409,22 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     vertical-align: top;
 }
 .manual-table tr:last-child td { border-bottom: none; }
+
+/* ─── Toggle mostrar/ocultar contraseña (Mi Perfil) ─── */
+.password-wrap { position: relative; }
+.password-wrap input { width: 100%; padding-right: 38px; }
+.toggle-password {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 4px;
+    opacity: .45;
+    transition: opacity .15s;
+}
+.toggle-password:hover { opacity: 1; }
