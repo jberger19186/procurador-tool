@@ -228,24 +228,34 @@ async function initDashboard() {
     const pagoOkData = sessionStorage.getItem('show_pago_ok');
     if (pagoOkData) {
         sessionStorage.removeItem('show_pago_ok');
-        // Siempre llamamos a /confirm vía JWT para registrar el provider.
-        // Si MP devolvió preapproval_id: lo vinculamos con verificación en MP.
-        // Si no (sandbox y algunos casos de producción): marcamos payment_provider
-        // directamente por user_id; el webhook lo completará con el preapproval real.
+        // Llamamos a /confirm vía JWT. El backend VERIFICA contra MercadoPago que
+        // exista una suscripción autorizada antes de marcar el método de pago
+        // (configured=true/false). Si el usuario volvió del checkout sin pagar,
+        // configured=false y el banner lo refleja (no se muestra el éxito).
+        let confirmed = false;
         try {
             const { preapprovalId } = JSON.parse(pagoOkData);
-            await apiFetch('/usuarios/api/checkout/confirm', {
+            const res = await apiFetch('/usuarios/api/checkout/confirm', {
                 method: 'POST',
                 body: JSON.stringify({ preapproval_id: preapprovalId || undefined })
             });
+            if (res && res.ok) {
+                const d = await res.json();
+                confirmed = d.configured !== false; // backward compat si no viene el campo
+            }
         } catch (_) {}
         // Recargar cuenta para que renderFact() vea el payment_provider actualizado
         await loadAccount();
         navigateTo('facturacion');
         setTimeout(() => {
             const banner = document.createElement('div');
-            banner.style.cssText = 'background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-weight:600;';
-            banner.textContent = '✅ ¡Método de pago configurado correctamente! Tu suscripción mensual está activa.';
+            if (confirmed) {
+                banner.style.cssText = 'background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-weight:600;';
+                banner.textContent = '✅ ¡Método de pago configurado correctamente! Tu suscripción mensual está activa.';
+            } else {
+                banner.style.cssText = 'background:#fffbeb;color:#92400e;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-weight:600;';
+                banner.textContent = 'ℹ️ No detectamos un pago confirmado en MercadoPago. Si completaste la suscripción, se acreditará automáticamente en unos minutos.';
+            }
             const container = document.getElementById('facturacion-content')
                            || document.getElementById('section-facturacion');
             if (container) container.prepend(banner);

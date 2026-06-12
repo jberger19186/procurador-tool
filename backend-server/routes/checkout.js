@@ -78,13 +78,19 @@ router.post('/confirm', async (req, res) => {
     if (preapproval_id) {
       await linkPreapproval(userId, preapproval_id);
       logger.info('[Checkout] Preapproval vinculado', { userId, preapproval_id });
-    } else {
-      // MP no devolvió preapproval_id (ocurre en sandbox y en algunos flujos de producción)
-      // Marcamos el provider vía JWT; el webhook lo completará con el ID real
-      await markPaymentConfigured(userId);
-      logger.info('[Checkout] Pago marcado como configurado vía retorno MP', { userId });
+      return res.json({ ok: true, configured: true, message: 'Método de pago configurado. El primer cobro se procesará automáticamente.' });
     }
-    res.json({ ok: true, message: 'Método de pago configurado. El primer cobro se procesará automáticamente.' });
+    // MP no devolvió preapproval_id (sandbox y algunos flujos): markPaymentConfigured
+    // VERIFICA contra MP que exista un preapproval autorizado antes de marcar.
+    // Si el usuario volvió del checkout sin pagar, configured=false y NO se marca nada.
+    const result = await markPaymentConfigured(userId);
+    res.json({
+      ok: true,
+      configured: result.configured,
+      message: result.configured
+        ? 'Método de pago configurado. El primer cobro se procesará automáticamente.'
+        : 'No detectamos una suscripción confirmada en MercadoPago. Si completaste el pago, se acreditará automáticamente en unos minutos.'
+    });
   } catch (err) {
     logger.error('[Checkout] Error confirmando pago', { userId, err: err.message });
     res.status(500).json({ error: err.message });

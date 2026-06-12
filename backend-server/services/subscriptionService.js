@@ -94,11 +94,15 @@ async function createPreapproval(userId, planName) {
  * @param {string} preapprovalId
  */
 async function linkPreapproval(userId, preapprovalId) {
-  // Verificar que el preapproval pertenece al usuario (consultar MP)
+  // Verificar que el preapproval existe y está AUTORIZADO en MP (un preapproval
+  // pendiente = checkout sin completar → no cuenta como método de pago configurado)
   const preapproval = await preApprovalClient.get({ id: preapprovalId });
 
   if (!preapproval || !preapproval.id) {
     throw new Error(`Preapproval ${preapprovalId} no encontrado en MercadoPago`);
+  }
+  if (preapproval.status !== 'authorized') {
+    throw new Error(`La suscripción en MercadoPago no está autorizada (estado: ${preapproval.status})`);
   }
 
   await db.query(
@@ -201,28 +205,75 @@ async function applyRenewal(subscriptionId, planName, nextBillingDate) {
  * markPaymentConfigured — marca payment_provider='mercadopago' cuando no se recibe preapproval_id
  * Se usa cuando MP no devuelve preapproval_id en el redirect (ej: sandbox).
  *
- * Intenta también reclamar el preapproval_id más reciente de webhook_events
- * que no esté vinculado a ninguna suscripción todavía (creado en los últimos 10 min).
- * Esto permite que la cancelación posterior pueda invocar la API de MP correctamente.
+ * ⚠️ VERIFICA contra MercadoPago antes de marcar: busca un preapproval AUTORIZADO
+ * con external_reference=user_{id}. Sin esa verificación, un usuario que entraba al
+ * checkout y volvía SIN pagar (botón de MP deshabilitado, pestaña cerrada, back)
+ * quedaba marcado con método de pago configurado sin haber pagado nunca
+ * (la suscripción quedaba "paga" sin pago y sin reset de contadores — bug 2026-06-12).
  *
  * @param {number} userId
+ * @returns {Promise<{configured: boolean, preapprovalId: string|null}>}
  */
 async function markPaymentConfigured(userId) {
-  // Buscar el preapproval más reciente no vinculado a ninguna suscripción
-  const { rows: [recentEvent] } = await db.query(
-    `SELECT we.external_id AS preapproval_id
-     FROM webhook_events we
-     WHERE we.event_type IN ('preapproval', 'subscription_preapproval')
-       AND we.created_at > NOW() - INTERVAL '10 minutes'
-       AND NOT EXISTS (
-         SELECT 1 FROM subscriptions s
-         WHERE s.external_subscription_id = we.external_id
-       )
-     ORDER BY we.created_at DESC
-     LIMIT 1`
-  );
+  // Email del usuario para el matcheo por payer_email (fallback de identificación)
+  const { rows: [usr] } = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
+  const userEmail = (usr?.email || '').toLowerCase();
 
-  const preapprovalId = recentEvent?.preapproval_id || null;
+  // Un preapproval cuenta como "de este usuario" solo si es atribuible:
+  // external_reference=user_{id} o payer_email coincidente. OJO: el search de MP
+  // IGNORA el query param external_reference (devuelve todos los preapprovals del
+  // vendedor) → el filtro DEBE hacerse acá. Sin esto, cualquier preapproval
+  // autorizado de otro usuario daba match (validado en staging 2026-06-12).
+  const belongsToUser = (p) =>
+    p.status === 'authorized' && (
+      p.external_reference === `user_${userId}` ||
+      (userEmail && (p.payer_email || '').toLowerCase() === userEmail)
+    );
+
+  // 1) Verificación primaria: buscar en MP un preapproval autorizado atribuible al usuario
+  let authorized = null;
+  try {
+    const resp = await fetch(
+      `https://api.mercadopago.com/preapproval/search?limit=50`,
+      { headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN || ''}` } }
+    );
+    if (resp.ok) {
+      const data = await resp.json();
+      authorized = (data.results || []).find(belongsToUser) || null;
+    } else {
+      logger.warn('[SubscriptionService] MP preapproval/search no-ok', { userId, status: resp.status });
+    }
+  } catch (e) {
+    logger.warn('[SubscriptionService] Error consultando MP preapproval/search', { userId, err: e.message });
+  }
+
+  // 2) Fallback: webhook de preapproval reciente sin vincular (evidencia de checkout
+  //    real), verificando en MP que esté autorizado Y sea atribuible a este usuario
+  if (!authorized) {
+    const { rows: [recentEvent] } = await db.query(
+      `SELECT we.external_id AS preapproval_id
+       FROM webhook_events we
+       WHERE we.event_type IN ('preapproval', 'subscription_preapproval')
+         AND we.created_at > NOW() - INTERVAL '10 minutes'
+         AND NOT EXISTS (
+           SELECT 1 FROM subscriptions s
+           WHERE s.external_subscription_id = we.external_id
+         )
+       ORDER BY we.created_at DESC
+       LIMIT 1`
+    );
+    if (recentEvent?.preapproval_id) {
+      try {
+        const p = await preApprovalClient.get({ id: recentEvent.preapproval_id });
+        if (p && belongsToUser(p)) authorized = p;
+      } catch (_) { /* no verificable → no se marca */ }
+    }
+  }
+
+  if (!authorized) {
+    logger.info('[SubscriptionService] Confirm sin preapproval autorizado en MP — NO se marca el método de pago', { userId });
+    return { configured: false, preapprovalId: null };
+  }
 
   await db.query(
     `UPDATE subscriptions
@@ -230,10 +281,10 @@ async function markPaymentConfigured(userId) {
          external_subscription_id  = COALESCE(NULLIF(external_subscription_id, ''), $1),
          updated_at                = NOW()
      WHERE user_id = $2`,
-    [preapprovalId, userId]
+    [authorized.id, userId]
   );
-
-  logger.info('[SubscriptionService] Pago marcado como configurado', { userId, preapprovalId: preapprovalId || '(ninguno reciente)' });
+  logger.info('[SubscriptionService] Método de pago verificado y marcado', { userId, preapprovalId: authorized.id });
+  return { configured: true, preapprovalId: authorized.id };
 }
 
 /**
