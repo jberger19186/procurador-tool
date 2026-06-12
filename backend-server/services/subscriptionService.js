@@ -13,7 +13,7 @@
  */
 
 const db = require('../db');  // pool compartido para servicios (ver db.js)
-const { preApprovalClient, preApprovalPlanClient, PLAN_LIMITS, PLAN_PRICES, isPlanPayable } = require('../utils/mercadopago');
+const { preApprovalClient, preApprovalPlanClient, paymentClient, PLAN_LIMITS, PLAN_PRICES, isPlanPayable } = require('../utils/mercadopago');
 const logger = require('../utils/logger');
 
 // Map de plan → variable de entorno con el ID del plan en MP
@@ -218,6 +218,11 @@ async function markPaymentConfigured(userId) {
   // Email del usuario para el matcheo por payer_email (fallback de identificación)
   const { rows: [usr] } = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
   const userEmail = (usr?.email || '').toLowerCase();
+  const { rows: [subRow] } = await db.query(
+    'SELECT id, plan, trial_bonus_until, checkout_initiated_at FROM subscriptions WHERE user_id = $1',
+    [userId]
+  );
+  if (!subRow) return { configured: false, preapprovalId: null };
 
   // Un preapproval cuenta como "de este usuario" solo si es atribuible:
   // external_reference=user_{id} o payer_email coincidente. OJO: el search de MP
@@ -232,6 +237,8 @@ async function markPaymentConfigured(userId) {
 
   // 1) Verificación primaria: buscar en MP un preapproval autorizado atribuible al usuario
   let authorized = null;
+  let claimedByWindow = false;
+  let searchResults = [];
   try {
     const resp = await fetch(
       `https://api.mercadopago.com/preapproval/search?limit=50`,
@@ -239,12 +246,46 @@ async function markPaymentConfigured(userId) {
     );
     if (resp.ok) {
       const data = await resp.json();
-      authorized = (data.results || []).find(belongsToUser) || null;
+      searchResults = data.results || [];
+      authorized = searchResults.find(belongsToUser) || null;
     } else {
       logger.warn('[SubscriptionService] MP preapproval/search no-ok', { userId, status: resp.status });
     }
   } catch (e) {
     logger.warn('[SubscriptionService] Error consultando MP preapproval/search', { userId, err: e.message });
+  }
+
+  // 1b) Claim por ventana de checkout: el checkout plan-based de MP NO persiste
+  //     external_reference ni payer_email en el preapproval (quedan vacíos), así que
+  //     un pago real puede quedar inatribuible. Si este usuario inició un checkout
+  //     (checkout_initiated_at), se reclama el preapproval AUTORIZADO de NUESTRO plan,
+  //     SIN identificadores (no atribuible a otro flujo), SIN dueño en la DB y creado
+  //     DENTRO de la ventana. Riesgo de colisión: dos usuarios pagando en la misma
+  //     ventana de minutos (aceptable en Beta; el más reciente gana, el otro se
+  //     resuelve manualmente).
+  if (!authorized && subRow.checkout_initiated_at) {
+    const windowStart = new Date(new Date(subRow.checkout_initiated_at).getTime() - 2 * 60 * 1000);
+    const ourPlanIds = [process.env.MP_PLAN_COMBO_PROMO_ID, process.env.MP_PLAN_EXTENSION_PROMO_ID].filter(Boolean);
+    const candidates = [];
+    for (const p of searchResults) {
+      if (p.status !== 'authorized') continue;
+      if (!ourPlanIds.includes(p.preapproval_plan_id)) continue;
+      if (p.external_reference || p.payer_email) continue;     // atribuible por otra vía → no reclamar
+      if (new Date(p.date_created) < windowStart) continue;
+      const { rows: [linked] } = await db.query(
+        'SELECT 1 FROM subscriptions WHERE external_subscription_id = $1', [p.id]
+      );
+      if (linked) continue;                                     // ya es de otro usuario
+      candidates.push(p);
+    }
+    candidates.sort((a, b) => new Date(b.date_created) - new Date(a.date_created));
+    if (candidates.length > 0) {
+      authorized = candidates[0];
+      claimedByWindow = true;
+      logger.info('[SubscriptionService] Preapproval reclamado por ventana de checkout', {
+        userId, preapprovalId: authorized.id, initiatedAt: subRow.checkout_initiated_at, candidatos: candidates.length
+      });
+    }
   }
 
   // 2) Fallback: webhook de preapproval reciente sin vincular (evidencia de checkout
@@ -284,7 +325,90 @@ async function markPaymentConfigured(userId) {
     [authorized.id, userId]
   );
   logger.info('[SubscriptionService] Método de pago verificado y marcado', { userId, preapprovalId: authorized.id });
+
+  // Si se reclamó por ventana, el webhook del primer pago NO pudo atribuirlo (llegó
+  // antes de la vinculación, sin identificadores) → reconciliarlo ahora: registra el
+  // pago y aplica trial bonus / renovación (lo que habría hecho el webhook).
+  if (claimedByWindow) {
+    try {
+      await reconcileClaimedCheckout(userId, subRow, authorized);
+    } catch (e) {
+      logger.warn('[SubscriptionService] Error reconciliando primer pago del checkout reclamado', { userId, err: e.message });
+    }
+  }
+
   return { configured: true, preapprovalId: authorized.id };
+}
+
+/**
+ * reconcileClaimedCheckout — registra el primer pago de un preapproval reclamado por
+ * ventana y aplica los efectos que el webhook no pudo aplicar por falta de atribución
+ * (insert en payments + applyTrialBonus/applyRenewal + activación + factura pendiente).
+ * Identifica el pago entre los webhooks recientes: aprobado, del MISMO pagador de MP
+ * (payer_id del preapproval) y posterior a la creación del preapproval.
+ */
+async function reconcileClaimedCheckout(userId, subRow, preapproval) {
+  const { rows: events } = await db.query(
+    `SELECT external_id FROM webhook_events
+     WHERE provider = 'mercadopago'
+       AND event_type IN ('payment', 'subscription_authorized_payment')
+       AND created_at >= $1::timestamptz - INTERVAL '2 minutes'
+     ORDER BY id DESC LIMIT 10`,
+    [preapproval.date_created]
+  );
+
+  for (const ev of events) {
+    let payment;
+    try { payment = await paymentClient.get({ id: ev.external_id }); } catch (_) { continue; }
+    if (!payment || payment.status !== 'approved') continue;
+    if (String(payment.payer?.id || '') !== String(preapproval.payer_id || '')) continue;
+    if (new Date(payment.date_created) < new Date(new Date(preapproval.date_created).getTime() - 60 * 1000)) continue;
+
+    // ¿Ya registrado? (el webhook pudo haberlo procesado por otra vía)
+    const { rows: [existing] } = await db.query(
+      'SELECT 1 FROM payments WHERE external_payment_id = $1', [String(payment.id)]
+    );
+    if (existing) break;
+
+    const { rows: [saved] } = await db.query(
+      `INSERT INTO payments
+         (user_id, subscription_id, external_payment_id, amount, currency, status, plan, period_start, raw_response)
+       VALUES ($1, $2, $3, $4, 'ARS', $5, $6, NOW(), $7)
+       ON CONFLICT (external_payment_id) DO UPDATE
+         SET status = EXCLUDED.status, raw_response = EXCLUDED.raw_response
+       RETURNING id`,
+      [userId, subRow.id, String(payment.id), payment.transaction_amount, payment.status, subRow.plan, JSON.stringify(payment)]
+    );
+
+    const nextBillingDate = new Date();
+    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+    if (!subRow.trial_bonus_until) {
+      await applyTrialBonus(subRow.id, subRow.plan, nextBillingDate);
+    } else {
+      await applyRenewal(subRow.id, subRow.plan, nextBillingDate);
+    }
+
+    await db.query(
+      `UPDATE subscriptions
+       SET status = 'active', next_billing_date = $1, last_payment_at = NOW(), updated_at = NOW()
+       WHERE id = $2`,
+      [nextBillingDate, subRow.id]
+    );
+
+    // Factura pendiente (manual hasta contratar Facturante) — fire-and-forget
+    try {
+      const { enqueueInvoice } = require('./invoiceService');
+      await enqueueInvoice(saved.id);
+    } catch (e) {
+      logger.warn('[SubscriptionService] Error encolando factura del pago reconciliado', { paymentId: payment.id, err: e.message });
+    }
+
+    logger.info('[SubscriptionService] Primer pago reconciliado tras claim por ventana', {
+      userId, paymentId: payment.id, amount: payment.transaction_amount
+    });
+    break; // solo el primer pago
+  }
 }
 
 /**

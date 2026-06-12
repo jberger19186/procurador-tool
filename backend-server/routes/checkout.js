@@ -57,6 +57,12 @@ router.post('/init', async (req, res) => {
     }
 
     const { initPoint, preapprovalId } = await createPreapproval(userId, plan_name);
+
+    // Registrar el inicio del checkout: MP (plan-based) no persiste external_reference
+    // ni payer_email en el preapproval, así que esta marca de tiempo es lo que permite
+    // atribuir el preapproval autorizado al usuario cuando vuelve (claim por ventana).
+    await db.query('UPDATE subscriptions SET checkout_initiated_at = NOW() WHERE user_id = $1', [userId]);
+
     logger.info('[Checkout] init_point generado', { userId, plan_name });
     res.json({ init_point: initPoint, preapproval_id: preapprovalId });
   } catch (err) {
