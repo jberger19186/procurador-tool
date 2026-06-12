@@ -1298,7 +1298,6 @@ async function renderFact() {
     const hasMethod   = subData?.hasPaymentMethod || !!acc.paymentProvider;
     const nextBilling = subData?.nextBillingDate  || acc.nextBillingDate;
     const cancelAt    = subData?.cancelAt         || acc.cancelAt;
-    const trialBonus  = subData?.trialBonusUntil  || acc.trialBonusUntil;
     const planName    = subData?.planDisplayName  || acc.plan || '';
     const planChanges = acc.planChangesThisCycle ?? 0;
 
@@ -1363,13 +1362,9 @@ async function renderFact() {
             </div>`;
     }
 
-    // Bonus bienvenida
-    if (trialBonus && new Date(trialBonus) > new Date()) {
-        paymentBody += `
-            <div style="margin-top:14px;padding:10px 14px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:13px;color:#065f46">
-                🎁 <strong>Bonus de bienvenida:</strong> +20 usos de prueba incluidos en tu plan hasta el ${formatDate(trialBonus)}.
-            </div>`;
-    }
+    // (El cartel "Bonus de bienvenida +20 usos" se eliminó: era del modelo viejo.
+    //  Hoy el primer pago asigna los límites del plan por submódulo, sin usos extra;
+    //  trial_bonus_until solo marca que el primer pago ya se aplicó.)
 
     // Cancelación programada + botón reactivar
     if (cancelAt) {
