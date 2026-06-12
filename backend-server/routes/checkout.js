@@ -43,6 +43,19 @@ router.post('/init', async (req, res) => {
   }
 
   try {
+    // Guard: el método de pago se configura recién DESPUÉS de que el admin active la
+    // cuenta (flujo oficial §4). Un trial sin activar (pending_activation / pending_email)
+    // no puede iniciar checkout. Los estados active / suspended (pago fallido) / re-suscripción
+    // sí pueden. Defensa en profundidad: el botón del portal ya está deshabilitado en trial.
+    const db = req.app.get('db');
+    const u = await db.query('SELECT registration_status FROM users WHERE id = $1', [userId]);
+    const rs = u.rows[0]?.registration_status;
+    if (rs === 'pending_activation' || rs === 'pending_email') {
+      return res.status(403).json({
+        error: 'Tu cuenta debe ser activada por el administrador antes de configurar un método de pago.'
+      });
+    }
+
     const { initPoint, preapprovalId } = await createPreapproval(userId, plan_name);
     logger.info('[Checkout] init_point generado', { userId, plan_name });
     res.json({ init_point: initPoint, preapproval_id: preapprovalId });
