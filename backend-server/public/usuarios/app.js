@@ -430,7 +430,7 @@ function renderTopbar() {
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
-function navigateTo(section) {
+function navigateTo(section, fromHistory) {
     state.currentSection = section;
 
     // Sidebar nav active
@@ -457,7 +457,23 @@ function navigateTo(section) {
         case 'ayuda': renderAyuda(); break;
         case 'reactivacion': renderReactivacion(); break;
     }
+
+    // Historial del navegador: que el botón Atrás vuelva a la sección anterior del
+    // portal en vez de salir. NO se toca la URL (pushState con '' = misma URL) → sin
+    // riesgo para el SSO (#sso=), que de todos modos ya se limpió antes de navegar.
+    if (!fromHistory) {
+        const navState = { _sec: section };
+        if (history.state && history.state._sec) history.pushState(navState, '');
+        else history.replaceState(navState, '');
+    }
 }
+
+// Botón Atrás/Adelante del navegador → navegar entre secciones del portal (no salir)
+window.addEventListener('popstate', (e) => {
+    if (!state.token) return; // sin sesión: comportamiento normal del navegador
+    const st = e.state;
+    navigateTo((st && st._sec) || 'plan', true);
+});
 
 // ─── SIDEBAR MOBILE ───────────────────────────────────────────────────────────
 function toggleSidebarMobile() {

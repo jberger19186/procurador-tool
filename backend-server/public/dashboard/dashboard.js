@@ -144,7 +144,7 @@ window.addEventListener('load', async () => {
 });
 
 // ───── ROUTING ─────
-function navigate(page, id) {
+function navigate(page, id, fromHistory) {
     if (currentPage && currentPage !== page) prevPage = currentPage;
     currentPage = page;
     document.querySelectorAll('#sidebar nav a').forEach(a => {
@@ -172,7 +172,25 @@ function navigate(page, id) {
 
     const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal, diagnostico: renderDiagnostico, 'facturacion-admin': renderFacturacionAdmin };
     if (pages[page]) pages[page]();
+
+    // Historial del navegador: registrar la navegación entre secciones para que el
+    // botón Atrás vuelva a la sección anterior en vez de salir del panel. NO se toca la
+    // URL (pushState con '' = misma URL) → sin riesgo para el login/sesión.
+    if (!fromHistory) {
+        const navState = { _nav: page, _id: id || null };
+        if (history.state && history.state._nav) history.pushState(navState, '');
+        else history.replaceState(navState, '');
+    }
 }
+
+// Botón Atrás/Adelante del navegador → navegar entre secciones (no salir del panel)
+window.addEventListener('popstate', (e) => {
+    // Solo si el panel está visible (sesión iniciada); si no, dejar el comportamiento normal
+    if (document.getElementById('main')?.style.display === 'none') return;
+    const st = e.state;
+    if (st && st._nav) navigate(st._nav, st._id, true);
+    else navigate('overview', null, true);
+});
 
 // ───── API HELPER ─────
 async function apiFetch(path, method = 'GET', body = null, auth = true) {
