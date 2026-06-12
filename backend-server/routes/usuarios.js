@@ -25,7 +25,9 @@ router.put('/profile', authenticateToken, async (req, res) => {
         if (apellido !== undefined) { fields.push(`apellido = $${idx++}`); values.push(apellido.trim()); }
         if (cuit !== undefined) { fields.push(`cuit = $${idx++}`); values.push(cuit.replace(/[-\s]/g, '')); }
         if (telefono !== undefined) { fields.push(`telefono = $${idx++}`); values.push(telefono.trim()); }
-        if (domicilio !== undefined) { fields.push(`domicilio = $${idx++}`); values.push(typeof domicilio === 'string' ? domicilio : JSON.stringify(domicilio)); }
+        // domicilio es jsonb: siempre serializar (un string plano como "Calle 123" no es
+        // JSON válido y rompía el UPDATE; JSON.stringify lo convierte en string JSON)
+        if (domicilio !== undefined) { fields.push(`domicilio = $${idx++}`); values.push(JSON.stringify(domicilio)); }
 
         fields.push(`updated_at = NOW()`);
         values.push(userId);
