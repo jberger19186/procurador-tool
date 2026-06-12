@@ -1277,12 +1277,25 @@ async function renderFact() {
     const planChanges = acc.planChangesThisCycle ?? 0;
 
     // Card: Método de pago
+    // El trial todavía SIN activar por el admin tiene PRIORIDAD: aunque haya quedado
+    // un payment_provider (p. ej. de pruebas), mientras la cuenta no esté activada no
+    // se muestra "método configurado" ni se permite configurar/cambiar el pago.
+    const isTrialNotActivated = (rs === 'pending_activation' || rs === 'pending_email');
     const isCancelledExpired = rs === 'cancelled';
     const isSuspendedPayment = rs === 'suspended' || (subData?.status === 'suspended' && subData?.paymentGraceEndsAt);
 
     let paymentBody = '';
 
-    if (isCancelledExpired) {
+    if (isTrialNotActivated) {
+        // Período de prueba sin activar — mensaje + botón deshabilitado (flujo oficial §4)
+        paymentBody = `
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px">
+                    <p style="font-size:13px;color:var(--text-muted);margin:0">Tu cuenta está en período de prueba (<strong>${acc.usageCount ?? 0}/${acc.usageLimit ?? 20}</strong> usos). Vas a poder configurar tu método de pago una vez que el administrador active tu cuenta.</p>
+                </div>
+                <button class="btn btn-primary btn-sm" disabled style="white-space:nowrap;opacity:.5;cursor:not-allowed" title="Disponible cuando el administrador active tu cuenta">💳 Configurar método de pago</button>
+            </div>`;
+    } else if (isCancelledExpired) {
         // Suscripción vencida — permitir re-suscribirse desde cero
         paymentBody = `
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -1300,25 +1313,15 @@ async function renderFact() {
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap;background:#991b1b;border-color:#991b1b">Actualizar método de pago</button>
             </div>`;
-    } else if (!hasMethod && rs === 'active') {
-        // Activado por el admin, sin método configurado — habilitar configuración de pago
+    } else if (!hasMethod) {
+        // Activado por el admin (rs='active'), sin método configurado — habilitar pago
+        // (los estados de trial sin activar ya se capturaron arriba en isTrialNotActivated)
         paymentBody = `
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
                 <div style="flex:1;min-width:200px">
                     <p style="font-size:13px;color:var(--text-muted);margin:0">No tenés un método de pago configurado. Estás usando tus usos de prueba: <strong>${acc.usageCount ?? 0}/${acc.usageLimit ?? 20}</strong>. Al configurar el pago se te asignan los límites de tu plan y el contador arranca limpio.</p>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap">💳 Configurar método de pago</button>
-            </div>`;
-    } else if (!hasMethod) {
-        // Trial todavía SIN activar por el admin (pending_activation / pending_email):
-        // el método de pago se configura recién después de que el admin active la cuenta
-        // (flujo oficial §4). Botón deshabilitado hasta entonces.
-        paymentBody = `
-            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-                <div style="flex:1;min-width:200px">
-                    <p style="font-size:13px;color:var(--text-muted);margin:0">Tu cuenta está en período de prueba (<strong>${acc.usageCount ?? 0}/${acc.usageLimit ?? 20}</strong> usos). Vas a poder configurar tu método de pago una vez que el administrador active tu cuenta.</p>
-                </div>
-                <button class="btn btn-primary btn-sm" disabled style="white-space:nowrap;opacity:.5;cursor:not-allowed" title="Disponible cuando el administrador active tu cuenta">💳 Configurar método de pago</button>
             </div>`;
     } else {
         // Método configurado
