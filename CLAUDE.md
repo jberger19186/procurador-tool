@@ -28,9 +28,18 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.24** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-11 (login del trial agotado · mensaje "ya consumiste tus usos" · límites por subsistema para pagos · fix "No autenticado" al agotar usos · releases v2.7.23 + v2.7.24)
+> Última sesión: 2026-06-12 (revisión del flujo de habilitación completo · fix tope global post-pago 999999 · checkout gateado por activación admin · cards admin clickeables · botón Atrás en dashboards · SEC-4 detectado)
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-12 — revisión integral del flujo de habilitación + fixes de portal/dashboard** :
+  - **Revisión del flujo completo verificada contra el código** (registro → verificar email → trial 20 → activación admin → pago): las 5 etapas cumplen el modelo. Documentado en "Arquitectura de usage_limit / usage_count" (tabla por etapa)
+  - **Fix tope global post-pago (backend, ya en prod):** `applyTrialBonus`/`applyRenewal` ponían `usage_limit` = límite de proc del plan (50 en COMBO) en vez de 999999 → como `usage_count` suma TODAS las ejecuciones, un pago que mezclaba módulos (45 proc + 5 inf = 50) quedaba bloqueado por el pre-check global con mensaje de trial, con submódulos aún disponibles. Ahora ambos setean `usage_limit=999999` (global = contador histórico; rige el submódulo). Validado en staging con `applyTrialBonus` real: 18/20 con usos mezclados → 0/999999 + contadores por submódulo en 0
+  - **⚠️ Hallazgo SEC-4:** `middleware/checkLicense.js` es código muerto (no montado en ninguna ruta). El freno server-side del trial son los gates de la extensión; el de la app es el pre-check del cliente. Hardening pendiente pre-lanzamiento (ver tabla seguridad)
+  - **Checkout gateado por activación (portal + backend):** el botón "Configurar método de pago" solo se habilita con `registration_status='active'`; en trial muestra mensaje + botón deshabilitado. `/checkout/init` bloquea (403) `pending_activation`/`pending_email` (defensa en profundidad, validado en staging y prod). El estado trial-sin-activar tiene **prioridad** sobre `payment_provider` residual (caso user 230, que además se limpió en DB)
+  - **Dashboard admin:** cards del Resumen navegan a su sección (Usuarios registrados/Suscripciones activas → Usuarios · Tickets abiertos → Tickets)
+  - **Ambos dashboards:** el botón Atrás del navegador navega entre secciones en vez de salir (History API con `pushState(estado,'')` — sin tocar la URL → sin riesgo para login/SSO)
+  - Backup del día en Desktop (`202606_12062026_ProcuradorTool`)
 
 - ✅ **Sesión 2026-06-11 — acceso del trial agotado + enforcement de límites pagos (release v2.7.23)** :
   - **Login del trial agotado (backend, ya en prod):** `/auth/login` ahora deja entrar a la app a un usuario en trial (`suspended` + `pending_activation`) **aunque haya consumido los 20 usos** — solo para ver el estado de la cuenta. Las ejecuciones siguen bloqueadas server-side por `checkLicense` (403 cuando `usage_count >= usage_limit`). Antes la query exigía `usage_count < usage_limit` → daba 403 "No tenés una suscripción activa". Validado en staging con un trial 20/20 simulado. Commit `c256360`
@@ -345,6 +354,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 | **SEC-1** | **Auditoría de seguridad externa** | — | Revisión profesional independiente antes del lanzamiento masivo |
 | **SEC-2** | **Smoke tests CI en GitHub Actions** | — | Workflow que corre `smoke-test-pjn.js` + `dev-tools/smoke-payments.js` en cada push a `main`, más `npm audit` (P-1) |
 | **SEC-3** | **Hardening de secretos** | — | ✅ Verificado: ningún secreto hardcodeado, `.env`/keys/certs correctamente en `.gitignore` |
+| **SEC-4** | **Enforcement server-side del trial** | Pre-lanzamiento | `middleware/checkLicense.js` es código muerto (no montado). El freno del trial agotado es el pre-check del cliente Electron + gates de la extensión; un cliente adulterado podría ejecutar más allá de 20. Agregar chequeo de usos en `/license/execution/start` (toda ejecución pasa por ahí). Detectado 2026-06-12 |
 
 ---
 
@@ -1052,16 +1062,20 @@ Al verificar el email, el usuario recibe **20 usos de prueba** (`usage_limit=20`
 - Estados bloqueados (app+extensión): `pending_email`, `rejected`, `suspended_admin`, `suspended_plan_expired`, `cancelled`, y `suspended` por pago fallido.
 
 ### Arquitectura de usage_limit / usage_count
+> Verificado contra el código el 2026-06-12. Flujo completo: registro → verificar email → trial 20 → activación admin (conserva usos restantes, habilita pago) → pago (límites del plan por submódulo).
 
-| Estado | usage_limit | Enforcement |
+| Etapa | usage_limit | Enforcement |
 |---|---|---|
-| `pending_activation` (trial) | 20 | Global: `usage_count < usage_limit` — compartido entre todos los subsistemas |
-| `active` (activado por admin) | 999999 | Por subsistema: `proc_usage`, `informe_usage`, etc. El global no se enforcea |
+| `pending_email` (registrado, sin verificar) | 20 (nace con la suscripción) | Sin acceso: login Electron/extensión 403; checkout bloqueado (botón + guard) |
+| `pending_activation` (email verificado, trial) | 20 | Global: `usage_count < usage_limit` — compartido entre todos los subsistemas. Checkout bloqueado |
+| `active` SIN pago (activado por admin) | 20 (se conservan los usos restantes del trial) | Sigue el global de 20. Checkout HABILITADO (botón portal + guard `/checkout/init`) |
+| `active` CON pago (primer pago aprobado) | 999999 (`applyTrialBonus`/`applyRenewal`) | Por subsistema: `proc_usage`, `informe_usage`, etc. El global no se enforcea |
 
-- **Trial (`suspended`)**: Electron bloquea cuando `remaining = usage_limit - usage_count = 0`. Backend verifica lo mismo. 20 usos compartidos sin distinción de subsistema.
-- **Activo**: `usage_limit = 999999` → `remaining` nunca llega a 0 → Electron no interfiere. El backend enforcea cada subsistema independientemente via sus propias columnas.
-- `usage_count` siempre se incrementa (trial y activo) — sirve como contador histórico total.
+- **Trial**: Electron bloquea cuando `remaining = usage_limit - usage_count = 0` (pre-check de `run-process`); la extensión bloquea server-side (`extension-login`/`extension-auth`). 20 usos compartidos sin distinción de subsistema.
+- **Pago** (`payment_provider` seteado): `applyTrialBonus` resetea `usage_count` y TODOS los contadores por submódulo a 0 y pone `usage_limit=999999` → el global queda como contador histórico; rige el submódulo (`checkSubsystemLimit` en la app + `log-execution` 403 en backend). ⚠️ Fix 2026-06-12: antes `applyTrialBonus`/`applyRenewal` ponían `usage_limit` = límite de proc (50 en COMBO) → un pago que mezclaba módulos (ej. 45 proc + 5 inf = 50 global) quedaba bloqueado por el pre-check global con mensaje de trial, aunque tuviera submódulos disponibles.
+- `usage_count` siempre se incrementa (trial y pago) — sirve como contador histórico total.
 - El admin puede sobreescribir `usage_limit` manualmente desde la ficha de usuario ("Global (límite total)") o usar "🔓 Ilimitado".
+- ⚠️ **`middleware/checkLicense.js` es CÓDIGO MUERTO** (no está montado en ninguna ruta — verificado 2026-06-12). El freno real del trial agotado es el pre-check de la app (cliente) + los gates de la extensión (server). La descarga de scripts y `/license/execution/start` NO chequean usos server-side → un cliente adulterado podría ejecutar más allá del trial (mitigado: scripts cifrados/firmados, la app es el único cliente). **Hardening pendiente (pre-lanzamiento):** agregar chequeo de usos del trial en `/license/execution/start` — ver pendiente SEC-4.
 
 ### Probar cuotas/límites tocando la DB (refleja en la app sin re-login)
 

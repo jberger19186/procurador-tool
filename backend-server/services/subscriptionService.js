@@ -114,8 +114,8 @@ async function linkPreapproval(userId, preapprovalId) {
 }
 
 /**
- * applyTrialBonus — aplica el bonus de bienvenida al primer pago aprobado
- * usage_limit = plan_limit + 20 (trial bonus)
+ * applyTrialBonus — se aplica al primer pago aprobado: contadores a 0, tope global
+ * desactivado (usage_limit=999999) y enforcement por submódulo según el plan.
  * trial_bonus_until = next_billing_date (fin del primer período pago)
  *
  * @param {number} subscriptionId
@@ -126,11 +126,13 @@ async function applyTrialBonus(subscriptionId, planName, nextBillingDate) {
   const limits = PLAN_LIMITS[planName];
   if (!limits) throw new Error(`Plan desconocido: ${planName}`);
 
-  // Modelo trial-hasta-pago: al configurar el pago se asignan los límites del PLAN
-  // (sin el +20 del trial) y el contador arranca limpio en 0. Los 20 usos del trial
-  // se eliminan: a partir de acá rige el plan.
-  const baseProcLimit = limits.proc > 0 ? limits.proc : limits.novedades;
-  const newUsageLimit = baseProcLimit;
+  // Modelo trial-hasta-pago: al configurar el pago el contador arranca limpio en 0 y
+  // el enforcement pasa a ser POR SUBMÓDULO (proc/informe/batch/novedades, vía
+  // log-execution + pre-check de la app). El tope GLOBAL se desactiva (999999): si
+  // quedara en el límite de proc, usage_count —que suma TODAS las ejecuciones de todos
+  // los módulos— bloquearía antes de tiempo a un pago que mezcla módulos (ej. 45 proc
+  // + 5 informes = 50 global ≥ límite, con submódulos aún disponibles).
+  const newUsageLimit = 999999;
 
   await db.query(
     `UPDATE subscriptions
@@ -162,7 +164,8 @@ async function applyRenewal(subscriptionId, planName, nextBillingDate) {
   const limits = PLAN_LIMITS[planName];
   if (!limits) throw new Error(`Plan desconocido: ${planName}`);
 
-  const baseProcLimit = limits.proc > 0 ? limits.proc : limits.novedades;
+  // Igual que applyTrialBonus: el global queda desactivado (999999); rige el submódulo.
+  const baseProcLimit = 999999;
 
   await db.query(
     `UPDATE subscriptions
