@@ -12,7 +12,7 @@
 const express = require('express');
 const router  = express.Router();
 const authenticateToken = require('../middleware/authenticateToken');
-const { createPreapproval, linkPreapproval, markPaymentConfigured, reactivateSubscription, cancelSubscription } = require('../services/subscriptionService');
+const { createPreapproval, linkPreapproval, markPaymentConfigured, cancelSubscription } = require('../services/subscriptionService');
 const logger  = require('../utils/logger');
 
 // ── Middleware: verificar feature flag ───────────────────────────────────────
@@ -119,17 +119,15 @@ router.post('/cancel', async (req, res) => {
 });
 
 // ── POST /usuarios/api/checkout/reactivate ───────────────────────────────────
-// Deshace una cancelación programada (cancel_at) mientras aún no venció
+// DEPRECADO: un preapproval cancelado en MercadoPago NO se puede des-cancelar, así que
+// "reactivar" generaba un estado falso (DB activa/renovando, MP cancelado → nunca cobraba).
+// Ahora "Volver a suscribirme" en el portal usa /checkout/init (nuevo preapproval).
+// Se mantiene la ruta devolviendo un mensaje claro por compatibilidad con clientes viejos.
 router.post('/reactivate', async (req, res) => {
-  const userId = req.user.id;
-  try {
-    await reactivateSubscription(userId);
-    logger.info('[Checkout] Suscripción reactivada', { userId });
-    res.json({ ok: true, message: 'Tu suscripción fue reactivada. Seguirá renovándose automáticamente.' });
-  } catch (err) {
-    logger.error('[Checkout] Error reactivando suscripción', { userId, err: err.message });
-    res.status(400).json({ error: err.message });
-  }
+  return res.status(410).json({
+    error: 'Para reactivar tu suscripción, configurá nuevamente tu método de pago (se genera una suscripción nueva en MercadoPago).',
+    action: 'checkout'
+  });
 });
 
 // ── GET /usuarios/api/checkout/status ────────────────────────────────────────
