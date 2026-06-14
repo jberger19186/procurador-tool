@@ -99,13 +99,20 @@ router.post('/mercadopago', verifyMPSignature, async (req, res) => {
          ON CONFLICT (provider, external_id) DO NOTHING`,
         [externalId, type || action, JSON.stringify(req.body)]
       );
+      const isNew = rowCount > 0;
+      const isPreapproval = (type === 'preapproval' || type === 'subscription_preapproval');
 
-      if (rowCount === 0) {
+      // Los PAGOS se deduplican estricto: un mismo pago no debe procesarse 2 veces
+      // (evita doble factura / doble aplicación). Los PREAPPROVALS se procesan SIEMPRE:
+      // un mismo preapproval emite varios eventos en su ciclo (authorized→paused→
+      // cancelled) con el MISMO id → dedup por id perdería los cambios de estado. El sync
+      // de estado (handlePreapprovalEvent) es idempotente, así que reprocesar es inocuo.
+      if (!isNew && !isPreapproval) {
         logger.info('[Webhooks] Evento duplicado ignorado', { externalId, type });
         return;
       }
 
-      logger.info('[Webhooks] Procesando evento MP', { externalId, type });
+      logger.info('[Webhooks] Procesando evento MP', { externalId, type, isNew });
 
       if (type === 'payment' || type === 'subscription_authorized_payment') {
         // 'payment': pago directo
@@ -325,11 +332,67 @@ async function handlePreapprovalEvent(preapprovalId) {
   }
 
   if (!sub) {
+    // Fallback final: por el preapproval_id ya vinculado. Imprescindible para el caso
+    // plan-based, donde MP no devuelve external_reference ni payer_email → las búsquedas
+    // anteriores no corren, pero la suscripción YA tiene este preapproval vinculado
+    // (cancelación/pausa de una suscripción existente desde la cuenta de MP del usuario).
+    const { rows } = await db.query(
+      `SELECT s.id, s.status FROM subscriptions s
+       WHERE s.external_subscription_id = $1
+       ORDER BY s.id DESC LIMIT 1`,
+      [String(preapprovalId)]
+    );
+    sub = rows[0] || null;
+  }
+
+  if (!sub) {
     logger.warn('[Webhooks] Preapproval sin suscripción local', { preapprovalId, payerEmail, externalRef });
     return;
   }
 
-  // Guardar el preapproval_id real: necesario para cancelar la suscripción vía API de MP
+  // Reflejar el ESTADO del preapproval en nuestra DB. Esto sincroniza la suscripción
+  // sin importar dónde se originó la acción: si el usuario cancela/pausa/reactiva
+  // directamente desde su cuenta de MercadoPago (fuera de nuestro portal), el webhook
+  // mantiene la DB coherente con MP. Sin esto, una cancelación externa dejaba la cuenta
+  // como "activa/renovando" mientras MP no cobraba → servicio gratis indefinido.
+  const mpStatus = mpPreapproval?.status;
+
+  if (mpStatus === 'cancelled' || mpStatus === 'paused') {
+    // Cobro frenado en MP → programar baja al fin del período ya pagado (igual que la
+    // cancelación desde el portal). El cron de vencimiento cierra la cuenta en cancel_at.
+    await db.query(
+      `UPDATE subscriptions
+       SET cancel_at                = COALESCE(cancel_at, next_billing_date, NOW()),
+           auto_renewal             = FALSE,
+           payment_provider         = 'mercadopago',
+           external_subscription_id = $1,
+           updated_at               = NOW()
+       WHERE id = $2`,
+      [String(preapprovalId), sub.id]
+    );
+    logger.info('[Webhooks] Preapproval ' + mpStatus + ' en MP — baja programada al fin del período', { preapprovalId, subId: sub.id });
+    return;
+  }
+
+  if (mpStatus === 'authorized') {
+    // Autorizado/reactivado en MP → asegurar estado activo y renovable (cubre la
+    // reactivación hecha desde la cuenta de MP del usuario)
+    await db.query(
+      `UPDATE subscriptions
+       SET cancel_at                = NULL,
+           auto_renewal             = TRUE,
+           payment_provider         = 'mercadopago',
+           external_subscription_id = $1,
+           updated_at               = NOW()
+       WHERE id = $2`,
+      [String(preapprovalId), sub.id]
+    );
+    logger.info('[Webhooks] Preapproval authorized en MP — suscripción activa/renovable', { preapprovalId, subId: sub.id });
+    return;
+  }
+
+  // Otros estados (pending, etc.): solo vincular el preapproval_id real (necesario para
+  // poder cancelar luego vía API de MP)
   await db.query(
     `UPDATE subscriptions
      SET external_subscription_id = $1,
@@ -339,7 +402,7 @@ async function handlePreapprovalEvent(preapprovalId) {
     [String(preapprovalId), sub.id]
   );
 
-  logger.info('[Webhooks] Preapproval ID vinculado a suscripción', { preapprovalId, subId: sub.id, externalRef, payerEmail });
+  logger.info('[Webhooks] Preapproval ID vinculado a suscripción', { preapprovalId, subId: sub.id, externalRef, payerEmail, mpStatus });
 }
 
 module.exports = router;
