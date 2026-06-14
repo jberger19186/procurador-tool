@@ -633,7 +633,7 @@ cron.schedule('15 11 * * *', async () => {
 cron.schedule('20 11 * * *', async () => {
     try {
         const cancelled = await pool.query(`
-            SELECT u.id FROM users u
+            SELECT u.id, s.external_subscription_id FROM users u
             JOIN subscriptions s ON u.id = s.user_id
             WHERE u.registration_status = 'active'
               AND s.cancel_at IS NOT NULL
@@ -651,6 +651,20 @@ cron.schedule('20 11 * * *', async () => {
               )
         `);
         for (const u of cancelled.rows) {
+            // El preapproval quedó PAUSADO al cancelar (reversible). Como el usuario no
+            // reactivó y venció el período, ahora se cancela DEFINITIVAMENTE en MP.
+            const extId = u.external_subscription_id;
+            if (extId && !extId.startsWith('pay-') && process.env.MP_ACCESS_TOKEN) {
+                try {
+                    await fetch(`https://api.mercadopago.com/preapproval/${extId}`, {
+                        method: 'PUT',
+                        headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'cancelled' })
+                    });
+                } catch (e) {
+                    logger.warn(`[CRON] No se pudo cancelar preapproval ${extId} en MP: ${e.message}`);
+                }
+            }
             await pool.query(`UPDATE users SET registration_status = 'cancelled', updated_at = NOW() WHERE id = $1`, [u.id]);
             await pool.query(`UPDATE subscriptions SET status = 'cancelled', updated_at = NOW() WHERE user_id = $1`, [u.id]);
             await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'subscription_cancelled_expired')`, [u.id]);

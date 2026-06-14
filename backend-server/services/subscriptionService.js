@@ -411,14 +411,78 @@ async function reconcileClaimedCheckout(userId, subRow, preapproval) {
   }
 }
 
-// reactivateSubscription se eliminó: un preapproval cancelado en MP no se puede
-// des-cancelar (estado terminal). "Volver a suscribirme" en el portal genera un nuevo
-// checkout/preapproval; al confirmarse el pago, applyRenewal limpia cancel_at y
-// restaura auto_renewal=TRUE con un preapproval real y vigente.
+/**
+ * resolveRealPreapprovalId — devuelve el preapproval_id REAL del usuario en MP.
+ * Usa external_subscription_id si es real (no placeholder 'pay-...'); si no, lo busca
+ * en MP por external_reference=user_{id}. (El search de MP ignora el query param y
+ * devuelve todos los del vendedor → filtramos del lado nuestro. En checkouts plan-based
+ * el external_reference puede no persistirse → devuelve null si no se identifica con
+ * seguridad, para no tocar la suscripción de otro usuario.)
+ */
+async function resolveRealPreapprovalId(userId, externalSubId) {
+  if (externalSubId && !externalSubId.startsWith('pay-')) return externalSubId;
+  try {
+    const resp = await fetch(
+      `https://api.mercadopago.com/preapproval/search?external_reference=user_${userId}`,
+      { headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN || ''}` } }
+    );
+    if (resp.ok) {
+      const data = await resp.json();
+      const match = (data.results || []).find(
+        p => ['authorized', 'paused'].includes(p.status) && p.external_reference === `user_${userId}`
+      );
+      if (match) {
+        logger.info('[SubscriptionService] Preapproval real resuelto en MP', { userId, preapprovalId: match.id });
+        return match.id;
+      }
+    }
+  } catch (e) {
+    logger.warn('[SubscriptionService] No se pudo resolver preapproval real en MP', { userId, err: e.message });
+  }
+  return null;
+}
 
 /**
- * cancelSubscription — programa la cancelación al fin del período actual
- * El usuario sigue activo hasta next_billing_date
+ * reactivateSubscription — deshace una cancelación programada REANUDANDO el preapproval
+ * en MP (status: paused → authorized). NO genera un pago nuevo: el cobro se reanuda en la
+ * fecha original (next_billing_date). Válido solo mientras cancel_at no venció.
+ *
+ * @param {number} userId
+ */
+async function reactivateSubscription(userId) {
+  const { rows: [sub] } = await db.query(
+    'SELECT id, cancel_at, external_subscription_id FROM subscriptions WHERE user_id = $1',
+    [userId]
+  );
+  if (!sub) throw new Error(`Suscripción no encontrada para usuario ${userId}`);
+  if (!sub.cancel_at) throw new Error('La suscripción no tiene una cancelación programada');
+  if (new Date(sub.cancel_at) < new Date()) throw new Error('La cancelación ya venció — volvé a suscribirte');
+
+  // Reanudar el preapproval pausado en MP (paused → authorized)
+  const preapprovalId = await resolveRealPreapprovalId(userId, sub.external_subscription_id);
+  if (preapprovalId) {
+    await preApprovalClient.update({ id: preapprovalId, body: { status: 'authorized' } });
+    logger.info('[SubscriptionService] Preapproval MP reanudado (paused→authorized)', { preapprovalId });
+  } else {
+    // No hay preapproval reanudable (caso de borde) → no podemos garantizar el cobro futuro
+    throw new Error('No se pudo reanudar la suscripción en MercadoPago. Configurá nuevamente tu método de pago.');
+  }
+
+  await db.query(
+    `UPDATE subscriptions
+     SET cancel_at = NULL, auto_renewal = TRUE, updated_at = NOW()
+     WHERE id = $1`,
+    [sub.id]
+  );
+  logger.info('[SubscriptionService] Cancelación revertida — suscripción reanudada sin nuevo cobro', { userId });
+}
+
+/**
+ * cancelSubscription — programa la cancelación al fin del período actual.
+ * PAUSA el preapproval en MP (no lo cancela): pausado no cobra pero es reversible, así
+ * "Volver a suscribirme" puede reanudarlo sin un pago nuevo. El cron de vencimiento lo
+ * cancela definitivamente en cancel_at si el usuario no reactivó. El usuario sigue activo
+ * hasta next_billing_date.
  *
  * @param {number} userId
  */
@@ -429,43 +493,13 @@ async function cancelSubscription(userId) {
   );
   if (!sub) throw new Error(`Suscripción no encontrada para usuario ${userId}`);
 
-  // Resolver el preapproval REAL a cancelar (para frenar el cobro del próximo período).
-  // Los IDs 'pay-...' son placeholders internos, no preapproval IDs reales de MP.
-  let preapprovalId = (sub.external_subscription_id && !sub.external_subscription_id.startsWith('pay-'))
-    ? sub.external_subscription_id : null;
-
-  // Hardening: si solo hay placeholder (o nada), intentar resolver el preapproval real
-  // en MP por external_reference=user_{id}. (El search de MP ignora el query param y
-  // devuelve todos los del vendedor → filtramos del lado nuestro. En checkouts plan-based
-  // el external_reference puede no persistirse → si no se identifica con seguridad, NO se
-  // adivina por timing para no arriesgar cancelar la suscripción de otro usuario.)
-  if (!preapprovalId) {
-    try {
-      const resp = await fetch(
-        `https://api.mercadopago.com/preapproval/search?external_reference=user_${userId}`,
-        { headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN || ''}` } }
-      );
-      if (resp.ok) {
-        const data = await resp.json();
-        const auth = (data.results || []).find(
-          p => p.status === 'authorized' && p.external_reference === `user_${userId}`
-        );
-        if (auth) {
-          preapprovalId = auth.id;
-          logger.info('[SubscriptionService] Preapproval real resuelto en MP para cancelar', { userId, preapprovalId });
-        }
-      }
-    } catch (e) {
-      logger.warn('[SubscriptionService] No se pudo resolver preapproval real en MP', { userId, err: e.message });
-    }
-  }
-
+  const preapprovalId = await resolveRealPreapprovalId(userId, sub.external_subscription_id);
   if (preapprovalId) {
     try {
-      await preApprovalClient.update({ id: preapprovalId, body: { status: 'cancelled' } });
-      logger.info('[SubscriptionService] Preapproval MP cancelado', { preapprovalId });
+      await preApprovalClient.update({ id: preapprovalId, body: { status: 'paused' } });
+      logger.info('[SubscriptionService] Preapproval MP pausado (no se cobra el próximo período; reversible)', { preapprovalId });
     } catch (err) {
-      logger.error('[SubscriptionService] Error cancelando preapproval MP', { preapprovalId, err: err.message });
+      logger.error('[SubscriptionService] Error pausando preapproval MP', { preapprovalId, err: err.message });
       // No bloquear la cancelación local si MP falla
     }
   } else {
@@ -492,6 +526,7 @@ module.exports = {
   createPreapproval,
   linkPreapproval,
   markPaymentConfigured,
+  reactivateSubscription,
   applyTrialBonus,
   applyRenewal,
   cancelSubscription

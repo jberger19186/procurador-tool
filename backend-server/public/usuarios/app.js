@@ -1367,13 +1367,14 @@ async function renderFact() {
     //  trial_bonus_until solo marca que el primer pago ya se aplicó.)
 
     // Cancelación programada + botón reactivar.
-    // Reactivar = nueva suscripción (nuevo checkout MP): un preapproval cancelado en MP
-    // no se puede des-cancelar, así que para volver a cobrar hay que crear uno nuevo.
+    // Reactivar = reanudar el preapproval pausado en MP (sin nuevo cobro; el próximo
+    // débito cae en la fecha original). Si MP no lo puede reanudar, el backend responde
+    // action:'checkout' y se ofrece re-suscribirse con un método de pago nuevo.
     if (cancelAt) {
         paymentBody += `
             <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#991b1b;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-                <span><strong>Cancelación programada:</strong> tu suscripción se cancela el ${formatDate(cancelAt)}. Seguís teniendo acceso hasta esa fecha. Para continuar después podés volver a suscribirte.</span>
-                <button class="btn btn-outline btn-sm" onclick="confirmReactivateSubscription()" style="white-space:nowrap;border-color:#991b1b;color:#991b1b;background:#fff">↩ Volver a suscribirme</button>
+                <span><strong>Cancelación programada:</strong> tu suscripción se cancela el ${formatDate(cancelAt)}. Seguís teniendo acceso hasta esa fecha. Podés reactivarla sin costo adicional antes de esa fecha.</span>
+                <button class="btn btn-outline btn-sm" onclick="confirmReactivateSubscription()" style="white-space:nowrap;border-color:#991b1b;color:#991b1b;background:#fff">↩ Reactivar suscripción</button>
             </div>`;
     }
 
@@ -1530,13 +1531,29 @@ async function confirmCancelSubscription() {
     }
 }
 
-// Reactivar = volver a suscribirse con un nuevo checkout. La suscripción cancelada en
-// MercadoPago no se puede des-cancelar, así que se genera un preapproval nuevo. Al
-// confirmarse el pago, applyRenewal limpia cancel_at y restaura auto_renewal=TRUE con
-// un preapproval real y vigente.
+// Reactivar = reanudar el preapproval pausado en MP (sin nuevo cobro). Si MP no lo
+// puede reanudar (caso de borde), el backend responde action:'checkout' y se ofrece
+// re-suscribirse con un método de pago nuevo.
 async function confirmReactivateSubscription() {
-    if (!confirm('Para volver a suscribirte se generará un nuevo método de pago en MercadoPago (el cobro mensual se reanuda). ¿Continuar?')) return;
-    initCheckout();
+    if (!confirm('¿Reactivar tu suscripción? Se reanuda el cobro automático en la fecha de renovación habitual. No se genera un cobro nuevo ahora.')) return;
+    try {
+        const res = await apiFetch('/usuarios/api/checkout/reactivate', { method: 'POST' });
+        if (!res) return;
+        const data = await res.json();
+        if (res.ok) {
+            alert('✅ Suscripción reactivada. No se generó ningún cobro nuevo; el próximo débito será en tu fecha de renovación habitual.');
+            await loadAccount();
+            renderFact();
+        } else if (data.action === 'checkout') {
+            if (confirm((data.error || 'No se pudo reanudar automáticamente.') + '\n\n¿Configurar un método de pago nuevo para reactivar?')) {
+                initCheckout();
+            }
+        } else {
+            alert(data.error || 'No se pudo reactivar la suscripción.');
+        }
+    } catch (e) {
+        alert('Error de conexión. Intentá de nuevo.');
+    }
 }
 
 // ─── SECTION: REACTIVACIÓN ───────────────────────────────────────────────────

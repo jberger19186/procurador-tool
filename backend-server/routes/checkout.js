@@ -12,7 +12,7 @@
 const express = require('express');
 const router  = express.Router();
 const authenticateToken = require('../middleware/authenticateToken');
-const { createPreapproval, linkPreapproval, markPaymentConfigured, cancelSubscription } = require('../services/subscriptionService');
+const { createPreapproval, linkPreapproval, markPaymentConfigured, reactivateSubscription, cancelSubscription } = require('../services/subscriptionService');
 const logger  = require('../utils/logger');
 
 // ── Middleware: verificar feature flag ───────────────────────────────────────
@@ -119,15 +119,19 @@ router.post('/cancel', async (req, res) => {
 });
 
 // ── POST /usuarios/api/checkout/reactivate ───────────────────────────────────
-// DEPRECADO: un preapproval cancelado en MercadoPago NO se puede des-cancelar, así que
-// "reactivar" generaba un estado falso (DB activa/renovando, MP cancelado → nunca cobraba).
-// Ahora "Volver a suscribirme" en el portal usa /checkout/init (nuevo preapproval).
-// Se mantiene la ruta devolviendo un mensaje claro por compatibilidad con clientes viejos.
+// Reanuda una cancelación programada: despausa el preapproval en MP (no genera pago
+// nuevo). El cobro se reanuda en la fecha original. Si no hay preapproval reanudable,
+// devuelve un error con action:'checkout' para que el portal ofrezca re-suscribirse.
 router.post('/reactivate', async (req, res) => {
-  return res.status(410).json({
-    error: 'Para reactivar tu suscripción, configurá nuevamente tu método de pago (se genera una suscripción nueva en MercadoPago).',
-    action: 'checkout'
-  });
+  const userId = req.user.id;
+  try {
+    await reactivateSubscription(userId);
+    logger.info('[Checkout] Suscripción reanudada', { userId });
+    res.json({ ok: true, message: 'Tu suscripción se reanudó. El próximo cobro será en la fecha de renovación habitual; no se generó un cobro nuevo.' });
+  } catch (err) {
+    logger.error('[Checkout] Error reanudando suscripción', { userId, err: err.message });
+    res.status(400).json({ error: err.message, action: 'checkout' });
+  }
 });
 
 // ── GET /usuarios/api/checkout/status ────────────────────────────────────────
