@@ -491,6 +491,10 @@ async function renderUserDetail(userId) {
                     </div>
                 </div>
                 <div style="margin-top:12px">
+                    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Teléfono</label>
+                    <input type="text" id="reg-telefono" value="${escHtml(u.telefono || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                </div>
+                <div style="margin-top:12px">
                     <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Domicilio</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr 80px 80px;gap:8px;margin-bottom:8px">
                         <div>
@@ -1835,7 +1839,7 @@ window.sendPasswordReset = async function(userId, email) {
     }
 };
 
-const REG_FIELDS = ['reg-nombre','reg-apellido','reg-cuit','reg-status','reg-calle','reg-numero','reg-piso','reg-depto','reg-localidad','reg-provincia'];
+const REG_FIELDS = ['reg-nombre','reg-apellido','reg-cuit','reg-telefono','reg-status','reg-calle','reg-numero','reg-piso','reg-depto','reg-localidad','reg-provincia'];
 
 window.toggleRegistroEdit = function() {
     REG_FIELDS.forEach(id => {
@@ -1864,6 +1868,7 @@ window.saveRegistroData = async function(userId) {
             nombre:              document.getElementById('reg-nombre').value.trim()    || null,
             apellido:            document.getElementById('reg-apellido').value.trim()  || null,
             cuit:                document.getElementById('reg-cuit').value.trim()      || null,
+            telefono:            document.getElementById('reg-telefono').value.trim()  || null,
             registration_status: document.getElementById('reg-status').value          || null,
             domicilio: {
                 calle:     document.getElementById('reg-calle').value.trim(),

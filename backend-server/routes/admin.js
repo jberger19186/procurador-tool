@@ -730,7 +730,7 @@ router.get('/users/:userId', authenticateAdmin, async (req, res) => {
 // Actualizar datos de registro de un usuario
 router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
-    const { nombre, apellido, cuit, domicilio, registration_status } = req.body;
+    const { nombre, apellido, cuit, telefono, domicilio, registration_status } = req.body;
     const db = req.app.get('db');
 
     const validStatuses = ['pending_email', 'pending_activation', 'active', 'rejected', 'suspended', 'suspended_admin', 'suspended_plan_expired', 'cancelled'];
@@ -744,14 +744,16 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
                 nombre             = COALESCE($1, nombre),
                 apellido           = COALESCE($2, apellido),
                 cuit               = COALESCE($3, cuit),
-                domicilio          = COALESCE($4, domicilio),
-                registration_status = COALESCE($5, registration_status),
+                telefono           = COALESCE($4, telefono),
+                domicilio          = COALESCE($5, domicilio),
+                registration_status = COALESCE($6, registration_status),
                 updated_at         = NOW()
-            WHERE id = $6
+            WHERE id = $7
         `, [
             nombre   || null,
             apellido || null,
             cuit     || null,
+            telefono || null,
             domicilio ? JSON.stringify(domicilio) : null,
             registration_status || null,
             userId
@@ -2464,25 +2466,23 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
              VALUES ($1, $2, $2, $3, $4, $5, NOW())`,
             [userId, qty, reason.trim(), req.user.id, expiry]
         );
-        // Hacerlos EFECTIVOS: para el TRIAL (sin método de pago) los usos extra suman al
-        // cupo global → usage_limit += qty (ej. 20 → 20+qty). Para cuentas PAGAS el
-        // enforcement es por submódulo, así que se suman al bonus de procuración
-        // (proc_bonus += qty), que es el contador que la app consume realmente.
+        // Hacerlos EFECTIVOS: los usos extra de cortesía son un concepto del TRIAL
+        // (sin método de pago) → suman al cupo global: usage_limit += qty (ej. 20 → 20+qty).
+        // Para cuentas PAGAS el enforcement es por submódulo y se gestiona con "ajustar
+        // usos manuales" (columnas *_bonus); ahí la cortesía no aplica.
         // (Antes solo se insertaban en usage_extras, tabla que ningún enforcement activo
         //  leía → los usos de cortesía no surtían efecto.)
         const bumpResult = await db.query(
             `UPDATE subscriptions
-             SET usage_limit = CASE WHEN payment_provider IS NULL THEN usage_limit + $2 ELSE usage_limit END,
-                 proc_bonus  = CASE WHEN payment_provider IS NOT NULL THEN COALESCE(proc_bonus, 0) + $2 ELSE proc_bonus END,
-                 updated_at  = NOW()
-             WHERE user_id = $1
-             RETURNING payment_provider`,
+             SET usage_limit = usage_limit + $2, updated_at = NOW()
+             WHERE user_id = $1 AND payment_provider IS NULL
+             RETURNING usage_limit`,
             [userId, qty]
         );
-        const aplicadoEn = bumpResult.rows[0]?.payment_provider ? 'proc_bonus (pago)' : 'usage_limit (trial)';
+        const aplicado = bumpResult.rowCount > 0;
         await db.query(
             `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'extra_usage_assigned', $3)`,
-            [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason, aplicado_en: aplicadoEn })]
+            [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason, aplicado_al_trial: aplicado })]
         );
         // Notificación in-app
         await db.query(

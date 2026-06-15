@@ -514,14 +514,24 @@ async function renderPerfil() {
 
     const a = state.account;
 
-    // Rellenar form con datos existentes
+    // Domicilio estructurado (mismo formato que el registro y el admin). Compat: si quedó
+    // guardado como string de una versión vieja, lo ponemos en "calle".
+    let dom = a.domicilio || {};
+    if (typeof dom === 'string') { try { dom = JSON.parse(dom); } catch (_) { dom = {}; } }
+    if (typeof dom === 'string') dom = { calle: dom };
+
     const fields = {
         'profile-email': a.email || '',
         'profile-nombre': a.nombre || '',
         'profile-apellido': a.apellido || '',
         'profile-cuit': a.cuit || '',
         'profile-telefono': a.telefono || '',
-        'profile-domicilio': a.domicilio ? (typeof a.domicilio === 'string' ? a.domicilio : JSON.stringify(a.domicilio)) : '',
+        'dom-calle': dom.calle || '',
+        'dom-numero': dom.numero || '',
+        'dom-piso': dom.piso || '',
+        'dom-depto': dom.depto || '',
+        'dom-localidad': dom.localidad || '',
+        'dom-provincia': dom.provincia || '',
     };
 
     Object.entries(fields).forEach(([id, val]) => {
@@ -539,7 +549,14 @@ async function saveProfile(e) {
     const apellido = document.getElementById('profile-apellido').value.trim();
     const cuit = document.getElementById('profile-cuit').value.trim();
     const telefono = document.getElementById('profile-telefono').value.trim();
-    const domicilio = document.getElementById('profile-domicilio').value.trim();
+    const domicilio = {
+        calle:     document.getElementById('dom-calle').value.trim(),
+        numero:    document.getElementById('dom-numero').value.trim(),
+        piso:      document.getElementById('dom-piso').value.trim()  || undefined,
+        depto:     document.getElementById('dom-depto').value.trim() || undefined,
+        localidad: document.getElementById('dom-localidad').value.trim(),
+        provincia: document.getElementById('dom-provincia').value.trim(),
+    };
 
     if (!nombre || !apellido) {
         showAlert(alertEl, 'error', 'El nombre y apellido son obligatorios.');
