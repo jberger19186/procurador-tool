@@ -86,6 +86,76 @@ async function createPreapproval(userId, planName) {
   };
 }
 
+const REACTIVATION_BACK_URL = process.env.MP_BACK_URL || 'https://api.procuradortool.com/usuarios/?pago=ok';
+const PLAN_REASONS = {
+  COMBO_PROMO:     'Procurador SCW — COMBO PROMO',
+  EXTENSION_PROMO: 'Procurador SCW — EXTENSION PROMO'
+};
+
+/**
+ * createReactivationPreapproval — crea un preapproval CUSTOM (sin plan) con free_trial
+ * igual a los días que le quedan del período ya pagado, para que la reactivación NO
+ * genere un cobro inmediato (el primer débito cae en el vencimiento original). Se usa
+ * cuando la suscripción no se puede reanudar (cancelación terminal hecha desde MP).
+ * Si el período ya venció, no aplica free_trial (cobro inmediato normal).
+ *
+ * @param {number} userId
+ * @returns {Promise<{initPoint: string, freeTrialDays: number}>}
+ */
+async function createReactivationPreapproval(userId) {
+  const { rows: [sub] } = await db.query(
+    `SELECT s.plan, s.cancel_at, s.next_billing_date, u.email
+     FROM subscriptions s JOIN users u ON u.id = s.user_id
+     WHERE s.user_id = $1`,
+    [userId]
+  );
+  if (!sub) throw new Error(`Suscripción no encontrada para usuario ${userId}`);
+  const planName = sub.plan;
+  if (!isPlanPayable(planName)) throw new Error(`Plan ${planName} no admite cobro automático`);
+  const amount = PLAN_PRICES[planName];
+  if (!amount) throw new Error(`Sin precio configurado para ${planName}`);
+
+  // Días restantes del período ya pagado → free_trial. Si ya venció, 0 (cobro inmediato).
+  const refDate = sub.cancel_at || sub.next_billing_date;
+  const freeTrialDays = refDate
+    ? Math.max(0, Math.ceil((new Date(refDate) - new Date()) / 86400000))
+    : 0;
+
+  // payer_email: en producción real = email del usuario. En SANDBOX, MP exige que el
+  // pagador sea un test user (collector y payer deben ser ambos reales o ambos de prueba)
+  // → override por MP_SANDBOX_PAYER_EMAIL. Quitar esa env var al pasar a MP producción (B3).
+  const payerEmail = process.env.MP_SANDBOX_PAYER_EMAIL || sub.email || '';
+  const body = {
+    reason:             PLAN_REASONS[planName] || `Procurador SCW — ${planName}`,
+    external_reference: `user_${userId}`,
+    payer_email:        payerEmail,
+    back_url:           REACTIVATION_BACK_URL,
+    auto_recurring: {
+      frequency:          1,
+      frequency_type:     'months',
+      transaction_amount: amount,
+      currency_id:        'ARS'
+    },
+    status: 'pending'
+  };
+  if (freeTrialDays >= 1) {
+    body.auto_recurring.free_trial = { frequency: freeTrialDays, frequency_type: 'days' };
+  }
+
+  const preapproval = await preApprovalClient.create({ body });
+  if (!preapproval || !preapproval.init_point) {
+    throw new Error('MercadoPago no devolvió init_point para la reactivación');
+  }
+
+  // Estampar inicio de checkout para el claim por ventana del /confirm
+  await db.query('UPDATE subscriptions SET checkout_initiated_at = NOW() WHERE user_id = $1', [userId]);
+
+  logger.info('[SubscriptionService] Preapproval de reactivación creado (free_trial diferido)', {
+    userId, planName, freeTrialDays, preapprovalId: preapproval.id
+  });
+  return { initPoint: preapproval.init_point, freeTrialDays };
+}
+
 /**
  * linkPreapproval — vincula un preapproval_id a la suscripción del usuario
  * Se llama tras la confirmación del checkout (POST /checkout/confirm)
@@ -316,15 +386,21 @@ async function markPaymentConfigured(userId) {
     return { configured: false, preapprovalId: null };
   }
 
+  // Vincular SIEMPRE el preapproval autorizado encontrado (sobreescribe uno viejo
+  // cancelado) y limpiar cualquier baja programada: si hay un preapproval autorizado
+  // atribuible al usuario, esa ES su suscripción activa actual (cubre la reactivación
+  // por checkout tras una cancelación terminal hecha desde MercadoPago).
   await db.query(
     `UPDATE subscriptions
      SET payment_provider          = 'mercadopago',
-         external_subscription_id  = COALESCE(NULLIF(external_subscription_id, ''), $1),
+         external_subscription_id  = $1,
+         cancel_at                 = NULL,
+         auto_renewal              = TRUE,
          updated_at                = NOW()
      WHERE user_id = $2`,
     [authorized.id, userId]
   );
-  logger.info('[SubscriptionService] Método de pago verificado y marcado', { userId, preapprovalId: authorized.id });
+  logger.info('[SubscriptionService] Método de pago verificado y vinculado (suscripción activa)', { userId, preapprovalId: authorized.id });
 
   // Si se reclamó por ventana, el webhook del primer pago NO pudo atribuirlo (llegó
   // antes de la vinculación, sin identificadores) → reconciliarlo ahora: registra el
@@ -524,6 +600,7 @@ async function cancelSubscription(userId) {
 
 module.exports = {
   createPreapproval,
+  createReactivationPreapproval,
   linkPreapproval,
   markPaymentConfigured,
   reactivateSubscription,

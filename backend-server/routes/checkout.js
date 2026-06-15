@@ -12,7 +12,7 @@
 const express = require('express');
 const router  = express.Router();
 const authenticateToken = require('../middleware/authenticateToken');
-const { createPreapproval, linkPreapproval, markPaymentConfigured, reactivateSubscription, cancelSubscription } = require('../services/subscriptionService');
+const { createPreapproval, createReactivationPreapproval, linkPreapproval, markPaymentConfigured, reactivateSubscription, cancelSubscription } = require('../services/subscriptionService');
 const logger  = require('../utils/logger');
 
 // ── Middleware: verificar feature flag ───────────────────────────────────────
@@ -131,6 +131,22 @@ router.post('/reactivate', async (req, res) => {
   } catch (err) {
     logger.error('[Checkout] Error reanudando suscripción', { userId, err: err.message });
     res.status(400).json({ error: err.message, action: 'checkout' });
+  }
+});
+
+// ── POST /usuarios/api/checkout/reactivate-init ──────────────────────────────
+// Reactivación por NUEVO checkout cuando el preapproval no se puede reanudar (cancelación
+// terminal hecha desde MP). Crea un preapproval con free_trial = días ya pagados, para
+// que el primer cobro caiga en el vencimiento original (sin doble cobro).
+router.post('/reactivate-init', async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const { initPoint, freeTrialDays } = await createReactivationPreapproval(userId);
+    logger.info('[Checkout] init_point de reactivación generado', { userId, freeTrialDays });
+    res.json({ init_point: initPoint, free_trial_days: freeTrialDays });
+  } catch (err) {
+    logger.error('[Checkout] Error generando reactivación', { userId, err: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 

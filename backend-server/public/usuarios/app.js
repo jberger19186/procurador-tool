@@ -1545,8 +1545,22 @@ async function confirmReactivateSubscription() {
             await loadAccount();
             renderFact();
         } else if (data.action === 'checkout') {
-            if (confirm((data.error || 'No se pudo reanudar automáticamente.') + '\n\n¿Configurar un método de pago nuevo para reactivar?')) {
-                initCheckout();
+            // No se pudo reanudar (cancelación terminal, ej. hecha desde MercadoPago) →
+            // nueva suscripción con free_trial = días ya pagados (el primer cobro cae en
+            // el vencimiento original, sin doble cobro).
+            if (confirm((data.error || 'No se pudo reanudar automáticamente.') + '\n\nVamos a generar un método de pago nuevo. No se te cobrará ahora: el primer débito será recién en tu fecha de vencimiento actual. ¿Continuar?')) {
+                try {
+                    const r2 = await apiFetch('/usuarios/api/checkout/reactivate-init', { method: 'POST' });
+                    const d2 = r2 ? await r2.json() : null;
+                    if (r2 && r2.ok && d2.init_point) {
+                        localStorage.setItem('psc_checkout_pending', JSON.stringify({ initiated: Date.now() }));
+                        window.location.href = d2.init_point;
+                    } else {
+                        alert((d2 && d2.error) || 'No se pudo iniciar la reactivación.');
+                    }
+                } catch (_) {
+                    alert('Error de conexión. Intentá de nuevo.');
+                }
             }
         } else {
             alert(data.error || 'No se pudo reactivar la suscripción.');

@@ -307,7 +307,7 @@ async function handlePreapprovalEvent(preapprovalId) {
   if (refUserId) {
     // Prioridad 1: user_id extraído de external_reference (el más confiable)
     const { rows } = await db.query(
-      `SELECT s.id, s.status
+      `SELECT s.id, s.status, s.external_subscription_id AS linked_id
        FROM subscriptions s
        WHERE s.user_id = $1
          OR s.external_subscription_id = $2
@@ -320,7 +320,7 @@ async function handlePreapprovalEvent(preapprovalId) {
   if (!sub && payerEmail) {
     // Fallback: email del pagador (útil cuando portal email = MP email)
     const { rows } = await db.query(
-      `SELECT s.id, s.status
+      `SELECT s.id, s.status, s.external_subscription_id AS linked_id
        FROM subscriptions s
        JOIN users u ON u.id = s.user_id
        WHERE u.email = $1
@@ -337,7 +337,7 @@ async function handlePreapprovalEvent(preapprovalId) {
     // anteriores no corren, pero la suscripción YA tiene este preapproval vinculado
     // (cancelación/pausa de una suscripción existente desde la cuenta de MP del usuario).
     const { rows } = await db.query(
-      `SELECT s.id, s.status FROM subscriptions s
+      `SELECT s.id, s.status, s.external_subscription_id AS linked_id FROM subscriptions s
        WHERE s.external_subscription_id = $1
        ORDER BY s.id DESC LIMIT 1`,
       [String(preapprovalId)]
@@ -356,6 +356,20 @@ async function handlePreapprovalEvent(preapprovalId) {
   // mantiene la DB coherente con MP. Sin esto, una cancelación externa dejaba la cuenta
   // como "activa/renovando" mientras MP no cobraba → servicio gratis indefinido.
   const mpStatus = mpPreapproval?.status;
+
+  // Guard anti-pisado: si la suscripción ya está vinculada a OTRO preapproval real
+  // (distinto del de este webhook), un evento cancelled/paused de un preapproval VIEJO
+  // no debe pisar la suscripción nueva. (Ej.: el usuario canceló en MP, reactivó con un
+  // preapproval nuevo, y MP reenvía el webhook del viejo cancelado.) Los eventos
+  // 'authorized' SÍ pueden re-vincular: el preapproval autorizado más nuevo gana.
+  const linkedId = sub.linked_id || null;
+  const isLinked = linkedId && linkedId === String(preapprovalId);
+  const linkedToOther = linkedId && !linkedId.startsWith('pay-') && linkedId !== String(preapprovalId);
+
+  if ((mpStatus === 'cancelled' || mpStatus === 'paused') && linkedToOther) {
+    logger.info('[Webhooks] Preapproval ' + mpStatus + ' es de un preapproval viejo (no el vinculado) — se ignora para no pisar la suscripción activa', { preapprovalId, linkedId, subId: sub.id });
+    return;
+  }
 
   if (mpStatus === 'cancelled' || mpStatus === 'paused') {
     // Cobro frenado en MP → programar baja al fin del período ya pagado (igual que la
