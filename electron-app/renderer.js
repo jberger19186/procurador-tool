@@ -2065,6 +2065,8 @@ async function loadAccountData() {
                 const rem   = Math.max(0, limit - used);
                 const pct   = Math.min(100, Math.round((used / limit) * 100));
                 const barColor = rem <= 5 ? '#dc2626' : rem <= 10 ? '#d97706' : '#16a34a';
+                const courtesy = a.courtesyExtras || 0;
+                const courtesyTag = courtesy > 0 ? ` <span style="font-size:11px;font-weight:700;color:#16a34a">(+${courtesy} cortesía)</span>` : '';
                 trialBannerEl.style.display = '';
                 trialBannerEl.innerHTML = `
                     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;margin-bottom:16px">
@@ -2073,7 +2075,7 @@ async function loadAccountData() {
                                 <span style="font-weight:700;color:#92400e;font-size:13px">⏳ Período de prueba</span>
                                 <span style="color:#78350f;font-size:12px;margin-left:8px">El administrador activará tu cuenta en breve</span>
                             </div>
-                            <span style="font-size:18px;font-weight:800;color:${barColor}">${used}<span style="font-size:12px;font-weight:500;color:#92400e"> / ${limit} usos utilizados</span></span>
+                            <span style="font-size:18px;font-weight:800;color:${barColor}">${used}<span style="font-size:12px;font-weight:500;color:#92400e"> / ${limit} usos utilizados</span>${courtesyTag}</span>
                         </div>
                         <div style="background:#fde68a;border-radius:4px;height:7px;overflow:hidden">
                             <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width .3s"></div>

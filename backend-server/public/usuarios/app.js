@@ -766,6 +766,8 @@ function renderPlan() {
             ? 'Tu cuenta está pendiente de activación por el administrador'
             : 'Configurá tu método de pago para acceder a los límites de tu plan';
         const exhausted  = trialRem <= 0;
+        const courtesy   = acc.courtesyExtras || 0;
+        const courtesyTag = courtesy > 0 ? ` <span style="font-size:12px;font-weight:700;color:#16a34a">(+${courtesy} de cortesía)</span>` : '';
         const lowMsg     = rs === 'pending_activation'
             ? (exhausted
                 ? '🔴 Ya consumiste tus usos. Contactá al administrador para activar tu cuenta.'
@@ -787,7 +789,7 @@ function renderPlan() {
                         <span style="font-size:13px;font-weight:700;color:#92400e">⏳ Período de prueba</span>
                         <span style="font-size:12px;color:#78350f;margin-left:8px">${subLabel}</span>
                     </div>
-                    <span style="font-size:20px;font-weight:800;color:${barColor}">${trialUsed} <span style="font-size:13px;font-weight:500;color:#92400e">/ ${trialLimit} usos utilizados</span></span>
+                    <span style="font-size:20px;font-weight:800;color:${barColor}">${trialUsed} <span style="font-size:13px;font-weight:500;color:#92400e">/ ${trialLimit} usos utilizados</span>${courtesyTag}</span>
                 </div>
                 <div style="background:#fde68a;border-radius:4px;height:8px;overflow:hidden">
                     <div style="height:100%;width:${pctTrial}%;background:${barColor};border-radius:4px;transition:width .3s"></div>

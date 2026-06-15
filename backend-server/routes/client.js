@@ -457,6 +457,18 @@ router.get('/account', authenticateToken, async (req, res) => {
 
         const u = result.rows[0];
 
+        // Usos extra de cortesía vigentes asignados por el admin (ya incluidos en
+        // usage_limit del trial; se devuelven aparte para mostrar el "+N" en la UI).
+        let courtesyExtras = 0;
+        try {
+            const ce = await db.query(
+                `SELECT COALESCE(SUM(extra_uses), 0) AS total FROM usage_extras
+                 WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())`,
+                [userId]
+            );
+            courtesyExtras = parseInt(ce.rows[0]?.total || '0', 10);
+        } catch (_) {}
+
         // Obtener partes activas de monitoreo
         let monitorPartesActivas = 0;
         try {
@@ -564,6 +576,7 @@ router.get('/account', authenticateToken, async (req, res) => {
                 usageCount: u.usage_count ?? 0,
                 usageLimit: u.usage_limit ?? 0,
                 remaining: u.usage_limit ? u.usage_limit - (u.usage_count ?? 0) : 0,
+                courtesyExtras,   // usos extra de cortesía vigentes (ya incluidos en usageLimit)
                 // Flujo v2.1 — estado y suscripción extendida
                 registrationStatus: u.registration_status || null,
                 suspensionCause: u.suspension_cause || null,

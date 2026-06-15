@@ -715,9 +715,18 @@ router.get('/users/:userId', authenticateAdmin, async (req, res) => {
             LIMIT 30
         `, [userId]);
 
+        // Usos extra de cortesía vigentes (ya incluidos en usage_limit del trial)
+        const ceResult = await db.query(
+            `SELECT COALESCE(SUM(extra_uses), 0) AS total FROM usage_extras
+             WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())`,
+            [userId]
+        );
+        const userRow = userResult.rows[0];
+        userRow.courtesy_extras = parseInt(ceResult.rows[0]?.total || '0', 10);
+
         res.json({
             success: true,
-            user: userResult.rows[0],
+            user: userRow,
             recentLogs: logsResult.rows,
             events: eventsResult.rows
         });

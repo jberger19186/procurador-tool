@@ -419,7 +419,7 @@ async function renderUserDetail(userId) {
                     <div class="detail-grid">
                         <div class="detail-item"><label>Plan</label><span>${u.plan ? `<span class="badge badge-blue">${u.plan_display_name || u.plan}</span>` : '—'}</span></div>
                         <div class="detail-item"><label>Estado</label><span>${statusBadge(u.status)}</span></div>
-                        <div class="detail-item"><label>Uso global <span style="font-weight:400;color:var(--text-muted)">(extensión)</span></label><span>${u.usage_count ?? 0} / ${u.usage_limit ?? 0}</span></div>
+                        <div class="detail-item"><label>Uso global <span style="font-weight:400;color:var(--text-muted)">(extensión)</span></label><span>${u.usage_count ?? 0} / ${u.usage_limit ?? 0}${(u.courtesy_extras || 0) > 0 ? ` <span style="color:#16a34a;font-weight:600">(+${u.courtesy_extras} cortesía)</span>` : ''}</span></div>
                         <div class="detail-item"><label>Expira</label><span>${u.expires_at ? fmtDate(u.expires_at) : '—'}</span></div>
                     </div>
                     ${u.plan ? `<div style="margin-top:12px">
