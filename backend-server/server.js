@@ -679,18 +679,20 @@ cron.schedule('20 11 * * *', async () => {
 cron.schedule('25 11 * * *', async () => {
     try {
         const downgrades = await pool.query(`
-            SELECT u.id, u.email, u.nombre, s.scheduled_plan, s.id AS sub_id
+            SELECT u.id, u.email, u.nombre, s.scheduled_plan, s.id AS sub_id, s.payment_provider
             FROM subscriptions s JOIN users u ON u.id = s.user_id
             WHERE s.scheduled_plan IS NOT NULL
               AND (s.scheduled_plan->>'apply_at')::timestamp < NOW()
               AND s.status = 'active'
         `);
+        const subSvc = require('./services/subscriptionService');
         for (const u of downgrades.rows) {
             const sp = u.scheduled_plan;
             const newPlanResult = await pool.query(`SELECT * FROM plans WHERE id = $1`, [sp.plan_id]);
             if (newPlanResult.rows.length === 0) continue;
             const np = newPlanResult.rows[0];
-            const newUsageLimit = np.proc_executions_limit === -1 ? 999999 : np.proc_executions_limit;
+            // Pago → enforcement por submódulo (usage_limit=999999); trial/legacy → límite de proc.
+            const newUsageLimit = (u.payment_provider || np.proc_executions_limit === -1) ? 999999 : np.proc_executions_limit;
             const newExpiry = new Date();
             newExpiry.setDate(newExpiry.getDate() + (np.period_days || 30));
 
@@ -704,6 +706,11 @@ cron.schedule('25 11 * * *', async () => {
                     updated_at = NOW()
                 WHERE user_id = $5
             `, [np.name, np.id, newUsageLimit, newExpiry, u.id]);
+
+            // Ajustar el monto que cobra MercadoPago al plan ya rebajado (best-effort)
+            if (u.payment_provider) {
+                subSvc.updatePreapprovalAmount(u.id, np.name).catch(() => {});
+            }
 
             await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_downgrade_applied', $2)`,
                 [u.id, JSON.stringify({ to: np.name })]);

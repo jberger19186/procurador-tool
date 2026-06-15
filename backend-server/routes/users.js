@@ -4,6 +4,7 @@ const router = express.Router();
 const authenticateToken = require('../middleware/authenticateToken');
 const mailer = require('../utils/mailer');
 const logger = require('../utils/logger');
+const { updatePreapprovalAmount } = require('../services/subscriptionService');
 
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);
@@ -375,6 +376,12 @@ router.post('/change-plan', async (req, res) => {
                     [req.user.id, `Tu plan fue actualizado a ${newPlan.display_name}.`]
                 );
                 await client.query('COMMIT');
+
+                // Ajustar el monto que cobra MercadoPago al nuevo plan (best-effort).
+                // El upgrade aplica ya; el nuevo monto rige desde el próximo cobro.
+                if (u.payment_provider) {
+                    updatePreapprovalAmount(req.user.id, newPlan.name).catch(() => {});
+                }
 
                 res.json({
                     success: true,

@@ -272,6 +272,38 @@ async function applyRenewal(subscriptionId, planName, nextBillingDate) {
 }
 
 /**
+ * updatePreapprovalAmount — ajusta el monto que cobra MP al cambiar de plan (upgrade o
+ * downgrade). Resuelve el preapproval real del usuario y le actualiza
+ * auto_recurring.transaction_amount al precio del nuevo plan. Best-effort: si no hay
+ * preapproval vinculado (trial sin pago) o el plan no tiene precio, no hace nada.
+ * El nuevo monto rige desde el próximo cobro (MP no prorratea).
+ */
+async function updatePreapprovalAmount(userId, planName) {
+  const { rows: [sub] } = await db.query('SELECT external_subscription_id FROM subscriptions WHERE user_id = $1', [userId]);
+  const preapprovalId = await resolveRealPreapprovalId(userId, sub?.external_subscription_id);
+  if (!preapprovalId) {
+    logger.info('[SubscriptionService] Cambio de plan sin preapproval MP vinculado — no se ajusta el monto', { userId });
+    return false;
+  }
+  const amount = PLAN_PRICES[planName];
+  if (!amount) {
+    logger.warn('[SubscriptionService] Plan sin precio configurado — no se ajusta el monto en MP', { userId, planName });
+    return false;
+  }
+  try {
+    await preApprovalClient.update({
+      id: preapprovalId,
+      body: { auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: amount, currency_id: 'ARS' } }
+    });
+    logger.info('[SubscriptionService] Monto del preapproval MP ajustado al nuevo plan', { userId, preapprovalId, amount, planName });
+    return true;
+  } catch (e) {
+    logger.error('[SubscriptionService] Error ajustando el monto del preapproval MP', { userId, err: e.message });
+    return false;
+  }
+}
+
+/**
  * cancelSupersededPreapproval — "single-active": cancela en MP un preapproval anterior
  * del usuario cuando se vincula uno nuevo. Garantiza que el usuario tenga UN SOLO
  * preapproval vivo en MP → cancelar desde MP siempre apunta al correcto y no quedan
@@ -624,6 +656,7 @@ module.exports = {
   createPreapproval,
   createReactivationPreapproval,
   cancelSupersededPreapproval,
+  updatePreapprovalAmount,
   linkPreapproval,
   markPaymentConfigured,
   reactivateSubscription,
