@@ -26,11 +26,24 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.24** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.25** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-12 (revisión del flujo de habilitación completo · fix tope global post-pago 999999 · checkout gateado por activación admin · cards admin clickeables · botón Atrás en dashboards · SEC-4 detectado)
+> Última sesión: 2026-06-15 (ciclo de cobranza endurecido: pausa/reanuda en cancelación · reactivación con free_trial sin doble cobro · single-active · sync de cancelación externa desde MP · cortesía efectiva y visible · cambio de plan ajusta monto en MP · activación conserva cortesía · límites COMBO unificados · release v2.7.25 · E2E del flujo completo)
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-15 — endurecimiento del ciclo de cobranza + cambio de plan + E2E** :
+  - **Cancelar = PAUSAR / Reactivar = REANUDAR (sin cobro nuevo):** `cancelSubscription` pausa el preapproval en MP (reversible, no cobra el próximo período); `reactivateSubscription` lo reanuda (paused→authorized) sin generar pago, el cobro sigue en la fecha original. El cron de vencimiento lo cancela definitivamente si no se reactivó. (Antes cancelaba terminal → reactivar era imposible.)
+  - **Reactivación por checkout con `free_trial` (sin doble cobro):** si el preapproval quedó terminal (cancelado desde MP), "Reactivar" crea uno nuevo con free_trial = días ya pagados → el primer cobro cae en el vencimiento original. `MP_SANDBOX_PAYER_EMAIL` en `.env` (quitar en B3).
+  - **Single-active:** al vincular un preapproval nuevo se cancela el anterior en MP → un solo preapproval vivo por usuario.
+  - **Sync de cancelación/pausa/reactivación desde MercadoPago:** el webhook `subscription_preapproval` ahora refleja el estado (cancelled/paused→baja programada; authorized→activa). Idempotencia: los preapprovals se procesan siempre (no se deduplican por id); fallback de lookup por `external_subscription_id`. Guard anti-pisado (un preapproval viejo no clobberea la suscripción activa).
+  - **Usos de cortesía efectivos y visibles:** el admin asigna usos extra → suman al `usage_limit` del trial (antes solo se insertaban en `usage_extras`, tabla que nada leía). "(+N de cortesía)" visible en portal (banner superior + Mi Plan), ficha admin y app Electron. La **activación conserva** la cortesía (antes la pisaba con usage_limit=20).
+  - **Cambio de plan ajusta el monto en MercadoPago:** `updatePreapprovalAmount` actualiza `transaction_amount` del preapproval al cambiar de plan (upgrade inmediato + downgrade vía cron). Validado en sandbox (1500↔15000). Antes era un stub que no tocaba MP.
+  - **Cambio de plan por admin** desde la ficha (POST `/admin/subscriptions`): usage_limit=999999, registra evento, limpia `scheduled_plan`. **Banner de downgrade programado** + botón "Cancelar cambio" en el portal. **Historial de la cuenta** (user_events) visible en la ficha del admin.
+  - **Datos de registro:** domicilio estructurado en el portal (alineado con registro/admin) + **teléfono** en la ficha del admin (display + edición + PUT).
+  - **Límites COMBO_PROMO unificados:** proc 50 · batch 20 · informe 50 · monitor_novedades 50 · partes 20 (tabla `plans`, `PLAN_LIMITS`, CLAUDE.md, landing).
+  - **Release v2.7.25** (auto-recuperación de sesión, cortesía visible, mensajes). **E2E del ciclo de vida** verificado (registro→trial→tope→cortesía→activación→pago→bloqueo por submódulo→cancelar/reactivar).
+  - **Pendientes detectados:** integración cambio de plan↔MP en producción real (B3, ya implementada y probada en sandbox) · renovación mensual y pago-rechazado→gracia→suspensión (no ejercitados en E2E) · downgrade→upgrade requiere 3er plan tarifado activo (L1).
 
 - ✅ **Sesión 2026-06-12 — revisión integral del flujo de habilitación + fixes de portal/dashboard** :
   - **Revisión del flujo completo verificada contra el código** (registro → verificar email → trial 20 → activación admin → pago): las 5 etapas cumplen el modelo. Documentado en "Arquitectura de usage_limit / usage_count" (tabla por etapa)
