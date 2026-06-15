@@ -705,10 +705,21 @@ router.get('/users/:userId', authenticateAdmin, async (req, res) => {
             LIMIT 20
         `, [userId]);
 
+        // Historial de eventos de la cuenta (incluye cambios de plan: plan_upgraded,
+        // plan_downgrade_scheduled, plan_downgrade_cancelled, activated, etc.)
+        const eventsResult = await db.query(`
+            SELECT event_type, payload, created_at
+            FROM user_events
+            WHERE user_id = $1
+            ORDER BY id DESC
+            LIMIT 30
+        `, [userId]);
+
         res.json({
             success: true,
             user: userResult.rows[0],
-            recentLogs: logsResult.rows
+            recentLogs: logsResult.rows,
+            events: eventsResult.rows
         });
     } catch (error) {
         console.error('Error obteniendo usuario:', error);
@@ -2453,9 +2464,25 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
              VALUES ($1, $2, $2, $3, $4, $5, NOW())`,
             [userId, qty, reason.trim(), req.user.id, expiry]
         );
+        // Hacerlos EFECTIVOS: para el TRIAL (sin método de pago) los usos extra suman al
+        // cupo global → usage_limit += qty (ej. 20 → 20+qty). Para cuentas PAGAS el
+        // enforcement es por submódulo, así que se suman al bonus de procuración
+        // (proc_bonus += qty), que es el contador que la app consume realmente.
+        // (Antes solo se insertaban en usage_extras, tabla que ningún enforcement activo
+        //  leía → los usos de cortesía no surtían efecto.)
+        const bumpResult = await db.query(
+            `UPDATE subscriptions
+             SET usage_limit = CASE WHEN payment_provider IS NULL THEN usage_limit + $2 ELSE usage_limit END,
+                 proc_bonus  = CASE WHEN payment_provider IS NOT NULL THEN COALESCE(proc_bonus, 0) + $2 ELSE proc_bonus END,
+                 updated_at  = NOW()
+             WHERE user_id = $1
+             RETURNING payment_provider`,
+            [userId, qty]
+        );
+        const aplicadoEn = bumpResult.rows[0]?.payment_provider ? 'proc_bonus (pago)' : 'usage_limit (trial)';
         await db.query(
             `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'extra_usage_assigned', $3)`,
-            [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason })]
+            [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason, aplicado_en: aplicadoEn })]
         );
         // Notificación in-app
         await db.query(

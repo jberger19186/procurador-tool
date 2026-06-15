@@ -373,6 +373,7 @@ async function renderUserDetail(userId) {
         ]);
         const u = uData.user;
         const logs = uData.recentLogs;
+        const events = uData.events || [];
         const tickets = tData.tickets;
         const partes = mData.partes || [];
         const allPlans = (plansData.plans || []).filter(p => p.active);
@@ -650,6 +651,23 @@ async function renderUserDetail(userId) {
                         <td>${l.success ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">Error</span>'}</td>
                         <td>${fmtDate(l.execution_date)}</td>
                         <td style="font-size:12px;color:var(--text-muted)">${l.error_message || ''}</td>
+                    </tr>`).join('')}
+                    </tbody></table>
+                </div>`}
+            </div>
+        </div>
+
+        <!-- Historial de la cuenta (eventos: cambios de plan, activaciones, etc.) -->
+        <div class="card section-gap">
+            <div class="card-header"><h3>🗂️ Historial de la cuenta (${events.length})</h3></div>
+            <div class="card-body" style="padding:0">
+                ${events.length === 0 ? '<div class="empty-state"><p>Sin eventos</p></div>' : `
+                <div class="table-wrapper">
+                    <table><thead><tr><th>Evento</th><th>Detalle</th><th>Fecha</th></tr></thead>
+                    <tbody>${events.map(e => `<tr>
+                        <td>${eventLabel(e.event_type)}</td>
+                        <td style="font-size:12px;color:var(--text-muted)">${eventDetail(e)}</td>
+                        <td style="font-size:12px">${fmtDate(e.created_at)}</td>
                     </tr>`).join('')}
                     </tbody></table>
                 </div>`}
@@ -1561,6 +1579,37 @@ function fmtDate(d) {
 }
 function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+// Etiquetas legibles para los eventos de la cuenta (user_events)
+function eventLabel(type) {
+    const map = {
+        email_verified: '✉️ Email verificado',
+        activated: '✅ Cuenta activada (admin)',
+        rejected_blocked: '🚫 Rechazado (bloqueado)',
+        rejected_keep_trial: '⏸️ Rechazado (mantiene trial)',
+        admin_suspended: '⛔ Suspendido por admin',
+        admin_reactivated: '↩️ Reactivado por admin',
+        plan_upgraded: '⬆️ Upgrade de plan',
+        plan_downgrade_scheduled: '⬇️ Downgrade programado',
+        plan_downgrade_cancelled: '❎ Downgrade cancelado',
+        reactivated_plan_selection: '🔄 Reactivación con plan',
+        trial_exhausted_blocked: '🔴 Trial agotado',
+        subscription_cancelled_expired: '🗑️ Suscripción vencida/cancelada',
+    };
+    return map[type] || type;
+}
+function eventDetail(e) {
+    let p = e.payload;
+    if (typeof p === 'string') { try { p = JSON.parse(p); } catch (_) { p = {}; } }
+    p = p || {};
+    if (p.from && p.to) {
+        const fecha = p.apply_at ? ` (aplica ${fmtDate(p.apply_at)})` : '';
+        return `${p.from} → ${p.to}${fecha}`;
+    }
+    if (p.new_plan) return `Plan: ${p.new_plan}`;
+    if (p.reason) return escHtml(p.reason);
+    if (p.plan) return `Plan: ${p.plan}`;
+    return '';
 }
 function roleBadge(r) {
     return r === 'admin' ? '<span class="badge badge-purple">Admin</span>' : '<span class="badge badge-gray">Usuario</span>';
