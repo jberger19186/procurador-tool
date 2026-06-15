@@ -1050,7 +1050,7 @@ GET    /admin/users/search                — Autocomplete de usuarios (nombre, 
 ### Sistema de cuotas por plan
 ```
 EXTENSION_PROMO  → USD 1/mes  → 5 flujos extensión, sin cuotas app
-COMBO_PROMO      → USD 9.99/mes → extensión + app: 50 proc · 10 inf · 3 partes · 10 nov · 20 batch
+COMBO_PROMO      → $15.000 ARS/mes → extensión + app: 50 proc · 50 inf · 20 partes · 50 nov · 20 batch
 BASIC            → app: 50 proc · 10 inf · 3 partes activas
 PRO              → app: 200 proc · 50 inf · 10 partes activas
 ENTERPRISE       → app: ilimitado · 50 partes activas

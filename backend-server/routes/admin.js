@@ -293,14 +293,15 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
         const u = userResult.rows[0];
 
         // Modelo trial-hasta-pago: la activación por admin SOLO APRUEBA la cuenta.
-        // El usuario sigue en el TRIAL (20 usos) hasta que configure su método de
-        // pago; recién ahí se le asignan los límites del plan (webhook → applyTrialBonus).
-        // Por eso NO se resetea usage_count (el trial es 20 usos en total hasta el pago)
-        // y usage_limit se mantiene en 20. Solo en modo legacy sin cobro
+        // El usuario sigue en el TRIAL hasta que configure su método de pago; recién ahí
+        // se le asignan los límites del plan (webhook → applyTrialBonus).
+        // Por eso NO se resetea usage_count y se CONSERVA usage_limit tal cual está
+        // (20 base + los usos de cortesía que el admin haya sumado). Antes se forzaba a
+        // 20 y eso borraba la cortesía. Solo en modo legacy sin cobro
         // (PAYMENT_MODULE_ENABLED=false) se sube directo al límite del plan.
         const paymentEnabled = process.env.PAYMENT_MODULE_ENABLED === 'true';
         const planLimit = u.proc_executions_limit > 0 ? u.proc_executions_limit : 9999;
-        const usageLimit = paymentEnabled ? 20 : planLimit;
+        const usageLimit = paymentEnabled ? null : planLimit;   // null = conservar usage_limit actual
 
         await client.query(`
             UPDATE users
@@ -309,12 +310,13 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
         `, [userId]);
 
         // Sin cobro (legacy) reseteamos el contador al pasar al plan; con cobro
-        // mantenemos el progreso del trial (no se resetea usage_count).
+        // mantenemos el progreso del trial (usage_count) y el cupo actual (usage_limit,
+        // incluida la cortesía).
         await client.query(`
             UPDATE subscriptions
             SET status = 'active',
                 usage_count = ${paymentEnabled ? 'usage_count' : '0'},
-                usage_limit = $1,
+                usage_limit = COALESCE($1, usage_limit),
                 expires_at = NOW() + ($2 || ' days')::INTERVAL,
                 period_start = NOW(),
                 updated_at = NOW()

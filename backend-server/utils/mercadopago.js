@@ -31,7 +31,7 @@ const paymentClient         = new Payment(mpConfig);
  */
 const PLAN_LIMITS = {
   EXTENSION_PROMO: { proc: 0,   informe: 0,  partes: 0,  batch: 0,  novedades: 5  },
-  COMBO_PROMO:     { proc: 50,  informe: 10, partes: 3,  batch: 20, novedades: 10 },
+  COMBO_PROMO:     { proc: 50,  informe: 50, partes: 20, batch: 20, novedades: 50 },
   BASIC:           { proc: 50,  informe: 10, partes: 3,  batch: 0,  novedades: 0  },
   PRO:             { proc: 200, informe: 50, partes: 10, batch: 0,  novedades: 0  },
   ENTERPRISE:      { proc: 9999,informe: 9999,partes: 50,batch: 0,  novedades: 0  }
