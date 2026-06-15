@@ -272,6 +272,25 @@ async function applyRenewal(subscriptionId, planName, nextBillingDate) {
 }
 
 /**
+ * cancelSupersededPreapproval — "single-active": cancela en MP un preapproval anterior
+ * del usuario cuando se vincula uno nuevo. Garantiza que el usuario tenga UN SOLO
+ * preapproval vivo en MP → cancelar desde MP siempre apunta al correcto y no quedan
+ * huérfanos que generen webhooks "sin suscripción local".
+ */
+async function cancelSupersededPreapproval(oldId, newId) {
+  if (!oldId || oldId.startsWith('pay-') || oldId === newId) return;
+  try {
+    const p = await preApprovalClient.get({ id: oldId });
+    if (p && (p.status === 'authorized' || p.status === 'paused')) {
+      await preApprovalClient.update({ id: oldId, body: { status: 'cancelled' } });
+      logger.info('[SubscriptionService] Preapproval anterior cancelado al vincular uno nuevo (single-active)', { oldId, newId });
+    }
+  } catch (e) {
+    logger.warn('[SubscriptionService] No se pudo cancelar el preapproval anterior (single-active)', { oldId, err: e.message });
+  }
+}
+
+/**
  * markPaymentConfigured — marca payment_provider='mercadopago' cuando no se recibe preapproval_id
  * Se usa cuando MP no devuelve preapproval_id en el redirect (ej: sandbox).
  *
@@ -289,7 +308,7 @@ async function markPaymentConfigured(userId) {
   const { rows: [usr] } = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
   const userEmail = (usr?.email || '').toLowerCase();
   const { rows: [subRow] } = await db.query(
-    'SELECT id, plan, trial_bonus_until, checkout_initiated_at FROM subscriptions WHERE user_id = $1',
+    'SELECT id, plan, trial_bonus_until, checkout_initiated_at, external_subscription_id FROM subscriptions WHERE user_id = $1',
     [userId]
   );
   if (!subRow) return { configured: false, preapprovalId: null };
@@ -385,6 +404,9 @@ async function markPaymentConfigured(userId) {
     logger.info('[SubscriptionService] Confirm sin preapproval autorizado en MP — NO se marca el método de pago', { userId });
     return { configured: false, preapprovalId: null };
   }
+
+  // Single-active: cancelar en MP el preapproval anterior si es otro y sigue vivo.
+  await cancelSupersededPreapproval(subRow.external_subscription_id, authorized.id);
 
   // Vincular SIEMPRE el preapproval autorizado encontrado (sobreescribe uno viejo
   // cancelado) y limpiar cualquier baja programada: si hay un preapproval autorizado
@@ -601,6 +623,7 @@ async function cancelSubscription(userId) {
 module.exports = {
   createPreapproval,
   createReactivationPreapproval,
+  cancelSupersededPreapproval,
   linkPreapproval,
   markPaymentConfigured,
   reactivateSubscription,

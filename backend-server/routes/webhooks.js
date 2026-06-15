@@ -20,7 +20,7 @@ const router  = express.Router();
 const crypto  = require('crypto');
 const db      = require('../db');
 const { paymentClient, preApprovalClient } = require('../utils/mercadopago');
-const { applyTrialBonus, applyRenewal } = require('../services/subscriptionService');
+const { applyTrialBonus, applyRenewal, cancelSupersededPreapproval } = require('../services/subscriptionService');
 const { enqueueInvoice }                = require('../services/invoiceService');
 const mailer  = require('../utils/mailer');
 const logger  = require('../utils/logger');
@@ -389,6 +389,11 @@ async function handlePreapprovalEvent(preapprovalId) {
   }
 
   if (mpStatus === 'authorized') {
+    // Single-active: si la suscripción estaba vinculada a OTRO preapproval vivo, cancelarlo
+    // en MP (este autorizado nuevo lo reemplaza) → un solo preapproval vivo por usuario.
+    if (linkedToOther) {
+      await cancelSupersededPreapproval(linkedId, String(preapprovalId));
+    }
     // Autorizado/reactivado en MP → asegurar estado activo y renovable (cubre la
     // reactivación hecha desde la cuenta de MP del usuario)
     await db.query(
