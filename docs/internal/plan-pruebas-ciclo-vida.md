@@ -88,6 +88,62 @@ Prueba de punta a punta con la automatización real del PJN y el checkout real d
 
 ---
 
+## PLAN 3 — Matriz de cancelación / reactivación (según origen)
+
+Cada combinación toma un camino distinto en MP; hay que probarlas todas. Estado de
+partida en cada fila: usuario **pago y activo** (preapproval autorizado en MP).
+
+| # | Cancela desde | Reactiva desde | Resultado esperado |
+|---|---------------|----------------|--------------------|
+| A | **Portal** | **Portal** | Cancelar PAUSA el preapproval (reversible) + baja programada. Reactivar lo REANUDA (paused→authorized) **sin cobro nuevo**; próximo débito en la fecha original. `cancel_at` limpio. |
+| B | **Portal** | **MercadoPago** | Cancelar pausa. El usuario lo reanuda en MP (de pausado → activo) → el webhook `subscription_preapproval` sincroniza la cuenta a activa/renovable. |
+| C | **MercadoPago** | **Portal** | Cancelar en MP = TERMINAL. El webhook refleja la baja programada. "Reactivar" en el portal cae a **nuevo checkout con `free_trial`** = días ya pagados → **sin doble cobro**, primer débito en el vencimiento original. |
+| D | **MercadoPago** | **MercadoPago** | Cancelar terminal. El usuario re-suscribe en MP (nuevo preapproval) → webhook lo vincula y reactiva. Single-active cancela el viejo. |
+| E | **Portal o MP** | **(no reactiva)** | Al cruzar `cancel_at`, el cron pasa la cuenta a `cancelled`, corta el acceso y cancela el preapproval en MP definitivamente. Verificar acceso bloqueado + estado terminal. |
+
+**Verificaciones transversales en cada fila:** coherencia DB ↔ MP (estado del preapproval),
+banner correcto en el portal, que **no haya doble cobro**, y que el botón se comporte
+(reanudar vs. nuevo checkout) según el caso.
+
+---
+
+## Escenarios adicionales sugeridos (qué más probar)
+
+Más allá del camino feliz, conviene cubrir:
+
+**Cobranza / suscripción**
+1. **Pago rechazado** → gracia 3 días (`payment_grace_ends_at`) → si no se recupera, `suspended` + "Actualizá tu método de pago"; y la **recuperación** (paga de nuevo → reactiva).
+2. **Idempotencia de pagos**: el mismo webhook de pago dos veces → no duplica factura ni reaplica.
+3. **Vencimiento sin reactivar** (fila E) → `cancelled` + acceso cortado.
+4. **Reactivación tardía** (después de `cancel_at`) → ya no se puede reanudar; debe re-suscribirse.
+
+**Cambio de plan**
+5. **2 cambios/ciclo** y bloqueo del 3°.
+6. **Cancelar un downgrade programado** (botón "Cancelar cambio") → vuelve el cambio al contador.
+7. **Upgrade/downgrade ajustan el monto en MP** (validado en sandbox; confirmar en real).
+8. **downgrade → upgrade** (requiere un 3er plan tarifado activo — L1).
+9. Cambio de plan **estando no-activo** (debe rechazar).
+
+**Trial / usos**
+10. **Trial compartido app ↔ extensión**: usos consumidos en la app reducen el cupo de la extensión.
+11. **Extensión a 20/20** → bloqueada (`extension-auth`) con mensaje + link al portal.
+12. **Cortesía**: que sume al trial, se vea "(+N)", y **sobreviva la activación**.
+13. **SEC-4** (hardening pendiente): cliente adulterado intentando exceder los 20 usos.
+
+**Monitor**
+14. **Límite de partes** (20 en COMBO) → bloqueo al agregar la 21°.
+15. **Regla de borrado** de partes (borrable dentro de 24 h o pasados 30 días; bloqueado en el medio).
+
+**Cuenta / admin / sesión**
+16. **Admin**: rechazar+bloquear, rechazar+mantener trial, suspender, reactivar, ajuste manual de usos por submódulo, cambiar plan desde la ficha.
+17. **Verificación de email**: link vencido + reenvío.
+18. **Machine binding**: login desde otro `machineId` (lock de dispositivo).
+19. **Sesión**: expiración del token + refresh + auto-recuperación del "No autenticado".
+20. **Lock de ejecución multi-dispositivo**: correr en paralelo desde 2 instancias → la 2ª se bloquea.
+21. **Facturación**: el admin sube el PDF → aparece en el portal del usuario.
+
+---
+
 ## Pendientes que estas pruebas ayudan a cerrar
 - Renovación mensual (no ejercitada en E2E automatizado).
 - Pago rechazado → gracia → suspensión.
