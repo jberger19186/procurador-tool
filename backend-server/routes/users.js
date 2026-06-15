@@ -235,6 +235,36 @@ router.post('/cancel', async (req, res) => {
 
 // ─── POST /users/change-plan ──────────────────────────────────────────────────
 // Upgrade (inmediato, stub) / Downgrade (programado) / Reactivación desde suspended_plan_expired
+// Cancelar un cambio de plan (downgrade) programado para el próximo ciclo.
+// Quita scheduled_plan y devuelve el cambio al contador (no "cuesta" si se deshace).
+router.post('/cancel-scheduled-plan', async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const { rows: [sub] } = await db.query(
+            'SELECT scheduled_plan FROM subscriptions WHERE user_id = $1', [req.user.id]
+        );
+        if (!sub || !sub.scheduled_plan) {
+            return res.status(400).json({ error: 'No hay un cambio de plan programado para cancelar.' });
+        }
+        await db.query(
+            `UPDATE subscriptions
+             SET scheduled_plan = NULL,
+                 plan_changes_this_cycle = GREATEST(plan_changes_this_cycle - 1, 0),
+                 updated_at = NOW()
+             WHERE user_id = $1`,
+            [req.user.id]
+        );
+        await db.query(
+            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_downgrade_cancelled', $2)`,
+            [req.user.id, JSON.stringify(sub.scheduled_plan)]
+        );
+        res.json({ success: true, message: 'Cambio de plan programado cancelado. Seguís con tu plan actual.' });
+    } catch (err) {
+        console.error('Error cancelando cambio de plan programado:', err);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 router.post('/change-plan', async (req, res) => {
     const db = req.app.get('db');
     const { plan_name } = req.body;

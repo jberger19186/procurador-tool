@@ -55,6 +55,11 @@ SET payment_provider          = NULL,
     informe_usage             = 0,
     batch_usage               = 0,
     monitor_novedades_usage   = 0,
+    scheduled_plan            = NULL,
+    plan_changes_this_cycle   = 0,
+    plan_expiry_date          = NULL,
+    next_billing_date         = NULL,
+    checkout_initiated_at     = NULL,
     updated_at                = NOW()
 WHERE user_id IN (6,7,19);
 

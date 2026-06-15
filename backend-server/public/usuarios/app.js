@@ -953,6 +953,19 @@ function renderPlansModal() {
         container.innerHTML = '';
     }
 
+    // Aviso de cambio de plan (downgrade) programado para el próximo ciclo
+    let scheduled = acc?.scheduledPlan;
+    if (scheduled && typeof scheduled === 'string') { try { scheduled = JSON.parse(scheduled); } catch (_) { scheduled = null; } }
+    if (scheduled && scheduled.plan) {
+        const schedPlanObj = state.plans.find(p => p.name === scheduled.plan);
+        const schedName = schedPlanObj?.displayName || scheduled.plan;
+        const schedDate = scheduled.apply_at ? formatDate(scheduled.apply_at) : 'el próximo ciclo';
+        container.innerHTML += `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1e40af;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <span>📅 <strong>Cambio de plan programado:</strong> tu plan pasará a <strong>${escapeHtml(schedName)}</strong> el ${schedDate}. Hasta entonces conservás tu plan actual.</span>
+            <button class="btn btn-outline btn-sm" onclick="cancelScheduledPlan()" style="white-space:nowrap">Cancelar cambio</button>
+        </div>`;
+    }
+
     container.innerHTML += state.plans.map(p => {
         const isCurrent = p.name === currentPlan;
         const procLim = p.limits?.proc === -1 ? '∞' : (p.limits?.proc ?? '-');
@@ -1262,6 +1275,24 @@ async function changePlan(planName) {
             alert(data.error || 'Error al cambiar el plan.');
         } else {
             alert(data.message || 'Plan actualizado correctamente.');
+            await loadAccount();
+            renderPlan();
+        }
+    } catch (e) {
+        alert('Error de conexión. Intentá de nuevo.');
+    }
+}
+
+async function cancelScheduledPlan() {
+    if (!confirm('¿Cancelar el cambio de plan programado y seguir con tu plan actual?')) return;
+    try {
+        const res = await apiFetch('/users/cancel-scheduled-plan', { method: 'POST' });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'No se pudo cancelar el cambio programado.');
+        } else {
+            alert(data.message || 'Cambio de plan programado cancelado.');
             await loadAccount();
             renderPlan();
         }
