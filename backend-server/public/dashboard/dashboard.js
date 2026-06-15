@@ -642,25 +642,6 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
-        <!-- Logs recientes -->
-        <div class="card section-gap">
-            <div class="card-header"><h3>📋 Últimas ejecuciones (${logs.length})</h3></div>
-            <div class="card-body" style="padding:0">
-                ${logs.length === 0 ? '<div class="empty-state"><p>Sin ejecuciones</p></div>' : `
-                <div class="table-wrapper">
-                    <table><thead><tr><th>Script</th><th>Subsistema</th><th>Resultado</th><th>Fecha</th><th>Error</th></tr></thead>
-                    <tbody>${logs.map(l => `<tr>
-                        <td>${l.script_name || '—'}</td>
-                        <td style="font-size:11px;color:var(--text-muted)">${l.subsystem || '—'}</td>
-                        <td>${l.success ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">Error</span>'}</td>
-                        <td>${fmtDate(l.execution_date)}</td>
-                        <td style="font-size:12px;color:var(--text-muted)">${l.error_message || ''}</td>
-                    </tr>`).join('')}
-                    </tbody></table>
-                </div>`}
-            </div>
-        </div>
-
         <!-- Historial de la cuenta (eventos: cambios de plan, activaciones, etc.) -->
         <div class="card section-gap">
             <div class="card-header"><h3>🗂️ Historial de la cuenta (${events.length})</h3></div>
@@ -691,6 +672,25 @@ async function renderUserDetail(userId) {
             <div class="card-header"><h3>🧾 Historial de Facturas</h3></div>
             <div class="card-body" style="padding:0">
                 <div id="invoice-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
+            </div>
+        </div>
+
+        <!-- Logs recientes (al final) -->
+        <div class="card section-gap">
+            <div class="card-header"><h3>📋 Últimas ejecuciones (${logs.length})</h3></div>
+            <div class="card-body" style="padding:0">
+                ${logs.length === 0 ? '<div class="empty-state"><p>Sin ejecuciones</p></div>' : `
+                <div class="table-wrapper">
+                    <table><thead><tr><th>Script</th><th>Subsistema</th><th>Resultado</th><th>Fecha</th><th>Error</th></tr></thead>
+                    <tbody>${logs.map(l => `<tr>
+                        <td>${l.script_name || '—'}</td>
+                        <td style="font-size:11px;color:var(--text-muted)">${l.subsystem || '—'}</td>
+                        <td>${l.success ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">Error</span>'}</td>
+                        <td>${fmtDate(l.execution_date)}</td>
+                        <td style="font-size:12px;color:var(--text-muted)">${l.error_message || ''}</td>
+                    </tr>`).join('')}
+                    </tbody></table>
+                </div>`}
             </div>
         </div>`;
 
