@@ -365,10 +365,12 @@ function renderStatusBanner() {
             color: '#1d4ed8',
             msg: () => {
                 const used = acc.usageCount ?? 0;
-                const limit = 20;
+                const limit = acc.usageLimit ?? 20;   // incluye los usos de cortesía del admin
+                const courtesy = acc.courtesyExtras || 0;
                 const rem = limit - used;
                 const alerta = rem <= 5 ? ' 🔴' : '';
-                return `Cuenta pendiente de activación — ${used} de ${limit} usos de prueba utilizados. El administrador activará tu cuenta en breve.${alerta}`;
+                const cortesiaTxt = courtesy > 0 ? ` (incluye +${courtesy} de cortesía)` : '';
+                return `Cuenta pendiente de activación — ${used} de ${limit} usos de prueba utilizados${cortesiaTxt}. El administrador activará tu cuenta en breve.${alerta}`;
             }
         },
         suspended: {
@@ -404,10 +406,12 @@ function renderStatusBanner() {
     if (rs === 'active' && !acc.paymentProvider) {
         const used  = acc.usageCount ?? 0;
         const limit = acc.usageLimit ?? 20;
+        const courtesy = acc.courtesyExtras || 0;
         const rem   = limit - used;
         const alerta = rem <= 5 ? ' 🔴' : '';
+        const cortesiaTxt = courtesy > 0 ? ` (incluye +${courtesy} de cortesía)` : '';
         banner.style.background = '#b45309';
-        bannerText.textContent = `Usás tus usos de prueba: ${used}/${limit} — configurá tu método de pago para acceder a los límites de tu plan${alerta}`;
+        bannerText.textContent = `Usás tus usos de prueba: ${used}/${limit}${cortesiaTxt} — configurá tu método de pago para acceder a los límites de tu plan${alerta}`;
         banner.style.display = 'flex';
         return;
     }
