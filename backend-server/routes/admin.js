@@ -931,7 +931,12 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
 
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + (durationDays || planData.period_days || 30));
-        const usageLimit = planData.proc_executions_limit === -1 ? 999999 : planData.proc_executions_limit;
+        // El admin asigna un plan activo → enforcement por submódulo (los límites se leen
+        // del plan); el tope global no debe cortar al mezclar módulos → usage_limit=999999.
+        const usageLimit = 999999;
+
+        // Plan anterior (para registrar el cambio en el historial de la ficha)
+        const { rows: [prev] } = await db.query('SELECT plan AS current_plan FROM subscriptions WHERE user_id = $1', [userId]);
 
         await db.query(`
             INSERT INTO subscriptions (user_id, plan, plan_id, status, expires_at, usage_limit, period_start)
@@ -941,8 +946,15 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
                 usage_limit = $5, period_start = NOW(),
                 proc_usage = 0, batch_usage = 0, informe_usage = 0, monitor_novedades_usage = 0,
                 proc_bonus = 0, batch_bonus = 0, informe_bonus = 0, monitor_novedades_bonus = 0, monitor_partes_bonus = 0,
+                scheduled_plan = NULL,
                 updated_at = NOW()
         `, [userId, planData.name, planData.id, expiresAt, usageLimit]);
+
+        // Registrar el cambio de plan en el historial de la cuenta (visible en la ficha)
+        await db.query(
+            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_changed_by_admin', $2)`,
+            [userId, JSON.stringify({ from: prev?.current_plan || null, to: planData.name, admin_id: req.user.id })]
+        );
 
         console.log(`💳 Suscripción "${planData.name}" creada/actualizada para usuario ${userId} por admin: ${req.user.id}`);
         res.json({ success: true, message: 'Suscripción creada/actualizada correctamente', subscription: { userId, plan: planData.name, expiresAt } });

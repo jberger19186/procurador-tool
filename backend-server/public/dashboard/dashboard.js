@@ -1596,6 +1596,7 @@ function eventLabel(type) {
         plan_upgraded: '⬆️ Upgrade de plan',
         plan_downgrade_scheduled: '⬇️ Downgrade programado',
         plan_downgrade_cancelled: '❎ Downgrade cancelado',
+        plan_changed_by_admin: '🔧 Plan cambiado (admin)',
         reactivated_plan_selection: '🔄 Reactivación con plan',
         trial_exhausted_blocked: '🔴 Trial agotado',
         subscription_cancelled_expired: '🗑️ Suscripción vencida/cancelada',
