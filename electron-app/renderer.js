@@ -2106,7 +2106,7 @@ async function loadAccountData() {
                     <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
                         <span style="font-size:20px">⚠️</span>
                         <div style="flex:1">
-                            <div style="font-weight:600;color:#856404;font-size:13px">Usás tus usos de prueba: ${a.usageCount ?? 0}/${a.usageLimit ?? 20}</div>
+                            <div style="font-weight:600;color:#856404;font-size:13px">Usás tus usos de prueba: ${a.usageCount ?? 0}/${a.usageLimit ?? 20}${(a.courtesyExtras || 0) > 0 ? ` (incluye +${a.courtesyExtras} de cortesía)` : ''}</div>
                             <div style="color:#6c5700;font-size:12px;margin-top:2px">Al configurar tu método de pago se te asignan los límites de tu plan y el contador arranca limpio. La extensión también funciona mientras te queden usos de prueba.</div>
                         </div>
                         <button id="btn-ir-portal-cuenta"
@@ -2391,7 +2391,8 @@ async function checkSubscriptionStatusBanner() {
             const limit     = sub.usageLimit ?? 20;
             const remaining = limit - used;
             const lowIcon   = remaining <= 5 ? ' 🔴' : '';
-            msg   = `${used}/${limit} usos de prueba utilizados — El administrador activará tu cuenta en breve${lowIcon}`;
+            const cort      = (sub.courtesyExtras || 0) > 0 ? ` (incluye +${sub.courtesyExtras} de cortesía)` : '';
+            msg   = `${used}/${limit} usos de prueba utilizados${cort} — El administrador activará tu cuenta en breve${lowIcon}`;
             color = '#1d4ed8'; // azul
         } else if (rs === 'active') {
             const expiryDays  = daysUntil(sub.planExpiryDate);
@@ -2400,7 +2401,8 @@ async function checkSubscriptionStatusBanner() {
 
             if (!sub.paymentProvider) {
                 const u = sub.usageCount ?? 0, l = sub.usageLimit ?? 20;
-                msg   = `Usás tus usos de prueba: ${u}/${l} — configurá tu método de pago para acceder a los límites de tu plan`;
+                const c = (sub.courtesyExtras || 0) > 0 ? ` (incluye +${sub.courtesyExtras} de cortesía)` : '';
+                msg   = `Usás tus usos de prueba: ${u}/${l}${c} — configurá tu método de pago para acceder a los límites de tu plan`;
                 color = '#b45309'; // amarillo
             } else if (sub.cancelAt && cancelDays !== null && cancelDays >= 0) {
                 const fecha = new Date(sub.cancelAt).toLocaleDateString('es-AR');
