@@ -1787,6 +1787,17 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
         if (!cuit) {
             return { success: false, error: 'No tenés un CUIT registrado en el sistema.' };
         }
+        // Pre-chequeo del TRIAL (cupo global de 20 usos compartidos, incluida la cortesía):
+        // remaining = usage_limit - usage_count. Frena informe igual que procuración cuando
+        // el trial está agotado. Para cuentas pagas remaining=999999 → no frena acá.
+        const subInf = sessionInfo.subscription;
+        if (sessionInfo.success && subInf?.remaining !== null && subInf?.remaining <= 0) {
+            return {
+                success: false,
+                error: `Has alcanzado el límite de ejecuciones de tu plan (${subInf.plan}). Actualiza tu suscripción para continuar.`,
+                action: 'upgrade'
+            };
+        }
         // Pre-chequeo por subsistema (cuentas pagas: el global no frena)
         const informeLimitCheck = await checkSubsystemLimit('informe', sessionInfo?.subscription?.plan);
         if (informeLimitCheck.blocked) {
@@ -2224,6 +2235,18 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
     try {
         if (!authManager.isAuthenticated()) {
             return { success: false, error: 'No autenticado' };
+        }
+        // Pre-chequeo del TRIAL (cupo global de 20 usos compartidos, incluida la cortesía):
+        // frena el monitor igual que procuración cuando el trial está agotado.
+        // Para cuentas pagas remaining=999999 → no frena acá (rige el por-submódulo).
+        const monSession = await authManager.verifySession();
+        const monSub = monSession.subscription;
+        if (monSession.success && monSub?.remaining !== null && monSub?.remaining <= 0) {
+            return {
+                success: false,
+                error: `Has alcanzado el límite de ejecuciones de tu plan (${monSub.plan}). Actualiza tu suscripción para continuar.`,
+                action: 'upgrade'
+            };
         }
         // Pre-chequeo por subsistema (cuentas pagas: el global no frena)
         const monLimitCheck = await checkSubsystemLimit('monitor_novedades', null);
