@@ -2248,10 +2248,14 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
                 action: 'upgrade'
             };
         }
-        // Pre-chequeo por subsistema (cuentas pagas: el global no frena)
-        const monLimitCheck = await checkSubsystemLimit('monitor_novedades', null);
-        if (monLimitCheck.blocked) {
-            return { success: false, error: monLimitCheck.error, action: 'upgrade' };
+        // Pre-chequeo por subsistema (cuentas pagas: el global no frena).
+        // Solo las consultas de NOVEDADES consumen cupo; la consulta inicial
+        // (línea base) no consume → no se gatea por este límite.
+        if (modo === 'novedades') {
+            const monLimitCheck = await checkSubsystemLimit('monitor_novedades', null);
+            if (monLimitCheck.blocked) {
+                return { success: false, error: monLimitCheck.error, action: 'upgrade' };
+            }
         }
 
         const token   = authManager.backendClient.token;

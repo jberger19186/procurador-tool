@@ -786,9 +786,10 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.3);
+  /* Por encima de los banners fijos (#quota-banner z-index:9997) para que
+     el overlay del modal los cubra en vez de quedar el banner superpuesto. */
   z-index: 10000;
   backdrop-filter: blur(3px);
-  z-index: 500;
   align-items: center;
   justify-content: center;
   padding: 20px;
@@ -824,6 +825,8 @@ body {
 }
 .modal-close {
   width: 26px; height: 26px;
+  margin-left: auto;          /* empuja la ✕ al margen derecho del header */
+  flex-shrink: 0;
   border-radius: var(--radius-sm);
   border: none; background: transparent;
   color: var(--text-3); cursor: pointer;

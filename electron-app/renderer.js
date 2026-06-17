@@ -822,24 +822,13 @@ function toggleExpandConsole() {
 }
 
 // ============ MODALES ============
-function _updateBannerVisibility() {
-    const anyModalOpen = document.querySelector('.modal.active') !== null;
-    ['subscription-status-banner', 'quota-banner', 'promo-banner'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        if (anyModalOpen) {
-            el.dataset.hiddenByModal = el.style.display !== 'none' ? '1' : '0';
-            el.style.display = 'none';
-        } else if (el.dataset.hiddenByModal === '1') {
-            el.style.display = 'flex';
-            delete el.dataset.hiddenByModal;
-        }
-    });
-}
+// El overlay del modal (z-index 10000) ya cubre los banners fijos (z-index 9997),
+// así que NO hace falta ocultar/restaurar los banners al abrir/cerrar modales.
+// Quitamos el viejo _updateBannerVisibility() para evitar que se restauren con
+// estado stale (p.ej. la cuenta cambió mientras el modal estaba abierto).
 
 function openModal(modalId) {
     document.getElementById(modalId).classList.add('active');
-    _updateBannerVisibility();
 
     // Cargar estadísticas si se abre el modal de stats
     if (modalId === 'modalStats') {
@@ -849,7 +838,6 @@ function openModal(modalId) {
 
 function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('active');
-    _updateBannerVisibility();
 }
 
 // ============ CONFIGURAR LISTENERS DE MODALES ============
@@ -2082,6 +2070,23 @@ async function loadAccountData() {
                         </div>
                         ${rem <= 5 ? `<div style="margin-top:7px;font-size:12px;color:#991b1b;font-weight:600">${rem <= 0 ? '🔴 Ya consumiste tus usos. Contactá al administrador para activar tu cuenta.' : '🔴 Quedan pocos usos. Contactá al administrador para activar tu cuenta.'}</div>` : ''}
                     </div>`;
+            } else if (a.paymentProvider && a.paymentGraceEndsAt && new Date(a.paymentGraceEndsAt) > new Date() && a.registrationStatus === 'active') {
+                // Banner: pago rechazado, en período de gracia (sigue con acceso)
+                const fechaGracia = new Date(a.paymentGraceEndsAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                trialBannerEl.style.display = '';
+                trialBannerEl.innerHTML = `
+                    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                        <span style="font-size:20px">⚠️</span>
+                        <div style="flex:1">
+                            <div style="font-weight:600;color:#856404;font-size:13px">Pago rechazado</div>
+                            <div style="color:#6c5700;font-size:12px;margin-top:2px">Tu último pago fue rechazado. Actualizá tu método de pago antes del ${fechaGracia} o tu cuenta se suspenderá. Seguís teniendo acceso hasta esa fecha.</div>
+                        </div>
+                        <button id="btn-ir-portal-gracia"
+                            style="background:#ffc107;border:none;color:#333;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
+                            Actualizar pago
+                        </button>
+                    </div>`;
+                document.getElementById('btn-ir-portal-gracia')?.addEventListener('click', () => openPortalSection('facturacion'));
             } else if (a.paymentProvider && a.cancelAt && new Date(a.cancelAt) > new Date() && a.registrationStatus === 'active') {
                 // Banner: cancelación programada
                 const fechaCancelacion = new Date(a.cancelAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -2399,11 +2404,16 @@ async function checkSubscriptionStatusBanner() {
             const billingDays = daysUntil(sub.nextBillingDate);
             const cancelDays  = daysUntil(sub.cancelAt);
 
+            const graceDays = daysUntil(sub.paymentGraceEndsAt);
             if (!sub.paymentProvider) {
                 const u = sub.usageCount ?? 0, l = sub.usageLimit ?? 20;
                 const c = (sub.courtesyExtras || 0) > 0 ? ` (incluye +${sub.courtesyExtras} de cortesía)` : '';
                 msg   = `Usás tus usos de prueba: ${u}/${l}${c} — configurá tu método de pago para acceder a los límites de tu plan`;
                 color = '#b45309'; // amarillo
+            } else if (sub.paymentGraceEndsAt && graceDays !== null && graceDays >= 0) {
+                const fecha = new Date(sub.paymentGraceEndsAt).toLocaleDateString('es-AR');
+                msg   = `Tu último pago fue rechazado. Actualizá tu método de pago en el portal antes del ${fecha} o tu cuenta se suspenderá`;
+                color = '#b45309'; // ámbar (advertencia, todavía con acceso)
             } else if (sub.cancelAt && cancelDays !== null && cancelDays >= 0) {
                 const fecha = new Date(sub.cancelAt).toLocaleDateString('es-AR');
                 msg   = `Cancelación programada el ${fecha}. Seguís con acceso hasta esa fecha`;
