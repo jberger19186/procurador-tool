@@ -26,11 +26,51 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.25** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.26** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-15 (ciclo de cobranza endurecido: pausa/reanuda en cancelación · reactivación con free_trial sin doble cobro · single-active · sync de cancelación externa desde MP · cortesía efectiva y visible · cambio de plan ajusta monto en MP · activación conserva cortesía · límites COMBO unificados · release v2.7.25 · E2E del flujo completo)
+> Última sesión: 2026-06-17 (E2E real de cobranza con MP+Electron: recuperación de método con single-active robusto · gracia visible (portal+app+notificación) · conteo del monitor por consulta · suspensión por gracia vencida · release v2.7.26 — pendiente: Plan 3 filas B/D/E)
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-17 — E2E real de cobranza (MP comprador + app Electron) + fixes** :
+  - **Recuperación/actualización de método con preapproval atribuible:** cuando el usuario YA tiene método (`payment_provider` + `external_subscription_id`), `/checkout/init` usa la nueva `createUpdatePreapproval` (preapproval **custom con `external_reference=user_{id}`, cobro inmediato**) en vez del plan-based. El alta inicial sigue plan-based. **Por qué:** el plan-based no persiste `external_reference` → un preapproval nuevo queda inatribuible y `markPaymentConfigured` matcheaba el VIEJO, dejando 2 suscripciones vivas en MP y sin limpiar la gracia. Con `external_reference`, el webhook lo atribuye, hace single-active y dispara `applyRenewal`.
+  - **Single-active robusto (fix de carrera webhook↔confirm):** (1) `markPaymentConfigured` ahora elige el preapproval **más nuevo** atribuible (antes tomaba el primero/viejo) y **cancela TODOS** los demás atribuibles del usuario (autorizados **y pending**); (2) el branch `pending` del webhook ya no pisa un `external_subscription_id` distinto vivo (`COALESCE`), para que el `authorized` pueda superseder el viejo; (3) `cancelSupersededPreapproval` cancela también `pending` (limpia checkouts iniciados y no completados). Resultado: **siempre queda 1 preapproval vivo** por usuario.
+  - **Período de gracia VISIBLE (antes era invisible):** el aviso de pago rechazado solo aparecía una vez **suspendido**. Ahora durante la gracia (status active + `payment_grace_ends_at` futuro): banner ámbar en el **banner global del portal** (todas las secciones) + card en **Facturación** + banner/card en la **app Electron** + **notificación in-app** (el webhook `rejected` ahora inserta `notifications`, antes solo email). `/client/account` expone `paymentGraceEndsAt`.
+  - **Conteo del monitor por CONSULTA (Opción A):** antes `monitor_novedades_usage` solo subía cuando una consulta de novedades **encontraba** expedientes (en `/monitor/expedientes/bulk`) → consultas sin novedades no consumían. Ahora suma **+1 por consulta de novedades ejecutada** (encuentre o no) en `/monitor/log` (que el script llama siempre por parte); la **consulta inicial / línea base NO consume**. El pre-check `run-monitoreo` (app) solo gatea en `modo='novedades'`.
+  - **UI app:** banner ya no se superpone al modal (z-index `.modal` 10000 > banner 9997; se quitó el `_updateBannerVisibility` que restauraba estado stale) · ✕ del modal al margen derecho (`margin-left:auto`) · card de "pago rechazado" en Mi Cuenta.
+  - **Trial freno en informe/monitor:** el tope del trial (20 usos compartidos) ahora también frena informe y monitor (antes solo procuración; `checkSubsystemLimit` se saltea en trial).
+  - **E2E real validado** (CUIT 27320694359, cuenta compradora MP + automatización PJN real): primer pago · bloqueo por submódulo + ajustes manuales del admin (`*_bonus`) · cancelar/reactivar (portal↔portal pausa/reanuda · MP→portal free_trial sin doble cobro) · nuevo ciclo (renovación) · **pago rechazado → gracia → suspensión por gracia vencida → recuperación** (en gracia y post-suspensión). **Dev tool:** `backend-server/dev-tools/sim-renewal.js` (simula el cobro mensual: pago + `applyRenewal` + factura).
+  - **Aprendizaje (para soporte):** el panel de MP **no borra** las suscripciones canceladas (las lista bajo "Suscripciones canceladas") y **tarda en refrescar** las activas. Ante "tengo 2 suscripciones", la verdad está en el estado del preapproval (API `preapproval/search?status=authorized`), no en el render del panel. Single-active deja 1 **autorizada**; el resto quedan **canceladas** (no se pueden eliminar vía API).
+  - **Release v2.7.26.**
+
+#### 🧪 Ciclo de test de vida del usuario (flujo validado E2E)
+> Plan detallado: `docs/internal/plan-pruebas-ciclo-vida.md`. Resumen del camino validado:
+```
+REGISTRO (pending_email)
+  → verifica email (pending_activation, trial 20 usos compartidos app+extensión)
+  → usa hasta 20/20 → bloqueo + "Ya consumiste tus usos" (app + portal)
+  → (opcional) admin asigna +N cortesía (suma a usage_limit; visible "(+N)"; sobrevive la activación)
+  → admin ACTIVA (active, conserva usos restantes; habilita "Configurar método de pago")
+  → CONFIGURA MÉTODO (alta inicial plan-based) → applyTrialBonus: usage_limit=999999, límites por submódulo, pago + factura
+  → usa cada submódulo hasta su límite → bloqueo por submódulo (proc50·informe50·batch20·monitor_nov50·partes20)
+       (admin puede sumar *_bonus por submódulo → sigue usando hasta agotar de nuevo)
+  → NUEVO CICLO (renovación mensual) → contadores a 0, next_billing +1 mes, pago + factura nuevos
+  → CANCELAR/REACTIVAR:
+       · portal cancela = PAUSA preapproval (reversible) → portal reactiva = REANUDA (sin cobro)
+       · MP cancela = TERMINAL → portal reactiva = nuevo checkout free_trial (días ya pagados, sin doble cobro)
+  → PAGO RECHAZADO → GRACIA 3 días (sigue activo, banner ámbar + notificación) →
+       · paga en gracia → RECUPERADO (createUpdatePreapproval, single-active cancela el viejo)
+       · no paga → cron (30 11 * * *) SUSPENDE (status/registration=suspended; ejecutar bloqueado, login permite ver/pagar)
+            → paga estando suspendido → RECUPERADO (applyRenewal reactiva)
+```
+> **Cómo acelerar sin esperar días** (pruebas): gracia/suspensión se fuerzan tocando `payment_grace_ends_at` + corriendo la query del cron de `server.js`; la renovación con `dev-tools/sim-renewal.js`. Estado del usuario de prueba: `procuradortool@gmail.com` (id 230), CUIT 27320694359.
+
+#### 🔲 Pendiente de probar — Plan 3 (matriz cancelar/reactivar) filas B/D/E + sueltos
+> **Punto B del plan: continuar con esto en la próxima tanda.** Detalle en `docs/internal/plan-pruebas-ciclo-vida.md` (PLAN 3 + escenarios adicionales).
+- **Fila B:** cancelar desde el **portal** (pausa) → reactivar **desde MercadoPago** (el usuario reanuda en MP → webhook `subscription_preapproval` sincroniza a activa).
+- **Fila D:** cancelar **desde MP** (terminal) → re-suscribir **desde MP** (nuevo preapproval → webhook lo vincula y reactiva; single-active cancela el viejo).
+- **Fila E:** **no reactivar** → al cruzar `cancel_at` el cron pasa a `cancelled` y **corta el acceso** (verificar login bloqueado + estado terminal).
+- **Sueltos:** extensión Chrome con trial agotado (gate `extension-auth`) · límite `monitor_partes` (20) → bloqueo al agregar la 21° · cambio de plan (2/ciclo + cancelar downgrade programado) · idempotencia de pagos (mismo webhook 2× no duplica) · `downgrade→upgrade` (requiere 3er plan tarifado activo — L1).
 
 - ✅ **Sesión 2026-06-15 — endurecimiento del ciclo de cobranza + cambio de plan + E2E** :
   - **Cancelar = PAUSAR / Reactivar = REANUDAR (sin cobro nuevo):** `cancelSubscription` pausa el preapproval en MP (reversible, no cobra el próximo período); `reactivateSubscription` lo reanuda (paused→authorized) sin generar pago, el cobro sigue en la fecha original. El cron de vencimiento lo cancela definitivamente si no se reactivó. (Antes cancelaba terminal → reactivar era imposible.)
