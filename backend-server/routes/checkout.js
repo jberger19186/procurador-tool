@@ -12,7 +12,7 @@
 const express = require('express');
 const router  = express.Router();
 const authenticateToken = require('../middleware/authenticateToken');
-const { createPreapproval, createReactivationPreapproval, linkPreapproval, markPaymentConfigured, reactivateSubscription, cancelSubscription } = require('../services/subscriptionService');
+const { createPreapproval, createReactivationPreapproval, createUpdatePreapproval, linkPreapproval, markPaymentConfigured, reactivateSubscription, cancelSubscription } = require('../services/subscriptionService');
 const logger  = require('../utils/logger');
 
 // ── Middleware: verificar feature flag ───────────────────────────────────────
@@ -56,14 +56,32 @@ router.post('/init', async (req, res) => {
       });
     }
 
-    const { initPoint, preapprovalId } = await createPreapproval(userId, plan_name);
+    // ¿Es una ACTUALIZACIÓN/RECUPERACIÓN de método (el usuario ya tiene un preapproval
+    // vinculado) o el ALTA inicial? En la actualización/recuperación NO se puede usar el
+    // checkout plan-based: no persiste external_reference, así que el nuevo preapproval
+    // queda inatribuible y markPaymentConfigured matchea el preapproval VIEJO → quedan 2
+    // suscripciones vivas en MP y la gracia no se limpia. Para esos casos usamos un
+    // preapproval custom con external_reference (cobro inmediato): el webhook lo atribuye,
+    // hace single-active (cancela el viejo) y dispara la renovación.
+    const subRow = await db.query(
+      'SELECT external_subscription_id, payment_provider FROM subscriptions WHERE user_id = $1',
+      [userId]
+    );
+    const yaTieneMetodo = !!(subRow.rows[0]?.payment_provider && subRow.rows[0]?.external_subscription_id);
 
-    // Registrar el inicio del checkout: MP (plan-based) no persiste external_reference
-    // ni payer_email en el preapproval, así que esta marca de tiempo es lo que permite
-    // atribuir el preapproval autorizado al usuario cuando vuelve (claim por ventana).
-    await db.query('UPDATE subscriptions SET checkout_initiated_at = NOW() WHERE user_id = $1', [userId]);
+    let initPoint, preapprovalId = null;
+    if (yaTieneMetodo) {
+      ({ initPoint } = await createUpdatePreapproval(userId));
+      logger.info('[Checkout] init_point de actualización de método generado (preapproval atribuible)', { userId });
+    } else {
+      ({ initPoint, preapprovalId } = await createPreapproval(userId, plan_name));
+      // Registrar el inicio del checkout: MP (plan-based) no persiste external_reference
+      // ni payer_email, así que esta marca de tiempo permite atribuir el preapproval
+      // autorizado al usuario cuando vuelve (claim por ventana).
+      await db.query('UPDATE subscriptions SET checkout_initiated_at = NOW() WHERE user_id = $1', [userId]);
+      logger.info('[Checkout] init_point generado (alta inicial plan-based)', { userId, plan_name });
+    }
 
-    logger.info('[Checkout] init_point generado', { userId, plan_name });
     res.json({ init_point: initPoint, preapproval_id: preapprovalId });
   } catch (err) {
     logger.error('[Checkout] Error creando preapproval', { userId, err: err.message });

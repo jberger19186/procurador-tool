@@ -125,8 +125,14 @@ async function createReactivationPreapproval(userId) {
   // pagador sea un test user (collector y payer deben ser ambos reales o ambos de prueba)
   // → override por MP_SANDBOX_PAYER_EMAIL. Quitar esa env var al pasar a MP producción (B3).
   const payerEmail = process.env.MP_SANDBOX_PAYER_EMAIL || sub.email || '';
+  // MP muestra el free_trial como "X días gratis"; aclaramos en el título que esos
+  // días corresponden al período que el usuario ya tenía pagado (no es una promo nueva).
+  const baseReason = PLAN_REASONS[planName] || `Procurador SCW — ${planName}`;
+  const reason = freeTrialDays >= 1
+    ? `${baseReason} (reactivación · ${freeTrialDays} días ya abonados)`
+    : baseReason;
   const body = {
-    reason:             PLAN_REASONS[planName] || `Procurador SCW — ${planName}`,
+    reason,
     external_reference: `user_${userId}`,
     payer_email:        payerEmail,
     back_url:           REACTIVATION_BACK_URL,
@@ -154,6 +160,62 @@ async function createReactivationPreapproval(userId) {
     userId, planName, freeTrialDays, preapprovalId: preapproval.id
   });
   return { initPoint: preapproval.init_point, freeTrialDays };
+}
+
+/**
+ * createUpdatePreapproval — crea un preapproval CUSTOM (sin plan, con external_reference)
+ * con COBRO INMEDIATO (sin free_trial) para la ACTUALIZACIÓN/RECUPERACIÓN del método de
+ * pago cuando el usuario YA tiene una suscripción (p. ej. pago rechazado en gracia).
+ *
+ * Por qué no plan-based: el checkout plan-based no persiste external_reference, así que un
+ * preapproval nuevo queda inatribuible. Si el usuario ya tiene un preapproval viejo
+ * atribuible, markPaymentConfigured matchea el viejo y nunca reclama el nuevo → quedan 2
+ * suscripciones en MP y la gracia no se limpia. Con external_reference=user_{id}, el webhook
+ * (handlePreapprovalEvent + handlePaymentEvent) atribuye el nuevo de forma confiable, hace
+ * single-active (cancelSupersededPreapproval) y dispara applyRenewal (limpia la gracia).
+ */
+async function createUpdatePreapproval(userId) {
+  const { rows: [sub] } = await db.query(
+    `SELECT s.plan, u.email
+     FROM subscriptions s JOIN users u ON u.id = s.user_id
+     WHERE s.user_id = $1`,
+    [userId]
+  );
+  if (!sub) throw new Error(`Suscripción no encontrada para usuario ${userId}`);
+  const planName = sub.plan;
+  if (!isPlanPayable(planName)) throw new Error(`Plan ${planName} no admite cobro automático`);
+  const amount = PLAN_PRICES[planName];
+  if (!amount) throw new Error(`Sin precio configurado para ${planName}`);
+
+  const payerEmail = process.env.MP_SANDBOX_PAYER_EMAIL || sub.email || '';
+  const baseReason = PLAN_REASONS[planName] || `Procurador SCW — ${planName}`;
+  const body = {
+    reason:             `${baseReason} (actualización de método de pago)`,
+    external_reference: `user_${userId}`,
+    payer_email:        payerEmail,
+    back_url:           REACTIVATION_BACK_URL,
+    auto_recurring: {
+      frequency:          1,
+      frequency_type:     'months',
+      transaction_amount: amount,
+      currency_id:        'ARS'
+    },
+    status: 'pending'
+    // sin free_trial → cobro inmediato (es la renovación adeudada que había fallado)
+  };
+
+  const preapproval = await preApprovalClient.create({ body });
+  if (!preapproval || !preapproval.init_point) {
+    throw new Error('MercadoPago no devolvió init_point para la actualización de método');
+  }
+
+  // Estampar inicio de checkout para el claim por ventana del /confirm (defensa en profundidad)
+  await db.query('UPDATE subscriptions SET checkout_initiated_at = NOW() WHERE user_id = $1', [userId]);
+
+  logger.info('[SubscriptionService] Preapproval de actualización de método creado (cobro inmediato)', {
+    userId, planName, preapprovalId: preapproval.id
+  });
+  return { initPoint: preapproval.init_point };
 }
 
 /**
@@ -313,9 +375,12 @@ async function cancelSupersededPreapproval(oldId, newId) {
   if (!oldId || oldId.startsWith('pay-') || oldId === newId) return;
   try {
     const p = await preApprovalClient.get({ id: oldId });
-    if (p && (p.status === 'authorized' || p.status === 'paused')) {
+    // Cancelar autorizado/pausado (suscripción viva) y también pending: un checkout
+    // iniciado y no completado deja un preapproval pending que MP muestra en "Gestiona
+    // tus suscripciones" como si fuera a cobrarse → al vincular el nuevo, lo limpiamos.
+    if (p && (p.status === 'authorized' || p.status === 'paused' || p.status === 'pending')) {
       await preApprovalClient.update({ id: oldId, body: { status: 'cancelled' } });
-      logger.info('[SubscriptionService] Preapproval anterior cancelado al vincular uno nuevo (single-active)', { oldId, newId });
+      logger.info('[SubscriptionService] Preapproval anterior cancelado al vincular uno nuevo (single-active)', { oldId, newId, prevStatus: p.status });
     }
   } catch (e) {
     logger.warn('[SubscriptionService] No se pudo cancelar el preapproval anterior (single-active)', { oldId, err: e.message });
@@ -368,7 +433,12 @@ async function markPaymentConfigured(userId) {
     if (resp.ok) {
       const data = await resp.json();
       searchResults = data.results || [];
-      authorized = searchResults.find(belongsToUser) || null;
+      // Elegir el MÁS NUEVO atribuible (no el primero que devuelve MP): en una
+      // actualización/recuperación de método conviven el preapproval viejo y el nuevo,
+      // ambos atribuibles; el correcto es el recién creado (el más reciente).
+      authorized = searchResults
+        .filter(belongsToUser)
+        .sort((a, b) => new Date(b.date_created) - new Date(a.date_created))[0] || null;
     } else {
       logger.warn('[SubscriptionService] MP preapproval/search no-ok', { userId, status: resp.status });
     }
@@ -439,6 +509,19 @@ async function markPaymentConfigured(userId) {
 
   // Single-active: cancelar en MP el preapproval anterior si es otro y sigue vivo.
   await cancelSupersededPreapproval(subRow.external_subscription_id, authorized.id);
+
+  // Además, cancelar CUALQUIER otro preapproval atribuible al usuario (autorizado O
+  // pending) que no sea el elegido. Cubre: (a) la carrera webhook↔confirm donde el branch
+  // pending pudo pisar external_subscription_id dejando al viejo fuera del supersede de
+  // arriba; (b) los preapprovals PENDING huérfanos de checkouts iniciados y no completados,
+  // que MP muestra como "se debitará". Garantiza un único preapproval vivo por usuario.
+  for (const p of searchResults) {
+    const attributable = p.external_reference === `user_${userId}` ||
+      (userEmail && (p.payer_email || '').toLowerCase() === userEmail);
+    if (attributable && p.id !== authorized.id && (p.status === 'authorized' || p.status === 'pending')) {
+      await cancelSupersededPreapproval(p.id, authorized.id);
+    }
+  }
 
   // Vincular SIEMPRE el preapproval autorizado encontrado (sobreescribe uno viejo
   // cancelado) y limpiar cualquier baja programada: si hay un preapproval autorizado
@@ -655,6 +738,7 @@ async function cancelSubscription(userId) {
 module.exports = {
   createPreapproval,
   createReactivationPreapproval,
+  createUpdatePreapproval,
   cancelSupersededPreapproval,
   updatePreapprovalAmount,
   linkPreapproval,

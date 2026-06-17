@@ -262,7 +262,13 @@ async function handlePaymentEvent(paymentId) {
       [graceEnd, sub.sub_id]
     );
 
-    // Notificar al usuario
+    // Notificación in-app (además del email) para que el usuario vea el rechazo en el portal
+    await db.query(
+      `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'payment_rejected', $2)`,
+      [sub.user_id, `Tu pago fue rechazado. Actualizá tu método de pago en Facturación antes del ${graceEnd.toLocaleDateString('es-AR')} para no perder el acceso.`]
+    ).catch(err => logger.error('[Webhooks] Error creando notificación de pago rechazado', { err: err.message }));
+
+    // Notificar al usuario por email
     await mailer.sendPaymentFailedEmail(sub.email, graceEnd).catch(err =>
       logger.error('[Webhooks] Error enviando email pago rechazado', { err: err.message })
     );
@@ -410,11 +416,14 @@ async function handlePreapprovalEvent(preapprovalId) {
     return;
   }
 
-  // Otros estados (pending, etc.): solo vincular el preapproval_id real (necesario para
-  // poder cancelar luego vía API de MP)
+  // Otros estados (pending, etc.): vincular el preapproval_id real SOLO si todavía no hay
+  // uno. NO pisar un external_subscription_id distinto y vivo: si lo pisáramos, cuando
+  // llegue el 'authorized' de este preapproval nuevo, el branch authorized ya no "vería"
+  // al viejo para cancelarlo (single-active roto → 2 suscripciones). Preservando el viejo,
+  // el authorized lo supersede correctamente.
   await db.query(
     `UPDATE subscriptions
-     SET external_subscription_id = $1,
+     SET external_subscription_id = COALESCE(NULLIF(external_subscription_id, ''), $1),
          payment_provider          = 'mercadopago',
          updated_at                = NOW()
      WHERE id = $2`,

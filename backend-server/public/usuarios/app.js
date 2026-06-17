@@ -391,6 +391,15 @@ function renderStatusBanner() {
         },
     };
 
+    // Pago rechazado, en período de gracia (active, con método, gracia aún vigente).
+    // Tiene prioridad: avisar a tiempo para que actualice el pago antes de la suspensión.
+    if (rs === 'active' && acc.paymentGraceEndsAt && new Date(acc.paymentGraceEndsAt) > new Date()) {
+        banner.style.background = '#b45309';
+        bannerText.textContent = `⚠️ Tu último pago fue rechazado. Actualizá tu método de pago en Facturación antes del ${formatDate(acc.paymentGraceEndsAt)} o tu cuenta se suspenderá. Seguís teniendo acceso hasta esa fecha.`;
+        banner.style.display = 'flex';
+        return;
+    }
+
     // Plan vence pronto (active)
     if (rs === 'active' && acc.planExpiryDate) {
         const days = Math.ceil((new Date(acc.planExpiryDate) - Date.now()) / 86400000);
@@ -899,7 +908,7 @@ function renderDownloads() {
             <div class="download-item-icon">⚖️</div>
             <div class="download-item-info">
                 <div class="download-item-title">App de escritorio — Procurador SCW <span style="font-size:11px;color:#9ca3af;font-weight:400">Windows</span></div>
-                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.25</div>
+                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.26</div>
             </div>
             <div class="download-item-actions">
                 <button class="btn btn-primary btn-sm" onclick="downloadElectron(this)">⬇ Descargar instalador</button>
@@ -1362,6 +1371,11 @@ async function renderFact() {
     const isTrialNotActivated = (rs === 'pending_activation' || rs === 'pending_email');
     const isCancelledExpired = rs === 'cancelled';
     const isSuspendedPayment = rs === 'suspended' || (subData?.status === 'suspended' && subData?.paymentGraceEndsAt);
+    // Período de gracia: el último pago fue rechazado pero la cuenta sigue activa hasta
+    // que venza la gracia. Hay que avisar AHORA (no recién al suspender) para que el
+    // usuario actualice el método de pago a tiempo.
+    const graceEndsAt = subData?.paymentGraceEndsAt;
+    const isInGrace = !isSuspendedPayment && graceEndsAt && new Date(graceEndsAt) > new Date();
 
     let paymentBody = '';
 
@@ -1391,6 +1405,15 @@ async function renderFact() {
                     <p style="font-size:13px;color:#991b1b;margin:0;font-weight:500">⚠️ Pago rechazado. Actualizá tu método de pago para reactivar el acceso.</p>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap;background:#991b1b;border-color:#991b1b">Actualizar método de pago</button>
+            </div>`;
+    } else if (isInGrace) {
+        // Pago rechazado pero todavía en período de gracia — sigue activo, avisar a tiempo
+        paymentBody = `
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px">
+                    <p style="font-size:13px;color:#b45309;margin:0;font-weight:500">⚠️ Tu último pago fue rechazado. Actualizá tu método de pago antes del <strong>${formatDate(graceEndsAt)}</strong> o tu cuenta se suspenderá. Seguís teniendo acceso hasta esa fecha.</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap;background:#b45309;border-color:#b45309">Actualizar método de pago</button>
             </div>`;
     } else if (!hasMethod) {
         // Activado por el admin (rs='active'), sin método configurado — habilitar pago
@@ -1602,7 +1625,7 @@ async function confirmReactivateSubscription() {
             // No se pudo reanudar (cancelación terminal, ej. hecha desde MercadoPago) →
             // nueva suscripción con free_trial = días ya pagados (el primer cobro cae en
             // el vencimiento original, sin doble cobro).
-            if (confirm((data.error || 'No se pudo reanudar automáticamente.') + '\n\nVamos a generar un método de pago nuevo. No se te cobrará ahora: el primer débito será recién en tu fecha de vencimiento actual. ¿Continuar?')) {
+            if (confirm((data.error || 'No se pudo reanudar automáticamente.') + '\n\nVamos a generar un método de pago nuevo. MercadoPago mostrará unos "días gratis": corresponden a los días que ya tenías pagados de tu período actual. No se te cobrará ahora; el primer débito será recién en tu fecha de vencimiento actual. ¿Continuar?')) {
                 try {
                     const r2 = await apiFetch('/usuarios/api/checkout/reactivate-init', { method: 'POST' });
                     const d2 = r2 ? await r2.json() : null;

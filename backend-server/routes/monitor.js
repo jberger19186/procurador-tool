@@ -521,16 +521,9 @@ router.post('/expedientes/bulk', async (req, res) => {
                  WHERE id = $1`,
                 [parte_id]
             );
-        } else {
-            // Es una consulta de novedades — incrementar contador en subscriptions
-            try {
-                await db.query(`
-                    UPDATE subscriptions
-                    SET monitor_novedades_usage = COALESCE(monitor_novedades_usage, 0) + 1
-                    WHERE user_id = $1 AND status = 'active'
-                `, [userId]);
-            } catch (_) {}
         }
+        // El consumo de monitor_novedades_usage se cuenta por CONSULTA ejecutada
+        // (no por novedad encontrada) en POST /monitor/log — ver nota allí.
 
         res.json({ success: true, insertados, duplicados });
 
@@ -665,6 +658,20 @@ router.post('/log', async (req, res) => {
             [parte_id || null, userId, modo || null, total_encontrados || 0,
              nuevos_detectados || 0, tiempo_ejecucion_ms || null, error || null]
         );
+
+        // Consumo del límite monitor_novedades: se cuenta UNA por consulta de
+        // novedades EJECUTADA (encuentre o no novedades), no por novedad detectada.
+        // La consulta inicial (línea base) NO consume. Solo cuentan las exitosas.
+        if (modo === 'novedades' && !error) {
+            try {
+                await db.query(`
+                    UPDATE subscriptions
+                    SET monitor_novedades_usage = COALESCE(monitor_novedades_usage, 0) + 1
+                    WHERE user_id = $1 AND status = 'active'
+                `, [userId]);
+            } catch (_) {}
+        }
+
         res.json({ success: true });
     } catch (err) {
         console.error('Error en POST /monitor/log:', err);
