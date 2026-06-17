@@ -1737,23 +1737,48 @@ async function generarPDFExpediente(
     }
 
     // ── HEADER VISUAL ─────────────────────────────────────────────────────────
-    // Banda azul superior
-    page.drawRectangle({ x: 0, y: height - 85, width, height: 85, color: C_BLUE });
-    // Título: número de expediente
-    page.drawText(sanitize(datosGenerales.expediente || 'Expediente'), { x: marginLeft, y: height - 35, size: 16, font: fontBold, color: C_WHITE });
+    // La carátula va DENTRO de la banda azul: debajo del número de expediente y
+    // arriba de la jurisdicción, con la misma tipografía que el expediente
+    // (16pt bold blanco). La banda crece según las líneas que ocupe la carátula.
+    const caratulaTxt   = sanitize(datosGenerales.caratula || '');
+    const caratulaSize  = 16;
+    const caratulaLineH = 20;
+    const caratulaLines = [];
+    {
+        let cline = '';
+        for (const word of caratulaTxt.split(' ').filter(Boolean)) {
+            const test = cline ? cline + ' ' + word : word;
+            if (fontBold.widthOfTextAtSize(test, caratulaSize) > maxWidth && cline) {
+                caratulaLines.push(cline);
+                cline = word;
+            } else {
+                cline = test;
+            }
+        }
+        if (cline) caratulaLines.push(cline);
+    }
+    const headerH = 85 + caratulaLines.length * caratulaLineH;
+    // Banda azul superior (altura dinámica)
+    page.drawRectangle({ x: 0, y: height - headerH, width, height: headerH, color: C_BLUE });
+    // Número de expediente — un punto intermedio: más chico que la carátula (16),
+    // más grande que jurisdicción/situación (9)
+    page.drawText(sanitize(datosGenerales.expediente || 'Expediente'), { x: marginLeft, y: height - 33, size: 13, font: fontBold, color: C_WHITE });
+    // Carátula — misma tipografía que el número de expediente
+    let hy = height - 35;
+    for (const cl of caratulaLines) {
+        hy -= caratulaLineH;
+        page.drawText(cl, { x: marginLeft, y: hy, size: caratulaSize, font: fontBold, color: C_WHITE });
+    }
     // Subtítulo: jurisdicción | dependencia
     const subHeader = sanitize(`${datosGenerales.jurisdiccion || ''}  |  ${datosGenerales.dependencia || ''}`);
-    page.drawText(subHeader, { x: marginLeft, y: height - 55, size: 9, font, color: C_BLUE_LIGHT });
+    page.drawText(subHeader, { x: marginLeft, y: hy - 20, size: 9, font, color: C_BLUE_LIGHT });
     // Situación actual
     const sitLabel = sanitize(`Situacion: ${datosGenerales.situacion_actual || ''}`);
-    page.drawText(sitLabel, { x: marginLeft, y: height - 70, size: 9, font, color: C_BLUE_LIGHT });
+    page.drawText(sitLabel, { x: marginLeft, y: hy - 35, size: 9, font, color: C_BLUE_LIGHT });
     // Línea inferior del header
-    page.drawRectangle({ x: 0, y: height - 86, width: width, height: 1, color: C_GREEN });
+    page.drawRectangle({ x: 0, y: height - headerH - 1, width: width, height: 1, color: C_GREEN });
 
-    y = height - 105;
-
-    // Carátula debajo del header (puede ser larga)
-    agregarTextoAjustado(sanitize('Caratula: ' + (datosGenerales.caratula || '')), 10);
+    y = height - headerH - 20;
 
     // ==== Resumen: helpers de configuración y construcción ====
     function cargarConfigResumen() {
