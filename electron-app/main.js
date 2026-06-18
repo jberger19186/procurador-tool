@@ -141,6 +141,17 @@ function createLoginWindow() {
 
     loginWindow.loadFile('renderer/login.html');
 
+    // Los links del login (ej. "Ingresá al portal" cuando la cuenta está bloqueada o sin
+    // suscripción) usan target="_blank". Sin esto, Electron abriría una ventana embebida;
+    // en su lugar los abrimos en el navegador por defecto del usuario (el Chrome de la PC),
+    // que lleva al login del portal sin iniciar sesión automáticamente.
+    loginWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (/^https?:\/\//i.test(url)) {
+            shell.openExternal(url).catch(() => {});
+        }
+        return { action: 'deny' };
+    });
+
     loginWindow.once('ready-to-show', () => {
         loginWindow.show();
     });

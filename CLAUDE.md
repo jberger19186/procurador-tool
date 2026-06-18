@@ -26,9 +26,9 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.26** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.27** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-17 (E2E real de cobranza con MP+Electron: recuperación de método con single-active robusto · gracia visible (portal+app+notificación) · conteo del monitor por consulta · suspensión por gracia vencida · release v2.7.26 — pendiente: Plan 3 filas B/D/E)
+> Última sesión: 2026-06-18 (Plan 3 cerrado: filas A/B/C/E validadas, D no es flujo real (MP no auto-suscribe a nuestro plan) · login bloqueado abre el portal en el navegador del usuario (shell.openExternal) · release v2.7.27)
 
 ### Últimas funcionalidades implementadas (listas en producción)
 
@@ -65,12 +65,14 @@ REGISTRO (pending_email)
 ```
 > **Cómo acelerar sin esperar días** (pruebas): gracia/suspensión se fuerzan tocando `payment_grace_ends_at` + corriendo la query del cron de `server.js`; la renovación con `dev-tools/sim-renewal.js`. Estado del usuario de prueba: `procuradortool@gmail.com` (id 230), CUIT 27320694359.
 
-#### 🔲 Pendiente de probar — Plan 3 (matriz cancelar/reactivar) filas B/D/E + sueltos
-> **Punto B del plan: continuar con esto en la próxima tanda.** Detalle en `docs/internal/plan-pruebas-ciclo-vida.md` (PLAN 3 + escenarios adicionales).
-- **Fila B:** cancelar desde el **portal** (pausa) → reactivar **desde MercadoPago** (el usuario reanuda en MP → webhook `subscription_preapproval` sincroniza a activa).
-- **Fila D:** cancelar **desde MP** (terminal) → re-suscribir **desde MP** (nuevo preapproval → webhook lo vincula y reactiva; single-active cancela el viejo).
-- **Fila E:** **no reactivar** → al cruzar `cancel_at` el cron pasa a `cancelled` y **corta el acceso** (verificar login bloqueado + estado terminal).
-- **Sueltos:** extensión Chrome con trial agotado (gate `extension-auth`) · límite `monitor_partes` (20) → bloqueo al agregar la 21° · cambio de plan (2/ciclo + cancelar downgrade programado) · idempotencia de pagos (mismo webhook 2× no duplica) · `downgrade→upgrade` (requiere 3er plan tarifado activo — L1).
+#### ✅ Plan 3 (matriz cancelar/reactivar) — CERRADO + 🔲 sueltos pendientes
+> Detalle en `docs/internal/plan-pruebas-ciclo-vida.md` (PLAN 3 + escenarios adicionales).
+- **Fila A** (portal cancela=pausa → portal reactiva=reanuda, sin cobro): ✅ validada.
+- **Fila B** (portal cancela=pausa → reactiva **desde MP**): ✅ validada. **Aprendizaje:** la UI del comprador de MP **no expone "reanudar"** una pausada (solo cancelar); la reanudación-desde-MP se probó por API (PUT `authorized`) → el webhook `subscription_preapproval` sincroniza la cuenta a activa/renovable solo. En la práctica el usuario reactiva desde **nuestro portal** (fila A).
+- **Fila C** (MP cancela=terminal → portal reactiva=checkout `free_trial`, sin doble cobro): ✅ validada.
+- **Fila D** (MP cancela → re-suscribir **desde MP**): ⚠️ **No es un flujo real.** El comprador en MP no puede auto-suscribirse a nuestro plan (las suscripciones se inician siempre desde un `init_point` que generamos nosotros; un link "pelado" del plan saldría sin `external_reference` → inatribuible). La re-suscripción tras una cancelación terminal **se colapsa en la fila C** (portal "Reactivar").
+- **Fila E** (no reactivar → cron `20 11 * * *` pasa a `cancelled` y corta el acceso): ✅ validada — estado terminal, login bloqueado. El cron tiene guard de seguridad (no cancela si hubo pago aprobado reciente cerca de `cancel_at`).
+- **🔲 Sueltos pendientes:** extensión Chrome con trial agotado (gate `extension-auth`) · límite `monitor_partes` (20) → bloqueo al agregar la 21° · cambio de plan (2/ciclo + cancelar downgrade programado) · idempotencia de pagos (mismo webhook 2× no duplica) · `downgrade→upgrade` (requiere 3er plan tarifado activo — L1).
 
 - ✅ **Sesión 2026-06-15 — endurecimiento del ciclo de cobranza + cambio de plan + E2E** :
   - **Cancelar = PAUSAR / Reactivar = REANUDAR (sin cobro nuevo):** `cancelSubscription` pausa el preapproval en MP (reversible, no cobra el próximo período); `reactivateSubscription` lo reanuda (paused→authorized) sin generar pago, el cobro sigue en la fecha original. El cron de vencimiento lo cancela definitivamente si no se reactivó. (Antes cancelaba terminal → reactivar era imposible.)
