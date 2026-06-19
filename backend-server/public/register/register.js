@@ -28,7 +28,7 @@ document.getElementById('cuit').addEventListener('input', function () {
 // ─── Persistencia del borrador (conservar datos al ir a T&C / Privacidad) ──────
 // Guardamos los campos NO sensibles en sessionStorage. Las contraseñas NO se
 // persisten por seguridad; el navegador suele restaurarlas vía bfcache al volver.
-const DRAFT_FIELDS = ['nombre','apellido','email','cuit','calle','numero','piso','depto','localidad','provincia'];
+const DRAFT_FIELDS = ['nombre','apellido','email','telefono','cuit','calle','numero','piso','depto','localidad','provincia'];
 
 function saveDraft() {
     try {
@@ -248,6 +248,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         nombre:    get('nombre'),
         apellido:  get('apellido'),
         email:     get('email'),
+        telefono:  get('telefono') || undefined,
         password:  document.getElementById('password').value,
         cuit:      get('cuit'),
         domicilio: {
