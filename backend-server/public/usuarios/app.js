@@ -560,7 +560,7 @@ async function saveProfile(e) {
 
     const nombre = document.getElementById('profile-nombre').value.trim();
     const apellido = document.getElementById('profile-apellido').value.trim();
-    const cuit = document.getElementById('profile-cuit').value.trim();
+    // El CUIT no es editable por el usuario (solo el admin) → no se envía.
     const telefono = document.getElementById('profile-telefono').value.trim();
     const domicilio = {
         calle:     document.getElementById('dom-calle').value.trim(),
@@ -582,7 +582,7 @@ async function saveProfile(e) {
     try {
         const res = await apiFetch('/usuarios/api/profile', {
             method: 'PUT',
-            body: { nombre, apellido, cuit, telefono, domicilio },
+            body: { nombre, apellido, telefono, domicilio },
         });
 
         if (!res) return;

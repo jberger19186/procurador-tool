@@ -9,9 +9,11 @@ const { validatePassword } = require('../utils/passwordPolicy');
 router.put('/profile', authenticateToken, async (req, res) => {
     const db = req.app.get('db');
     const userId = req.user.id;
-    const { nombre, apellido, cuit, telefono, domicilio } = req.body;
+    // El CUIT NO se actualiza desde el portal del usuario (solo el admin puede cambiarlo).
+    // Aunque llegue en el body, se ignora (defensa en profundidad).
+    const { nombre, apellido, telefono, domicilio } = req.body;
 
-    if (!nombre && !apellido && !cuit && !telefono && !domicilio) {
+    if (!nombre && !apellido && !telefono && !domicilio) {
         return res.status(400).json({ error: 'Al menos un campo debe ser proporcionado' });
     }
 
@@ -23,7 +25,6 @@ router.put('/profile', authenticateToken, async (req, res) => {
 
         if (nombre !== undefined) { fields.push(`nombre = $${idx++}`); values.push(nombre.trim()); }
         if (apellido !== undefined) { fields.push(`apellido = $${idx++}`); values.push(apellido.trim()); }
-        if (cuit !== undefined) { fields.push(`cuit = $${idx++}`); values.push(cuit.replace(/[-\s]/g, '')); }
         if (telefono !== undefined) { fields.push(`telefono = $${idx++}`); values.push(telefono.trim()); }
         // domicilio es jsonb: siempre serializar (un string plano como "Calle 123" no es
         // JSON válido y rompía el UPDATE; JSON.stringify lo convierte en string JSON)
