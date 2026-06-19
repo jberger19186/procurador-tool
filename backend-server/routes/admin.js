@@ -776,6 +776,78 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
     }
 });
 
+// ─── Cambiar email del usuario (solo admin) ────────────────────────────────────
+// Flujo: cambia el email → SUSPENDE la cuenta (pending_email) → envía verificación al
+// NUEVO correo + notifica al usuario. Al verificar (GET /auth/verify-email) se restaura
+// el registration_status previo (guardado en email_change_prev_status) → "continúa como
+// venía" sin re-activación del admin.
+router.post('/users/:userId/change-email', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const { email } = req.body;
+    const db = req.app.get('db');
+    const crypto = require('crypto');
+    const mailer = require('../utils/mailer');
+    const logger = require('../utils/logger');
+
+    const newEmail = (email || '').trim().toLowerCase();
+    if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            'SELECT id, email, nombre, registration_status FROM users WHERE id = $1', [userId]
+        );
+        if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+        const user = rows[0];
+
+        if ((user.email || '').toLowerCase() === newEmail) {
+            return res.status(400).json({ error: 'El email nuevo es igual al actual' });
+        }
+        const taken = await db.query('SELECT id FROM users WHERE LOWER(email) = $1 AND id <> $2', [newEmail, userId]);
+        if (taken.rows.length > 0) {
+            return res.status(400).json({ error: 'Ese email ya está en uso por otra cuenta' });
+        }
+
+        const token = crypto.randomBytes(32).toString('hex');
+        const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        // COALESCE en email_change_prev_status: si ya había un cambio pendiente, no pisamos
+        // el estado previo guardado (sigue siendo el "real" anterior al primer cambio).
+        await db.query(`
+            UPDATE users
+            SET email                    = $1,
+                email_verified           = false,
+                email_verify_token       = $2,
+                email_verify_expires     = $3,
+                email_change_prev_status = COALESCE(email_change_prev_status, registration_status),
+                registration_status      = 'pending_email',
+                updated_at               = NOW()
+            WHERE id = $4
+        `, [newEmail, token, tokenExpires, userId]);
+
+        // Verificación al NUEVO correo
+        mailer.sendEmailVerification(newEmail, user.nombre || 'Usuario', token).catch(err =>
+            logger.error('[Admin] Error enviando verificación de cambio de email', { err: err.message }));
+
+        // Notificación in-app + evento en el historial
+        await db.query(
+            `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'email_changed_admin', $2)`,
+            [userId, `El administrador actualizó tu email a ${newEmail}. Revisá ese correo y hacé clic en el enlace para verificarlo y reactivar tu cuenta.`]
+        ).catch(() => {});
+        await db.query(
+            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'email_changed_by_admin', $2)`,
+            [userId, JSON.stringify({ old_email: user.email, new_email: newEmail, by: req.user.id })]
+        ).catch(() => {});
+
+        logger.info(`✉️ Email cambiado por admin: ${user.email} → ${newEmail} (user ${userId})`);
+        res.json({ success: true, email: newEmail, prevStatus: user.registration_status });
+    } catch (error) {
+        console.error('Error cambiando email:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 // ─── Marcar email como verificado manualmente ─────────────────────────────────
 router.post('/users/:userId/verify-email', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;

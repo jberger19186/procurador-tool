@@ -457,12 +457,19 @@ async function renderUserDetail(userId) {
             <div class="card-header">
                 <h3>📋 Datos de Registro</h3>
                 <div style="display:flex;gap:8px">
+                    <button id="reg-email-btn" class="btn btn-sm btn-secondary" onclick="toggleEmailEdit(${u.id})">✉️ Editar email</button>
                     <button id="reg-edit-btn" class="btn btn-sm btn-secondary" onclick="toggleRegistroEdit(${u.id})">✏️ Editar</button>
                     <button id="reg-save-btn" class="btn btn-sm btn-primary" onclick="saveRegistroData(${u.id})" style="display:none">💾 Guardar</button>
                     <button id="reg-cancel-btn" class="btn btn-sm btn-secondary" onclick="cancelRegistroEdit()" style="display:none">✕ Cancelar</button>
+                    <button id="reg-email-save-btn" class="btn btn-sm btn-primary" onclick="saveUserEmail(${u.id})" style="display:none">💾 Guardar email</button>
+                    <button id="reg-email-cancel-btn" class="btn btn-sm btn-secondary" onclick="cancelEmailEdit(${u.id})" style="display:none">✕ Cancelar</button>
                 </div>
             </div>
             <div class="card-body">
+                <div style="margin-bottom:12px">
+                    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Email <span style="font-weight:400;color:var(--text-muted)">(solo editable por admin · al cambiarlo se suspende hasta re-verificar)</span></label>
+                    <input type="email" id="reg-email" value="${escHtml(u.email || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                     <div>
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nombre</label>
@@ -1882,6 +1889,36 @@ window.saveRegistroData = async function(userId) {
         });
         showAlert(alertEl, '✅ Datos de registro actualizados', 'success');
         cancelRegistroEdit();
+    } catch (e) {
+        showAlert(alertEl, e.message, 'error');
+    }
+};
+
+// ── Cambio de email del usuario (solo admin) ──
+window.toggleEmailEdit = function(userId) {
+    const inp = document.getElementById('reg-email');
+    if (inp) { inp.disabled = false; inp.style.background = '#fff'; inp.focus(); }
+    document.getElementById('reg-email-btn').style.display        = 'none';
+    document.getElementById('reg-edit-btn').style.display         = 'none';
+    document.getElementById('reg-email-save-btn').style.display   = '';
+    document.getElementById('reg-email-cancel-btn').style.display = '';
+};
+
+window.cancelEmailEdit = function(userId) {
+    // Re-render para descartar el cambio y restaurar el estado de los botones/campos
+    renderUserDetail(userId);
+};
+
+window.saveUserEmail = async function(userId) {
+    const inp     = document.getElementById('reg-email');
+    const alertEl = document.getElementById('ud-alert');
+    const newEmail = (inp?.value || '').trim();
+    if (!newEmail) { showAlert(alertEl, 'Ingresá un email', 'error'); return; }
+    if (!confirm(`¿Cambiar el email del usuario a "${newEmail}"?\n\nLa cuenta se SUSPENDERÁ hasta que el usuario verifique el nuevo correo. Se le envía un email de verificación al nuevo correo + una notificación. Al verificar, la cuenta vuelve sola al estado actual (sin re-activación del admin).`)) return;
+    try {
+        await apiFetch(`/admin/users/${userId}/change-email`, 'POST', { email: newEmail });
+        showAlert(alertEl, '✅ Email actualizado. Se envió la verificación al nuevo correo; la cuenta quedó suspendida hasta que el usuario verifique.', 'success');
+        setTimeout(() => renderUserDetail(userId), 1500);
     } catch (e) {
         showAlert(alertEl, e.message, 'error');
     }

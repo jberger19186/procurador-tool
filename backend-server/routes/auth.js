@@ -130,7 +130,7 @@ router.post('/register', registerLimiter, async (req, res) => {
 
     const {
         nombre, apellido, email, password, cuit,
-        domicilio, plan_name, toc_accepted
+        domicilio, plan_name, toc_accepted, telefono
     } = req.body;
 
     try {
@@ -194,13 +194,14 @@ router.post('/register', registerLimiter, async (req, res) => {
 
             const userResult = await client.query(`
                 INSERT INTO users (
-                    nombre, apellido, email, password_hash, cuit, domicilio,
+                    nombre, apellido, email, telefono, password_hash, cuit, domicilio,
                     registration_status, toc_accepted_at,
                     email_verified, email_verify_token, email_verify_expires
-                ) VALUES ($1,$2,$3,$4,$5,$6,'pending_email',NOW(),false,$7,$8)
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,'pending_email',NOW(),false,$8,$9)
                 RETURNING id, email, nombre, apellido
             `, [
                 nombre.trim(), apellido.trim(), email.trim().toLowerCase(),
+                (telefono || '').trim() || null,
                 hashedPassword, cuit.replace(/[-\s]/g, ''),
                 JSON.stringify(domicilio),
                 token, tokenExpires
@@ -306,7 +307,7 @@ router.get('/verify-email', async (req, res) => {
 
     try {
         const result = await db.query(`
-            SELECT u.id, u.email, u.nombre, u.apellido, p.display_name AS plan_name
+            SELECT u.id, u.email, u.nombre, u.apellido, u.email_change_prev_status, p.display_name AS plan_name
             FROM users u
             JOIN subscriptions s ON u.id = s.user_id
             JOIN plans p ON s.plan_id = p.id
@@ -331,24 +332,37 @@ router.get('/verify-email', async (req, res) => {
 
         const user = result.rows[0];
 
+        // Si el email cambió por acción del admin, restauramos el estado de registro PREVIO
+        // (no 'pending_activation') para que la cuenta "continúe como venía" sin re-activación.
+        // En el alta nueva (sin estado previo) el flujo es el normal → pending_activation.
+        const isEmailChange = !!user.email_change_prev_status;
+        const targetStatus  = (isEmailChange && user.email_change_prev_status !== 'pending_email')
+            ? user.email_change_prev_status
+            : 'pending_activation';
+
         const verifyClient = await db.connect();
         try {
             await verifyClient.query('BEGIN');
             await verifyClient.query(`
                 UPDATE users
                 SET email_verified = true,
-                    registration_status = 'pending_activation',
+                    registration_status = $2,
+                    email_change_prev_status = NULL,
                     email_verify_token = NULL,
                     email_verify_expires = NULL
                 WHERE id = $1
-            `, [user.id]);
+            `, [user.id, targetStatus]);
             await verifyClient.query(
-                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'email_verified', $2)`,
-                [user.id, JSON.stringify({ plan: user.plan_name })]
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, $2, $3)`,
+                [user.id, isEmailChange ? 'email_changed_verified' : 'email_verified',
+                 JSON.stringify({ plan: user.plan_name, email: user.email })]
             );
             await verifyClient.query(
-                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'email_verified', $2)`,
-                [user.id, 'Tu email fue verificado. Tenés 20 usos de prueba disponibles.']
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, $2, $3)`,
+                [user.id, isEmailChange ? 'email_changed' : 'email_verified',
+                 isEmailChange
+                    ? 'Verificaste tu nuevo email. Tu cuenta quedó reactivada.'
+                    : 'Tu email fue verificado. Tenés 20 usos de prueba disponibles.']
             );
             await verifyClient.query('COMMIT');
         } catch (e) {
@@ -358,12 +372,15 @@ router.get('/verify-email', async (req, res) => {
             verifyClient.release();
         }
 
-        mailer.sendWelcomeEmail(user.email, user.nombre, user.plan_name).catch(() => {});
+        // El email de bienvenida solo aplica al alta nueva, no a un cambio de email.
+        if (!isEmailChange) mailer.sendWelcomeEmail(user.email, user.nombre, user.plan_name).catch(() => {});
 
-        logger.info(`✅ Email verificado: ${user.email}`);
+        logger.info(`✅ Email verificado: ${user.email} (${isEmailChange ? 'cambio de email' : 'alta'})`);
 
         res.send(renderVerifyPage('success',
-            `¡Hola ${user.nombre}! Tu email fue confirmado. El administrador activará tu cuenta en breve. Mientras tanto, tenés 20 ejecuciones de prueba disponibles en la app.`));
+            isEmailChange
+                ? `¡Listo ${user.nombre}! Verificaste tu nuevo email y tu cuenta quedó reactivada. Ya podés usar la app con normalidad.`
+                : `¡Hola ${user.nombre}! Tu email fue confirmado. El administrador activará tu cuenta en breve. Mientras tanto, tenés 20 ejecuciones de prueba disponibles en la app.`));
 
     } catch (error) {
         logger.error('Error en verify-email:', error.message);
