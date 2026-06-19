@@ -1,9 +1,10 @@
-# test-user-panel.ps1 — Panel de TESTING (local).
-# Menú interactivo que ejecuta backend-server/dev-tools/test-user.js en el server (vía SSH).
+# test-user-panel.ps1 -- Panel de TESTING (local).
+# Menu interactivo que ejecuta backend-server/dev-tools/test-user.js en el server (via SSH).
 # Sirve para borrar el usuario de prueba y ajustar usos/contadores en la DB.
-# Uso: click derecho > "Ejecutar con PowerShell", o desde una terminal:  ./test-user-panel.ps1
+# Uso:  powershell -ExecutionPolicy Bypass -File test-user-panel.ps1
 #
-# NO es producción. Las operaciones tocan la DB directo. Requiere la llave SSH.
+# NO es produccion. Las operaciones tocan la DB directo. Requiere la llave SSH.
+# (ASCII puro a proposito: PowerShell 5.1 lee .ps1 como ANSI y los acentos rompen el parser.)
 
 $KEY    = "C:/Users/JONATHAN/.ssh/do_procurador"
 $HOSTIP = "root@142.93.64.94"
@@ -20,42 +21,42 @@ if ([string]::IsNullOrWhiteSpace($email)) { $email = "procuradortool@gmail.com" 
 
 do {
     Write-Host "============================================================"
-    Write-Host " Panel de testing  —  $email"
+    Write-Host " Panel de testing  -  $email"
     Write-Host "============================================================"
-    Write-Host " 1) Ver estado (usos por submódulo + trial)"
+    Write-Host " 1) Ver estado (usos por submodulo + trial)"
     Write-Host " 2) Borrar usuario (libera email + CUIT para registrar de 0)"
     Write-Host " 3) Setear TRIAL  (ej: 18/20)"
-    Write-Host " 4) Setear uso de SUBMODULO (ej: proc 20  ->  20/50)"
-    Write-Host " 5) Setear BONUS de submódulo (extiende el límite)"
+    Write-Host " 4) Setear uso de SUBMODULO (ej: proc 20  =>  20/50)"
+    Write-Host " 5) Setear BONUS de submodulo (extiende el limite)"
     Write-Host " 6) Resetear todos los contadores a 0"
     Write-Host " 7) Cambiar el email objetivo"
-    Write-Host " 8) Listar TODOS los usuarios (ver cuál borrar)"
+    Write-Host " 8) Listar TODOS los usuarios (ver cual borrar)"
     Write-Host " 0) Salir"
     Write-Host "------------------------------------------------------------"
-    $op = Read-Host "Opción"
+    $op = Read-Host "Opcion"
 
     switch ($op) {
         "1" { Run "show $email" }
         "2" {
-            $c = Read-Host "Confirmá borrar '$email' y TODOS sus datos (escribí 'si')"
+            $c = Read-Host "Confirma borrar '$email' y TODOS sus datos (escribi 'si')"
             if ($c -eq "si") { Run "delete $email" } else { Write-Host "Cancelado." }
         }
         "3" {
             $u = Read-Host "Usados (usage_count)"
-            $l = Read-Host "Límite [Enter = 20]"
+            $l = Read-Host "Limite [Enter = 20]"
             if ([string]::IsNullOrWhiteSpace($l)) { $l = "20" }
             Run "trial $email $u $l"
         }
         "4" {
-            Write-Host "Submódulos: proc | batch | informe | monitor_novedades"
-            $s = Read-Host "Submódulo"
+            Write-Host "Submodulos: proc | batch | informe | monitor_novedades"
+            $s = Read-Host "Submodulo"
             $u = Read-Host "Usados"
             Run "usage $email $s $u"
         }
         "5" {
-            Write-Host "Submódulos: proc | batch | informe | monitor_novedades | monitor_partes"
-            $s = Read-Host "Submódulo"
-            $n = Read-Host "Bonus (se suma al límite del plan)"
+            Write-Host "Submodulos: proc | batch | informe | monitor_novedades | monitor_partes"
+            $s = Read-Host "Submodulo"
+            $n = Read-Host "Bonus (se suma al limite del plan)"
             Run "bonus $email $s $n"
         }
         "6" { Run "reset $email" }
@@ -69,6 +70,6 @@ do {
             if (-not [string]::IsNullOrWhiteSpace($pick)) { $email = $pick }
         }
         "0" { Write-Host "Chau." }
-        default { Write-Host "Opción inválida." }
+        default { Write-Host "Opcion invalida." }
     }
 } while ($op -ne "0")
