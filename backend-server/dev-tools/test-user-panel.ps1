@@ -29,6 +29,7 @@ do {
     Write-Host " 5) Setear BONUS de submódulo (extiende el límite)"
     Write-Host " 6) Resetear todos los contadores a 0"
     Write-Host " 7) Cambiar el email objetivo"
+    Write-Host " 8) Listar TODOS los usuarios (ver cuál borrar)"
     Write-Host " 0) Salir"
     Write-Host "------------------------------------------------------------"
     $op = Read-Host "Opción"
@@ -61,6 +62,11 @@ do {
         "7" {
             $email = Read-Host "Nuevo email objetivo"
             if ([string]::IsNullOrWhiteSpace($email)) { $email = "procuradortool@gmail.com" }
+        }
+        "8" {
+            Run "list"
+            $pick = Read-Host "Email a fijar como objetivo [Enter = dejar '$email']"
+            if (-not [string]::IsNullOrWhiteSpace($pick)) { $email = $pick }
         }
         "0" { Write-Host "Chau." }
         default { Write-Host "Opción inválida." }

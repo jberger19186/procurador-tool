@@ -27,6 +27,18 @@ async function getUserId(email) {
   return rows[0] ? rows[0].id : null;
 }
 
+async function list() {
+  const { rows } = await db.query(`
+    SELECT u.id, u.email, u.registration_status, u.cuit, u.role, s.payment_provider
+    FROM users u LEFT JOIN subscriptions s ON s.user_id = u.id
+    ORDER BY u.id`);
+  console.log(`\n=== Usuarios (${rows.length}) ===`);
+  for (const r of rows) {
+    const tipo = r.role === 'admin' ? 'ADMIN' : (r.payment_provider ? 'pago' : 'trial/—');
+    console.log(`id ${r.id} | ${r.email} | ${r.registration_status || '—'} | cuit ${r.cuit || '—'} | ${tipo}`);
+  }
+}
+
 async function show(email) {
   const { rows } = await db.query(`
     SELECT u.id, u.email, u.cuit, u.telefono, u.registration_status, u.email_verified,
@@ -122,6 +134,7 @@ async function reset(email) {
   const [cmd, ...a] = process.argv.slice(2);
   try {
     switch (cmd) {
+      case 'list':   await list(); break;
       case 'show':   await show(a[0]); break;
       case 'delete': await del(a[0]); break;
       case 'trial':  await setTrial(a[0], a[1], a[2]); break;
@@ -130,6 +143,7 @@ async function reset(email) {
       case 'reset':  await reset(a[0]); break;
       default:
         console.log(`Herramienta de testing de usuarios. Comandos:
+  list                                                     lista todos los usuarios (para elegir cuál borrar)
   show   <email>                                           estado actual (usos por submódulo + trial)
   delete <email>                                           borra el usuario (libera email + CUIT)
   trial  <email> <usados> [limite=20]                      setea el trial (usage_count/usage_limit)
