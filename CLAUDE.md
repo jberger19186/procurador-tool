@@ -28,9 +28,15 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.27** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-18 (Plan 3 cerrado: filas A/B/C/E validadas, D no es flujo real (MP no auto-suscribe a nuestro plan) · login bloqueado abre el portal en el navegador del usuario (shell.openExternal) · release v2.7.27)
+> Última sesión: 2026-06-18 (UX registro/portal/admin: campo teléfono en registro · card COMBO con límites reales por submódulo · CUIT no editable por el usuario · cambio de email por admin con re-verificación (suspende + restaura estado previo) · landing v2.7.27 · backup .7z a carpeta de automatización)
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-18 (tarde) — ajustes UX registro/portal/admin + flujo cambio de email** :
+  - **Registro:** campo **teléfono** nuevo (opcional, debajo de email) que se persiste en `users.telefono`; **card COMBO** aclara los límites reales (proc 50 + **20 por lote** · informes 50 · monitor **20 partes** + **50 consultas de novedades/mes**; antes decía "novedades ilimitadas"); estilo del input `tel` corregido (el CSS no incluía `input[type=tel]`); versión de la landing **2.7.27**.
+  - **Portal usuario:** el **CUIT ya no es editable** por el usuario (input `disabled` + se quitó del payload + el backend `/usuarios/api/profile` lo ignora). Lo sigue editando solo el admin.
+  - **Cambio de email por admin (flujo nuevo):** botón **"✉️ Editar email"** en Datos de Registro → `POST /admin/users/:id/change-email` cambia el email, **suspende** la cuenta (`pending_email`), guarda el estado previo (columna **`email_change_prev_status`**, migración `20260618_...`), envía verificación al **nuevo** correo + notificación in-app + evento. Al verificar (`/auth/verify-email`), la cuenta **vuelve sola al estado previo** (sin re-activación del admin). Guards: email vacío/igual/tomado por otra cuenta.
+  - **Doc:** variante de **backup `.7z` → `OneDrive/.../z-automatizacion`** agregada a CLAUDE.md (junto al backup completo de Desktop).
 
 - ✅ **Sesión 2026-06-17 — E2E real de cobranza (MP comprador + app Electron) + fixes** :
   - **Recuperación/actualización de método con preapproval atribuible:** cuando el usuario YA tiene método (`payment_provider` + `external_subscription_id`), `/checkout/init` usa la nueva `createUpdatePreapproval` (preapproval **custom con `external_reference=user_{id}`, cobro inmediato**) en vez del plan-based. El alta inicial sigue plan-based. **Por qué:** el plan-based no persiste `external_reference` → un preapproval nuevo queda inatribuible y `markPaymentConfigured` matcheaba el VIEJO, dejando 2 suscripciones vivas en MP y sin limpiar la gracia. Con `external_reference`, el webhook lo atribuye, hace single-active y dispara `applyRenewal`.
@@ -946,6 +952,30 @@ Contenido del backup:
 | `ProcuradorTool_source.zip` | Código fuente completo |
 
 > ⚠️ Guardar la carpeta en lugar seguro — contiene claves privadas. No subir a lugares públicos.
+
+### Variante: backup comprimido `.7z` → carpeta de automatización
+> Mismo contenido que el backup completo (DB + env + keys + certs + código fuente), pero **comprimido en `.7z`** y **movido a OneDrive** en vez de quedar suelto en el Desktop. Usa 7-Zip (`C:\Program Files\7-Zip\7z.exe`).
+> **Destino:** `C:\Users\JONATHAN\OneDrive\Documentos\z-noc files\z-automatizacion\`
+> **Correr desde Git Bash** (no PowerShell: el `>` de PowerShell escribe UTF-16 y corrompe el dump; Git Bash escribe bytes limpios).
+
+```bash
+SEVENZ="/c/Program Files/7-Zip/7z.exe"; KEY="C:/Users/JONATHAN/.ssh/do_procurador"
+FOLDER="/c/Users/JONATHAN/Desktop/$(date +%Y%m)_$(date +%d%m%Y)_ProcuradorTool"
+DEST="/c/Users/JONATHAN/OneDrive/Documentos/z-noc files/z-automatizacion"
+mkdir -p "$FOLDER/keys" "$FOLDER/certs" "$DEST"
+# 1) DB
+ssh -i "$KEY" root@142.93.64.94 "sudo -u postgres pg_dump procurador_db" > "$FOLDER/procurador_db_backup.sql"
+# 2) env + keys + certs
+scp -i "$KEY" root@142.93.64.94:/var/www/procurador/backend-server/.env "$FOLDER/env_backend.txt"
+scp -i "$KEY" -r root@142.93.64.94:/var/www/procurador/backend-server/keys/.  "$FOLDER/keys/"
+scp -i "$KEY" -r root@142.93.64.94:/var/www/procurador/backend-server/certs/. "$FOLDER/certs/"
+# 3) código fuente → .7z (excluye node_modules/dist/.git/.claude)
+"$SEVENZ" a "$FOLDER/ProcuradorTool_source.7z" "C:/Users/JONATHAN/source/repos/ProcuradorTool/*" '-xr!node_modules' '-xr!dist' '-xr!.git' '-xr!.claude' -bso0 -bsp0
+# 4) comprimir la carpeta entera, borrarla y mover el .7z a automatización
+"$SEVENZ" a "$FOLDER.7z" "$FOLDER" -bso0 -bsp0
+rm -rf "$FOLDER" && mv "$FOLDER.7z" "$DEST/"
+```
+> Resultado: solo queda `<YYYYMM_DDMMYYYY>_ProcuradorTool.7z` en la carpeta de automatización (Desktop limpio).
 
 ### Backup de schema DB solamente
 ```bash
