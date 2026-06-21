@@ -232,14 +232,16 @@ $b = [IO.File]::ReadAllBytes($f); [Text.Encoding]::UTF8.GetString($b) -match "pj
 > **El corazón de la experiencia del usuario nuevo.** Requiere TC-C4 = True.
 > Setup de estado base trial: snippet **B** con `<N>=0`.
 
-### TC-D1 · ⭐ Primera PROCURACIÓN exitosa de punta a punta 🔲 (PRUEBA REINA)
+### TC-D1 · ⭐ Primera PROCURACIÓN exitosa de punta a punta ✅ 2026-06-20 (PRUEBA REINA)
 - **Quién:** computer-use (app, full) + humano disponible si Chrome pide algo
 - **Setup:** trial con usos disponibles (snippet B, N=0).
 - **Pasos:** sidebar **Procurar** → (fecha límite = hoy por defecto) → botón **Procurar**.
 - **Esperado:** Chrome abre, login SSO con CUIT 27320694359, recorre expedientes, **termina sin error**, suma 1 a `usage_count`, **el visor HTML se abre automáticamente** al finalizar.
 - **Verif. DB:** `usage_count` +1.
 - **Restaurar:** snippet B (N=0).
-- **Nota:** en las sesiones del 2026-06-20 ninguna procuración llegó a completar (se detuvieron o fallaron por selector del PJN). **Confirmar que existe al menos 1 expediente procesable en la cuenta del PJN antes de correr.**
+- **Resultado (2026-06-20, cuenta pago activa, fecha límite 19/06/2026):** 2 expedientes procesados en 27 s. Visor HTML abierto automáticamente. `usage_count` 4→5, `proc_usage` 1→2. 0 fallidos.
+  - FCR 9078/2021 — AFIP c/ QUISPE — Juzgado Federal Caleta Olivia — 15 movs. ✅
+  - FCR 6705/2025 — ARCA c/ BRISAS SUREÑAS — Cámara Federal Comodoro — 15 movs. ✅
 
 ### TC-D2 · INFORME individual exitoso ✅ 2026-06-20
 - **Quién:** computer-use (app, full)
@@ -402,11 +404,11 @@ $b = [IO.File]::ReadAllBytes($f); [Text.Encoding]::UTF8.GetString($b) -match "pj
 | A — Registro/verificación | — | A1, A2, A3, A4 |
 | B — Descarga/instalación | — | B1, B2, B3 |
 | C — Onboarding | C4 | C1, C2, C3 |
-| D — Trial/primeras ejecuciones | D2, D3, D4 (smoke), D6 | **D1**, D5, D7 |
+| D — Trial/primeras ejecuciones | **D1**, D2, D3, D4 (smoke), D6 | D5, D7 |
 | E — Activación/pago | E2, E3 (prev.) | E1 |
 | F — Límites pagos | F1, F2, F3, F4 | — |
 | G — Suscripción | G1–G9 | G10/G11 (L1) |
 | H — Transversales | H7 | H1–H6, H8 |
 
-> **Foco inmediato:** **D1** (procuración exitosa completa — la prueba reina, nunca completada aún) + onboarding (C) + registro/verificación (A).
-> **Último testeo:** 2026-06-20 (sesión completa Bloque D+F+G+H7; TC-D2, D3, C4, H7 nuevos; F1–F4 + G1–G9 reconfirmados).
+> **Foco inmediato:** onboarding (C) + registro/verificación (A) + TC-D5 (trial compartido app↔extensión).
+> **Último testeo:** 2026-06-20 (sesión completa; **D1 validado** — prueba reina completada; D2, D3, C4, H7 nuevos; F1–F4 + G1–G9 reconfirmados).
