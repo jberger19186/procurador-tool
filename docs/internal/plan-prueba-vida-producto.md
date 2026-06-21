@@ -264,10 +264,11 @@ $b = [IO.File]::ReadAllBytes($f); [Text.Encoding]::UTF8.GetString($b) -match "pj
 - **Estado:** ✅ por **smoke tests** (48/48, último 2026-05-27). 🔲 manual no re-corrido.
 - **Restaurar:** —
 
-### TC-D5 · Trial compartido app ↔ extensión 🔲
+### TC-D5 · Trial compartido app ↔ extensión ✅ 2026-06-20
 - **Setup:** trial N=18 (snippet B).
 - **Esperado:** la app muestra 18/20; usar 1 en la app → 19/20; la **extensión** ve el mismo cupo (queda 1).
 - **Restaurar:** snippet B (N=0).
+- **Resultado (2026-06-20):** App Mi Cuenta: "18 / 20 usos utilizados" con barra al 90% ✅. `GET /client/extension-auth` a 18/20 → **200** `{success:true, usagePercent:90, enabledFlows:[5 flujos]}` ✅. Set usage_count=20 → `GET /client/extension-auth` → **403** "Agotaste tus 20 usos de prueba. Tu cuenta está pendiente de activación por el equipo..." ✅. Cupo genuinamente compartido: app y extensión leen el mismo `usage_count` de la DB.
 
 ### TC-D6 · Agotar 20/20 → bloqueo app + extensión + mensajes ✅
 - **Estado:** ✅ validado.
@@ -276,11 +277,12 @@ $b = [IO.File]::ReadAllBytes($f); [Text.Encoding]::UTF8.GetString($b) -match "pj
   - Extensión 20/20 (`extension-auth` 403): *"Agotaste tus 20 usos de prueba. Configurá tu método de pago desde el portal para seguir usando la extensión."* `action:subscribe` — **validado 2026-06-20**.
 - **Restaurar:** snippet A.
 
-### TC-D7 · Cortesía del admin (+N usos) 🔲
-- **Quién:** humano (dashboard) + Claude (DB)
-- **Pasos:** admin asigna +N usos de cortesía a la cuenta en trial.
-- **Esperado:** `usage_limit` += N; "(+N de cortesía)" visible en portal (banner + Mi Plan), ficha admin y app; la **activación posterior conserva** la cortesía.
-- **Restaurar:** snippet B (N=0).
+### TC-D7 · Cortesía del admin (+N usos) ✅ 2026-06-20
+- **Quién:** Claude (admin API) + computer-use (verifica app)
+- **Pasos:** trial 5/20 → `POST /admin/users/233/extra-usage {extra_uses:5}` → verificar app → `POST /admin/users/233/activate` → verificar DB.
+- **Esperado:** `usage_limit` += N; "(+N de cortesía)" visible en app; la **activación posterior conserva** la cortesía.
+- **Restaurar:** snippet A.
+- **Resultado (2026-06-20):** API devolvió `{success:true, extra_uses:5}`. DB: usage_limit 20→25. App Mi Cuenta: "5 / 25 usos utilizados **(+5 cortesía)**" con barra verde ✅. Post-activación (`POST /admin/users/233/activate`): registration_status='active', status='active', usage_count=5, **usage_limit=25** (cortesía conservada — `COALESCE(null, 25) = 25`) ✅.
 
 ---
 
@@ -404,11 +406,11 @@ $b = [IO.File]::ReadAllBytes($f); [Text.Encoding]::UTF8.GetString($b) -match "pj
 | A — Registro/verificación | — | A1, A2, A3, A4 |
 | B — Descarga/instalación | — | B1, B2, B3 |
 | C — Onboarding | C4 | C1, C2, C3 |
-| D — Trial/primeras ejecuciones | **D1**, D2, D3, D4 (smoke), D6 | D5, D7 |
+| D — Trial/primeras ejecuciones | **D1**, D2, D3, D4 (smoke), **D5**, **D7**, D6 | — |
 | E — Activación/pago | E2, E3 (prev.) | E1 |
 | F — Límites pagos | F1, F2, F3, F4 | — |
 | G — Suscripción | G1–G9 | G10/G11 (L1) |
 | H — Transversales | H7 | H1–H6, H8 |
 
-> **Foco inmediato:** onboarding (C) + registro/verificación (A) + TC-D5 (trial compartido app↔extensión).
-> **Último testeo:** 2026-06-20 (sesión completa; **D1 validado** — prueba reina completada; D2, D3, C4, H7 nuevos; F1–F4 + G1–G9 reconfirmados).
+> **Foco inmediato:** onboarding (C) + registro/verificación (A) + E1 (primer pago real).
+> **Último testeo:** 2026-06-20 (sesión completa; D5 trial compartido app↔extensión ✅; D7 cortesía + activación ✅; D1 prueba reina completada; D2, D3, C4, H7; F1–F4 + G1–G9 reconfirmados).
