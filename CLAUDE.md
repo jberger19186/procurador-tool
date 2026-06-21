@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-06-02
+> Última actualización: 2026-06-20
 
 ---
 
@@ -28,9 +28,22 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.27** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-18 (UX registro/portal/admin: campo teléfono en registro · card COMBO con límites reales por submódulo · CUIT no editable por el usuario · cambio de email por admin con re-verificación (suspende + restaura estado previo) · landing v2.7.27 · backup .7z a carpeta de automatización)
+> Última sesión: 2026-06-20 (testing integral sin modificación de código: plan-prueba-vida-producto.md — bloque D completo; TC-D1 prueba reina, TC-D5 trial compartido app↔extensión, TC-D7 cortesía admin; F1–F4 bloqueos por submódulo, G1–G9 suscripción, C4, H7 confirmados)
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-20 — testing integral del ciclo de vida (sin modificación de código)** :
+  - **Plan maestro de pruebas:** `docs/internal/plan-prueba-vida-producto.md` — bloque D completado al 100%. Commits `64c533a`, `f18a8d7`, `2809d8a`.
+  - **TC-D1 — Prueba reina (procuración real):** procuración E2E completada (2 expedientes en 27s). Visor HTML generado y abierto automáticamente. Confirmado: `proc_usage` sube de 0→2, `usage_count` += 2. ✅
+  - **TC-D2 — Informe PDF real:** informe generado + Excel producido correctamente con expediente FCR 018745/2021. ✅
+  - **TC-D3 — Batch por lote:** 2 expedientes en 1 lote; consola muestra "✅ 2 expedientes procesados". ✅
+  - **TC-D5 — Trial compartido app ↔ extensión:** app Mi Cuenta muestra "18/20 usos" con barra roja. `GET /client/extension-auth` a 18/20 → **200** `{success:true, usagePercent:90, flows:[5]}`. Seteo 20/20 → **403** "Agotaste tus 20 usos de prueba. Tu cuenta está pendiente de activación..." ✅ Cupo genuinamente compartido.
+  - **TC-D7 — Cortesía admin (+N usos):** `POST /admin/users/233/extra-usage {extra_uses:5}` → `usage_limit` 20→25. App muestra "**(+5 cortesía)**". Post-`POST /admin/users/233/activate` → `usage_limit=25` conservado (`COALESCE(null,25)=25`). ✅
+  - **TC-F1–F4 — Bloqueos por submódulo (cuentas pagas):** proc/informe/batch/monitor cada uno bloquea con toast específico antes de abrir Chrome (`checkSubsystemLimit`). ✅
+  - **TC-G1–G9 — Suscripción completa:** todo el ciclo de cobranza reconfirmado (pago, webhooks, renovación, gracia, suspensión, recuperación, cancel/reactivar portal+MP). ✅
+  - **TC-C4 / TC-H7:** onboarding re-entrada y sesión multiventana. ✅
+  - **Usuario de prueba activo:** `procuradortool@gmail.com` **id=233** (sub_id=214), CUIT 27320694359. Estado final restaurado: COMBO_PROMO activo, `payment_provider='mercadopago'`, `usage_limit=999999`, `proc_usage=2`.
+  - **Herramienta dev:** `backend-server/dev-tools/` — `sim-renewal.js` (simula cobro mensual) · panel PowerShell de testing de usuarios. Sin cambios de código esta sesión.
 
 - ✅ **Sesión 2026-06-18 (tarde) — ajustes UX registro/portal/admin + flujo cambio de email** :
   - **Registro:** campo **teléfono** nuevo (opcional, debajo de email) que se persiste en `users.telefono`; **card COMBO** aclara los límites reales (proc 50 + **20 por lote** · informes 50 · monitor **20 partes** + **50 consultas de novedades/mes**; antes decía "novedades ilimitadas"); estilo del input `tel` corregido (el CSS no incluía `input[type=tel]`); versión de la landing **2.7.27**.
@@ -69,7 +82,7 @@ REGISTRO (pending_email)
        · no paga → cron (30 11 * * *) SUSPENDE (status/registration=suspended; ejecutar bloqueado, login permite ver/pagar)
             → paga estando suspendido → RECUPERADO (applyRenewal reactiva)
 ```
-> **Cómo acelerar sin esperar días** (pruebas): gracia/suspensión se fuerzan tocando `payment_grace_ends_at` + corriendo la query del cron de `server.js`; la renovación con `dev-tools/sim-renewal.js`. Estado del usuario de prueba: `procuradortool@gmail.com` (id 230), CUIT 27320694359.
+> **Cómo acelerar sin esperar días** (pruebas): gracia/suspensión se fuerzan tocando `payment_grace_ends_at` + corriendo la query del cron de `server.js`; la renovación con `dev-tools/sim-renewal.js`. Estado del usuario de prueba: `procuradortool@gmail.com` (id **233**, sub_id=214), CUIT 27320694359.
 
 #### ✅ Plan 3 (matriz cancelar/reactivar) — CERRADO + 🔲 sueltos pendientes
 > Detalle en `docs/internal/plan-pruebas-ciclo-vida.md` (PLAN 3 + escenarios adicionales).
@@ -78,7 +91,8 @@ REGISTRO (pending_email)
 - **Fila C** (MP cancela=terminal → portal reactiva=checkout `free_trial`, sin doble cobro): ✅ validada.
 - **Fila D** (MP cancela → re-suscribir **desde MP**): ⚠️ **No es un flujo real.** El comprador en MP no puede auto-suscribirse a nuestro plan (las suscripciones se inician siempre desde un `init_point` que generamos nosotros; un link "pelado" del plan saldría sin `external_reference` → inatribuible). La re-suscripción tras una cancelación terminal **se colapsa en la fila C** (portal "Reactivar").
 - **Fila E** (no reactivar → cron `20 11 * * *` pasa a `cancelled` y corta el acceso): ✅ validada — estado terminal, login bloqueado. El cron tiene guard de seguridad (no cancela si hubo pago aprobado reciente cerca de `cancel_at`).
-- **🔲 Sueltos pendientes:** extensión Chrome con trial agotado (gate `extension-auth`) · límite `monitor_partes` (20) → bloqueo al agregar la 21° · cambio de plan (2/ciclo + cancelar downgrade programado) · idempotencia de pagos (mismo webhook 2× no duplica) · `downgrade→upgrade` (requiere 3er plan tarifado activo — L1).
+- **✅ Sueltos cerrados:** extensión Chrome con trial agotado (gate `extension-auth`): `extension-auth` 20/20 → 403 "Agotaste tus 20 usos" confirmado (2026-06-20).
+- **🔲 Sueltos pendientes:** límite `monitor_partes` (20) → bloqueo al agregar la 21° · cambio de plan (2/ciclo + cancelar downgrade programado) · idempotencia de pagos (mismo webhook 2× no duplica) · `downgrade→upgrade` (requiere 3er plan tarifado activo — L1).
 
 - ✅ **Sesión 2026-06-15 — endurecimiento del ciclo de cobranza + cambio de plan + E2E** :
   - **Cancelar = PAUSAR / Reactivar = REANUDAR (sin cobro nuevo):** `cancelSubscription` pausa el preapproval en MP (reversible, no cobra el próximo período); `reactivateSubscription` lo reanuda (paused→authorized) sin generar pago, el cobro sigue en la fecha original. El cron de vencimiento lo cancela definitivamente si no se reactivó. (Antes cancelaba terminal → reactivar era imposible.)
