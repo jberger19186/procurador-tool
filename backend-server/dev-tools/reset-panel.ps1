@@ -29,7 +29,8 @@ $LIGHT = [System.Drawing.Color]::FromArgb(180,220,255)
 function Ts { (Get-Date).ToString("HH:mm:ss") }
 
 function RunSQL([string]$sql) {
-    ssh -i $KEY $HOST_ ("sudo -u postgres psql " + $DBNAME + " -t -c `"" + $sql + "`" 2>/dev/null")
+    # Pipe via stdin para evitar que el shell remoto parta el SQL en palabras.
+    $sql | ssh -i $KEY $HOST_ ("sudo -u postgres psql " + $DBNAME + " -t 2>/dev/null")
 }
 
 function BackupDB {
