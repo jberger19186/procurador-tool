@@ -13,7 +13,13 @@ Add-Type -AssemblyName Microsoft.VisualBasic
 $KEY    = "C:/Users/JONATHAN/.ssh/do_procurador"
 $HOST_  = "root@142.93.64.94"
 $DBNAME = "procurador_db"
-$DEVDIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+# $MyInvocation.MyCommand.Path es null cuando se corre desde un exe compilado con ps2exe.
+# Fallback: usar el path del proceso en ejecucion.
+$DEVDIR = if ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    Split-Path -Parent ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+}
 
 # ── Colores ───────────────────────────────────────────────────────────────────
 $AMBER = [System.Drawing.Color]::FromArgb(217,119,6)
@@ -295,13 +301,35 @@ $btnAll.Add_Click({
     AppendLog $log ("[" + (Ts) + "] Haciendo backup previo...") $AMBER
     AppendLog $log (BackupDB) $TEXT3
 
-    $sqlFile = Join-Path $DEVDIR "reset-nonadmin-users.sql"
-    if (-not (Test-Path $sqlFile)) {
-        AppendLog $log ("ERROR: no se encontro " + $sqlFile) $RED; return
-    }
-    AppendLog $log ("[" + (Ts) + "] Ejecutando reset-nonadmin-users.sql...") $AMBER
-    $out = Get-Content $sqlFile | ssh -i $KEY $HOST_ ("sudo -u postgres psql " + $DBNAME + " -v ON_ERROR_STOP=1 2>&1")
-    foreach ($line in $out) { AppendLog $log $line $GREEN }
+    # SQL incrustado directamente (no depende del archivo .sql externo).
+    AppendLog $log ("[" + (Ts) + "] Ejecutando reset de usuarios no-admin...") $AMBER
+    $sqlReset = "BEGIN;" +
+        "DELETE FROM ticket_comments WHERE ticket_id IN (SELECT id FROM support_tickets WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin'));" +
+        "DELETE FROM ticket_comments WHERE author_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM support_tickets WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM invoices WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM payments WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM webhook_events;" +
+        "DELETE FROM usage_logs WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM usage_adjustments WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM usage_extras WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM user_events WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM user_events WHERE performed_by IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM admin_events WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM analytics_events WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM notifications WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM user_notifications WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM user_notifications WHERE created_by IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM monitor_consultas_log WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM monitor_partes WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM active_executions WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM user_legal_acceptances WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM subscriptions WHERE user_id IN (SELECT id FROM users WHERE role <> 'admin');" +
+        "DELETE FROM users WHERE role <> 'admin';" +
+        "COMMIT;" +
+        "SELECT id, email, role FROM users ORDER BY id;"
+    $out = RunSQL $sqlReset
+    AppendLog $log $out $GREEN
     AppendLog $log "--- Reset completado ---" $AMBER
 })
 
