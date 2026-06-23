@@ -604,6 +604,18 @@ async function saveProfile(e) {
     }
 }
 
+// Indicador en vivo de coincidencia de contraseñas (igual que el formulario de registro)
+function updatePwMatch() {
+    const pwd  = document.getElementById('new-password').value;
+    const conf = document.getElementById('confirm-password').value;
+    const el   = document.getElementById('pw-match');
+    if (!el) return;
+    if (!conf) { el.style.display = 'none'; el.textContent = ''; el.className = 'pw-match'; return; }
+    el.style.display = 'block';
+    if (pwd === conf) { el.textContent = '✓ Las contraseñas coinciden';    el.className = 'pw-match ok'; }
+    else              { el.textContent = '✗ Las contraseñas no coinciden'; el.className = 'pw-match bad'; }
+}
+
 async function savePassword(e) {
     e.preventDefault();
     const alertEl = document.getElementById('password-alert');
@@ -650,6 +662,7 @@ async function savePassword(e) {
         } else {
             showAlert(alertEl, 'success', 'Contraseña actualizada correctamente.');
             document.getElementById('password-form').reset();
+            updatePwMatch();
         }
     } catch (e) {
         showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
@@ -2257,6 +2270,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Password form
     document.getElementById('password-form').addEventListener('submit', savePassword);
+
+    // Indicador en vivo de coincidencia de contraseñas (verde/rojo)
+    document.getElementById('new-password').addEventListener('input', updatePwMatch);
+    document.getElementById('confirm-password').addEventListener('input', updatePwMatch);
 
     // New ticket form
     document.getElementById('new-ticket-form').addEventListener('submit', submitNewTicket);
