@@ -841,10 +841,10 @@ function renderPlan() {
     // Usage table
     const rows = [
         { label: 'Procuración', key: 'proc' },
+        { label: 'Procurar Batch', key: 'batch' },
         { label: 'Informes', key: 'informe' },
         { label: 'Monitor Novedades', key: 'monitor_novedades' },
         { label: 'Monitor Partes', key: 'monitor_partes' },
-        { label: 'Batch', key: 'batch' },
     ];
 
     const tbody = document.getElementById('usage-tbody');
