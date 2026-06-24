@@ -50,7 +50,7 @@ async function doLogin() {
         }
 
         showApp();
-        navigate(location.hash.slice(1).split('/')[0] || 'overview');
+        navFromHash();
 
     } catch (e) {
         errEl.textContent   = e.message;
@@ -140,7 +140,7 @@ window.addEventListener('load', async () => {
     // Token válido local y en servidor — restaurar
     token = savedToken;
     showApp();
-    navigate(location.hash.slice(1).split('/')[0] || 'overview');
+    navFromHash();
 });
 
 // ───── ROUTING ─────
@@ -181,6 +181,14 @@ function navigate(page, id, fromHistory) {
         if (history.state && history.state._nav) history.pushState(navState, '');
         else history.replaceState(navState, '');
     }
+}
+
+// Navega según el hash de la URL (deep-link / abrir en nueva pestaña).
+// Formato: #page  o  #page/id  (la querystring opcional ?x=y se ignora acá).
+function navFromHash() {
+    const raw = (location.hash.slice(1).split('?')[0]) || '';
+    const [page, id] = raw.split('/');
+    navigate(page || 'overview', id || null);
 }
 
 // Botón Atrás/Adelante del navegador → navegar entre secciones (no salir del panel)
@@ -1202,18 +1210,19 @@ async function renderTickets() {
                 <table id="tickets-table">
                     <thead><tr><th>#</th><th>Usuario</th><th>Categoría</th><th>Título</th><th>Estado</th><th>Prioridad</th><th>Beneficio</th><th>Fecha</th><th></th></tr></thead>
                     <tbody>${tickets.length === 0 ? '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:32px">Sin tickets</td></tr>' :
-                    tickets.map(t => `<tr class="ticket-row"
+                    tickets.map(t => `<tr class="ticket-row" style="cursor:pointer"
+                        onclick="navigate('ticket-detail','${t.id}')"
                         data-status="${t.status}" data-cat="${t.category}" data-pri="${t.priority}"
                         data-text="${(t.title + t.user_email).toLowerCase()}">
                         <td>#${t.id}</td>
-                        <td style="font-size:12px"><a onclick="navigate('user-detail','${t.user_id}')" style="cursor:pointer;color:var(--primary);text-decoration:underline">${t.user_email}</a></td>
+                        <td style="font-size:12px"><a href="#user-detail/${t.user_id}" onclick="event.stopPropagation();navigate('user-detail','${t.user_id}');return false" style="color:var(--primary);text-decoration:underline">${t.user_email}</a></td>
                         <td>${catBadge(t.category)}</td>
                         <td>${t.title}</td>
                         <td>${ticketStatusBadge(t.status)}</td>
                         <td>${priorityBadge(t.priority, t.priority_source, t.priority_notes)}</td>
                         <td>${t.benefit_applied ? '<span class="badge badge-green">✓</span>' : '—'}</td>
                         <td style="font-size:12px">${fmtDate(t.created_at)}</td>
-                        <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
+                        <td><a class="btn btn-sm btn-secondary" href="#ticket-detail/${t.id}" onclick="event.stopPropagation();navigate('ticket-detail','${t.id}');return false">Ver</a></td>
                     </tr>`).join('')}
                     </tbody>
                 </table>
@@ -1256,7 +1265,7 @@ async function renderTicketDetail(ticketId) {
             <div>
                 <h2>Ticket #${t.id} — ${t.title}</h2>
                 <p>
-                    <a onclick="navigate('user-detail','${t.user_id}')" style="cursor:pointer;color:var(--primary);text-decoration:underline">${t.user_email}</a>
+                    <a href="#user-detail/${t.user_id}" onclick="navigate('user-detail','${t.user_id}');return false" style="color:var(--primary);text-decoration:underline">${t.user_email}</a>
                     · ${catLabel(t.category)} · ${fmtDate(t.created_at)}
                 </p>
             </div>
