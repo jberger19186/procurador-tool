@@ -1540,83 +1540,117 @@ router.post('/tickets/:id/comment', authenticateAdmin, async (req, res) => {
 });
 
 // Aplicar beneficio comercial a un ticket
+// Helper: aplica el efecto del beneficio y lo registra en commercial_benefits.
+// ticketId puede ser null (beneficio aplicado desde la ficha del usuario, sin ticket).
+async function applyBenefitToUser(db, { userId, benefitType, benefitValue, ticketId, adminId }) {
+    const planLimits = { BASIC: 100, PRO: 1000, ENTERPRISE: 999999 };
+
+    if (benefitType === 'discount') {
+        const days = parseInt(benefitValue) || 30;
+        await db.query(
+            `UPDATE subscriptions SET expires_at = COALESCE(expires_at, NOW()) + ($2 || ' days')::interval WHERE user_id = $1`,
+            [userId, days]
+        );
+        console.log(`🎁 Descuento: suscripción de usuario ${userId} extendida ${days} días por admin ${adminId}`);
+    } else if (benefitType === 'plan_upgrade') {
+        const newPlan = String(benefitValue).toUpperCase();
+        if (!planLimits[newPlan]) {
+            const err = new Error('Plan inválido para upgrade');
+            err.statusCode = 400;
+            throw err;
+        }
+        await db.query(
+            `UPDATE subscriptions SET plan = $1, usage_limit = $2 WHERE user_id = $3`,
+            [newPlan, planLimits[newPlan], userId]
+        );
+        console.log(`⬆️ Plan upgrade: usuario ${userId} → ${newPlan} por admin ${adminId}`);
+    } else if (benefitType === 'usage_reset') {
+        await db.query(`UPDATE subscriptions SET usage_count = 0 WHERE user_id = $1`, [userId]);
+        console.log(`🔄 Usage reset: usuario ${userId} por admin ${adminId}`);
+    }
+
+    // Registrar el beneficio (historial). NO se auto-resuelve el ticket.
+    await db.query(
+        `INSERT INTO commercial_benefits (user_id, ticket_id, benefit_type, benefit_value, applied_by_admin_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [userId, ticketId || null, benefitType, benefitValue != null ? String(benefitValue) : null, adminId]
+    );
+    await db.query(
+        `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'benefit_applied', $3)`,
+        [adminId, userId, JSON.stringify({ benefit_type: benefitType, benefit_value: benefitValue, ticket_id: ticketId || null })]
+    );
+}
+
+const VALID_BENEFITS = ['discount', 'plan_upgrade', 'usage_reset'];
+
+// Aplicar beneficio desde un TICKET (permite múltiples; ya no auto-resuelve)
 router.post('/tickets/:id/apply-benefit', authenticateAdmin, async (req, res) => {
     const { id } = req.params;
     const { benefit_type, benefit_value } = req.body;
     const db = req.app.get('db');
 
-    const validBenefits = ['discount', 'plan_upgrade', 'usage_reset'];
-    if (!validBenefits.includes(benefit_type)) {
+    if (!VALID_BENEFITS.includes(benefit_type)) {
         return res.status(400).json({ error: 'Tipo de beneficio inválido' });
     }
-
     try {
-        // Obtener el ticket y el user_id
-        const ticketResult = await db.query(`
-            SELECT t.id, t.user_id, t.benefit_applied
-            FROM support_tickets t
-            WHERE t.id = $1
-        `, [id]);
-
+        const ticketResult = await db.query(`SELECT id, user_id FROM support_tickets WHERE id = $1`, [id]);
         if (ticketResult.rows.length === 0) {
             return res.status(404).json({ error: 'Ticket no encontrado' });
         }
-
-        const ticket = ticketResult.rows[0];
-
-        if (ticket.benefit_applied) {
-            return res.status(400).json({ error: 'Ya se aplicó un beneficio a este ticket' });
-        }
-
-        const planLimits = { BASIC: 100, PRO: 1000, ENTERPRISE: 999999 };
-
-        // Aplicar beneficio según tipo
-        if (benefit_type === 'discount') {
-            // Extiende la suscripción N días
-            const days = parseInt(benefit_value) || 30;
-            await db.query(`
-                UPDATE subscriptions
-                SET expires_at = expires_at + INTERVAL '${days} days'
-                WHERE user_id = $1
-            `, [ticket.user_id]);
-            console.log(`🎁 Descuento: suscripción de usuario ${ticket.user_id} extendida ${days} días por admin ${req.user.id}`);
-
-        } else if (benefit_type === 'plan_upgrade') {
-            // Actualiza el plan
-            const newPlan = String(benefit_value).toUpperCase();
-            if (!planLimits[newPlan]) {
-                return res.status(400).json({ error: 'Plan inválido para upgrade' });
-            }
-            await db.query(`
-                UPDATE subscriptions
-                SET plan = $1, usage_limit = $2
-                WHERE user_id = $3
-            `, [newPlan, planLimits[newPlan], ticket.user_id]);
-            console.log(`⬆️ Plan upgrade: usuario ${ticket.user_id} → ${newPlan} por admin ${req.user.id}`);
-
-        } else if (benefit_type === 'usage_reset') {
-            // Resetea el contador de uso
-            await db.query(`
-                UPDATE subscriptions SET usage_count = 0 WHERE user_id = $1
-            `, [ticket.user_id]);
-            console.log(`🔄 Usage reset: usuario ${ticket.user_id} por admin ${req.user.id}`);
-        }
-
-        // Marcar ticket como beneficio aplicado y resolverlo
-        await db.query(`
-            UPDATE support_tickets
-            SET benefit_applied = TRUE, benefit_type = $1, benefit_value = $2,
-                status = 'resolved', resolved_at = NOW()
-            WHERE id = $3
-        `, [benefit_type, benefit_value || null, id]);
-
-        res.json({
-            success: true,
-            message: `Beneficio '${benefit_type}' aplicado correctamente`
+        await applyBenefitToUser(db, {
+            userId: ticketResult.rows[0].user_id,
+            benefitType: benefit_type, benefitValue: benefit_value,
+            ticketId: parseInt(id, 10), adminId: req.user.id
         });
+        res.json({ success: true, message: `Beneficio '${benefit_type}' aplicado correctamente` });
     } catch (error) {
-        console.error('Error aplicando beneficio:', error);
-        res.status(500).json({ error: 'Error aplicando beneficio' });
+        console.error('Error aplicando beneficio:', error.message);
+        res.status(error.statusCode || 500).json({ error: error.message || 'Error aplicando beneficio' });
+    }
+});
+
+// Aplicar beneficio desde la FICHA del usuario (sin ticket)
+router.post('/users/:userId/apply-benefit', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const { benefit_type, benefit_value, ticket_id } = req.body;
+    const db = req.app.get('db');
+
+    if (!VALID_BENEFITS.includes(benefit_type)) {
+        return res.status(400).json({ error: 'Tipo de beneficio inválido' });
+    }
+    try {
+        const u = await db.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+        if (u.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+        await applyBenefitToUser(db, {
+            userId: parseInt(userId, 10),
+            benefitType: benefit_type, benefitValue: benefit_value,
+            ticketId: ticket_id ? parseInt(ticket_id, 10) || null : null, adminId: req.user.id
+        });
+        res.json({ success: true, message: `Beneficio '${benefit_type}' aplicado correctamente` });
+    } catch (error) {
+        console.error('Error aplicando beneficio:', error.message);
+        res.status(error.statusCode || 500).json({ error: error.message || 'Error aplicando beneficio' });
+    }
+});
+
+// Historial de beneficios comerciales de un usuario
+router.get('/users/:userId/benefits', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    try {
+        const result = await db.query(
+            `SELECT cb.id, cb.ticket_id, cb.benefit_type, cb.benefit_value, cb.created_at,
+                    a.email AS applied_by_email
+             FROM commercial_benefits cb
+             LEFT JOIN users a ON a.id = cb.applied_by_admin_id
+             WHERE cb.user_id = $1
+             ORDER BY cb.created_at DESC`,
+            [userId]
+        );
+        res.json({ success: true, benefits: result.rows });
+    } catch (error) {
+        console.error('Error listando beneficios:', error.message);
+        res.status(500).json({ error: 'Error listando beneficios' });
     }
 });
 

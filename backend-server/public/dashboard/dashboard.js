@@ -593,32 +593,15 @@ async function renderUserDetail(userId) {
         </div>
 
         <!-- Beneficios comerciales aplicados -->
-        ${(() => {
-            const benefits = (tickets || []).filter(t => t.benefit_applied);
-            if (benefits.length === 0) return '';
-            return `
         <div class="card section-gap">
-            <div class="card-header"><h3>🎁 Beneficios comerciales aplicados (${benefits.length})</h3></div>
-            <div class="card-body" style="padding:0">
-                <div class="table-wrapper">
-                    <table>
-                        <thead><tr><th>Ticket</th><th>Beneficio</th><th>Valor</th><th>Fecha</th></tr></thead>
-                        <tbody>${benefits.map(t => {
-                            const valLbl = t.benefit_type === 'discount' ? `${t.benefit_value || 30} días`
-                                : t.benefit_type === 'plan_upgrade' ? (t.benefit_value || '—')
-                                : t.benefit_type === 'usage_reset' ? '—' : (t.benefit_value || '—');
-                            return `<tr>
-                                <td><a onclick="navigate('ticket-detail','${t.id}')" style="cursor:pointer;color:var(--primary);text-decoration:underline">#${t.id}</a></td>
-                                <td>${benefitLabel(t.benefit_type)}</td>
-                                <td style="font-size:12px;color:var(--text-muted)">${valLbl}</td>
-                                <td style="font-size:12px;color:var(--text-muted)">${fmtDate(t.resolved_at || t.updated_at)}</td>
-                            </tr>`;
-                        }).join('')}</tbody>
-                    </table>
-                </div>
+            <div class="card-header">
+                <h3>🎁 Beneficios comerciales</h3>
+                <button class="btn btn-sm btn-primary" onclick="openApplyBenefitModal(${u.id})">+ Aplicar beneficio</button>
             </div>
-        </div>`;
-        })()}
+            <div class="card-body">
+                <div id="user-benefits-list" style="font-size:13px;color:var(--text-muted)">Cargando...</div>
+            </div>
+        </div>
 
         <!-- Tickets del usuario -->
         <div class="card section-gap">
@@ -732,6 +715,7 @@ async function renderUserDetail(userId) {
         // Cargar secciones asíncronas
         loadAdjustmentHistory(userId);
         loadExtraUsage(userId);
+        loadUserBenefits(userId);
         loadPaymentHistory(userId);
         loadInvoiceHistory(userId);
     } catch (e) {
@@ -966,6 +950,98 @@ window.doGrantExtra = async function(userId) {
         document.getElementById('extra-modal').remove();
         showAlert(document.getElementById('ud-alert'), `🎁 ${extra_uses} usos extra asignados correctamente.`, 'success');
         loadExtraUsage(userId);
+    } catch (e) {
+        alertEl.innerHTML = `<div class="alert alert-error" style="margin-bottom:8px">${escHtml(e.message)}</div>`;
+    }
+};
+
+// ── Beneficios comerciales (ficha del usuario) ──────────────────────────────────
+function benefitValueLabel(type, value) {
+    if (type === 'discount')     return `${parseInt(value, 10) || 30} días`;
+    if (type === 'plan_upgrade') return value || '—';
+    if (type === 'usage_reset')  return '—';
+    return value || '—';
+}
+
+async function loadUserBenefits(userId) {
+    const el = document.getElementById('user-benefits-list');
+    if (!el) return;
+    try {
+        const { benefits } = await apiFetch(`/admin/users/${userId}/benefits`);
+        if (!benefits || benefits.length === 0) {
+            el.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">Sin beneficios aplicados.</span>';
+            return;
+        }
+        const rows = benefits.map(b => {
+            const ticketCell = b.ticket_id
+                ? `<a onclick="navigate('ticket-detail','${b.ticket_id}')" style="cursor:pointer;color:var(--primary);text-decoration:underline">#${b.ticket_id}</a>`
+                : '<span style="color:var(--text-muted)">—</span>';
+            return `<tr>
+                <td style="font-size:12px">${fmtDate(b.created_at)}</td>
+                <td>${benefitLabel(b.benefit_type)}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${escHtml(benefitValueLabel(b.benefit_type, b.benefit_value))}</td>
+                <td style="text-align:center">${ticketCell}</td>
+                <td style="font-size:11px;color:var(--text-muted)">${escHtml(b.applied_by_email || '—')}</td>
+            </tr>`;
+        }).join('');
+        el.innerHTML = `<div class="table-wrapper"><table>
+            <thead><tr><th>Fecha</th><th>Beneficio</th><th>Valor</th><th>Ticket</th><th>Aplicado por</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div>`;
+    } catch (e) {
+        el.innerHTML = `<span style="font-size:13px;color:var(--text-muted)">Error al cargar: ${escHtml(e.message)}</span>`;
+    }
+}
+
+window.openApplyBenefitModal = function(userId) {
+    const existing = document.getElementById('benefit-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'benefit-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML = `
+        <div style="background:#fff;border-radius:10px;padding:28px;width:400px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+            <h3 style="margin:0 0 16px;font-size:16px">🎁 Aplicar beneficio comercial</h3>
+            <div style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Tipo</label>
+                <select id="ub-benefit-type" onchange="updateUserBenefitValue()" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                    <option value="discount">🗓 Extender suscripción (días)</option>
+                    <option value="plan_upgrade">⬆️ Cambiar plan</option>
+                    <option value="usage_reset">🔄 Resetear uso</option>
+                </select>
+            </div>
+            <div id="ub-benefit-value-wrap" style="margin-bottom:16px"></div>
+            <div id="benefit-modal-alert"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('benefit-modal').remove()">Cancelar</button>
+                <button class="btn btn-success btn-sm" onclick="doApplyUserBenefit(${userId})">Aplicar</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    updateUserBenefitValue();
+};
+
+window.updateUserBenefitValue = function() {
+    const type = document.getElementById('ub-benefit-type').value;
+    const wrap = document.getElementById('ub-benefit-value-wrap');
+    if (type === 'discount') {
+        wrap.innerHTML = '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Días a extender</label><input type="number" id="ub-benefit-value" value="30" min="1" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">';
+    } else if (type === 'plan_upgrade') {
+        wrap.innerHTML = '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nuevo plan</label><select id="ub-benefit-value" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="BASIC">BASIC</option><option value="PRO" selected>PRO</option><option value="ENTERPRISE">ENTERPRISE</option></select>';
+    } else {
+        wrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);margin:0">Resetea el contador de uso global a 0.</p><input type="hidden" id="ub-benefit-value" value="0">';
+    }
+};
+
+window.doApplyUserBenefit = async function(userId) {
+    const benefit_type  = document.getElementById('ub-benefit-type').value;
+    const benefit_value = document.getElementById('ub-benefit-value').value;
+    const alertEl = document.getElementById('benefit-modal-alert');
+    try {
+        await apiFetch(`/admin/users/${userId}/apply-benefit`, 'POST', { benefit_type, benefit_value });
+        document.getElementById('benefit-modal').remove();
+        showAlert(document.getElementById('ud-alert'), `🎁 Beneficio "${benefitLabel(benefit_type)}" aplicado correctamente.`, 'success');
+        loadUserBenefits(userId);
     } catch (e) {
         alertEl.innerHTML = `<div class="alert alert-error" style="margin-bottom:8px">${escHtml(e.message)}</div>`;
     }
@@ -1323,10 +1399,6 @@ async function renderTicketDetail(ticketId) {
                 <div class="card">
                     <div class="card-header"><h3>🎁 Beneficio comercial</h3></div>
                     <div class="card-body">
-                        ${t.benefit_applied ? `
-                        <div class="alert alert-success" style="margin-bottom:0">
-                            ✅ Beneficio aplicado: ${benefitLabel(t.benefit_type)}
-                        </div>` : `
                         <div style="display:flex;flex-direction:column;gap:10px">
                             <div>
                                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Tipo</label>
@@ -1340,8 +1412,13 @@ async function renderTicketDetail(ticketId) {
                                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Días a extender</label>
                                 <input type="number" id="benefit-value" value="30" min="1" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
                             </div>
-                            <button class="btn btn-success" onclick="applyBenefit(${t.id})">Aplicar beneficio</button>
-                        </div>`}
+                            <button class="btn btn-success" onclick="applyBenefit(${t.id}, ${t.user_id})">Aplicar beneficio</button>
+                            <div style="font-size:11px;color:var(--text-muted)">Se pueden aplicar varios. No cambia el estado del ticket.</div>
+                            <div style="margin-top:4px">
+                                <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Historial del usuario</div>
+                                <div id="tk-benefit-history" style="font-size:12px;color:var(--text-muted)">Cargando...</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1352,6 +1429,9 @@ async function renderTicketDetail(ticketId) {
         }
         if (window.loadTicketCourtesyHistory) {
             setTimeout(() => loadTicketCourtesyHistory(t.user_id), 100);
+        }
+        if (window.loadTicketBenefitHistory) {
+            setTimeout(() => loadTicketBenefitHistory(t.user_id), 100);
         }
     } catch (e) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
@@ -1552,15 +1632,38 @@ window.updateTicketMeta = async function(id) {
     } catch (e) { showAlert(document.getElementById('td-alert'), e.message); }
 };
 
-window.applyBenefit = async function(id) {
+window.applyBenefit = async function(id, userId) {
     const benefit_type  = document.getElementById('benefit-type').value;
     const benefit_value = document.getElementById('benefit-value').value;
-    if (!confirm(`¿Aplicar beneficio "${benefitLabel(benefit_type)}"? Esta acción es irreversible.`)) return;
+    if (!confirm(`¿Aplicar beneficio "${benefitLabel(benefit_type)}"? El efecto es inmediato y no cambia el estado del ticket.`)) return;
     try {
         await apiFetch(`/admin/tickets/${id}/apply-benefit`, 'POST', { benefit_type, benefit_value });
         showAlert(document.getElementById('td-alert'), 'Beneficio aplicado correctamente.', 'success');
-        setTimeout(() => navigate('ticket-detail', id), 1000);
+        if (userId && window.loadTicketBenefitHistory) loadTicketBenefitHistory(userId);
     } catch (e) { showAlert(document.getElementById('td-alert'), e.message); }
+};
+
+window.loadTicketBenefitHistory = async function(userId) {
+    const el = document.getElementById('tk-benefit-history');
+    if (!el) return;
+    try {
+        const { benefits } = await apiFetch(`/admin/users/${userId}/benefits`);
+        const list = (benefits || []).slice(0, 5);
+        if (list.length === 0) {
+            el.innerHTML = '<em style="color:var(--text-muted)">Sin beneficios previos.</em>';
+            return;
+        }
+        el.innerHTML = list.map(b => {
+            const ticketLbl = b.ticket_id ? ` <span class="badge badge-blue" style="font-size:9px">#${b.ticket_id}</span>` : '';
+            return `<div style="padding:4px 0;border-bottom:1px solid #f3f4f6;font-size:11px">
+                <strong style="color:#15803d">${benefitLabel(b.benefit_type)}</strong>
+                <span style="color:var(--text-muted)"> · ${escHtml(benefitValueLabel(b.benefit_type, b.benefit_value))}</span>${ticketLbl}
+                <span style="color:var(--text-muted)"> · ${fmtDate(b.created_at)}</span>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        el.innerHTML = `<em style="color:var(--text-muted)">Error al cargar: ${escHtml(e.message)}</em>`;
+    }
 };
 
 // ───── SCRIPTS ─────
