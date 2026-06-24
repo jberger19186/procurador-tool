@@ -1012,35 +1012,49 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
             return res.status(400).json({ error: 'Se requiere plan o planId' });
         }
 
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + (durationDays || planData.period_days || 30));
-        // El admin asigna un plan activo → enforcement por submódulo (los límites se leen
-        // del plan); el tope global no debe cortar al mezclar módulos → usage_limit=999999.
-        const usageLimit = 999999;
+        // Estado previo: para el historial y para decidir trial vs pago.
+        const { rows: [prev] } = await db.query(
+            'SELECT plan AS current_plan, payment_provider FROM subscriptions WHERE user_id = $1', [userId]
+        );
+        // TRIAL (sin método de pago): el cambio de plan NO debe romper el trial.
+        // Se cambia SOLO el plan asociado; se conservan el cupo (usage_limit=20),
+        // los usos consumidos (usage_count) y el estado trial. El salto a 999999 +
+        // enforcement por submódulo recién aplica cuando hay pago real.
+        const isTrial = prev && !prev.payment_provider;
 
-        // Plan anterior (para registrar el cambio en el historial de la ficha)
-        const { rows: [prev] } = await db.query('SELECT plan AS current_plan FROM subscriptions WHERE user_id = $1', [userId]);
-
-        await db.query(`
-            INSERT INTO subscriptions (user_id, plan, plan_id, status, expires_at, usage_limit, period_start)
-            VALUES ($1, $2, $3, 'active', $4, $5, NOW())
-            ON CONFLICT (user_id) DO UPDATE
-            SET plan = $2, plan_id = $3, status = 'active', expires_at = $4,
-                usage_limit = $5, period_start = NOW(),
-                proc_usage = 0, batch_usage = 0, informe_usage = 0, monitor_novedades_usage = 0,
-                proc_bonus = 0, batch_bonus = 0, informe_bonus = 0, monitor_novedades_bonus = 0, monitor_partes_bonus = 0,
-                scheduled_plan = NULL,
-                updated_at = NOW()
-        `, [userId, planData.name, planData.id, expiresAt, usageLimit]);
+        let expiresAt = null;
+        if (isTrial) {
+            await db.query(`
+                UPDATE subscriptions
+                SET plan = $2, plan_id = $3, scheduled_plan = NULL, updated_at = NOW()
+                WHERE user_id = $1
+            `, [userId, planData.name, planData.id]);
+        } else {
+            // Cuenta paga (o sin suscripción previa) → plan activo con enforcement por
+            // submódulo; el tope global no debe cortar al mezclar módulos → usage_limit=999999.
+            expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + (durationDays || planData.period_days || 30));
+            await db.query(`
+                INSERT INTO subscriptions (user_id, plan, plan_id, status, expires_at, usage_limit, period_start)
+                VALUES ($1, $2, $3, 'active', $4, 999999, NOW())
+                ON CONFLICT (user_id) DO UPDATE
+                SET plan = $2, plan_id = $3, status = 'active', expires_at = $4,
+                    usage_limit = 999999, period_start = NOW(),
+                    proc_usage = 0, batch_usage = 0, informe_usage = 0, monitor_novedades_usage = 0,
+                    proc_bonus = 0, batch_bonus = 0, informe_bonus = 0, monitor_novedades_bonus = 0, monitor_partes_bonus = 0,
+                    scheduled_plan = NULL,
+                    updated_at = NOW()
+            `, [userId, planData.name, planData.id, expiresAt]);
+        }
 
         // Registrar el cambio de plan en el historial de la cuenta (visible en la ficha)
         await db.query(
             `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_changed_by_admin', $2)`,
-            [userId, JSON.stringify({ from: prev?.current_plan || null, to: planData.name, admin_id: req.user.id })]
+            [userId, JSON.stringify({ from: prev?.current_plan || null, to: planData.name, admin_id: req.user.id, trial: !!isTrial })]
         );
 
-        console.log(`💳 Suscripción "${planData.name}" creada/actualizada para usuario ${userId} por admin: ${req.user.id}`);
-        res.json({ success: true, message: 'Suscripción creada/actualizada correctamente', subscription: { userId, plan: planData.name, expiresAt } });
+        console.log(`💳 Suscripción "${planData.name}" ${isTrial ? '(trial, plan cambiado sin romper cupo)' : 'creada/actualizada'} para usuario ${userId} por admin: ${req.user.id}`);
+        res.json({ success: true, message: isTrial ? 'Plan del trial actualizado (se conservan los usos de prueba)' : 'Suscripción creada/actualizada correctamente', subscription: { userId, plan: planData.name, expiresAt } });
     } catch (error) {
         console.error('Error gestionando suscripción:', error);
         res.status(500).json({ error: 'Error gestionando suscripción' });
