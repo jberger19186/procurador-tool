@@ -882,21 +882,15 @@ async function loadExtraUsage(userId) {
             return;
         }
         const rows = extras.map(e => {
-            const active = !e.expires_at || new Date(e.expires_at) > new Date();
-            const badge = e.remaining_uses > 0 && active
-                ? `<span class="badge badge-green">${e.remaining_uses} restantes</span>`
-                : `<span class="badge badge-gray">Agotado</span>`;
             return `<tr>
                 <td style="font-size:12px">${fmtDate(e.created_at)}</td>
-                <td style="text-align:center">${e.extra_uses}</td>
-                <td>${badge}</td>
+                <td style="text-align:center"><strong style="color:#15803d">+${e.extra_uses}</strong></td>
                 <td style="font-size:12px">${escHtml(e.reason || '—')}</td>
-                <td style="font-size:12px;color:var(--text-muted)">${e.expires_at ? fmtDate(e.expires_at) : '—'}</td>
                 <td style="font-size:11px;color:var(--text-muted)">${escHtml(e.assigned_by_email || '—')}</td>
             </tr>`;
         }).join('');
         el.innerHTML = `<div class="table-wrapper"><table>
-            <thead><tr><th>Fecha</th><th>Usos</th><th>Estado</th><th>Motivo</th><th>Vence</th><th>Asignado por</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Usos</th><th>Motivo</th><th>Asignado por</th></tr></thead>
             <tbody>${rows}</tbody>
         </table></div>`;
     } catch (e) {
@@ -922,10 +916,6 @@ window.openGrantExtraModal = function(userId) {
                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo <span style="color:red">*</span></label>
                 <input type="text" id="extra-reason" placeholder="Ej: Cortesía por problema técnico" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
             </div>
-            <div style="margin-bottom:16px">
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Vencimiento (opcional)</label>
-                <input type="date" id="extra-expires" min="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
-            </div>
             <div id="extra-alert"></div>
             <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button class="btn btn-secondary btn-sm" onclick="document.getElementById('extra-modal').remove()">Cancelar</button>
@@ -938,7 +928,6 @@ window.openGrantExtraModal = function(userId) {
 window.doGrantExtra = async function(userId) {
     const extra_uses = parseInt(document.getElementById('extra-qty').value, 10);
     const reason = document.getElementById('extra-reason').value.trim();
-    const expires_at = document.getElementById('extra-expires').value || null;
     const alertEl = document.getElementById('extra-alert');
 
     if (!extra_uses || extra_uses < 1 || extra_uses > 1000) {
@@ -949,15 +938,8 @@ window.doGrantExtra = async function(userId) {
         alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">El motivo es obligatorio.</div>';
         return;
     }
-    if (expires_at) {
-        const hoy = new Date(); hoy.setHours(0,0,0,0);
-        if (new Date(expires_at + 'T00:00:00') < hoy) {
-            alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">La fecha de vencimiento no puede ser anterior a hoy.</div>';
-            return;
-        }
-    }
     try {
-        await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', { extra_uses, reason, expires_at });
+        await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', { extra_uses, reason });
         document.getElementById('extra-modal').remove();
         showAlert(document.getElementById('ud-alert'), `🎁 ${extra_uses} usos extra asignados correctamente.`, 'success');
         loadExtraUsage(userId);
@@ -1385,15 +1367,9 @@ async function renderTicketDetail(ticketId) {
                         ${isTrial
                             ? `<div style="padding:8px 10px;background:#ecfdf5;border-left:2px solid #16a34a;border-radius:4px;font-size:11px;color:#166534;line-height:1.4">Suma al cupo global del trial (${t.usage_count ?? 0}/${t.usage_limit ?? 0}). Útil mientras el usuario no configuró método de pago.</div>`
                             : `<div style="padding:8px 10px;background:#fef9c3;border-left:2px solid #ca8a04;border-radius:4px;font-size:11px;color:#854d0e;line-height:1.4"><strong>💳 Cuenta paga.</strong> La cortesía solo aplica en trial. Para esta cuenta usá <strong>🎯 Ajuste manual de usos</strong> arriba.</div>`}
-                        <div style="display:flex;gap:8px">
-                            <div style="flex:1">
-                                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad de usos</label>
-                                <input type="number" id="tk-courtesy-qty" value="5" min="1" max="1000" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
-                            </div>
-                            <div style="flex:1">
-                                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Vence (opcional)</label>
-                                <input type="date" id="tk-courtesy-expires" min="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
-                            </div>
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad de usos</label>
+                            <input type="number" id="tk-courtesy-qty" value="5" min="1" max="1000" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
                         </div>
                         <div>
                             <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo</label>
@@ -1485,17 +1461,12 @@ window.applyTicketUsageAdjustment = async function(userId, ticketId) {
 window.applyTicketCourtesy = async function(userId, ticketId) {
     const qty       = parseInt(document.getElementById('tk-courtesy-qty').value, 10);
     const reason    = document.getElementById('tk-courtesy-reason').value.trim();
-    const expires_at = document.getElementById('tk-courtesy-expires').value || null;
     if (!qty || qty < 1 || qty > 1000) { alert('La cantidad debe ser un número entre 1 y 1000.'); return; }
     if (!reason) { alert('El motivo es obligatorio'); return; }
-    if (expires_at) {
-        const hoy = new Date(); hoy.setHours(0,0,0,0);
-        if (new Date(expires_at + 'T00:00:00') < hoy) { alert('La fecha de vencimiento no puede ser anterior a hoy.'); return; }
-    }
     if (!confirm(`¿Asignar ${qty} usos de cortesía?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`)) return;
     try {
-        const r = await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', {
-            extra_uses: qty, reason, expires_at, ticket_id: ticketId
+        await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', {
+            extra_uses: qty, reason, ticket_id: ticketId
         });
         document.getElementById('tk-courtesy-reason').value = '';
         loadTicketCourtesyHistory(userId);
@@ -1516,14 +1487,9 @@ window.loadTicketCourtesyHistory = async function(userId) {
             return;
         }
         el.innerHTML = list.map(e => {
-            const active = !e.expires_at || new Date(e.expires_at) > new Date();
-            const estado = (e.remaining_uses > 0 && active)
-                ? `<span class="badge badge-green" style="font-size:9px">${e.remaining_uses} restantes</span>`
-                : `<span class="badge badge-gray" style="font-size:9px">agotado</span>`;
             return `<div style="padding:4px 0;border-bottom:1px solid #f3f4f6;font-size:11px">
-                <strong style="color:#15803d">+${e.extra_uses}</strong> ${estado}
+                <strong style="color:#15803d">+${e.extra_uses}</strong> usos
                 <span style="color:var(--text-muted)"> · ${fmtDate(e.created_at)}</span>
-                ${e.expires_at ? `<span style="color:var(--text-muted)"> · vence ${fmtDate(e.expires_at)}</span>` : ''}
                 ${e.reason ? `<br><span style="color:var(--text-muted);font-style:italic">${escHtml(e.reason).substring(0,80)}</span>` : ''}
             </div>`;
         }).join('');

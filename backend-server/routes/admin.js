@@ -2576,7 +2576,7 @@ router.get('/users/:userId/refund-preview', authenticateAdmin, async (req, res) 
 // Asigna usos extra de cortesía (price_total=0); descuenta de remaining_uses al usar
 router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
-    const { extra_uses, reason, expires_at, ticket_id } = req.body || {};
+    const { extra_uses, reason, ticket_id } = req.body || {};
     const db = req.app.get('db');
 
     const qty = parseInt(extra_uses, 10);
@@ -2588,21 +2588,11 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
     }
 
     try {
-        const expiry = expires_at ? new Date(expires_at) : null;
-        if (expires_at && isNaN(expiry)) {
-            return res.status(400).json({ error: 'expires_at inválido' });
-        }
-        if (expiry) {
-            const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-            if (expiry < hoy) {
-                return res.status(400).json({ error: 'La fecha de vencimiento no puede ser anterior a hoy.' });
-            }
-        }
-
+        // Cortesía = +N usos permanentes (sin vencimiento). expires_at queda NULL.
         await db.query(
             `INSERT INTO usage_extras (user_id, extra_uses, remaining_uses, reason, created_by_admin_id, expires_at, created_at)
-             VALUES ($1, $2, $2, $3, $4, $5, NOW())`,
-            [userId, qty, reason.trim(), req.user.id, expiry]
+             VALUES ($1, $2, $2, $3, $4, NULL, NOW())`,
+            [userId, qty, reason.trim(), req.user.id]
         );
         // Hacerlos EFECTIVOS: los usos extra de cortesía son un concepto del TRIAL
         // (sin método de pago) → suman al cupo global: usage_limit += qty (ej. 20 → 20+qty).
