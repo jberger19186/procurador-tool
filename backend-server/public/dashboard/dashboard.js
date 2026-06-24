@@ -466,6 +466,7 @@ async function renderUserDetail(userId) {
             <div class="card-header">
                 <h3>📋 Datos de Registro</h3>
                 <div style="display:flex;gap:8px">
+                    ${u.registration_status === 'pending_email' ? `<button class="btn btn-sm btn-primary" style="background:#d97706;border-color:#d97706" onclick="resendVerification(${u.id})">📧 Reenviar verificación</button>` : ''}
                     <button id="reg-email-btn" class="btn btn-sm btn-secondary" onclick="toggleEmailEdit(${u.id})">✉️ Editar email</button>
                     <button id="reg-edit-btn" class="btn btn-sm btn-secondary" onclick="toggleRegistroEdit(${u.id})">✏️ Editar</button>
                     <button id="reg-save-btn" class="btn btn-sm btn-primary" onclick="saveRegistroData(${u.id})" style="display:none">💾 Guardar</button>
@@ -494,7 +495,7 @@ async function renderUserDetail(userId) {
                     </div>
                     <div>
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Estado de registro</label>
-                        <select id="reg-status" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg-secondary)">
+                        <select id="reg-status" data-initial="${u.registration_status || ''}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg-secondary)">
                             <option value="pending_email"          ${u.registration_status === 'pending_email'          ? 'selected' : ''}>Email sin verificar</option>
                             <option value="pending_activation"     ${u.registration_status === 'pending_activation'     ? 'selected' : ''}>Trial pendiente de activación</option>
                             <option value="active"                 ${u.registration_status === 'active'                 ? 'selected' : ''}>Activo</option>
@@ -2109,13 +2110,22 @@ window.cancelRegistroEdit = function() {
 
 window.saveRegistroData = async function(userId) {
     const alertEl = document.getElementById('ud-alert');
+    const statusEl = document.getElementById('reg-status');
+    const newStatus = statusEl.value || null;
+    const initialStatus = statusEl.dataset.initial || '';
+    // Confirmaciones para transiciones con efectos (no es un flip cosmético).
+    if (newStatus === 'active' && initialStatus !== 'active') {
+        if (!confirm('Vas a ACTIVAR la cuenta: la suscripción pasa a activa, se le envía el email de bienvenida y la notificación. ¿Continuar?')) return;
+    } else if (newStatus === 'pending_activation' && initialStatus !== 'pending_activation') {
+        if (!confirm('Vas a reiniciar el TRIAL: el cupo vuelve a 20 usos (contadores a 0) y la suscripción queda suspendida. ¿Continuar?')) return;
+    }
     try {
-        await apiFetch(`/admin/users/${userId}/registro`, 'PUT', {
+        const r = await apiFetch(`/admin/users/${userId}/registro`, 'PUT', {
             nombre:              document.getElementById('reg-nombre').value.trim()    || null,
             apellido:            document.getElementById('reg-apellido').value.trim()  || null,
             cuit:                document.getElementById('reg-cuit').value.trim()      || null,
             telefono:            document.getElementById('reg-telefono').value.trim()  || null,
-            registration_status: document.getElementById('reg-status').value          || null,
+            registration_status: newStatus,
             domicilio: {
                 calle:     document.getElementById('reg-calle').value.trim(),
                 numero:    document.getElementById('reg-numero').value.trim(),
@@ -2125,8 +2135,20 @@ window.saveRegistroData = async function(userId) {
                 provincia: document.getElementById('reg-provincia').value.trim(),
             }
         });
-        showAlert(alertEl, '✅ Datos de registro actualizados', 'success');
-        cancelRegistroEdit();
+        const msg = r && r.activated ? '✅ Cuenta activada (email enviado)' : '✅ Datos de registro actualizados';
+        showAlert(alertEl, msg, 'success');
+        setTimeout(() => navigate('user-detail', userId), 1000);
+    } catch (e) {
+        showAlert(alertEl, e.message, 'error');
+    }
+};
+
+window.resendVerification = async function(userId) {
+    const alertEl = document.getElementById('ud-alert');
+    if (!confirm('¿Reenviar el email de verificación a este usuario?')) return;
+    try {
+        const r = await apiFetch(`/admin/users/${userId}/resend-verification`, 'POST');
+        showAlert(alertEl, (r && r.message) || '✅ Email de verificación reenviado', 'success');
     } catch (e) {
         showAlert(alertEl, e.message, 'error');
     }

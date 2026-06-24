@@ -266,6 +266,64 @@ router.get('/users/pending', authenticateAdmin, async (req, res) => {
 });
 
 // ─── Activar usuario ──────────────────────────────────────────────────────────
+// Activación de una cuenta (lógica reutilizable). Corre DENTRO de una transacción
+// (recibe el client ya en BEGIN). Devuelve el usuario para mandar el email afuera.
+// La usan: el botón "Activar" (panel de pendientes) y el selector "Activo" de
+// Datos de Registro → ambos hacen exactamente lo mismo.
+async function performActivation(client, userId, expiresDays, adminId) {
+    const userResult = await client.query(`
+        SELECT u.id, u.email, u.nombre, u.registration_status,
+               s.id AS sub_id, s.plan_id, s.plan AS plan_name,
+               p.proc_executions_limit
+        FROM users u
+        JOIN subscriptions s ON u.id = s.user_id
+        JOIN plans p ON s.plan_id = p.id
+        WHERE u.id = $1
+    `, [userId]);
+
+    if (userResult.rows.length === 0) {
+        const e = new Error('No se puede activar: el usuario no tiene una suscripción con plan asignado.');
+        e.statusCode = 400;
+        throw e;
+    }
+    const u = userResult.rows[0];
+
+    // Modelo trial-hasta-pago: la activación SOLO APRUEBA la cuenta. El usuario sigue en
+    // el TRIAL hasta configurar el pago (ahí el webhook aplica los límites del plan).
+    // Por eso NO se resetea usage_count y se CONSERVA usage_limit (20 + cortesías).
+    // Solo en modo legacy sin cobro se sube directo al límite del plan.
+    const paymentEnabled = process.env.PAYMENT_MODULE_ENABLED === 'true';
+    const planLimit = u.proc_executions_limit > 0 ? u.proc_executions_limit : 9999;
+    const usageLimit = paymentEnabled ? null : planLimit;   // null = conservar usage_limit actual
+
+    await client.query(`UPDATE users SET registration_status = 'active', updated_at = NOW() WHERE id = $1`, [userId]);
+    await client.query(`
+        UPDATE subscriptions
+        SET status = 'active',
+            usage_count = ${paymentEnabled ? 'usage_count' : '0'},
+            usage_limit = COALESCE($1, usage_limit),
+            expires_at = NOW() + ($2 || ' days')::INTERVAL,
+            period_start = NOW(),
+            updated_at = NOW()
+        WHERE user_id = $3
+    `, [usageLimit, expiresDays, userId]);
+
+    await client.query(
+        `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'activated', $2)`,
+        [userId, JSON.stringify({ admin_id: adminId, plan: u.plan_name || '' })]
+    );
+    await client.query(
+        `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'activate', $3)`,
+        [adminId, userId, JSON.stringify({ plan: u.plan_name || '' })]
+    );
+    await client.query(
+        `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'account_activated', $2)`,
+        [userId, 'Tu cuenta fue aprobada. Seguís con tus usos de prueba; configurá tu método de pago para acceder a los límites de tu plan.']
+    );
+
+    return u;
+}
+
 router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
     const { userId } = req.params;
@@ -274,84 +332,52 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
-
-        const userResult = await client.query(`
-            SELECT u.id, u.email, u.nombre, u.registration_status,
-                   s.id AS sub_id, s.plan_id,
-                   p.proc_executions_limit
-            FROM users u
-            JOIN subscriptions s ON u.id = s.user_id
-            JOIN plans p ON s.plan_id = p.id
-            WHERE u.id = $1
-        `, [userId]);
-
-        if (userResult.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
-
-        const u = userResult.rows[0];
-
-        // Modelo trial-hasta-pago: la activación por admin SOLO APRUEBA la cuenta.
-        // El usuario sigue en el TRIAL hasta que configure su método de pago; recién ahí
-        // se le asignan los límites del plan (webhook → applyTrialBonus).
-        // Por eso NO se resetea usage_count y se CONSERVA usage_limit tal cual está
-        // (20 base + los usos de cortesía que el admin haya sumado). Antes se forzaba a
-        // 20 y eso borraba la cortesía. Solo en modo legacy sin cobro
-        // (PAYMENT_MODULE_ENABLED=false) se sube directo al límite del plan.
-        const paymentEnabled = process.env.PAYMENT_MODULE_ENABLED === 'true';
-        const planLimit = u.proc_executions_limit > 0 ? u.proc_executions_limit : 9999;
-        const usageLimit = paymentEnabled ? null : planLimit;   // null = conservar usage_limit actual
-
-        await client.query(`
-            UPDATE users
-            SET registration_status = 'active', updated_at = NOW()
-            WHERE id = $1
-        `, [userId]);
-
-        // Sin cobro (legacy) reseteamos el contador al pasar al plan; con cobro
-        // mantenemos el progreso del trial (usage_count) y el cupo actual (usage_limit,
-        // incluida la cortesía).
-        await client.query(`
-            UPDATE subscriptions
-            SET status = 'active',
-                usage_count = ${paymentEnabled ? 'usage_count' : '0'},
-                usage_limit = COALESCE($1, usage_limit),
-                expires_at = NOW() + ($2 || ' days')::INTERVAL,
-                period_start = NOW(),
-                updated_at = NOW()
-            WHERE user_id = $3
-        `, [usageLimit, expires_days, userId]);
-
-        // Eventos, notificación y email
-        await client.query(
-            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'activated', $2)`,
-            [userId, JSON.stringify({ admin_id: req.user.id, plan: u.plan_name || '' })]
-        );
-        await client.query(
-            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'activate', $3)`,
-            [req.user.id, userId, JSON.stringify({ plan: u.plan_name || '' })]
-        );
-        await client.query(
-            `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'account_activated', $2)`,
-            [userId, 'Tu cuenta fue aprobada. Seguís con tus usos de prueba; configurá tu método de pago para acceder a los límites de tu plan.']
-        );
-
+        const u = await performActivation(client, userId, expires_days, req.user.id);
         await client.query('COMMIT');
 
-        // Email fuera de transacción (no bloquea)
         const mailer = require('../utils/mailer');
         mailer.sendActivationEmail(u.email, u.email).catch(() => {});
 
         console.log(`✅ Usuario ${userId} (${u.email}) activado por admin ${req.user.id}`);
         res.json({ success: true, message: `Usuario ${u.email} activado correctamente` });
-
     } catch (error) {
         await client.query('ROLLBACK');
+        if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
         console.error('Error activando usuario:', error);
         res.status(500).json({ error: 'Error del servidor' });
     } finally {
         client.release();
+    }
+});
+
+// ─── Reenviar email de verificación (admin) ──────────────────────────────────
+router.post('/users/:userId/resend-verification', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    try {
+        const r = await db.query('SELECT id, email, nombre, email_verified FROM users WHERE id = $1', [userId]);
+        if (r.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+        const u = r.rows[0];
+        if (u.email_verified) return res.status(400).json({ error: 'El email de este usuario ya está verificado.' });
+
+        const crypto = require('crypto');
+        const token = crypto.randomBytes(32).toString('hex');
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await db.query(
+            'UPDATE users SET email_verify_token = $1, email_verify_expires = $2 WHERE id = $3',
+            [token, expires, userId]
+        );
+        const mailer = require('../utils/mailer');
+        await mailer.sendEmailVerification(u.email, u.nombre || 'Usuario', token);
+        await db.query(
+            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'resend_verification', '{}')`,
+            [req.user.id, userId]
+        );
+        console.log(`📧 Verificación reenviada a ${u.email} por admin ${req.user.id}`);
+        res.json({ success: true, message: `Email de verificación reenviado a ${u.email}.` });
+    } catch (error) {
+        console.error('Error reenviando verificación:', error.message);
+        res.status(500).json({ error: 'Error del servidor' });
     }
 });
 
@@ -749,8 +775,21 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
         return res.status(400).json({ error: 'Estado de registro inválido' });
     }
 
+    const client = await db.connect();
     try {
-        await db.query(`
+        await client.query('BEGIN');
+
+        const cur = await client.query('SELECT registration_status FROM users WHERE id = $1', [userId]);
+        if (cur.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        const prevStatus = cur.rows[0].registration_status;
+
+        // Datos de perfil (siempre). El registration_status se aplica acá salvo que sea
+        // 'active' viniendo de otro estado: en ese caso lo maneja performActivation abajo
+        // (activación real, no flip crudo).
+        await client.query(`
             UPDATE users SET
                 nombre             = COALESCE($1, nombre),
                 apellido           = COALESCE($2, apellido),
@@ -769,10 +808,41 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
             registration_status || null,
             userId
         ]);
-        res.json({ success: true });
+
+        let activatedUser = null;
+        if (registration_status === 'active' && prevStatus !== 'active') {
+            // "Activo" desde el selector = activación REAL (igual que el botón Activar):
+            // suscripción active, expiry, notificación, email, eventos.
+            activatedUser = await performActivation(client, userId, 30, req.user.id);
+        } else if (registration_status === 'pending_activation' && prevStatus !== 'pending_activation') {
+            // "Trial" = reiniciar el cupo a un trial fresco: 20 usos, suscripción suspendida.
+            await client.query(`
+                UPDATE subscriptions
+                SET status = 'suspended', usage_count = 0, usage_limit = 20,
+                    proc_usage = 0, batch_usage = 0, informe_usage = 0, monitor_novedades_usage = 0,
+                    updated_at = NOW()
+                WHERE user_id = $1
+            `, [userId]);
+            await client.query(
+                `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'trial_reset', $3)`,
+                [req.user.id, userId, JSON.stringify({ usage_limit: 20 })]
+            );
+        }
+
+        await client.query('COMMIT');
+
+        if (activatedUser) {
+            const mailer = require('../utils/mailer');
+            mailer.sendActivationEmail(activatedUser.email, activatedUser.email).catch(() => {});
+        }
+        res.json({ success: true, activated: !!activatedUser });
     } catch (error) {
+        await client.query('ROLLBACK');
+        if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
         console.error('Error actualizando datos de registro:', error);
         res.status(500).json({ error: 'Error del servidor' });
+    } finally {
+        client.release();
     }
 });
 
