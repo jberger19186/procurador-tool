@@ -924,7 +924,7 @@ window.openGrantExtraModal = function(userId) {
             </div>
             <div style="margin-bottom:16px">
                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Vencimiento (opcional)</label>
-                <input type="date" id="extra-expires" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                <input type="date" id="extra-expires" min="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
             </div>
             <div id="extra-alert"></div>
             <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -941,9 +941,20 @@ window.doGrantExtra = async function(userId) {
     const expires_at = document.getElementById('extra-expires').value || null;
     const alertEl = document.getElementById('extra-alert');
 
+    if (!extra_uses || extra_uses < 1 || extra_uses > 1000) {
+        alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">La cantidad debe ser un número entre 1 y 1000.</div>';
+        return;
+    }
     if (!reason) {
         alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">El motivo es obligatorio.</div>';
         return;
+    }
+    if (expires_at) {
+        const hoy = new Date(); hoy.setHours(0,0,0,0);
+        if (new Date(expires_at + 'T00:00:00') < hoy) {
+            alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">La fecha de vencimiento no puede ser anterior a hoy.</div>';
+            return;
+        }
     }
     try {
         await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', { extra_uses, reason, expires_at });
@@ -1381,7 +1392,7 @@ async function renderTicketDetail(ticketId) {
                             </div>
                             <div style="flex:1">
                                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Vence (opcional)</label>
-                                <input type="date" id="tk-courtesy-expires" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
+                                <input type="date" id="tk-courtesy-expires" min="${new Date().toISOString().slice(0,10)}" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
                             </div>
                         </div>
                         <div>
@@ -1475,8 +1486,12 @@ window.applyTicketCourtesy = async function(userId, ticketId) {
     const qty       = parseInt(document.getElementById('tk-courtesy-qty').value, 10);
     const reason    = document.getElementById('tk-courtesy-reason').value.trim();
     const expires_at = document.getElementById('tk-courtesy-expires').value || null;
-    if (!qty || qty < 1) { alert('Cantidad inválida'); return; }
+    if (!qty || qty < 1 || qty > 1000) { alert('La cantidad debe ser un número entre 1 y 1000.'); return; }
     if (!reason) { alert('El motivo es obligatorio'); return; }
+    if (expires_at) {
+        const hoy = new Date(); hoy.setHours(0,0,0,0);
+        if (new Date(expires_at + 'T00:00:00') < hoy) { alert('La fecha de vencimiento no puede ser anterior a hoy.'); return; }
+    }
     if (!confirm(`¿Asignar ${qty} usos de cortesía?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`)) return;
     try {
         const r = await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', {

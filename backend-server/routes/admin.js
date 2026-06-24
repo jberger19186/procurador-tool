@@ -2592,6 +2592,12 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
         if (expires_at && isNaN(expiry)) {
             return res.status(400).json({ error: 'expires_at inválido' });
         }
+        if (expiry) {
+            const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+            if (expiry < hoy) {
+                return res.status(400).json({ error: 'La fecha de vencimiento no puede ser anterior a hoy.' });
+            }
+        }
 
         await db.query(
             `INSERT INTO usage_extras (user_id, extra_uses, remaining_uses, reason, created_by_admin_id, expires_at, created_at)
