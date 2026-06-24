@@ -421,8 +421,9 @@ function renderStatusBanner() {
         // Acceso asignado por el equipo (cortesía): usage_limit en el centinela ilimitado.
         // No es un trial → no mostrar "X/999999 usos de prueba".
         if (limit >= 100000) {
+            const planNm = (acc.plan && typeof acc.plan === 'object') ? (acc.plan.displayName || acc.plan.name) : acc.plan;
             banner.style.background = '#15803d';
-            bannerText.textContent = `Tenés acceso asignado por el equipo${acc.plan ? ` (plan ${acc.plan})` : ''} — sin método de pago configurado.`;
+            bannerText.textContent = `Tenés acceso asignado por el equipo${planNm ? ` (plan ${planNm})` : ''} — sin método de pago configurado.`;
             banner.style.display = 'flex';
             return;
         }
@@ -1386,7 +1387,8 @@ async function renderFact() {
     const hasMethod   = subData?.hasPaymentMethod || !!acc.paymentProvider;
     const nextBilling = subData?.nextBillingDate  || acc.nextBillingDate;
     const cancelAt    = subData?.cancelAt         || acc.cancelAt;
-    const planName    = subData?.planDisplayName  || acc.plan || '';
+    const planRaw     = (acc.plan && typeof acc.plan === 'object') ? (acc.plan.displayName || acc.plan.name) : acc.plan;
+    const planName    = subData?.planDisplayName  || planRaw || '';
     const planChanges = acc.planChangesThisCycle ?? 0;
 
     // Card: Método de pago
@@ -1503,7 +1505,7 @@ async function renderFact() {
                 <div style="display:grid;gap:0">
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
                         <span style="font-size:13px;color:var(--text-muted)">Plan actual</span>
-                        <span style="font-size:13px;font-weight:600">${escapeHtml(planName || acc.plan || '—')}</span>
+                        <span style="font-size:13px;font-weight:600">${escapeHtml(planName || '—')}</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
                         <span style="font-size:13px;color:var(--text-muted)">Próxima renovación</span>
