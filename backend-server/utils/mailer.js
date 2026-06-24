@@ -283,16 +283,31 @@ async function sendRejectionEmail(email, nombre, reason, mode) {
     await sendEmail(email, subject, emailLayout(`${p(`Hola <strong>${nombre}</strong>,`)}${body}`, '#dc2626'));
 }
 
-async function sendTrialExhaustedEmail(email, nombre) {
-    await sendEmail(
-        email,
-        'Tus usos de prueba se agotaron — Procurador SCW',
-        emailLayout(`
-          ${p(`Hola <strong>${nombre}</strong>,`)}
-          ${infoBox('Utilizaste todos tus <strong>20 usos de prueba</strong>. Tu acceso fue bloqueado automáticamente.', '#dc2626')}
-          ${p('Contactanos en <a href="mailto:soporte@procuradortool.com" style="color:#d97706">soporte@procuradortool.com</a> si querés activar una suscripción.')}
-        `, '#dc2626')
-    );
+async function sendTrialExhaustedEmail(email, nombre, opts = {}) {
+    const { notActivated = false, usageLimit = 20 } = opts;
+    // Dos variantes: antes de activación el usuario todavía no puede configurar
+    // el pago (depende del admin); después de activación ya puede.
+    if (notActivated) {
+        await sendEmail(
+            email,
+            'Tus usos de prueba se agotaron — Procurador SCW',
+            emailLayout(`
+              ${p(`Hola <strong>${nombre}</strong>,`)}
+              ${infoBox(`Utilizaste todos tus <strong>${usageLimit} usos de prueba</strong>. Tu cuenta está pendiente de activación por el equipo — te avisaremos por email en cuanto esté lista para que puedas continuar.`, '#d97706')}
+              ${p('Si tenés dudas, escribinos a <a href="mailto:soporte@procuradortool.com" style="color:#d97706">soporte@procuradortool.com</a>.')}
+            `, '#d97706')
+        );
+    } else {
+        await sendEmail(
+            email,
+            'Tus usos de prueba se agotaron — Procurador SCW',
+            emailLayout(`
+              ${p(`Hola <strong>${nombre}</strong>,`)}
+              ${infoBox(`Utilizaste todos tus <strong>${usageLimit} usos de prueba</strong>. Configurá tu método de pago desde el portal para acceder a los límites de tu plan y seguir usando la app y la extensión.`, '#d97706')}
+              ${btnPrimary(PORTAL_URL, 'Ir al portal →')}
+            `, '#d97706')
+        );
+    }
 }
 
 async function sendPlanExpiryWarningEmail(email, nombre, planExpiryDate) {

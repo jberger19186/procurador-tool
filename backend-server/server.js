@@ -514,7 +514,7 @@ const mailerCron = require('./utils/mailer');
 cron.schedule('0 * * * *', async () => {
     try {
         const exhausted = await pool.query(`
-            SELECT u.id, u.email, u.nombre
+            SELECT u.id, u.email, u.nombre, u.registration_status, s.usage_limit
             FROM users u
             JOIN subscriptions s ON u.id = s.user_id
             WHERE s.payment_provider IS NULL
@@ -526,10 +526,17 @@ cron.schedule('0 * * * *', async () => {
               )
         `);
         for (const u of exhausted.rows) {
+            // Dos mensajes distintos: antes de activación el usuario NO puede
+            // configurar el pago (depende del admin); después de activación sí.
+            const lim = u.usage_limit ?? 20;
+            const notActivated = u.registration_status === 'pending_activation';
+            const message = notActivated
+                ? `Agotaste tus ${lim} usos de prueba. Tu cuenta está pendiente de activación por el equipo — te avisaremos por email cuando puedas continuar.`
+                : `Agotaste tus ${lim} usos de prueba. Configurá tu método de pago desde el portal para acceder a los límites de tu plan y seguir usando la app y la extensión.`;
             await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'trial_exhausted_blocked')`, [u.id]);
             await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'trial_exhausted', $2)`,
-                [u.id, 'Agotaste tus 20 usos de prueba. Configurá tu método de pago para acceder a los límites de tu plan y seguir usando la app y la extensión.']);
-            mailerCron.sendTrialExhaustedEmail(u.email, u.nombre).catch(() => {});
+                [u.id, message]);
+            mailerCron.sendTrialExhaustedEmail(u.email, u.nombre, { notActivated, usageLimit: lim }).catch(() => {});
         }
         if (exhausted.rowCount > 0) logger.info(`[CRON] trial_exhausted: ${exhausted.rowCount} usuarios notificados (sin rechazo)`);
     } catch (err) {
