@@ -377,6 +377,7 @@ async function renderUserDetail(userId) {
         const tickets = tData.tickets;
         const partes = mData.partes || [];
         const allPlans = (plansData.plans || []).filter(p => p.active);
+        activePlansCache = allPlans; // reuso para el selector "cambiar plan" del beneficio
 
         document.getElementById('content').innerHTML = `
         <a class="back-btn" onclick="navigate(prevPage || 'users')">← Volver a ${prevPage === 'pending-users' ? 'Pendientes' : 'Usuarios'}</a>
@@ -882,9 +883,10 @@ async function loadExtraUsage(userId) {
             return;
         }
         const rows = extras.map(e => {
+            const pos = e.extra_uses >= 0;
             return `<tr>
                 <td style="font-size:12px">${fmtDate(e.created_at)}</td>
-                <td style="text-align:center"><strong style="color:#15803d">+${e.extra_uses}</strong></td>
+                <td style="text-align:center"><strong style="color:${pos ? '#15803d' : '#991b1b'}">${pos ? '+' : ''}${e.extra_uses}</strong></td>
                 <td style="font-size:12px">${escHtml(e.reason || '—')}</td>
                 <td style="font-size:11px;color:var(--text-muted)">${escHtml(e.assigned_by_email || '—')}</td>
             </tr>`;
@@ -909,8 +911,9 @@ window.openGrantExtraModal = function(userId) {
         <div style="background:#fff;border-radius:10px;padding:28px;width:400px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
             <h3 style="margin:0 0 16px;font-size:16px">🎁 Asignar usos extra</h3>
             <div style="margin-bottom:12px">
-                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad de usos <span style="color:red">*</span></label>
-                <input type="number" id="extra-qty" value="10" min="1" max="1000" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad de usos (+/-) <span style="color:red">*</span></label>
+                <input type="number" id="extra-qty" value="10" min="-1000" max="1000" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                <div style="font-size:11px;color:var(--text-muted);margin-top:3px">Positivo suma, negativo resta (ej. -5 quita usos).</div>
             </div>
             <div style="margin-bottom:12px">
                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo <span style="color:red">*</span></label>
@@ -930,8 +933,8 @@ window.doGrantExtra = async function(userId) {
     const reason = document.getElementById('extra-reason').value.trim();
     const alertEl = document.getElementById('extra-alert');
 
-    if (!extra_uses || extra_uses < 1 || extra_uses > 1000) {
-        alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">La cantidad debe ser un número entre 1 y 1000.</div>';
+    if (!Number.isInteger(extra_uses) || extra_uses === 0 || extra_uses < -1000 || extra_uses > 1000) {
+        alertEl.innerHTML = '<div class="alert alert-error" style="margin-bottom:8px">La cantidad debe ser un entero entre -1000 y 1000 (distinto de 0).</div>';
         return;
     }
     if (!reason) {
@@ -941,7 +944,8 @@ window.doGrantExtra = async function(userId) {
     try {
         await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', { extra_uses, reason });
         document.getElementById('extra-modal').remove();
-        showAlert(document.getElementById('ud-alert'), `🎁 ${extra_uses} usos extra asignados correctamente.`, 'success');
+        const verbo = extra_uses > 0 ? `${extra_uses} usos sumados` : `${Math.abs(extra_uses)} usos restados`;
+        showAlert(document.getElementById('ud-alert'), `🎁 ${verbo} correctamente.`, 'success');
         loadExtraUsage(userId);
     } catch (e) {
         alertEl.innerHTML = `<div class="alert alert-error" style="margin-bottom:8px">${escHtml(e.message)}</div>`;
@@ -949,11 +953,38 @@ window.doGrantExtra = async function(userId) {
 };
 
 // ── Beneficios comerciales (ficha del usuario) ──────────────────────────────────
+const RESET_TARGET_LABELS = {
+    global: 'Trial (global)', proc: 'Procuración', batch: 'Procurar Batch',
+    informe: 'Informes', monitor_novedades: 'Monitor Novedades'
+};
+
 function benefitValueLabel(type, value) {
     if (type === 'discount')     return `${parseInt(value, 10) || 30} días`;
-    if (type === 'plan_upgrade') return value || '—';
-    if (type === 'usage_reset')  return '—';
+    if (type === 'plan_upgrade') {
+        const p = (activePlansCache || []).find(x => x.name === value);
+        return p ? (p.display_name || p.name) : (value || '—');
+    }
+    if (type === 'usage_reset')  return RESET_TARGET_LABELS[value] || 'Trial (global)';
     return value || '—';
+}
+
+// Cache de planes vigentes (active=true) para los selectores de "cambiar plan"
+let activePlansCache = null;
+async function getActivePlans() {
+    if (activePlansCache) return activePlansCache;
+    try {
+        const { plans } = await apiFetch('/admin/plans');
+        activePlansCache = (plans || []).filter(p => p.active);
+    } catch (e) { activePlansCache = []; }
+    return activePlansCache;
+}
+function planOptionsHtml() {
+    const list = activePlansCache || [];
+    if (list.length === 0) return '<option value="">(sin planes vigentes)</option>';
+    return list.map(p => `<option value="${p.name}">${escHtml(p.display_name || p.name)}</option>`).join('');
+}
+function resetTargetOptionsHtml() {
+    return Object.entries(RESET_TARGET_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 }
 
 async function loadUserBenefits(userId) {
@@ -986,7 +1017,8 @@ async function loadUserBenefits(userId) {
     }
 }
 
-window.openApplyBenefitModal = function(userId) {
+window.openApplyBenefitModal = async function(userId) {
+    await getActivePlans();
     const existing = document.getElementById('benefit-modal');
     if (existing) existing.remove();
     const modal = document.createElement('div');
@@ -1020,9 +1052,9 @@ window.updateUserBenefitValue = function() {
     if (type === 'discount') {
         wrap.innerHTML = '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Días a extender</label><input type="number" id="ub-benefit-value" value="30" min="1" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">';
     } else if (type === 'plan_upgrade') {
-        wrap.innerHTML = '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nuevo plan</label><select id="ub-benefit-value" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="BASIC">BASIC</option><option value="PRO" selected>PRO</option><option value="ENTERPRISE">ENTERPRISE</option></select>';
+        wrap.innerHTML = `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nuevo plan (vigente)</label><select id="ub-benefit-value" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">${planOptionsHtml()}</select>`;
     } else {
-        wrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted);margin:0">Resetea el contador de uso global a 0.</p><input type="hidden" id="ub-benefit-value" value="0">';
+        wrap.innerHTML = `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Qué resetear a 0</label><select id="ub-benefit-value" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">${resetTargetOptionsHtml()}</select>`;
     }
 };
 
@@ -1213,6 +1245,7 @@ async function renderTicketDetail(ticketId) {
         const data = await apiFetch(`/admin/tickets/${ticketId}`);
         const t = data.ticket;
         const comments = data.comments;
+        await getActivePlans(); // cache para el selector "cambiar plan" del beneficio
         // Trial = sin método de pago. La cortesía solo surte efecto en trial (suma al cupo
         // global); el ajuste por submódulo (*_bonus) solo importa en cuentas pagas.
         const isTrial = !t.payment_provider;
@@ -1368,8 +1401,9 @@ async function renderTicketDetail(ticketId) {
                             ? `<div style="padding:8px 10px;background:#ecfdf5;border-left:2px solid #16a34a;border-radius:4px;font-size:11px;color:#166534;line-height:1.4">Suma al cupo global del trial (${t.usage_count ?? 0}/${t.usage_limit ?? 0}). Útil mientras el usuario no configuró método de pago.</div>`
                             : `<div style="padding:8px 10px;background:#fef9c3;border-left:2px solid #ca8a04;border-radius:4px;font-size:11px;color:#854d0e;line-height:1.4"><strong>💳 Cuenta paga.</strong> La cortesía solo aplica en trial. Para esta cuenta usá <strong>🎯 Ajuste manual de usos</strong> arriba.</div>`}
                         <div>
-                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad de usos</label>
-                            <input type="number" id="tk-courtesy-qty" value="5" min="1" max="1000" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad de usos (+/-)</label>
+                            <input type="number" id="tk-courtesy-qty" value="5" min="-1000" max="1000" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:3px">Positivo suma, negativo resta.</div>
                         </div>
                         <div>
                             <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo</label>
@@ -1431,9 +1465,9 @@ window.updateBenefitValue = function() {
     if (type === 'discount') {
         wrap.innerHTML = '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Días a extender</label><input type="number" id="benefit-value" value="30" min="1" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">';
     } else if (type === 'plan_upgrade') {
-        wrap.innerHTML = '<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nuevo plan</label><select id="benefit-value" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px"><option value="BASIC">BASIC</option><option value="PRO" selected>PRO</option><option value="ENTERPRISE">ENTERPRISE</option></select>';
+        wrap.innerHTML = `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nuevo plan (vigente)</label><select id="benefit-value" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">${planOptionsHtml()}</select>`;
     } else {
-        wrap.innerHTML = '<p style="font-size:13px;color:var(--text-muted)">Resetea el contador de uso a 0.</p><input type="hidden" id="benefit-value" value="0">';
+        wrap.innerHTML = `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Qué resetear a 0</label><select id="benefit-value" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">${resetTargetOptionsHtml()}</select>`;
     }
 };
 
@@ -1461,16 +1495,17 @@ window.applyTicketUsageAdjustment = async function(userId, ticketId) {
 window.applyTicketCourtesy = async function(userId, ticketId) {
     const qty       = parseInt(document.getElementById('tk-courtesy-qty').value, 10);
     const reason    = document.getElementById('tk-courtesy-reason').value.trim();
-    if (!qty || qty < 1 || qty > 1000) { alert('La cantidad debe ser un número entre 1 y 1000.'); return; }
+    if (!Number.isInteger(qty) || qty === 0 || qty < -1000 || qty > 1000) { alert('La cantidad debe ser un entero entre -1000 y 1000 (distinto de 0).'); return; }
     if (!reason) { alert('El motivo es obligatorio'); return; }
-    if (!confirm(`¿Asignar ${qty} usos de cortesía?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`)) return;
+    const accion = qty > 0 ? `sumar ${qty}` : `restar ${Math.abs(qty)}`;
+    if (!confirm(`¿${accion} usos de cortesía?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`)) return;
     try {
         await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', {
             extra_uses: qty, reason, ticket_id: ticketId
         });
         document.getElementById('tk-courtesy-reason').value = '';
         loadTicketCourtesyHistory(userId);
-        alert(`🎁 ${qty} usos de cortesía asignados correctamente.`);
+        alert(`🎁 Cortesía aplicada correctamente (${qty > 0 ? '+' : ''}${qty}).`);
     } catch (e) {
         alert('Error: ' + e.message);
     }
@@ -1487,8 +1522,9 @@ window.loadTicketCourtesyHistory = async function(userId) {
             return;
         }
         el.innerHTML = list.map(e => {
+            const pos = e.extra_uses >= 0;
             return `<div style="padding:4px 0;border-bottom:1px solid #f3f4f6;font-size:11px">
-                <strong style="color:#15803d">+${e.extra_uses}</strong> usos
+                <strong style="color:${pos ? '#15803d' : '#991b1b'}">${pos ? '+' : ''}${e.extra_uses}</strong> usos
                 <span style="color:var(--text-muted)"> · ${fmtDate(e.created_at)}</span>
                 ${e.reason ? `<br><span style="color:var(--text-muted);font-style:italic">${escHtml(e.reason).substring(0,80)}</span>` : ''}
             </div>`;

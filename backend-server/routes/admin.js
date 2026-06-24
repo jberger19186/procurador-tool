@@ -1543,8 +1543,6 @@ router.post('/tickets/:id/comment', authenticateAdmin, async (req, res) => {
 // Helper: aplica el efecto del beneficio y lo registra en commercial_benefits.
 // ticketId puede ser null (beneficio aplicado desde la ficha del usuario, sin ticket).
 async function applyBenefitToUser(db, { userId, benefitType, benefitValue, ticketId, adminId }) {
-    const planLimits = { BASIC: 100, PRO: 1000, ENTERPRISE: 999999 };
-
     if (benefitType === 'discount') {
         const days = parseInt(benefitValue) || 30;
         await db.query(
@@ -1553,20 +1551,32 @@ async function applyBenefitToUser(db, { userId, benefitType, benefitValue, ticke
         );
         console.log(`🎁 Descuento: suscripción de usuario ${userId} extendida ${days} días por admin ${adminId}`);
     } else if (benefitType === 'plan_upgrade') {
-        const newPlan = String(benefitValue).toUpperCase();
-        if (!planLimits[newPlan]) {
-            const err = new Error('Plan inválido para upgrade');
+        // El plan debe ser uno VIGENTE (active=true) de la tabla plans.
+        const newPlan = String(benefitValue || '').toUpperCase();
+        const planRes = await db.query(`SELECT id, name FROM plans WHERE name = $1 AND active = true`, [newPlan]);
+        if (planRes.rows.length === 0) {
+            const err = new Error('Plan inválido o no vigente');
             err.statusCode = 400;
             throw err;
         }
+        const pd = planRes.rows[0];
+        // Plan activo → enforcement por submódulo (límites se leen del plan);
+        // el tope global no debe cortar al mezclar módulos → usage_limit=999999.
         await db.query(
-            `UPDATE subscriptions SET plan = $1, usage_limit = $2 WHERE user_id = $3`,
-            [newPlan, planLimits[newPlan], userId]
+            `UPDATE subscriptions SET plan = $1, plan_id = $2, usage_limit = 999999, updated_at = NOW() WHERE user_id = $3`,
+            [pd.name, pd.id, userId]
         );
-        console.log(`⬆️ Plan upgrade: usuario ${userId} → ${newPlan} por admin ${adminId}`);
+        console.log(`⬆️ Plan upgrade: usuario ${userId} → ${pd.name} por admin ${adminId}`);
     } else if (benefitType === 'usage_reset') {
-        await db.query(`UPDATE subscriptions SET usage_count = 0 WHERE user_id = $1`, [userId]);
-        console.log(`🔄 Usage reset: usuario ${userId} por admin ${adminId}`);
+        // benefitValue indica QUÉ resetear: global (trial) o un subsistema.
+        const colMap = {
+            global: 'usage_count',
+            proc: 'proc_usage', batch: 'batch_usage', informe: 'informe_usage',
+            monitor_novedades: 'monitor_novedades_usage'
+        };
+        const col = colMap[benefitValue] || 'usage_count';
+        await db.query(`UPDATE subscriptions SET ${col} = 0, updated_at = NOW() WHERE user_id = $1`, [userId]);
+        console.log(`🔄 Usage reset (${col}): usuario ${userId} por admin ${adminId}`);
     }
 
     // Registrar el beneficio (historial). NO se auto-resuelve el ticket.
@@ -2579,30 +2589,29 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
     const { extra_uses, reason, ticket_id } = req.body || {};
     const db = req.app.get('db');
 
+    // Permite sumar (+) o restar (-) usos de cortesía. No se permite 0.
     const qty = parseInt(extra_uses, 10);
-    if (!qty || qty < 1 || qty > 1000) {
-        return res.status(400).json({ error: 'extra_uses debe ser un entero entre 1 y 1000' });
+    if (!Number.isInteger(qty) || qty === 0 || qty < -1000 || qty > 1000) {
+        return res.status(400).json({ error: 'extra_uses debe ser un entero entre -1000 y 1000 (distinto de 0)' });
     }
     if (!reason || !reason.trim()) {
         return res.status(400).json({ error: 'El motivo es obligatorio' });
     }
 
     try {
-        // Cortesía = +N usos permanentes (sin vencimiento). expires_at queda NULL.
+        // Cortesía = ±N usos permanentes (sin vencimiento). expires_at queda NULL.
         await db.query(
             `INSERT INTO usage_extras (user_id, extra_uses, remaining_uses, reason, created_by_admin_id, expires_at, created_at)
              VALUES ($1, $2, $2, $3, $4, NULL, NOW())`,
             [userId, qty, reason.trim(), req.user.id]
         );
         // Hacerlos EFECTIVOS: los usos extra de cortesía son un concepto del TRIAL
-        // (sin método de pago) → suman al cupo global: usage_limit += qty (ej. 20 → 20+qty).
+        // (sin método de pago) → suman/restan al cupo global. GREATEST(0,...) evita negativo.
         // Para cuentas PAGAS el enforcement es por submódulo y se gestiona con "ajustar
         // usos manuales" (columnas *_bonus); ahí la cortesía no aplica.
-        // (Antes solo se insertaban en usage_extras, tabla que ningún enforcement activo
-        //  leía → los usos de cortesía no surtían efecto.)
         const bumpResult = await db.query(
             `UPDATE subscriptions
-             SET usage_limit = usage_limit + $2, updated_at = NOW()
+             SET usage_limit = GREATEST(0, usage_limit + $2), updated_at = NOW()
              WHERE user_id = $1 AND payment_provider IS NULL
              RETURNING usage_limit`,
             [userId, qty]
@@ -2613,12 +2622,14 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
             `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'extra_usage_assigned', $3)`,
             [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason, aplicado_al_trial: aplicado, ticket_id: ticketRef })]
         );
-        // Notificación in-app
-        await db.query(
-            `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'extra_usage_assigned', $2)`,
-            [userId, `Se te asignaron ${qty} usos adicionales de cortesía.`]
-        );
-        console.log(`🎁 ${qty} usos extra asignados a usuario ${userId} por admin ${req.user.id}: ${reason}`);
+        // Notificación in-app SOLO al sumar (restar es una corrección interna del admin).
+        if (qty > 0) {
+            await db.query(
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'extra_usage_assigned', $2)`,
+                [userId, `Se te asignaron ${qty} usos adicionales de cortesía.`]
+            );
+        }
+        console.log(`🎁 ${qty > 0 ? '+' : ''}${qty} usos de cortesía a usuario ${userId} por admin ${req.user.id}: ${reason}`);
         res.json({ success: true, extra_uses: qty });
     } catch (err) {
         console.error('[extra-usage POST] Error:', err.message);
