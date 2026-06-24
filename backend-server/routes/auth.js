@@ -517,6 +517,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
         // Bloquear acceso según registration_status con mensajes específicos
         const blockedStatuses = {
+            pending_email:         { error: 'Debés verificar tu email antes de usar la app. Revisá tu casilla o reenviá la verificación desde el portal.', action: 'portal' },
             rejected:              { error: 'Tu cuenta fue rechazada. Contactá al administrador.', action: 'contact_admin' },
             suspended_admin:       { error: 'Tu cuenta fue suspendida por el administrador. Podés solicitar revisión en el portal.', action: 'contact_admin' },
             suspended_plan_expired:{ error: 'Tu plan venció. Ingresá al portal para seleccionar un nuevo plan.', action: 'portal' },

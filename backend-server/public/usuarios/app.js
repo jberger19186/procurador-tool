@@ -742,6 +742,7 @@ function renderPlan() {
 
     // Status badge — use registrationStatus for v2.1 states
     const statusLabels = {
+        pending_email: 'Email sin verificar',
         pending_activation: 'Período de prueba',
         active: 'Activo',
         suspended: 'Suspendido (pago)',
@@ -752,6 +753,7 @@ function renderPlan() {
     };
     const statusBadgeMap = {
         active: 'badge-active',
+        pending_email: 'badge-pending',
         pending_activation: 'badge-pending',
         suspended: 'badge-suspended',
         suspended_admin: 'badge-suspended',

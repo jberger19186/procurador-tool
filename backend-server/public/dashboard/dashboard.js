@@ -496,7 +496,7 @@ async function renderUserDetail(userId) {
                     <div>
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Estado de registro</label>
                         <select id="reg-status" data-initial="${u.registration_status || ''}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg-secondary)">
-                            <option value="pending_email"          ${u.registration_status === 'pending_email'          ? 'selected' : ''}>Email sin verificar</option>
+                            ${u.registration_status === 'pending_email' ? '<option value="pending_email" selected>Email sin verificar (usá "Editar email" para forzar re-verificación)</option>' : ''}
                             <option value="pending_activation"     ${u.registration_status === 'pending_activation'     ? 'selected' : ''}>Trial pendiente de activación</option>
                             <option value="active"                 ${u.registration_status === 'active'                 ? 'selected' : ''}>Activo</option>
                             <option value="rejected"               ${u.registration_status === 'rejected'               ? 'selected' : ''}>Rechazado / Bloqueado</option>

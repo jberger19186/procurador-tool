@@ -786,6 +786,15 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
         }
         const prevStatus = cur.rows[0].registration_status;
 
+        // pending_email es un estado administrado por el sistema (registro / cambio de
+        // email, junto con email_verified=false). Ponerlo a mano crea estados imposibles
+        // (ej. email_verified=true + pending_email). Para forzar re-verificación está
+        // "Editar email". Solo se permite si ya estaba en pending_email (no es transición).
+        if (registration_status === 'pending_email' && prevStatus !== 'pending_email') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'No se puede poner "Email sin verificar" manualmente. Usá "Editar email" para forzar la re-verificación.' });
+        }
+
         // Datos de perfil (siempre). El registration_status se aplica acá salvo que sea
         // 'active' viniendo de otro estado: en ese caso lo maneja performActivation abajo
         // (activación real, no flip crudo).
