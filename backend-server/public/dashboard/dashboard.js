@@ -1116,6 +1116,9 @@ async function renderTicketDetail(ticketId) {
         const data = await apiFetch(`/admin/tickets/${ticketId}`);
         const t = data.ticket;
         const comments = data.comments;
+        // Trial = sin método de pago. La cortesía solo surte efecto en trial (suma al cupo
+        // global); el ajuste por submódulo (*_bonus) solo importa en cuentas pagas.
+        const isTrial = !t.payment_provider;
 
         document.getElementById('content').innerHTML = `
         <a class="back-btn" onclick="navigate('tickets')">← Volver a Tickets</a>
@@ -1228,9 +1231,10 @@ async function renderTicketDetail(ticketId) {
                 </div>
 
                 <!-- AJUSTE MANUAL DE USOS (Fase 4 Ítem 3) -->
-                <div class="card section-gap">
-                    <div class="card-header"><h3>🎯 Ajuste manual de usos</h3></div>
+                <div class="card section-gap" style="opacity:${isTrial ? '0.6' : '1'}">
+                    <div class="card-header"><h3>🎯 Ajuste manual de usos <span class="badge badge-${isTrial ? 'gray' : 'blue'}" style="font-size:9px;margin-left:4px">cuenta paga</span></h3></div>
                     <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+                        ${isTrial ? `<div style="padding:8px 10px;background:#fef9c3;border-left:2px solid #ca8a04;border-radius:4px;font-size:11px;color:#854d0e;line-height:1.4"><strong>⏳ Cuenta en trial.</strong> El ajuste por submódulo solo rige en cuentas pagas. Para sumar usos a este usuario usá <strong>🎁 Usos de cortesía</strong> abajo.</div>` : ''}
                         <div>
                             <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Subsistema</label>
                             <select id="tk-adj-sub" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
@@ -1256,6 +1260,31 @@ async function renderTicketDetail(ticketId) {
                             <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Historial reciente del usuario</div>
                             <div id="tk-adj-history" style="font-size:12px;color:var(--text-muted)">Cargando...</div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- USOS DE CORTESÍA (trial) -->
+                <div class="card section-gap" style="opacity:${isTrial ? '1' : '0.6'}">
+                    <div class="card-header"><h3>🎁 Usos de cortesía <span class="badge badge-${isTrial ? 'blue' : 'gray'}" style="font-size:9px;margin-left:4px">trial</span></h3></div>
+                    <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+                        ${isTrial
+                            ? `<div style="padding:8px 10px;background:#ecfdf5;border-left:2px solid #16a34a;border-radius:4px;font-size:11px;color:#166534;line-height:1.4">Suma al cupo global del trial (${t.usage_count ?? 0}/${t.usage_limit ?? 0}). Útil mientras el usuario no configuró método de pago.</div>`
+                            : `<div style="padding:8px 10px;background:#fef9c3;border-left:2px solid #ca8a04;border-radius:4px;font-size:11px;color:#854d0e;line-height:1.4"><strong>💳 Cuenta paga.</strong> La cortesía solo aplica en trial. Para esta cuenta usá <strong>🎯 Ajuste manual de usos</strong> arriba.</div>`}
+                        <div style="display:flex;gap:8px">
+                            <div style="flex:1">
+                                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Cantidad de usos</label>
+                                <input type="number" id="tk-courtesy-qty" value="5" min="1" max="1000" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
+                            </div>
+                            <div style="flex:1">
+                                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Vence (opcional)</label>
+                                <input type="date" id="tk-courtesy-expires" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Motivo</label>
+                            <input type="text" id="tk-courtesy-reason" placeholder="Ej: Cortesía por problema técnico" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
+                        </div>
+                        <button class="btn btn-success btn-sm" onclick="applyTicketCourtesy(${t.user_id}, ${t.id})">🎁 Asignar cortesía</button>
                     </div>
                 </div>
 
@@ -1321,6 +1350,25 @@ window.applyTicketUsageAdjustment = async function(userId, ticketId) {
         document.getElementById('tk-adj-reason').value = '';
         loadTicketAdjustmentHistory(userId);
         alert('Ajuste aplicado correctamente.');
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+};
+
+// ───── Usos de cortesía (trial) desde un ticket ─────
+window.applyTicketCourtesy = async function(userId, ticketId) {
+    const qty       = parseInt(document.getElementById('tk-courtesy-qty').value, 10);
+    const reason    = document.getElementById('tk-courtesy-reason').value.trim();
+    const expires_at = document.getElementById('tk-courtesy-expires').value || null;
+    if (!qty || qty < 1) { alert('Cantidad inválida'); return; }
+    if (!reason) { alert('El motivo es obligatorio'); return; }
+    if (!confirm(`¿Asignar ${qty} usos de cortesía?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`)) return;
+    try {
+        const r = await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', {
+            extra_uses: qty, reason, expires_at, ticket_id: ticketId
+        });
+        document.getElementById('tk-courtesy-reason').value = '';
+        alert(`🎁 ${qty} usos de cortesía asignados correctamente.`);
     } catch (e) {
         alert('Error: ' + e.message);
     }

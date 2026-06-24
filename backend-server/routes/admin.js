@@ -1300,9 +1300,12 @@ router.get('/tickets/:id', authenticateAdmin, async (req, res) => {
 
     try {
         const ticketResult = await db.query(`
-            SELECT t.*, u.email AS user_email, u.id AS user_id
+            SELECT t.*, u.email AS user_email, u.id AS user_id,
+                   u.registration_status,
+                   s.payment_provider, s.usage_count, s.usage_limit
             FROM support_tickets t
             JOIN users u ON t.user_id = u.id
+            LEFT JOIN subscriptions s ON s.user_id = u.id
             WHERE t.id = $1
         `, [id]);
 
@@ -2539,7 +2542,7 @@ router.get('/users/:userId/refund-preview', authenticateAdmin, async (req, res) 
 // Asigna usos extra de cortesía (price_total=0); descuenta de remaining_uses al usar
 router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
-    const { extra_uses, reason, expires_at } = req.body || {};
+    const { extra_uses, reason, expires_at, ticket_id } = req.body || {};
     const db = req.app.get('db');
 
     const qty = parseInt(extra_uses, 10);
@@ -2575,9 +2578,10 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
             [userId, qty]
         );
         const aplicado = bumpResult.rowCount > 0;
+        const ticketRef = ticket_id ? parseInt(ticket_id, 10) || null : null;
         await db.query(
             `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'extra_usage_assigned', $3)`,
-            [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason, aplicado_al_trial: aplicado })]
+            [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason, aplicado_al_trial: aplicado, ticket_id: ticketRef })]
         );
         // Notificación in-app
         await db.query(
