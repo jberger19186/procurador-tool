@@ -366,6 +366,9 @@ function renderStatusBanner() {
             msg: () => {
                 const used = acc.usageCount ?? 0;
                 const limit = acc.usageLimit ?? 20;   // incluye los usos de cortesía del admin
+                if (limit >= 100000) {
+                    return 'Tu cuenta tiene acceso asignado por el equipo. Está pendiente de activación final por el administrador.';
+                }
                 const courtesy = acc.courtesyExtras || 0;
                 const rem = limit - used;
                 const alerta = rem <= 5 ? ' 🔴' : '';
@@ -415,6 +418,14 @@ function renderStatusBanner() {
     if (rs === 'active' && !acc.paymentProvider) {
         const used  = acc.usageCount ?? 0;
         const limit = acc.usageLimit ?? 20;
+        // Acceso asignado por el equipo (cortesía): usage_limit en el centinela ilimitado.
+        // No es un trial → no mostrar "X/999999 usos de prueba".
+        if (limit >= 100000) {
+            banner.style.background = '#15803d';
+            bannerText.textContent = `Tenés acceso asignado por el equipo${acc.plan ? ` (plan ${acc.plan})` : ''} — sin método de pago configurado.`;
+            banner.style.display = 'flex';
+            return;
+        }
         const courtesy = acc.courtesyExtras || 0;
         const rem   = limit - used;
         const alerta = rem <= 5 ? ' 🔴' : '';
@@ -781,7 +792,8 @@ function renderPlan() {
     // Trial info box — período de prueba (20 usos) mientras no haya método de pago.
     // Aplica a pending_activation (recién verificado el email) y a active sin pago (activado por admin).
     let trialBox = document.getElementById('trial-info-box');
-    const inTrial = !acc.paymentProvider && (rs === 'pending_activation' || rs === 'active');
+    // Acceso ilimitado asignado por el equipo (usage_limit en el centinela) NO es trial.
+    const inTrial = !acc.paymentProvider && (rs === 'pending_activation' || rs === 'active') && (acc.usageLimit ?? 20) < 100000;
     if (inTrial) {
         const trialUsed  = acc.usageCount ?? 0;
         const trialLimit = acc.usageLimit ?? 20;
@@ -1427,6 +1439,15 @@ async function renderFact() {
                     <p style="font-size:13px;color:#b45309;margin:0;font-weight:500">⚠️ Tu último pago fue rechazado. Actualizá tu método de pago antes del <strong>${formatDate(graceEndsAt)}</strong> o tu cuenta se suspenderá. Seguís teniendo acceso hasta esa fecha.</p>
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="initCheckout()" style="white-space:nowrap;background:#b45309;border-color:#b45309">Actualizar método de pago</button>
+            </div>`;
+    } else if (!hasMethod && (acc.usageLimit ?? 20) >= 100000) {
+        // Acceso ilimitado asignado por el equipo (cortesía), sin método de pago — no es trial.
+        paymentBody = `
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px">
+                    <p style="font-size:13px;color:var(--text-muted);margin:0">Tenés acceso asignado por el equipo${planName ? ` (plan <strong>${escapeHtml(planName)}</strong>)` : ''}, sin método de pago configurado. Podés configurar un método de pago cuando quieras.</p>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="initCheckout()" style="white-space:nowrap">💳 Configurar método de pago</button>
             </div>`;
     } else if (!hasMethod) {
         // Activado por el admin (rs='active'), sin método configurado — habilitar pago

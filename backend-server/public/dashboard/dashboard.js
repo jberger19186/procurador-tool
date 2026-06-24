@@ -1039,7 +1039,6 @@ window.openApplyBenefitModal = async function(userId) {
                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Tipo</label>
                 <select id="ub-benefit-type" onchange="updateUserBenefitValue()" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
                     <option value="discount">🗓 Extender suscripción (días)</option>
-                    <option value="plan_upgrade">⬆️ Cambiar plan</option>
                     <option value="usage_reset">🔄 Resetear uso</option>
                 </select>
             </div>
@@ -1434,8 +1433,7 @@ async function renderTicketDetail(ticketId) {
                                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Tipo</label>
                                 <select id="benefit-type" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px" onchange="updateBenefitValue()">
                                     <option value="discount">🗓 Extender suscripción (días)</option>
-                                    <option value="plan_upgrade">⬆️ Cambiar plan</option>
-                                    <option value="usage_reset">🔄 Resetear uso</option>
+                                                    <option value="usage_reset">🔄 Resetear uso</option>
                                 </select>
                             </div>
                             <div id="benefit-value-wrap">
