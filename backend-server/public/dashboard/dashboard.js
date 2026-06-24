@@ -1285,6 +1285,10 @@ async function renderTicketDetail(ticketId) {
                             <input type="text" id="tk-courtesy-reason" placeholder="Ej: Cortesía por problema técnico" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box">
                         </div>
                         <button class="btn btn-success btn-sm" onclick="applyTicketCourtesy(${t.user_id}, ${t.id})">🎁 Asignar cortesía</button>
+                        <div style="margin-top:8px">
+                            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Historial reciente del usuario</div>
+                            <div id="tk-courtesy-history" style="font-size:12px;color:var(--text-muted)">Cargando...</div>
+                        </div>
                     </div>
                 </div>
 
@@ -1317,6 +1321,9 @@ async function renderTicketDetail(ticketId) {
         // Cargar historial de ajustes del usuario (no bloqueante)
         if (window.loadTicketAdjustmentHistory) {
             setTimeout(() => loadTicketAdjustmentHistory(t.user_id), 100);
+        }
+        if (window.loadTicketCourtesyHistory) {
+            setTimeout(() => loadTicketCourtesyHistory(t.user_id), 100);
         }
     } catch (e) {
         document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
@@ -1368,9 +1375,37 @@ window.applyTicketCourtesy = async function(userId, ticketId) {
             extra_uses: qty, reason, expires_at, ticket_id: ticketId
         });
         document.getElementById('tk-courtesy-reason').value = '';
+        loadTicketCourtesyHistory(userId);
         alert(`🎁 ${qty} usos de cortesía asignados correctamente.`);
     } catch (e) {
         alert('Error: ' + e.message);
+    }
+};
+
+window.loadTicketCourtesyHistory = async function(userId) {
+    const el = document.getElementById('tk-courtesy-history');
+    if (!el) return;
+    try {
+        const { extras } = await apiFetch(`/admin/users/${userId}/extra-usage`);
+        const list = (extras || []).slice(0, 5);
+        if (list.length === 0) {
+            el.innerHTML = '<em style="color:var(--text-muted)">Sin cortesías previas.</em>';
+            return;
+        }
+        el.innerHTML = list.map(e => {
+            const active = !e.expires_at || new Date(e.expires_at) > new Date();
+            const estado = (e.remaining_uses > 0 && active)
+                ? `<span class="badge badge-green" style="font-size:9px">${e.remaining_uses} restantes</span>`
+                : `<span class="badge badge-gray" style="font-size:9px">agotado</span>`;
+            return `<div style="padding:4px 0;border-bottom:1px solid #f3f4f6;font-size:11px">
+                <strong style="color:#15803d">+${e.extra_uses}</strong> ${estado}
+                <span style="color:var(--text-muted)"> · ${fmtDate(e.created_at)}</span>
+                ${e.expires_at ? `<span style="color:var(--text-muted)"> · vence ${fmtDate(e.expires_at)}</span>` : ''}
+                ${e.reason ? `<br><span style="color:var(--text-muted);font-style:italic">${escHtml(e.reason).substring(0,80)}</span>` : ''}
+            </div>`;
+        }).join('');
+    } catch (e) {
+        el.innerHTML = `<em style="color:var(--text-muted)">Error al cargar: ${escHtml(e.message)}</em>`;
     }
 };
 
