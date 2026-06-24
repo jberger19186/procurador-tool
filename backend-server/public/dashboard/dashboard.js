@@ -592,6 +592,34 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
+        <!-- Beneficios comerciales aplicados -->
+        ${(() => {
+            const benefits = (tickets || []).filter(t => t.benefit_applied);
+            if (benefits.length === 0) return '';
+            return `
+        <div class="card section-gap">
+            <div class="card-header"><h3>🎁 Beneficios comerciales aplicados (${benefits.length})</h3></div>
+            <div class="card-body" style="padding:0">
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>Ticket</th><th>Beneficio</th><th>Valor</th><th>Fecha</th></tr></thead>
+                        <tbody>${benefits.map(t => {
+                            const valLbl = t.benefit_type === 'discount' ? `${t.benefit_value || 30} días`
+                                : t.benefit_type === 'plan_upgrade' ? (t.benefit_value || '—')
+                                : t.benefit_type === 'usage_reset' ? '—' : (t.benefit_value || '—');
+                            return `<tr>
+                                <td><a onclick="navigate('ticket-detail','${t.id}')" style="cursor:pointer;color:var(--primary);text-decoration:underline">#${t.id}</a></td>
+                                <td>${benefitLabel(t.benefit_type)}</td>
+                                <td style="font-size:12px;color:var(--text-muted)">${valLbl}</td>
+                                <td style="font-size:12px;color:var(--text-muted)">${fmtDate(t.resolved_at || t.updated_at)}</td>
+                            </tr>`;
+                        }).join('')}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+        })()}
+
         <!-- Tickets del usuario -->
         <div class="card section-gap">
             <div class="card-header">

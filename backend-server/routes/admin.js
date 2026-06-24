@@ -1251,7 +1251,7 @@ router.get('/tickets', authenticateAdmin, async (req, res) => {
         let query = `
             SELECT t.id, t.category, t.title, t.status, t.priority,
                    t.priority_source, t.priority_notes, t.priority_set_at, t.priority_set_by,
-                   t.benefit_type, t.benefit_applied,
+                   t.benefit_type, t.benefit_applied, t.benefit_value,
                    t.created_at, t.updated_at, t.resolved_at,
                    u.email AS user_email, u.id AS user_id
             FROM support_tickets t
