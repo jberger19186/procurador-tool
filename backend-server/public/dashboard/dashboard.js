@@ -3533,6 +3533,14 @@ async function renderFacturacionAdmin() {
         </div>`;
 
     await loadPendingInvoices();
+
+    // Si se llegó acá por un link "ver factura" desde un pago, abrimos la pestaña
+    // Emitidas prefiltrada por el usuario (loadIssuedInvoices resalta la fila).
+    if (_pendingInvoiceHighlight) {
+        const s = document.getElementById('search-issued');
+        if (s) s.value = _pendingInvoiceHighlight.email || '';
+        facturacionTab('issued');
+    }
 }
 
 function facturacionTab(tab) {
@@ -3708,6 +3716,7 @@ async function loadIssuedInvoices() {
             <table style="width:100%;border-collapse:collapse;font-size:13px">
                 <thead>
                     <tr style="border-bottom:2px solid #e5e7eb;background:#f9fafb">
+                        <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">ID</th>
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Fecha</th>
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Tipo</th>
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Número</th>
@@ -3722,7 +3731,8 @@ async function loadIssuedInvoices() {
                 </thead>
                 <tbody>
                     ${data.invoices.map(inv => `
-                    <tr style="border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                    <tr id="inv-row-${inv.id}" style="border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+                        <td style="padding:10px 12px;font-size:11px;color:#6b7280">#${inv.id}</td>
                         <td style="padding:10px 12px;white-space:nowrap">${fmtDate(inv.issued_at || inv.created_at)}</td>
                         <td style="padding:10px 12px">
                             <span style="display:inline-block;padding:2px 8px;background:#f3f4f6;border-radius:4px;font-size:11px;font-weight:600;color:#374151">
@@ -3748,13 +3758,14 @@ async function loadIssuedInvoices() {
                         </td>
                         <td style="padding:10px 12px;text-align:center;white-space:nowrap">
                             ${inv.payment_id
-                                ? `<span class="badge badge-green">#${inv.payment_id}</span> <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 6px" onclick="unlinkInvoiceFromPayment(${inv.id},'facturas')" title="Desvincular">✕</button>`
+                                ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro del pago" onclick="gotoPaymentRecord(${inv.payment_id},'${escHtml(inv.email||'')}')">Pago #${inv.payment_id}</a> <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 6px" onclick="unlinkInvoiceFromPayment(${inv.id},'facturas')" title="Desvincular">✕</button>`
                                 : `<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px" onclick="openLinkPaymentModal(${inv.id},'${escHtml(inv.email||'')}')">Asociar pago</button>`}
                         </td>
                     </tr>`).join('')}
                 </tbody>
             </table>
             </div>`;
+        if (_pendingInvoiceHighlight) { const h = _pendingInvoiceHighlight; _pendingInvoiceHighlight = null; _flashRow(`inv-row-${h.id}`); }
     } catch (e) {
         el.innerHTML = `<div style="color:#991b1b;font-size:13px;padding:12px">Error: ${escHtml(e.message)}</div>`;
     }
@@ -3982,6 +3993,11 @@ async function renderPagosAdmin() {
             </div>
             <div id="table-payments">Cargando…</div>
         </div>`;
+    // Si se llegó acá por un link "ver pago" desde una factura, prefiltramos por el usuario.
+    if (_pendingPaymentHighlight) {
+        const s = document.getElementById('search-payments');
+        if (s) s.value = _pendingPaymentHighlight.email || '';
+    }
     loadPaymentsAdmin();
 }
 
@@ -3998,20 +4014,22 @@ async function loadPaymentsAdmin() {
             return;
         }
         el.innerHTML = `<div class="table-wrapper"><table>
-            <thead><tr><th>Fecha</th><th>Usuario</th><th>Monto</th><th>Estado</th><th>Método</th><th>Plan</th><th>Factura</th><th></th></tr></thead>
-            <tbody>${data.payments.map(p => `<tr>
+            <thead><tr><th>#</th><th>Fecha</th><th>Usuario</th><th>Monto</th><th>Estado</th><th>Método</th><th>Plan</th><th>Factura</th><th></th></tr></thead>
+            <tbody>${data.payments.map(p => `<tr id="pay-row-${p.id}">
+                <td style="font-size:11px;color:#6b7280">#${p.id}</td>
                 <td style="font-size:12px;white-space:nowrap">${fmtDate(p.created_at)}</td>
                 <td><div style="font-weight:500">${escHtml(((p.nombre||'')+' '+(p.apellido||'')).trim() || '—')}</div><div style="color:#6b7280;font-size:11px">${escHtml(p.email||'')}</div></td>
                 <td><strong>${escHtml(p.currency||'ARS')} ${Number(p.amount||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</strong></td>
                 <td>${_paymentStatusBadge(p.status)}</td>
                 <td style="font-size:11px;color:#6b7280">${escHtml(p.payment_method||'—')}</td>
                 <td style="font-size:11px;color:#6b7280">${escHtml(p.plan||'—')}</td>
-                <td style="font-size:11px">${p.invoice_id ? `<span class="badge badge-green">#${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</span>` : '<span style="color:#9ca3af">Sin factura</span>'}</td>
+                <td style="font-size:11px">${p.invoice_id ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro de la factura" onclick="gotoInvoiceRecord(${p.invoice_id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</a>` : '<span style="color:#9ca3af">Sin factura</span>'}</td>
                 <td>${p.invoice_id
                     ? `<button class="btn btn-sm btn-secondary" onclick="unlinkInvoiceFromPayment(${p.invoice_id},'pagos')">Desvincular</button>`
                     : `<button class="btn btn-sm btn-secondary" onclick="openLinkInvoiceModal(${p.id},'${escHtml(p.email||'')}')">Asociar factura</button>`}</td>
             </tr>`).join('')}</tbody>
         </table></div>`;
+        if (_pendingPaymentHighlight) { const h = _pendingPaymentHighlight; _pendingPaymentHighlight = null; _flashRow(`pay-row-${h.id}`); }
     } catch (e) {
         el.innerHTML = `<div style="color:#991b1b;font-size:13px;padding:12px">Error: ${escHtml(e.message)}</div>`;
     }
@@ -4293,4 +4311,43 @@ async function submitInvoiceDynamic(fixedUserId) {
         showErr(e.message);
         btn.disabled = false; btn.textContent = '✅ Guardar factura';
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SIDEBAR COLAPSABLE (hamburger) + navegación cruzada pago↔factura
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function toggleSidebar() {
+    const collapsed = document.body.classList.toggle('sidebar-collapsed');
+    try { localStorage.setItem('admin_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+}
+function _applySidebarState() {
+    let collapsed = false;
+    try { collapsed = localStorage.getItem('admin_sidebar_collapsed') === '1'; } catch (_) {}
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    // Tooltips: con el menú colapsado solo se ven los íconos → el title muestra la sección
+    document.querySelectorAll('#sidebar nav a').forEach(a => { if (!a.title) a.title = a.textContent.trim(); });
+}
+if (document.readyState !== 'loading') _applySidebarState();
+else document.addEventListener('DOMContentLoaded', _applySidebarState);
+
+// Navegación cruzada: desde un pago al registro de su factura y viceversa.
+let _pendingInvoiceHighlight = null; // {id, email}
+let _pendingPaymentHighlight = null; // {id, email}
+function gotoInvoiceRecord(invoiceId, email) {
+    _pendingInvoiceHighlight = { id: invoiceId, email: email || '' };
+    navigate('facturacion-admin');
+}
+function gotoPaymentRecord(paymentId, email) {
+    _pendingPaymentHighlight = { id: paymentId, email: email || '' };
+    navigate('pagos-admin');
+}
+function _flashRow(rowId) {
+    const el = document.getElementById(rowId);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const orig = el.style.background;
+    el.style.transition = 'background .3s';
+    el.style.background = '#fde68a';
+    setTimeout(() => { el.style.background = orig; }, 1800);
 }

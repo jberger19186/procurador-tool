@@ -437,6 +437,32 @@ tr:hover td { background: #f9fafb; }
 /* ===== LOADING ===== */
 .loading { text-align: center; padding: 32px; color: var(--text-muted); font-size: 14px; }
 
+/* ===== HAMBURGER + SIDEBAR COLAPSABLE ===== */
+:root { --sidebar-w-collapsed: 64px; }
+#sidebar { transition: width .18s ease; }
+#main { transition: margin-left .18s ease; }
+
+#topbar .topbar-left { display: flex; align-items: center; gap: 12px; }
+.hamburger {
+    background: none; border: 1px solid var(--border); border-radius: 8px;
+    width: 36px; height: 36px; font-size: 17px; line-height: 1; cursor: pointer;
+    color: var(--text-muted); display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background .15s, color .15s, border-color .15s;
+}
+.hamburger:hover { background: var(--bg); color: var(--text); border-color: var(--accent); }
+
+body.sidebar-collapsed #sidebar { width: var(--sidebar-w-collapsed); }
+body.sidebar-collapsed #main { margin-left: var(--sidebar-w-collapsed); }
+/* Logo: solo el ícono, centrado */
+body.sidebar-collapsed #sidebar .logo { padding: 16px 0; text-align: center; }
+body.sidebar-collapsed #sidebar .logo .logo-row { justify-content: center; gap: 0; margin-bottom: 0; }
+body.sidebar-collapsed #sidebar .logo .logo-text,
+body.sidebar-collapsed #sidebar .logo small,
+body.sidebar-collapsed #sidebar .sidebar-footer { display: none; }
+/* Nav: solo íconos centrados (font-size:0 oculta el texto del label) */
+body.sidebar-collapsed #sidebar nav a { justify-content: center; gap: 0; padding: 12px 0; font-size: 0; }
+body.sidebar-collapsed #sidebar nav a .icon { font-size: 18px; width: auto; }
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
     :root { --sidebar-w: 0px; }

@@ -93,7 +93,10 @@
 <!-- MAIN -->
 <div id="main" style="display:none">
     <div id="topbar">
-        <h2 id="topbar-title">Resumen</h2>
+        <div class="topbar-left">
+            <button id="sidebar-toggle" class="hamburger" onclick="toggleSidebar()" aria-label="Colapsar/expandir menú" title="Colapsar/expandir menú">☰</button>
+            <h2 id="topbar-title">Resumen</h2>
+        </div>
         <div class="topbar-right">
             <span class="admin-badge" id="admin-email">Admin</span>
             <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
