@@ -3026,4 +3026,143 @@ router.post('/invoices/from-payment/:paymentId', authenticateAdmin, uploadInvoic
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECCIÓN: PAGOS (listado global, alta manual y asociación pago↔factura)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /admin/payments ───────────────────────────────────────────────────────
+// Listado global de pagos con filtros (search por email/nombre/cuit, status).
+// Incluye invoice_id si el pago tiene una factura asociada.
+router.get('/payments', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { search = '', status = '' } = req.query;
+    try {
+        const { rows } = await db.query(`
+            SELECT
+                p.id, p.external_payment_id, p.amount, p.currency, p.status,
+                p.payment_method, p.plan, p.period_start, p.period_end,
+                p.refund_amount, p.created_at,
+                i.id      AS invoice_id,
+                i.numero  AS invoice_numero,
+                u.id      AS user_id,
+                u.email, u.nombre, u.apellido, u.cuit
+            FROM payments p
+            JOIN users u ON u.id = p.user_id
+            LEFT JOIN invoices i ON i.payment_id = p.id
+            WHERE ($1 = '' OR u.email ILIKE $2 OR u.nombre ILIKE $2 OR u.apellido ILIKE $2 OR u.cuit ILIKE $2)
+              AND ($3 = '' OR p.status = $3)
+            ORDER BY p.created_at DESC
+            LIMIT 300
+        `, [search, `%${search}%`, status]);
+        res.json({ payments: rows });
+    } catch (err) {
+        console.error('[admin payments list] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── POST /admin/payments/manual ───────────────────────────────────────────────
+// Alta manual de un pago (sin PDF). Útil para registrar cobros fuera de MercadoPago.
+router.post('/payments/manual', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const {
+        user_id, amount, currency = 'ARS', status = 'approved',
+        payment_method = 'manual', plan, external_payment_id,
+        period_start, period_end, created_at
+    } = req.body;
+
+    if (!user_id || amount == null || isNaN(Number(amount)) || Number(amount) <= 0) {
+        return res.status(400).json({ error: 'user_id y un monto válido (> 0) son obligatorios' });
+    }
+    try {
+        // Validar que el usuario exista
+        const { rows: [usr] } = await db.query('SELECT id FROM users WHERE id = $1', [user_id]);
+        if (!usr) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+        // subscription_id del usuario (si tiene), para mantener la relación
+        const { rows: [sub] } = await db.query('SELECT id FROM subscriptions WHERE user_id = $1', [user_id]);
+
+        const { rows: [pmt] } = await db.query(
+            `INSERT INTO payments
+               (user_id, subscription_id, external_payment_id, amount, currency, status,
+                payment_method, plan, period_start, period_end, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, NOW()))
+             RETURNING id`,
+            [
+                user_id, sub?.id || null, external_payment_id || null, amount, currency, status,
+                payment_method || 'manual', plan || null,
+                period_start || null, period_end || null, created_at || null
+            ]
+        );
+        res.json({ ok: true, payment_id: pmt.id });
+    } catch (err) {
+        console.error('[admin payments manual] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── POST /admin/payments/:paymentId/link-invoice ──────────────────────────────
+// Asocia un pago a una factura existente (setea invoices.payment_id).
+router.post('/payments/:paymentId/link-invoice', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { paymentId } = req.params;
+    const { invoice_id } = req.body;
+    if (!invoice_id) return res.status(400).json({ error: 'invoice_id es obligatorio' });
+    try {
+        await linkInvoiceToPayment(db, invoice_id, paymentId);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(err.statusCode || 500).json({ error: err.message });
+    }
+});
+
+// ── POST /admin/invoices/:invoiceId/link-payment ──────────────────────────────
+// Asocia una factura a un pago existente (setea invoices.payment_id).
+router.post('/invoices/:invoiceId/link-payment', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { invoiceId } = req.params;
+    const { payment_id } = req.body;
+    if (!payment_id) return res.status(400).json({ error: 'payment_id es obligatorio' });
+    try {
+        await linkInvoiceToPayment(db, invoiceId, payment_id);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(err.statusCode || 500).json({ error: err.message });
+    }
+});
+
+// ── POST /admin/invoices/:invoiceId/unlink-payment ────────────────────────────
+// Quita la asociación pago↔factura.
+router.post('/invoices/:invoiceId/unlink-payment', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { invoiceId } = req.params;
+    try {
+        await db.query('UPDATE invoices SET payment_id = NULL, updated_at = NOW() WHERE id = $1', [invoiceId]);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Helper: vincula una factura a un pago validando coherencia y unicidad.
+// invoices.payment_id es UNIQUE → un pago no puede tener dos facturas.
+async function linkInvoiceToPayment(db, invoiceId, paymentId) {
+    const { rows: [inv] } = await db.query('SELECT id, user_id FROM invoices WHERE id = $1', [invoiceId]);
+    if (!inv) { const e = new Error('Factura no encontrada'); e.statusCode = 404; throw e; }
+    const { rows: [pmt] } = await db.query('SELECT id, user_id FROM payments WHERE id = $1', [paymentId]);
+    if (!pmt) { const e = new Error('Pago no encontrado'); e.statusCode = 404; throw e; }
+    if (inv.user_id && pmt.user_id && inv.user_id !== pmt.user_id) {
+        const e = new Error('El pago y la factura pertenecen a usuarios distintos'); e.statusCode = 400; throw e;
+    }
+    // ¿Ya hay otra factura asociada a este pago?
+    const { rows: [other] } = await db.query(
+        'SELECT id FROM invoices WHERE payment_id = $1 AND id <> $2', [paymentId, invoiceId]
+    );
+    if (other) {
+        const e = new Error(`Ese pago ya está asociado a la factura #${other.id}. Desvinculala primero.`);
+        e.statusCode = 409; throw e;
+    }
+    await db.query('UPDATE invoices SET payment_id = $1, updated_at = NOW() WHERE id = $2', [paymentId, invoiceId]);
+}
+
 module.exports = router;

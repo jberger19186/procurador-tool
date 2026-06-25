@@ -687,6 +687,15 @@ async function reactivateSubscription(userId) {
      WHERE id = $1`,
     [sub.id]
   );
+  // Registrar en el historial de la cuenta (visible en la ficha del admin)
+  try {
+    await db.query(
+      `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'subscription_cancel_reverted', $2)`,
+      [userId, JSON.stringify({ reverted_cancel_at: sub.cancel_at })]
+    );
+  } catch (e) {
+    logger.warn('[SubscriptionService] No se pudo registrar el evento subscription_cancel_reverted', { userId, err: e.message });
+  }
   logger.info('[SubscriptionService] Cancelación revertida — suscripción reanudada sin nuevo cobro', { userId });
 }
 
@@ -729,6 +738,16 @@ async function cancelSubscription(userId) {
      WHERE id = $1`,
     [sub.id]
   );
+
+  // Registrar en el historial de la cuenta (visible en la ficha del admin)
+  try {
+    await db.query(
+      `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'subscription_cancel_scheduled', $2)`,
+      [userId, JSON.stringify({ cancel_at: sub.next_billing_date })]
+    );
+  } catch (e) {
+    logger.warn('[SubscriptionService] No se pudo registrar el evento subscription_cancel_scheduled', { userId, err: e.message });
+  }
 
   logger.info('[SubscriptionService] Cancelación programada', { userId, cancelAt: sub.next_billing_date });
 

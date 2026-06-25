@@ -273,28 +273,29 @@ async function handleLogin(email, password) {
                     'ingresá al portal</a> para reenviar el link.'
                 );
             } else {
-                let errorMsg = 'Error al iniciar sesión';
+                const err = result.error || '';
 
-                if (result.error.includes('Credenciales inválidas')) {
-                    errorMsg = 'Email o contraseña incorrectos';
-                } else if (result.error.includes('vinculada a otro dispositivo')) {
-                    errorMsg = 'Esta cuenta está vinculada a otro dispositivo. Contacte al administrador.';
-                } else if (result.error.includes('suscripción')) {
+                // Casos que NO se resuelven en el portal → mensaje plano (sin link)
+                if (err.includes('Credenciales inválidas')) {
+                    showError('Email o contraseña incorrectos');
+                } else if (err.includes('vinculada a otro dispositivo')) {
+                    showError('Esta cuenta está vinculada a otro dispositivo. Contacte al administrador.');
+                } else if (err.includes('conexión') || err.includes('ECONNREFUSED')) {
+                    showError('No se puede conectar al servidor. Verifique su conexión.');
+                } else if (result.action) {
+                    // Estado bloqueante que se consulta/resuelve desde el portal (cuenta
+                    // suspendida, rechazada, cancelada, trial agotado, sin suscripción, etc.):
+                    // mostramos el mensaje del backend + un link directo al portal para que el
+                    // usuario no tenga que abrir el navegador a mano.
                     showErrorHTML(
-                        'No tenés una suscripción activa. ' +
-                        '<a href="https://api.procuradortool.com/usuarios/" target="_blank" ' +
+                        (err || 'No pudimos iniciar tu sesión.') +
+                        '<br><a href="https://api.procuradortool.com/usuarios/" target="_blank" ' +
                         'style="color:inherit;font-weight:700;text-decoration:underline;">' +
-                        'Ingresá al portal</a> para ver el estado de tu suscripción y configurar tu plan.'
+                        'Abrir el portal de usuarios →</a>'
                     );
-                    setLoading(false);
-                    return;
-                } else if (result.error.includes('conexión') || result.error.includes('ECONNREFUSED')) {
-                    errorMsg = 'No se puede conectar al servidor. Verifique su conexión.';
                 } else {
-                    errorMsg = result.error;
+                    showError(err || 'Error al iniciar sesión');
                 }
-
-                showError(errorMsg);
             }
             setLoading(false);
         }

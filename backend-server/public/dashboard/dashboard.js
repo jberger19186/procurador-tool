@@ -163,14 +163,15 @@ function navigate(page, id, fromHistory) {
         metrics: 'Métricas del sistema',
         legal: 'Legal',
         diagnostico: 'Diagnóstico del sistema',
-        'facturacion-admin': 'Facturación'
+        'facturacion-admin': 'Facturación',
+        'pagos-admin': 'Pagos'
     };
     document.getElementById('topbar-title').textContent = titles[page] || page;
 
     const content = document.getElementById('content');
     content.innerHTML = '<div class="loading">Cargando...</div>';
 
-    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal, diagnostico: renderDiagnostico, 'facturacion-admin': renderFacturacionAdmin };
+    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal, diagnostico: renderDiagnostico, 'facturacion-admin': renderFacturacionAdmin, 'pagos-admin': renderPagosAdmin };
     if (pages[page]) pages[page]();
 
     // Historial del navegador: registrar la navegación entre secciones para que el
@@ -437,7 +438,7 @@ async function renderUserDetail(userId) {
                         ${renderSubsystemBar('Procurar Batch', u.batch_usage || 0, u.batch_executions_limit, u.batch_bonus || 0)}
                         ${renderSubsystemBar('Informes', u.informe_usage || 0, u.informe_limit, u.informe_bonus || 0)}
                         ${renderSubsystemBar('Monitor Novedades', u.monitor_novedades_usage || 0, u.monitor_novedades_limit, u.monitor_novedades_bonus || 0)}
-                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Monitor Partes límite: ${u.monitor_partes_limit === -1 ? 'Ilimitado' : (u.monitor_partes_limit || 3) + (u.monitor_partes_bonus || 0)} (bonus: ${u.monitor_partes_bonus || 0})</div>
+                        ${renderSubsystemBar('Monitor Partes', partes.length, u.monitor_partes_limit ?? 3, u.monitor_partes_bonus || 0)}
                     </div>` : ''}
                     <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
                         <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:2px">Cambiar plan</div>
@@ -554,6 +555,47 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
+        <!-- Tickets del usuario -->
+        <div class="card section-gap">
+            <div class="card-header">
+                <h3>🎫 Tickets (${tickets.length})</h3>
+                <a class="btn btn-sm btn-secondary" onclick="navigate('tickets')">Ver todos</a>
+            </div>
+            <div class="card-body" style="padding:0">
+                ${tickets.length === 0 ? '<div class="empty-state"><p>Sin tickets</p></div>' : `
+                <div class="table-wrapper">
+                    <table><thead><tr><th>#</th><th>Categoría</th><th>Título</th><th>Estado</th><th>Prioridad</th><th>Fecha</th><th></th></tr></thead>
+                    <tbody>${tickets.map(t => `<tr>
+                        <td>#${t.id}</td>
+                        <td>${catBadge(t.category)}</td>
+                        <td>${t.title}</td>
+                        <td>${ticketStatusBadge(t.status)}</td>
+                        <td>${priorityBadge(t.priority, t.priority_source, t.priority_notes)}</td>
+                        <td>${fmtDate(t.created_at)}</td>
+                        <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
+                    </tr>`).join('')}
+                    </tbody></table>
+                </div>`}
+            </div>
+        </div>
+
+        <!-- Historial de la cuenta (eventos: cambios de plan, activaciones, etc.) -->
+        <div class="card section-gap">
+            <div class="card-header"><h3>🗂️ Historial de la cuenta (${events.length})</h3></div>
+            <div class="card-body" style="padding:0">
+                ${events.length === 0 ? '<div class="empty-state"><p>Sin eventos</p></div>' : `
+                <div class="table-wrapper">
+                    <table><thead><tr><th>Evento</th><th>Detalle</th><th>Fecha</th></tr></thead>
+                    <tbody>${events.map(e => `<tr>
+                        <td>${eventLabel(e.event_type)}</td>
+                        <td style="font-size:12px;color:var(--text-muted)">${eventDetail(e)}</td>
+                        <td style="font-size:12px">${fmtDate(e.created_at)}</td>
+                    </tr>`).join('')}
+                    </tbody></table>
+                </div>`}
+            </div>
+        </div>
+
         <!-- Ajustes de uso por subsistema -->
         <div class="card section-gap">
             <div class="card-header"><h3>🎁 Ajustes Manuales de Uso</h3></div>
@@ -613,27 +655,25 @@ async function renderUserDetail(userId) {
             </div>
         </div>
 
-        <!-- Tickets del usuario -->
+        <!-- Historial de pagos -->
         <div class="card section-gap">
             <div class="card-header">
-                <h3>🎫 Tickets (${tickets.length})</h3>
-                <a class="btn btn-sm btn-secondary" onclick="navigate('tickets')">Ver todos</a>
+                <h3>💳 Historial de Pagos</h3>
+                <button class="btn btn-sm btn-primary" onclick="openPaymentModal(${u.id},'${escHtml(u.email)}')">＋ Agregar pago</button>
             </div>
             <div class="card-body" style="padding:0">
-                ${tickets.length === 0 ? '<div class="empty-state"><p>Sin tickets</p></div>' : `
-                <div class="table-wrapper">
-                    <table><thead><tr><th>#</th><th>Categoría</th><th>Título</th><th>Estado</th><th>Prioridad</th><th>Fecha</th><th></th></tr></thead>
-                    <tbody>${tickets.map(t => `<tr>
-                        <td>#${t.id}</td>
-                        <td>${catBadge(t.category)}</td>
-                        <td>${t.title}</td>
-                        <td>${ticketStatusBadge(t.status)}</td>
-                        <td>${priorityBadge(t.priority, t.priority_source, t.priority_notes)}</td>
-                        <td>${fmtDate(t.created_at)}</td>
-                        <td><button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${t.id}')">Ver</button></td>
-                    </tr>`).join('')}
-                    </tbody></table>
-                </div>`}
+                <div id="payment-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
+            </div>
+        </div>
+
+        <!-- Historial de facturas -->
+        <div class="card section-gap">
+            <div class="card-header">
+                <h3>🧾 Historial de Facturas</h3>
+                <button class="btn btn-sm btn-primary" onclick="openInvoiceModalDynamic(${u.id},'${escHtml(u.email)}')">＋ Agregar factura</button>
+            </div>
+            <div class="card-body" style="padding:0">
+                <div id="invoice-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
             </div>
         </div>
 
@@ -667,39 +707,6 @@ async function renderUserDetail(userId) {
                         </tbody></table>
                     </div>`
                 }
-            </div>
-        </div>
-
-        <!-- Historial de la cuenta (eventos: cambios de plan, activaciones, etc.) -->
-        <div class="card section-gap">
-            <div class="card-header"><h3>🗂️ Historial de la cuenta (${events.length})</h3></div>
-            <div class="card-body" style="padding:0">
-                ${events.length === 0 ? '<div class="empty-state"><p>Sin eventos</p></div>' : `
-                <div class="table-wrapper">
-                    <table><thead><tr><th>Evento</th><th>Detalle</th><th>Fecha</th></tr></thead>
-                    <tbody>${events.map(e => `<tr>
-                        <td>${eventLabel(e.event_type)}</td>
-                        <td style="font-size:12px;color:var(--text-muted)">${eventDetail(e)}</td>
-                        <td style="font-size:12px">${fmtDate(e.created_at)}</td>
-                    </tr>`).join('')}
-                    </tbody></table>
-                </div>`}
-            </div>
-        </div>
-
-        <!-- Historial de pagos -->
-        <div class="card section-gap">
-            <div class="card-header"><h3>💳 Historial de Pagos</h3></div>
-            <div class="card-body" style="padding:0">
-                <div id="payment-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
-            </div>
-        </div>
-
-        <!-- Historial de facturas -->
-        <div class="card section-gap">
-            <div class="card-header"><h3>🧾 Historial de Facturas</h3></div>
-            <div class="card-body" style="padding:0">
-                <div id="invoice-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
             </div>
         </div>
 
@@ -1846,6 +1853,8 @@ function eventLabel(type) {
         reactivated_plan_selection: '🔄 Reactivación con plan',
         trial_exhausted_blocked: '🔴 Trial agotado',
         subscription_cancelled_expired: '🗑️ Suscripción vencida/cancelada',
+        subscription_cancel_scheduled: '🚫 Cancelación programada',
+        subscription_cancel_reverted: '↩️ Cancelación revertida',
     };
     return map[type] || type;
 }
@@ -1853,6 +1862,9 @@ function eventDetail(e) {
     let p = e.payload;
     if (typeof p === 'string') { try { p = JSON.parse(p); } catch (_) { p = {}; } }
     p = p || {};
+    if (e.event_type === 'subscription_cancel_scheduled' && p.cancel_at) {
+        return `Se cancela el ${fmtDate(p.cancel_at)} (fin del período pago)`;
+    }
     if (p.from && p.to) {
         const fecha = p.apply_at ? ` (aplica ${fmtDate(p.apply_at)})` : '';
         return `${p.from} → ${p.to}${fecha}`;
@@ -3705,6 +3717,7 @@ async function loadIssuedInvoices() {
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Monto</th>
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Plan</th>
                         <th style="text-align:center;padding:10px 12px;font-weight:600;color:#374151">PDF</th>
+                        <th style="text-align:center;padding:10px 12px;font-weight:600;color:#374151">Pago</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -3732,6 +3745,11 @@ async function loadIssuedInvoices() {
                                     📄 Ver PDF
                                    </a>`
                                 : '—'}
+                        </td>
+                        <td style="padding:10px 12px;text-align:center;white-space:nowrap">
+                            ${inv.payment_id
+                                ? `<span class="badge badge-green">#${inv.payment_id}</span> <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 6px" onclick="unlinkInvoiceFromPayment(${inv.id},'facturas')" title="Desvincular">✕</button>`
+                                : `<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px" onclick="openLinkPaymentModal(${inv.id},'${escHtml(inv.email||'')}')">Asociar pago</button>`}
                         </td>
                     </tr>`).join('')}
                 </tbody>
@@ -3926,4 +3944,353 @@ function fmtNroFactura(value) {
     // Solo dígitos: sucursal 0001 + número con padding
     const numero = v.replace(/\D/g, '').padStart(8, '0').slice(-8);
     return `0001-${numero}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECCIÓN PAGOS (admin) + modales dinámicos de alta manual y asociación
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function _paymentStatusBadge(s) {
+    return ({
+        approved: '<span class="badge badge-green">Aprobado</span>',
+        pending:  '<span class="badge badge-yellow">Pendiente</span>',
+        rejected: '<span class="badge badge-red">Rechazado</span>',
+        refunded: '<span class="badge badge-blue">Reembolsado</span>'
+    })[s] || `<span class="badge badge-gray">${escHtml(s || '—')}</span>`;
+}
+
+async function renderPagosAdmin() {
+    const content = document.getElementById('content');
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <input id="search-payments" type="text" placeholder="Buscar por email, nombre o CUIT…"
+                    style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"
+                    oninput="loadPaymentsAdmin()" />
+                <select id="filter-payment-status" onchange="loadPaymentsAdmin()"
+                    style="padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff">
+                    <option value="">Todos los estados</option>
+                    <option value="approved">Aprobado</option>
+                    <option value="pending">Pendiente</option>
+                    <option value="rejected">Rechazado</option>
+                    <option value="refunded">Reembolsado</option>
+                </select>
+                <button class="btn btn-sm btn-secondary" onclick="loadPaymentsAdmin()">🔄 Actualizar</button>
+                <button class="btn btn-sm btn-primary" onclick="openPaymentModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px">
+                    <span style="font-size:16px;line-height:1">＋</span> Nuevo pago manual
+                </button>
+            </div>
+            <div id="table-payments">Cargando…</div>
+        </div>`;
+    loadPaymentsAdmin();
+}
+
+async function loadPaymentsAdmin() {
+    const search = document.getElementById('search-payments')?.value || '';
+    const status = document.getElementById('filter-payment-status')?.value || '';
+    const el = document.getElementById('table-payments');
+    if (!el) return;
+    el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:12px">Cargando…</div>';
+    try {
+        const data = await apiFetch(`/admin/payments?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`);
+        if (!data?.payments?.length) {
+            el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center">Sin pagos</div>';
+            return;
+        }
+        el.innerHTML = `<div class="table-wrapper"><table>
+            <thead><tr><th>Fecha</th><th>Usuario</th><th>Monto</th><th>Estado</th><th>Método</th><th>Plan</th><th>Factura</th><th></th></tr></thead>
+            <tbody>${data.payments.map(p => `<tr>
+                <td style="font-size:12px;white-space:nowrap">${fmtDate(p.created_at)}</td>
+                <td><div style="font-weight:500">${escHtml(((p.nombre||'')+' '+(p.apellido||'')).trim() || '—')}</div><div style="color:#6b7280;font-size:11px">${escHtml(p.email||'')}</div></td>
+                <td><strong>${escHtml(p.currency||'ARS')} ${Number(p.amount||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</strong></td>
+                <td>${_paymentStatusBadge(p.status)}</td>
+                <td style="font-size:11px;color:#6b7280">${escHtml(p.payment_method||'—')}</td>
+                <td style="font-size:11px;color:#6b7280">${escHtml(p.plan||'—')}</td>
+                <td style="font-size:11px">${p.invoice_id ? `<span class="badge badge-green">#${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</span>` : '<span style="color:#9ca3af">Sin factura</span>'}</td>
+                <td>${p.invoice_id
+                    ? `<button class="btn btn-sm btn-secondary" onclick="unlinkInvoiceFromPayment(${p.invoice_id},'pagos')">Desvincular</button>`
+                    : `<button class="btn btn-sm btn-secondary" onclick="openLinkInvoiceModal(${p.id},'${escHtml(p.email||'')}')">Asociar factura</button>`}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>`;
+    } catch (e) {
+        el.innerHTML = `<div style="color:#991b1b;font-size:13px;padding:12px">Error: ${escHtml(e.message)}</div>`;
+    }
+}
+
+// ── Modal dinámico genérico ───────────────────────────────────────────────────
+function _injectModal(innerHtml, maxWidth = 520) {
+    closeDynModal();
+    const wrap = document.createElement('div');
+    wrap.id = '_dyn-modal';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1100;display:flex;align-items:center;justify-content:center';
+    wrap.innerHTML = `<div style="background:#fff;border-radius:12px;width:100%;max-width:${maxWidth}px;box-shadow:0 20px 60px rgba(0,0,0,.25);max-height:90vh;overflow:auto">${innerHtml}</div>`;
+    wrap.addEventListener('click', e => { if (e.target === wrap) closeDynModal(); });
+    document.body.appendChild(wrap);
+    return wrap;
+}
+function closeDynModal() {
+    const m = document.getElementById('_dyn-modal');
+    if (m) m.remove();
+}
+function _modalHeader(title) {
+    return `<div style="padding:18px 22px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827">${title}</h3>
+        <button onclick="closeDynModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;line-height:1">×</button>
+    </div>`;
+}
+
+// ── Asociar FACTURA a un pago (desde la sección Pagos) ─────────────────────────
+async function openLinkInvoiceModal(paymentId, email) {
+    _injectModal(`${_modalHeader('🔗 Asociar factura al pago #' + paymentId)}
+        <div style="padding:22px"><div id="_link-body" style="font-size:13px;color:#6b7280">Cargando facturas…</div></div>`);
+    try {
+        const data = await apiFetch(`/admin/invoices?search=${encodeURIComponent(email)}`);
+        const invs = data?.invoices || [];
+        const body = document.getElementById('_link-body');
+        if (!invs.length) { body.innerHTML = 'Este usuario no tiene facturas emitidas. Creá una factura primero desde Facturación o la ficha del usuario.'; return; }
+        body.innerHTML = `
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;color:#374151">Elegí la factura a asociar</label>
+            <select id="_link-invoice-sel" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                ${invs.map(i => `<option value="${i.id}" ${i.payment_id ? 'disabled' : ''}>#${i.id} · ${escHtml(i.numero||'s/nro')} · $${Number(i.amount||0).toLocaleString('es-AR')} · ${fmtDate(i.issued_at||i.created_at)}${i.payment_id ? ` (ya asociada a pago #${i.payment_id})` : ''}</option>`).join('')}
+            </select>
+            <div id="_link-err" style="color:#991b1b;font-size:12px;margin-top:8px;display:none"></div>
+            <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button class="btn btn-sm btn-primary" onclick="confirmLinkInvoice(${paymentId})">Asociar</button>
+            </div>`;
+    } catch (e) {
+        document.getElementById('_link-body').innerHTML = `<span style="color:#991b1b">Error: ${escHtml(e.message)}</span>`;
+    }
+}
+async function confirmLinkInvoice(paymentId) {
+    const invoiceId = document.getElementById('_link-invoice-sel')?.value;
+    if (!invoiceId) return;
+    try {
+        await apiFetch(`/admin/payments/${paymentId}/link-invoice`, 'POST', { invoice_id: invoiceId });
+        closeDynModal();
+        loadPaymentsAdmin();
+    } catch (e) {
+        const err = document.getElementById('_link-err'); if (err) { err.textContent = e.message; err.style.display = ''; }
+    }
+}
+async function unlinkInvoiceFromPayment(invoiceId, refresh) {
+    if (!confirm('¿Quitar la asociación pago↔factura?')) return;
+    try {
+        await apiFetch(`/admin/invoices/${invoiceId}/unlink-payment`, 'POST', {});
+        if (refresh === 'facturas') loadIssuedInvoices(); else loadPaymentsAdmin();
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ── Asociar PAGO a una factura (desde Facturación → Emitidas) ──────────────────
+async function openLinkPaymentModal(invoiceId, email) {
+    _injectModal(`${_modalHeader('🔗 Asociar pago a la factura #' + invoiceId)}
+        <div style="padding:22px"><div id="_link-body" style="font-size:13px;color:#6b7280">Cargando pagos…</div></div>`);
+    try {
+        const data = await apiFetch(`/admin/payments?search=${encodeURIComponent(email)}`);
+        const pmts = data?.payments || [];
+        const body = document.getElementById('_link-body');
+        if (!pmts.length) { body.innerHTML = 'Este usuario no tiene pagos registrados. Podés crear uno manual desde la sección Pagos.'; return; }
+        body.innerHTML = `
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;color:#374151">Elegí el pago a asociar</label>
+            <select id="_link-payment-sel" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                ${pmts.map(p => `<option value="${p.id}" ${p.invoice_id ? 'disabled' : ''}>#${p.id} · ${escHtml(p.currency||'ARS')} ${Number(p.amount||0).toLocaleString('es-AR')} · ${escHtml(p.status||'')} · ${fmtDate(p.created_at)}${p.invoice_id ? ` (ya tiene factura #${p.invoice_id})` : ''}</option>`).join('')}
+            </select>
+            <div id="_link-err" style="color:#991b1b;font-size:12px;margin-top:8px;display:none"></div>
+            <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button class="btn btn-sm btn-primary" onclick="confirmLinkPayment(${invoiceId})">Asociar</button>
+            </div>`;
+    } catch (e) {
+        document.getElementById('_link-body').innerHTML = `<span style="color:#991b1b">Error: ${escHtml(e.message)}</span>`;
+    }
+}
+async function confirmLinkPayment(invoiceId) {
+    const paymentId = document.getElementById('_link-payment-sel')?.value;
+    if (!paymentId) return;
+    try {
+        await apiFetch(`/admin/invoices/${invoiceId}/link-payment`, 'POST', { payment_id: paymentId });
+        closeDynModal();
+        loadIssuedInvoices();
+    } catch (e) {
+        const err = document.getElementById('_link-err'); if (err) { err.textContent = e.message; err.style.display = ''; }
+    }
+}
+
+// ── Alta manual de PAGO (dinámico) ────────────────────────────────────────────
+// fixedUserId/fixedEmail: cuando se abre desde la ficha del usuario el usuario queda fijo.
+let _payModalUserId = null;
+let _payUserResults = [];
+function openPaymentModal(fixedUserId = null, fixedEmail = '') {
+    _payModalUserId = fixedUserId || null;
+    _payUserResults = [];
+    const today = new Date().toISOString().slice(0, 10);
+    const userBlock = fixedUserId
+        ? `<div style="padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#166534">Usuario: <strong>${escHtml(fixedEmail)}</strong> (#${fixedUserId})</div>`
+        : `<div style="position:relative">
+                <input id="_pay-user-search" type="text" autocomplete="off" placeholder="Escribí el email del usuario…"
+                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"
+                    oninput="_payUserSearch(this.value)" />
+                <div id="_pay-user-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;max-height:180px;overflow-y:auto"></div>
+                <div id="_pay-user-selected" style="display:none;margin-top:6px;padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#166534"></div>
+           </div>`;
+    _injectModal(`${_modalHeader('💳 Nuevo pago manual')}
+        <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
+            <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Usuario *</label>${userBlock}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto *</label>
+                    <input id="_pay-amount" type="number" min="0" step="0.01" placeholder="15000" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Moneda</label>
+                    <input id="_pay-currency" type="text" value="ARS" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Estado</label>
+                    <select id="_pay-status" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
+                        <option value="approved" selected>Aprobado</option>
+                        <option value="pending">Pendiente</option>
+                        <option value="rejected">Rechazado</option>
+                        <option value="refunded">Reembolsado</option>
+                    </select></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Método</label>
+                    <input id="_pay-method" type="text" value="manual" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Fecha</label>
+                    <input id="_pay-date" type="date" value="${today}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Plan / Concepto</label>
+                    <input id="_pay-plan" type="text" placeholder="Ej: COMBO_PROMO" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">ID externo <span style="font-weight:400;color:#9ca3af">(opcional)</span></label>
+                <input id="_pay-extid" type="text" placeholder="ID de MercadoPago u otro" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            <div id="_pay-err" style="color:#991b1b;font-size:12px;display:none"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button id="_pay-submit" class="btn btn-sm btn-primary" onclick="submitManualPayment(${fixedUserId || 'null'})">✅ Guardar pago</button>
+            </div>
+        </div>`);
+}
+let _payUserSearchTimeout = null;
+function _payUserSearch(q) {
+    clearTimeout(_payUserSearchTimeout);
+    const dd = document.getElementById('_pay-user-dropdown');
+    if (!q || q.length < 2) { dd.style.display = 'none'; return; }
+    _payUserSearchTimeout = setTimeout(async () => {
+        try {
+            const data = await apiFetch(`/admin/users/search?q=${encodeURIComponent(q)}&limit=8`);
+            _payUserResults = data?.users || [];
+            if (!_payUserResults.length) { dd.style.display = 'none'; return; }
+            dd.innerHTML = _payUserResults.map((u, idx) => `<div onmousedown="_paySelectUser(${idx})" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'"><strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong> <span style="color:#6b7280">${escHtml(u.email)}</span>${u.cuit?` <span style="color:#6b7280;font-size:11px">CUIT: ${escHtml(u.cuit)}</span>`:''}</div>`).join('');
+            dd.style.display = '';
+        } catch (_) { dd.style.display = 'none'; }
+    }, 300);
+}
+function _paySelectUser(idx) {
+    const u = _payUserResults[idx];
+    if (!u) return;
+    _payModalUserId = u.id;
+    document.getElementById('_pay-user-search').value = u.email;
+    document.getElementById('_pay-user-dropdown').style.display = 'none';
+    const sel = document.getElementById('_pay-user-selected');
+    sel.innerHTML = `✅ <strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong> · ${escHtml(u.email)}${u.cuit?` · CUIT: ${escHtml(u.cuit)}`:''}`;
+    sel.style.display = '';
+}
+async function submitManualPayment(fixedUserId) {
+    const errEl = document.getElementById('_pay-err');
+    const showErr = m => { errEl.textContent = m; errEl.style.display = ''; };
+    errEl.style.display = 'none';
+    const userId = fixedUserId || _payModalUserId;
+    if (!userId) return showErr('Seleccioná un usuario');
+    const amount = document.getElementById('_pay-amount').value;
+    if (!amount || isNaN(amount) || Number(amount) <= 0) return showErr('El monto es obligatorio');
+    const btn = document.getElementById('_pay-submit');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+        await apiFetch('/admin/payments/manual', 'POST', {
+            user_id: userId,
+            amount,
+            currency: document.getElementById('_pay-currency').value.trim() || 'ARS',
+            status: document.getElementById('_pay-status').value,
+            payment_method: document.getElementById('_pay-method').value.trim() || 'manual',
+            plan: document.getElementById('_pay-plan').value.trim() || null,
+            external_payment_id: document.getElementById('_pay-extid').value.trim() || null,
+            created_at: document.getElementById('_pay-date').value || null
+        });
+        closeDynModal();
+        if (fixedUserId) loadPaymentHistory(fixedUserId); else loadPaymentsAdmin();
+    } catch (e) {
+        showErr(e.message);
+        btn.disabled = false; btn.textContent = '✅ Guardar pago';
+    }
+}
+
+// ── Alta manual de FACTURA para un usuario fijo (dinámico, con PDF) ────────────
+function openInvoiceModalDynamic(fixedUserId, fixedEmail) {
+    const today = new Date().toISOString().slice(0, 10);
+    _injectModal(`${_modalHeader('🧾 Nueva factura manual')}
+        <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
+            <div style="padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#166534">Usuario: <strong>${escHtml(fixedEmail)}</strong> (#${fixedUserId})</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Tipo de comprobante</label>
+                    <select id="_inv-tipo" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
+                        <option value="C" selected>Factura C</option><option value="B">Factura B</option><option value="A">Factura A</option>
+                        <option value="NC_C">Nota de crédito C</option><option value="NC_B">Nota de crédito B</option>
+                    </select></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto (ARS) *</label>
+                    <input id="_inv-amount" type="number" min="0" step="0.01" placeholder="15000" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número *</label>
+                    <input id="_inv-numero" type="text" placeholder="1245 → 0001-00001245" onblur="this.value=fmtNroFactura(this.value)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">CAE <span style="font-weight:400;color:#9ca3af">(opcional)</span></label>
+                    <input id="_inv-cae" type="text" placeholder="12345678901234" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Fecha de emisión *</label>
+                    <input id="_inv-date" type="date" value="${today}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Plan / Concepto</label>
+                    <input id="_inv-plan" type="text" placeholder="Ej: COMBO_PROMO" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">PDF de la factura *</label>
+                <input id="_inv-file" type="file" accept=".pdf" style="font-size:13px;width:100%">
+                <p style="margin:4px 0 0;font-size:11px;color:#6b7280">Máximo 5 MB · solo PDF</p></div>
+            <div id="_inv-err" style="color:#991b1b;font-size:12px;display:none"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button id="_inv-submit" class="btn btn-sm btn-primary" onclick="submitInvoiceDynamic(${fixedUserId})">✅ Guardar factura</button>
+            </div>
+        </div>`);
+}
+async function submitInvoiceDynamic(fixedUserId) {
+    const errEl = document.getElementById('_inv-err');
+    const showErr = m => { errEl.textContent = m; errEl.style.display = ''; };
+    errEl.style.display = 'none';
+    const amount = document.getElementById('_inv-amount').value;
+    if (!amount || isNaN(amount) || Number(amount) <= 0) return showErr('El monto es obligatorio');
+    const dateVal = document.getElementById('_inv-date').value;
+    if (!dateVal) return showErr('La fecha de emisión es obligatoria');
+    const fileInput = document.getElementById('_inv-file');
+    if (!fileInput?.files[0]) return showErr('Seleccioná un PDF');
+    const btn = document.getElementById('_inv-submit');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    const form = new FormData();
+    form.append('pdf', fileInput.files[0]);
+    form.append('user_id', fixedUserId);
+    form.append('amount', amount);
+    form.append('issued_at', dateVal);
+    form.append('invoice_type', document.getElementById('_inv-tipo').value || 'C');
+    const numero = document.getElementById('_inv-numero').value.trim();
+    const cae = document.getElementById('_inv-cae').value.trim();
+    const plan = document.getElementById('_inv-plan').value.trim();
+    if (numero) form.append('numero', numero);
+    if (cae) form.append('cae', cae);
+    if (plan) form.append('plan', plan);
+    try {
+        const resp = await fetch('/admin/invoices/manual', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Error al guardar');
+        closeDynModal();
+        loadInvoiceHistory(fixedUserId);
+    } catch (e) {
+        showErr(e.message);
+        btn.disabled = false; btn.textContent = '✅ Guardar factura';
+    }
 }

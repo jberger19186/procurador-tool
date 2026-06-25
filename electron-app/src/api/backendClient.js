@@ -65,8 +65,9 @@ class BackendClient {
             console.error('❌ Error en login:', error.message);
             return {
                 success: false,
-                code:  error.response?.data?.code  || null,
-                error: error.response?.data?.error || error.message
+                code:   error.response?.data?.code   || null,
+                action: error.response?.data?.action || null,
+                error:  error.response?.data?.error  || error.message
             };
         }
     }

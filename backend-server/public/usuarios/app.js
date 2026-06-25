@@ -936,7 +936,7 @@ function renderDownloads() {
             <div class="download-item-icon">⚖️</div>
             <div class="download-item-info">
                 <div class="download-item-title">App de escritorio — Procurador SCW <span style="font-size:11px;color:#9ca3af;font-weight:400">Windows</span></div>
-                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.27</div>
+                <div class="download-item-desc">Procuración automática, informes y monitor de partes · v2.7.28</div>
             </div>
             <div class="download-item-actions">
                 <button class="btn btn-primary btn-sm" onclick="downloadElectron(this)">⬇ Descargar instalador</button>
@@ -1118,7 +1118,7 @@ function renderTicketsList() {
     container.innerHTML = `<div class="tickets-list">
         ${state.tickets.map(t => {
             const statusClass = `badge badge-${t.status}`;
-            const statusLabel = { open: 'Abierto', closed: 'Cerrado', in_progress: 'En progreso' }[t.status] || t.status;
+            const statusLabel = { open: 'Abierto', closed: 'Cerrado', in_progress: 'En progreso', resolved: 'Resuelto' }[t.status] || t.status;
             const catIcon = { technical: '🔧', billing: '💳', commercial: '📋' }[t.category] || '🎫';
 
             return `<div class="ticket-item" onclick="openTicketDetail(${t.id})">
@@ -1166,7 +1166,7 @@ async function openTicketDetail(ticketId) {
 
 function renderTicketDetail(ticket) {
     const statusClass = `badge badge-${ticket.status}`;
-    const statusLabel = { open: 'Abierto', closed: 'Cerrado', in_progress: 'En progreso' }[ticket.status] || ticket.status;
+    const statusLabel = { open: 'Abierto', closed: 'Cerrado', in_progress: 'En progreso', resolved: 'Resuelto' }[ticket.status] || ticket.status;
     const categoryLabels = { technical: 'Técnico', billing: 'Facturación', commercial: 'Comercial' };
 
     const comments = ticket.comments || [];
