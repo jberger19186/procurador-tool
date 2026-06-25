@@ -2887,10 +2887,12 @@ router.get('/invoices/pending', authenticateAdmin, async (req, res) => {
 });
 
 // ── GET /admin/invoices ───────────────────────────────────────────────────────
-// Facturas ya emitidas con PDF, con filtros opcionales
+// Facturas emitidas (con PDF) por defecto. Con ?include_no_pdf=1 incluye también los
+// registros de factura sin PDF (status pending) — usado por el selector "Asociar factura".
 router.get('/invoices', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
-    const { search = '', status = '' } = req.query;
+    const { search = '', status = '', include_no_pdf = '' } = req.query;
+    const pdfCond = include_no_pdf ? 'TRUE' : "(i.pdf_url IS NOT NULL AND i.pdf_url <> '')";
     try {
         const { rows } = await db.query(`
             SELECT
@@ -2913,7 +2915,7 @@ router.get('/invoices', authenticateAdmin, async (req, res) => {
             FROM invoices i
             LEFT JOIN payments p ON p.id = i.payment_id
             LEFT JOIN users u ON u.id = i.user_id
-            WHERE i.pdf_url IS NOT NULL AND i.pdf_url <> ''
+            WHERE ${pdfCond}
               AND ($1 = '' OR u.email ILIKE $2 OR u.nombre ILIKE $2 OR u.apellido ILIKE $2 OR u.cuit ILIKE $2)
               AND ($3 = '' OR i.status = $3)
             ORDER BY COALESCE(i.issued_at, i.created_at) DESC
@@ -3044,6 +3046,8 @@ router.get('/payments', authenticateAdmin, async (req, res) => {
                 p.refund_amount, p.created_at,
                 i.id      AS invoice_id,
                 i.numero  AS invoice_numero,
+                i.pdf_url AS invoice_pdf,
+                i.status  AS invoice_status,
                 u.id      AS user_id,
                 u.email, u.nombre, u.apellido, u.cuit
             FROM payments p

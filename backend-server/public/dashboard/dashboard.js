@@ -3532,6 +3532,13 @@ async function renderFacturacionAdmin() {
 
         </div>`;
 
+    // Si se llegó por un link a una factura SIN PDF, prefiltramos la pestaña Pendientes
+    // por el usuario (loadPendingInvoices resalta la fila del pago).
+    if (_pendingPendingInvoiceHighlight) {
+        const sp = document.getElementById('search-pending');
+        if (sp) sp.value = _pendingPendingInvoiceHighlight.email || '';
+    }
+
     await loadPendingInvoices();
 
     // Si se llegó acá por un link "ver factura" desde un pago, abrimos la pestaña
@@ -3582,6 +3589,7 @@ async function loadPendingInvoices() {
                 </tbody>
             </table>
             </div>`;
+        if (_pendingPendingInvoiceHighlight) { const h = _pendingPendingInvoiceHighlight; _pendingPendingInvoiceHighlight = null; _flashRow(`pending-row-${h.id}`); }
     } catch (e) {
         el.innerHTML = `<div style="color:#991b1b;font-size:13px;padding:12px">Error: ${escHtml(e.message)}</div>`;
     }
@@ -3602,7 +3610,7 @@ function pendingInvoiceRow(row) {
         ? `/admin/invoices/${row.invoice_id}/upload`
         : `/admin/invoices/from-payment/${row.payment_id}`;
 
-    return `<tr style="border-bottom:1px solid #f3f4f6;transition:background .1s" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
+    return `<tr id="pending-row-${row.payment_id}" style="border-bottom:1px solid #f3f4f6;transition:background .1s" onmouseover="this.style.background='#fafafa'" onmouseout="this.style.background=''">
         <td style="padding:12px;white-space:nowrap;vertical-align:top">${fmtDate(row.payment_date)}</td>
         <td style="padding:12px;vertical-align:top;line-height:1.6">${datosFacturacion}</td>
         <td style="padding:12px;white-space:nowrap;vertical-align:top;font-weight:600">$${Number(row.amount || 0).toLocaleString('es-AR')}</td>
@@ -4023,7 +4031,12 @@ async function loadPaymentsAdmin() {
                 <td>${_paymentStatusBadge(p.status)}</td>
                 <td style="font-size:11px;color:#6b7280">${escHtml(p.payment_method||'—')}</td>
                 <td style="font-size:11px;color:#6b7280">${escHtml(p.plan||'—')}</td>
-                <td style="font-size:11px">${p.invoice_id ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro de la factura" onclick="gotoInvoiceRecord(${p.invoice_id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</a>` : '<span style="color:#9ca3af">Sin factura</span>'}</td>
+                <td style="font-size:11px">${
+                    !p.invoice_id ? '<span style="color:#9ca3af">Sin factura</span>'
+                    : p.invoice_pdf
+                        ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro de la factura (emitida)" onclick="gotoInvoiceRecord(${p.invoice_id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</a>`
+                        : `<a class="badge badge-yellow" style="cursor:pointer;text-decoration:none" title="Registro creado sin PDF — subir en Pendientes" onclick="gotoPendingInvoice(${p.id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id} · sin PDF</a>`
+                }</td>
                 <td>${p.invoice_id
                     ? `<button class="btn btn-sm btn-secondary" onclick="unlinkInvoiceFromPayment(${p.invoice_id},'pagos')">Desvincular</button>`
                     : `<button class="btn btn-sm btn-secondary" onclick="openLinkInvoiceModal(${p.id},'${escHtml(p.email||'')}')">Asociar factura</button>`}</td>
@@ -4062,14 +4075,14 @@ async function openLinkInvoiceModal(paymentId, email) {
     _injectModal(`${_modalHeader('🔗 Asociar factura al pago #' + paymentId)}
         <div style="padding:22px"><div id="_link-body" style="font-size:13px;color:#6b7280">Cargando facturas…</div></div>`);
     try {
-        const data = await apiFetch(`/admin/invoices?search=${encodeURIComponent(email)}`);
+        const data = await apiFetch(`/admin/invoices?include_no_pdf=1&search=${encodeURIComponent(email)}`);
         const invs = data?.invoices || [];
         const body = document.getElementById('_link-body');
-        if (!invs.length) { body.innerHTML = 'Este usuario no tiene facturas emitidas. Creá una factura primero desde Facturación o la ficha del usuario.'; return; }
+        if (!invs.length) { body.innerHTML = 'Este usuario no tiene facturas registradas. Creá una factura primero desde Facturación o la ficha del usuario.'; return; }
         body.innerHTML = `
-            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;color:#374151">Elegí la factura a asociar</label>
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;color:#374151">Elegí la factura a asociar <span style="font-weight:400;color:#9ca3af">(incluye registros sin PDF)</span></label>
             <select id="_link-invoice-sel" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
-                ${invs.map(i => `<option value="${i.id}" ${i.payment_id ? 'disabled' : ''}>#${i.id} · ${escHtml(i.numero||'s/nro')} · $${Number(i.amount||0).toLocaleString('es-AR')} · ${fmtDate(i.issued_at||i.created_at)}${i.payment_id ? ` (ya asociada a pago #${i.payment_id})` : ''}</option>`).join('')}
+                ${invs.map(i => `<option value="${i.id}" ${i.payment_id ? 'disabled' : ''}>#${i.id} · ${escHtml(i.numero||'s/nro')} · $${Number(i.amount||0).toLocaleString('es-AR')} · ${fmtDate(i.issued_at||i.created_at)}${i.pdf_url ? '' : ' · sin PDF'}${i.payment_id ? ` (ya asociada a pago #${i.payment_id})` : ''}</option>`).join('')}
             </select>
             <div id="_link-err" style="color:#991b1b;font-size:12px;margin-top:8px;display:none"></div>
             <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
@@ -4334,8 +4347,9 @@ if (document.readyState !== 'loading') _applySidebarState();
 else document.addEventListener('DOMContentLoaded', _applySidebarState);
 
 // Navegación cruzada: desde un pago al registro de su factura y viceversa.
-let _pendingInvoiceHighlight = null; // {id, email}
-let _pendingPaymentHighlight = null; // {id, email}
+let _pendingInvoiceHighlight = null;        // {id, email} → Facturación › Emitidas
+let _pendingPaymentHighlight = null;        // {id, email} → Pagos
+let _pendingPendingInvoiceHighlight = null; // {id, email} → Facturación › Pendientes (factura sin PDF; id = payment_id)
 function gotoInvoiceRecord(invoiceId, email) {
     _pendingInvoiceHighlight = { id: invoiceId, email: email || '' };
     navigate('facturacion-admin');
@@ -4343,6 +4357,11 @@ function gotoInvoiceRecord(invoiceId, email) {
 function gotoPaymentRecord(paymentId, email) {
     _pendingPaymentHighlight = { id: paymentId, email: email || '' };
     navigate('pagos-admin');
+}
+// Factura con registro creado pero PDF no subido → pestaña Pendientes (para subir el PDF).
+function gotoPendingInvoice(paymentId, email) {
+    _pendingPendingInvoiceHighlight = { id: paymentId, email: email || '' };
+    navigate('facturacion-admin');
 }
 function _flashRow(rowId) {
     const el = document.getElementById(rowId);
