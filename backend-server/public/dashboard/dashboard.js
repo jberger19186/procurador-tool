@@ -4322,8 +4322,10 @@ function toggleSidebar() {
     try { localStorage.setItem('admin_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
 }
 function _applySidebarState() {
-    let collapsed = false;
-    try { collapsed = localStorage.getItem('admin_sidebar_collapsed') === '1'; } catch (_) {}
+    // Por defecto el menú arranca COLAPSADO (solo íconos). Si el usuario lo expande
+    // o colapsa manualmente, se respeta su preferencia guardada.
+    let collapsed = true;
+    try { const v = localStorage.getItem('admin_sidebar_collapsed'); if (v !== null) collapsed = v === '1'; } catch (_) {}
     document.body.classList.toggle('sidebar-collapsed', collapsed);
     // Tooltips: con el menú colapsado solo se ven los íconos → el title muestra la sección
     document.querySelectorAll('#sidebar nav a').forEach(a => { if (!a.title) a.title = a.textContent.trim(); });
