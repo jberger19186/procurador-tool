@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-06-20
+> Última actualización: 2026-06-25
 
 ---
 
@@ -26,11 +26,23 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ---
 
 ## 🔄 Estado actual
-> Versión app Electron: **2.7.27** — publicada en GitHub Releases (auto-updater activo)
+> Versión app Electron: **2.7.28** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-24 (admin: beneficios comerciales como tabla de eventos + cortesía ±N sin vencimiento + "Activo"/"Trial" desde el selector de Datos de Registro; hardening de `pending_email`; deep-links en tabla de tickets. Migración `20260624_commercial_benefits.sql`)
+> Última sesión: 2026-06-25 (dashboard: reorden de menú lateral + menú **colapsable** (hamburger); **sección Pagos** nueva con alta manual y asociación pago↔factura en ambos sentidos (links cruzados); reorden de secciones de la ficha + alta manual de pagos/facturas; **barra de progreso** Monitor Partes; **cancelación programada** registrada en Historial de la cuenta; portal: ticket `resolved`→"RESUELTO"; Electron: **link al portal** en mensajes de login bloqueantes — release **v2.7.28**; landing actualizada a 2.7.28. Sin migraciones de DB.)
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-25 — mejoras dashboard admin + portal + Electron (release v2.7.28)** :
+  - **Menú lateral del admin reordenado:** Resumen · Usuarios · Tickets · Facturación · **Pagos** · Planes · Monitor · Legal · Métricas · Diagnóstico · Scripts (`public/dashboard/index.html`).
+  - **Menú lateral colapsable (hamburger):** botón ☰ en el topbar colapsa el sidebar a **solo íconos** (logo/labels/footer ocultos, íconos centrados, tooltips por sección). Estado persistido en `localStorage` (`admin_sidebar_collapsed`). CSS: clase `body.sidebar-collapsed` + `--sidebar-w-collapsed:64px`. JS: `toggleSidebar()`/`_applySidebarState()` en `dashboard.js`.
+  - **Nueva sección Pagos** (`pagos-admin` en el nav, debajo de Facturación): listado global de `payments` con búsqueda (email/nombre/cuit) + filtro por estado; **alta manual** de pagos; **asociación pago↔factura** en ambos sentidos. Backend nuevo en `routes/admin.js`: `GET /admin/payments`, `POST /admin/payments/manual`, `POST /admin/payments/:id/link-invoice`, `POST /admin/invoices/:id/link-payment`, `POST /admin/invoices/:id/unlink-payment` (helper `linkInvoiceToPayment` respeta `invoices.payment_id` UNIQUE → 1 factura por pago).
+  - **Links cruzados pago↔factura:** en Pagos la columna "Factura #N" es link → abre Facturación→Emitidas prefiltrada y resalta la fila; en Facturación→Emitidas se agregó columna **ID** (id de factura) y el "Pago #N" es link → abre Pagos prefiltrado y resalta la fila. Helpers `gotoInvoiceRecord`/`gotoPaymentRecord`/`_flashRow`.
+  - **Ficha de usuario reordenada:** Información+Suscripción → Datos de Registro → Tickets → Historial de la cuenta → Ajustes Manuales → Usos Extra → Beneficios → Historial de Pagos → Historial de Facturas → Partes en Monitoreo → Últimas ejecuciones. Botones **"＋ Agregar pago"** / **"＋ Agregar factura"** (modales dinámicos `openPaymentModal`/`openInvoiceModalDynamic`).
+  - **Barra de progreso Monitor Partes** en la ficha: reusa `renderSubsystemBar('Monitor Partes', partes.length, monitor_partes_limit, bonus)` (antes era texto plano).
+  - **Cancelación programada visible en el Historial de la cuenta:** `cancelSubscription`/`reactivateSubscription` (`services/subscriptionService.js`) ahora insertan `user_events` (`subscription_cancel_scheduled` / `subscription_cancel_reverted`); labels en `eventLabel`/`eventDetail` (muestra la fecha `cancel_at`). Antes no quedaba registro.
+  - **Portal:** estado de ticket `resolved` muestra **"RESUELTO"** (faltaba en el map de `app.js`).
+  - **Electron — link al portal en login bloqueado:** `/auth/login` ya devolvía `action` (portal/contact_admin/resubscribe/subscribe); `backendClient.login` ahora lo propaga y `renderer/login.js` muestra el link "Abrir el portal de usuarios →" (`showErrorHTML`) en estados bloqueantes (suspendida, rechazada, cancelada, trial agotado, sin suscripción); credenciales/device-bound/conexión siguen como mensaje plano. **Release v2.7.28** (tags `electron-v2.7.28` + GitHub `v2.7.28`), texto de versión actualizado en portal (`app.js`) y **landing** (4 refs).
+  - **Sin migraciones de DB** (las tablas `payments`/`invoices`/`user_events` ya existían). Resguardos previos: `.7z` en `…/z-automatizacion/202606_25062026_ProcuradorTool.7z` + tag de recupero `pre-mejoras-dashboard-2026-06-25`. Commits `53bc0ea`, `78ef4f1`, `20f9d8a`.
 
 - ✅ **Sesión 2026-06-24 — herramientas de admin (beneficios/cortesía) + endurecimiento de estados** :
   - **Beneficios comerciales = tabla de eventos** (migración `20260624_commercial_benefits.sql`): antes el beneficio se guardaba en un único slot de `support_tickets` (1 por ticket, sin historial, no aplicable sin ticket). Ahora `commercial_benefits` (user_id, ticket_id nullable, type, value, applied_by, created_at) permite **N beneficios por usuario**, con o sin ticket. Backfill de los ya aplicados. **Ya NO auto-resuelve el ticket** al aplicar (decisión del usuario). Helper `applyBenefitToUser` compartido. Endpoints: `POST /admin/tickets/:id/apply-benefit`, `POST /admin/users/:id/apply-benefit` (sin ticket), `GET /admin/users/:id/benefits`. UI: card "Beneficios comerciales" en la ficha con botón "+ Aplicar beneficio" + historial; en el ticket el form queda siempre disponible (varios) + historial.
