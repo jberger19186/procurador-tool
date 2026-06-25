@@ -3449,11 +3449,14 @@ async function renderFacturacionAdmin() {
                         <div>
                             <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Usuario (email) *</label>
                             <div style="position:relative">
-                                <input id="mi-user-search" type="text" placeholder="Escribí el email del usuario…"
-                                    autocomplete="off"
-                                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"
-                                    oninput="searchUsersForInvoice(this.value)"
-                                    onkeydown="handleUserSearchKeydown(event)" />
+                                <div style="display:flex;gap:6px">
+                                    <input id="mi-user-search" type="text" placeholder="Escribí el email del usuario…"
+                                        autocomplete="off"
+                                        style="flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"
+                                        oninput="searchUsersForInvoice(this.value)"
+                                        onkeydown="handleUserSearchKeydown(event)" />
+                                    <button type="button" class="btn btn-sm btn-secondary" title="Elegir de la lista de usuarios registrados" onclick="openUserPicker(_invoicePickUser)" style="white-space:nowrap">👤 Elegir</button>
+                                </div>
                                 <div id="mi-user-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;max-height:180px;overflow-y:auto"></div>
                             </div>
                             <div id="mi-user-selected" style="display:none;margin-top:6px;padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#166534"></div>
@@ -4158,9 +4161,12 @@ function openPaymentModal(fixedUserId = null, fixedEmail = '') {
     const userBlock = fixedUserId
         ? `<div style="padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#166534">Usuario: <strong>${escHtml(fixedEmail)}</strong> (#${fixedUserId})</div>`
         : `<div style="position:relative">
-                <input id="_pay-user-search" type="text" autocomplete="off" placeholder="Escribí el email del usuario…"
-                    style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"
-                    oninput="_payUserSearch(this.value)" />
+                <div style="display:flex;gap:6px">
+                    <input id="_pay-user-search" type="text" autocomplete="off" placeholder="Escribí el email del usuario…"
+                        style="flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"
+                        oninput="_payUserSearch(this.value)" />
+                    <button type="button" class="btn btn-sm btn-secondary" title="Elegir de la lista de usuarios registrados" onclick="openUserPicker(_payPickUser)" style="white-space:nowrap">👤 Elegir</button>
+                </div>
                 <div id="_pay-user-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:10;max-height:180px;overflow-y:auto"></div>
                 <div id="_pay-user-selected" style="display:none;margin-top:6px;padding:8px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;font-size:12px;color:#166534"></div>
            </div>`;
@@ -4371,4 +4377,93 @@ function _flashRow(rowId) {
     el.style.transition = 'background .3s';
     el.style.background = '#fde68a';
     setTimeout(() => { el.style.background = orig; }, 1800);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SELECTOR DE USUARIO (browse de usuarios registrados, para alta manual sin tipear)
+// Capa propia (z-index 1200) → se apila sobre cualquier modal de alta abierto.
+// ═══════════════════════════════════════════════════════════════════════════════
+let _userPickerCb = null;
+let _userPickerResults = [];
+let _userPickerTimeout = null;
+function openUserPicker(onPick) {
+    closeUserPicker();
+    _userPickerCb = onPick;
+    const wrap = document.createElement('div');
+    wrap.id = '_user-picker';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;display:flex;align-items:center;justify-content:center';
+    wrap.innerHTML = `<div style="background:#fff;border-radius:12px;width:100%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+            <h3 style="margin:0;font-size:15px;font-weight:700;color:#111827">👤 Seleccionar usuario</h3>
+            <button onclick="closeUserPicker()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;line-height:1">×</button>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid #f3f4f6">
+            <input id="_up-search" type="text" autocomplete="off" placeholder="Filtrar por email, nombre o CUIT…"
+                style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"
+                oninput="_userPickerSearch(this.value)">
+        </div>
+        <div id="_up-list" style="overflow-y:auto;padding:4px 0;font-size:13px">Cargando…</div>
+    </div>`;
+    wrap.addEventListener('click', e => { if (e.target === wrap) closeUserPicker(); });
+    document.body.appendChild(wrap);
+    _userPickerSearch('');
+    setTimeout(() => document.getElementById('_up-search')?.focus(), 50);
+}
+function closeUserPicker() {
+    const m = document.getElementById('_user-picker');
+    if (m) m.remove();
+    _userPickerCb = null;
+}
+function _userPickerSearch(q) {
+    clearTimeout(_userPickerTimeout);
+    _userPickerTimeout = setTimeout(async () => {
+        const list = document.getElementById('_up-list');
+        if (!list) return;
+        try {
+            const data = await apiFetch(`/admin/users/search?q=${encodeURIComponent(q)}&limit=500`);
+            _userPickerResults = data?.users || [];
+            if (!_userPickerResults.length) {
+                list.innerHTML = '<div style="padding:16px;text-align:center;color:#6b7280">Sin resultados</div>';
+                return;
+            }
+            list.innerHTML = _userPickerResults.map((u, idx) => `
+                <div onclick="_userPickerPick(${idx})" style="padding:9px 16px;cursor:pointer;border-bottom:1px solid #f6f7f9"
+                    onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#fff'">
+                    <div style="font-weight:600;color:#111827">${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</div>
+                    <div style="color:#6b7280;font-size:12px">${escHtml(u.email)}${u.cuit ? ` · CUIT ${escHtml(u.cuit)}` : ''}</div>
+                </div>`).join('');
+        } catch (e) {
+            list.innerHTML = `<div style="padding:16px;color:#991b1b">Error: ${escHtml(e.message)}</div>`;
+        }
+    }, 200);
+}
+function _userPickerPick(idx) {
+    const u = _userPickerResults[idx];
+    const cb = _userPickerCb;
+    closeUserPicker();
+    if (cb && u) cb(u);
+}
+
+// Callbacks de selección para los formularios de alta manual
+function _payPickUser(u) {
+    _payModalUserId = u.id;
+    const inp = document.getElementById('_pay-user-search'); if (inp) inp.value = u.email;
+    const dd = document.getElementById('_pay-user-dropdown'); if (dd) dd.style.display = 'none';
+    const sel = document.getElementById('_pay-user-selected');
+    if (sel) {
+        sel.innerHTML = `✅ <strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong> · ${escHtml(u.email)}${u.cuit ? ` · CUIT: ${escHtml(u.cuit)}` : ''}`;
+        sel.style.display = '';
+    }
+}
+function _invoicePickUser(u) {
+    _manualInvoiceUserId = u.id;
+    const inp = document.getElementById('mi-user-search'); if (inp) inp.value = u.email;
+    const dd = document.getElementById('mi-user-dropdown'); if (dd) dd.style.display = 'none';
+    const dom = u.domicilio || {};
+    const domStr = [dom.calle, dom.numero, dom.localidad, dom.provincia].filter(Boolean).join(', ');
+    const sel = document.getElementById('mi-user-selected');
+    if (sel) {
+        sel.innerHTML = `✅ <strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong> · ${escHtml(u.email)}${u.cuit ? ` · CUIT: ${escHtml(u.cuit)}` : ''}${domStr ? ` · ${escHtml(domStr)}` : ''}`;
+        sel.style.display = '';
+    }
 }

@@ -227,15 +227,16 @@ router.get('/users', authenticateAdmin, async (req, res) => {
 router.get('/users/search', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
     const { q = '', limit = 10 } = req.query;
-    if (!q || q.length < 2) return res.json({ users: [] });
+    // q vacío → lista todos (para el selector de usuario); q de 1 char → vacío (evita ruido en autocomplete)
+    if (q.length === 1) return res.json({ users: [] });
     try {
         const { rows } = await db.query(
             `SELECT id, email, nombre, apellido, cuit, domicilio
              FROM users
-             WHERE email ILIKE $1 OR nombre ILIKE $1 OR apellido ILIKE $1 OR cuit ILIKE $1
+             WHERE ($1 = '' OR email ILIKE $2 OR nombre ILIKE $2 OR apellido ILIKE $2 OR cuit ILIKE $2)
              ORDER BY nombre, apellido
-             LIMIT $2`,
-            [`%${q}%`, parseInt(limit, 10)]
+             LIMIT $3`,
+            [q, `%${q}%`, Math.min(parseInt(limit, 10) || 10, 500)]
         );
         res.json({ users: rows });
     } catch (err) {
