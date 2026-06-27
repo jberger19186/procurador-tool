@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-06-25
+> Última actualización: 2026-06-26
 
 ---
 
@@ -28,9 +28,21 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.28** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-25 (dashboard: reorden de menú lateral + menú **colapsable** (hamburger, colapsado por defecto); **sección Pagos** nueva con alta manual, **selector visual de usuario** y asociación pago↔factura en ambos sentidos (links cruzados, contempla factura sin PDF→Pendientes); reorden de secciones de la ficha + alta manual de pagos/facturas; **barra de progreso** Monitor Partes; **cancelación programada** registrada en Historial de la cuenta; portal: ticket `resolved`→"RESUELTO"; Electron: **link al portal** en mensajes de login bloqueantes — release **v2.7.28**; landing actualizada a 2.7.28. Sin migraciones de DB.)
+> Última sesión: 2026-06-26 (**fix** `invoices.payment_id` UNIQUE — arregla error `ON CONFLICT` al subir factura PDF de un pago; botón **"Crear factura"** directo desde Pagos; **Fase 1 de vigencia de planes por fecha** (bajo riesgo, sin tocar cobro): botón "vencimiento real del plan" en el panel, herencia de `plan_expiry_date` en altas, `cancelled` retornable desde el portal. **Spec completa** en `docs/internal/spec-vigencia-planes-fecha.md` con Fase 2 (cobro/MP) pendiente para sesión con staging. Migración `20260626_invoices_payment_id_unique.sql`.)
+> Sesión previa 2026-06-25: dashboard reorden + menú colapsable, sección Pagos, asociación pago↔factura, RESUELTO, barra Monitor Partes, cancelación en historial, link al portal en login Electron — release **v2.7.28**.
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-26 — fix facturación + Fase 1 vigencia de planes por fecha** :
+  - **Fix `invoices.payment_id` UNIQUE** (migración `20260626_invoices_payment_id_unique.sql`, aplicada en prod): el endpoint `from-payment` usa `ON CONFLICT (payment_id)` pero la tabla solo tenía FK → al subir el PDF de un pago sin factura aparecía *"there is no unique or exclusion constraint matching the ON CONFLICT specification"*. La restricción formaliza la invariante "1 factura por pago" (NULL permitido para facturas manuales). Como la subida fallaba, el pago quedaba en "Sin factura"; resuelto.
+  - **Botón "📎 Crear factura" en Pagos:** en un pago sin factura ahora se puede **subir el PDF directo** desde la sección Pagos (`openInvoiceFromPayment` → `/admin/invoices/from-payment/:id`, queda vinculada al pago). Antes solo se podía "Asociar" una existente o ir a Facturación→Pendientes.
+  - **Fase 1 — vigencia de planes por fecha (sin tocar el cobro de MP, commit `678c92b`):**
+    - **Panel:** sección "Vencimiento real del plan" en el form de plan (`savePlanExpiry` → `PUT /admin/plans/:id/expiry`), separada del "Tipo de límite" (que es **solo aviso**), con advertencia roja: hoy suspende en la fecha exacta y **no cancela el débito de MP** → no usar en planes con cobro activo hasta la Fase 2.
+    - **Registro:** las altas nuevas **heredan `plan_expiry_date`** del plan (`auth.js`; NULL si el plan no tiene).
+    - **Portal — `cancelled` retornable:** `portal-login` ya no bloquea `cancelled` (solo `rejected`); el portal ya tenía el camino de re-suscripción (`isCancelledExpired` → "Nueva suscripción" → **checkout real** de MP). La reactivación-stub gratis **no** se usa para `cancelled`; la app/extensión siguen bloqueadas. Banner del portal actualizado para guiar.
+  - **Spec de diseño completa:** `docs/internal/spec-vigencia-planes-fecha.md` — flujo de retiro de plan respetando el período pago, sincronización acceso↔cobro, ventana estricta de 7 días, estados (`suspended_plan_expired` recuperable vs `cancelled` retornable). **Fase 2 (crons + cancelación de MP + reactivación real)** queda pendiente para una sesión con **staging + backup + E2E**.
+  - **Aclaración del modelo de vigencia** (documentada en la conversación): `plan_expiry_date` (suscripción) = corte real que suspende vía cron; `promo_type='date'`/`promo_end_date` (plan) = **solo alerta**; `period_days` de `plans` está **inerte** salvo en `/users/change-plan`. El cron de suspensión por fecha **no cancela MP** (gap que cubre la Fase 2).
+  - **Sin release de Electron** (cambios de backend/dashboard/portal). App sigue en v2.7.28.
 
 - ✅ **Sesión 2026-06-25 — mejoras dashboard admin + portal + Electron (release v2.7.28)** :
   - **Menú lateral del admin reordenado:** Resumen · Usuarios · Tickets · Facturación · **Pagos** · Planes · Monitor · Legal · Métricas · Diagnóstico · Scripts (`public/dashboard/index.html`).

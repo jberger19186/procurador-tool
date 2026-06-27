@@ -1,8 +1,11 @@
 # Especificación — Vigencia de planes por fecha (retiro de plan) + recuperación de cuentas
 
-> Estado: **diseño aprobado, pendiente de implementar**. Redactado 2026-06-26.
-> Objetivo: ofrecer planes/promos con **fecha de retiro**, con acceso y cobro sincronizados,
-> y eliminar el "callejón sin salida" de las cuentas dadas de baja.
+> Redactado 2026-06-26. Objetivo: ofrecer planes/promos con **fecha de retiro**, con acceso
+> y cobro sincronizados, y eliminar el "callejón sin salida" de las cuentas dadas de baja.
+>
+> **Estado de implementación:**
+> - ✅ **Fase 1 (bajo riesgo, sin tocar cobro) — HECHA** (2026-06-26, commit `678c92b`): botón de "vencimiento real del plan" en el panel, herencia de `plan_expiry_date` en altas nuevas, y `cancelled` retornable desde el portal (re-suscripción por checkout real). Ver §7 puntos 5, 6, 7.
+> - ⏳ **Fase 2 (cobro / MercadoPago) — PENDIENTE** — requiere staging + backup + E2E. Ver §7 puntos 1, 2, 3, 4.
 
 ---
 
@@ -84,13 +87,15 @@ MercadoPago en Fase 5):
 
 ## 7. Cambios concretos a implementar (acotados)
 
-1. **Cron de retiro a fin de período (no mismo día):** en lugar de suspender cuando `plan_expiry_date < NOW()`, suspender en el **fin del período** (`next_billing_date`/`expires_at`) que caiga **después** de `plan_expiry_date`. Al suspender → llamar `cancelSubscription()` (pausar MP) + estado `suspended_plan_expired` + `payment_grace_ends_at = +7d`.
-2. **Aviso a 7 días antes** (ajustar el cron de `plan_expiry_warning`, hoy a 30 días).
-3. **Reactivación real (eliminar el stub):** que `/users/change-plan` en estado vencido **enrute por el checkout de MP** (cobro real del plan nuevo) en vez de "simula cobro OK"; cancelar el preapproval viejo (single-active ya lo hace).
-4. **Cron post-7-días:** si no eligió → **cancelar el preapproval en MP**; la cuenta **queda en `suspended_plan_expired`** (NO `cancelled`).
-5. **`cancelled` retornable:** permitir que un `cancelled` **entre al portal** (ajustar `portal-login`) y **re-suscribirse** (checkout). No toca el bloqueo de app/extensión.
-6. **Heredar `plan_expiry_date` en altas nuevas:** el INSERT de registro (`auth.js`) hoy no lo copia del plan → copiarlo si el plan lo tiene.
-7. **Botón en el panel admin** para `PUT /admin/plans/:id/expiry` (hoy solo por API).
+> Leyenda: ⏳ = Fase 2 (pendiente, requiere staging) · ✅ = Fase 1 (hecho 2026-06-26).
+
+1. ⏳ **Cron de retiro a fin de período (no mismo día):** en lugar de suspender cuando `plan_expiry_date < NOW()`, suspender en el **fin del período** (`next_billing_date`/`expires_at`) que caiga **después** de `plan_expiry_date`. Al suspender → llamar `cancelSubscription()` (pausar MP) + estado `suspended_plan_expired` + `payment_grace_ends_at = +7d`.
+2. ⏳ **Aviso a 7 días antes** (ajustar el cron de `plan_expiry_warning`, hoy a 30 días).
+3. ⏳ **Reactivación real (eliminar el stub):** que `/users/change-plan` en estado vencido **enrute por el checkout de MP** (cobro real del plan nuevo) en vez de "simula cobro OK"; cancelar el preapproval viejo (single-active ya lo hace).
+4. ⏳ **Cron post-7-días:** si no eligió → **cancelar el preapproval en MP**; la cuenta **queda en `suspended_plan_expired`** (NO `cancelled`).
+5. ✅ **`cancelled` retornable:** `portal-login` ya permite `cancelled` (solo bloquea `rejected`); el portal ya tenía el camino de re-suscripción (`isCancelledExpired` → "Nueva suscripción" → checkout real). La reactivación-stub gratis **no** se usa para `cancelled`. App/extensión siguen bloqueadas.
+6. ✅ **Heredar `plan_expiry_date` en altas nuevas:** el INSERT de registro (`auth.js`) copia `plan.plan_expiry_date` (NULL si el plan no tiene).
+7. ✅ **Botón en el panel admin** para `PUT /admin/plans/:id/expiry` (form de plan → "Vencimiento real del plan", con advertencia de que aún no cancela MP).
 
 ---
 
