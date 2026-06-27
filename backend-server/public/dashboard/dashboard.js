@@ -4040,9 +4040,10 @@ async function loadPaymentsAdmin() {
                         ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro de la factura (emitida)" onclick="gotoInvoiceRecord(${p.invoice_id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</a>`
                         : `<a class="badge badge-yellow" style="cursor:pointer;text-decoration:none" title="Registro creado sin PDF — subir en Pendientes" onclick="gotoPendingInvoice(${p.id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id} · sin PDF</a>`
                 }</td>
-                <td>${p.invoice_id
+                <td style="white-space:nowrap">${p.invoice_id
                     ? `<button class="btn btn-sm btn-secondary" onclick="unlinkInvoiceFromPayment(${p.invoice_id},'pagos')">Desvincular</button>`
-                    : `<button class="btn btn-sm btn-secondary" onclick="openLinkInvoiceModal(${p.id},'${escHtml(p.email||'')}')">Asociar factura</button>`}</td>
+                    : `<button class="btn btn-sm btn-primary" onclick="openInvoiceFromPayment(${p.id},'${escHtml(p.email||'')}')">📎 Crear factura</button>
+                       <button class="btn btn-sm btn-secondary" onclick="openLinkInvoiceModal(${p.id},'${escHtml(p.email||'')}')">Asociar</button>`}</td>
             </tr>`).join('')}</tbody>
         </table></div>`;
         if (_pendingPaymentHighlight) { const h = _pendingPaymentHighlight; _pendingPaymentHighlight = null; _flashRow(`pay-row-${h.id}`); }
@@ -4326,6 +4327,60 @@ async function submitInvoiceDynamic(fixedUserId) {
         if (!resp.ok) throw new Error(data.error || 'Error al guardar');
         closeDynModal();
         loadInvoiceHistory(fixedUserId);
+    } catch (e) {
+        showErr(e.message);
+        btn.disabled = false; btn.textContent = '✅ Guardar factura';
+    }
+}
+
+// ── Crear factura (con PDF) directamente desde un PAGO (queda vinculada al pago) ──
+// Usa /admin/invoices/from-payment/:paymentId → toma user/monto del pago y setea payment_id.
+function openInvoiceFromPayment(paymentId, email) {
+    _injectModal(`${_modalHeader('🧾 Crear factura del pago #' + paymentId)}
+        <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:12px;color:#6b7280">La factura se vincula automáticamente al pago${email ? ` de <strong>${escHtml(email)}</strong>` : ''} (monto y usuario salen del pago).</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Tipo de comprobante</label>
+                    <select id="_ifp-tipo" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
+                        <option value="C" selected>Factura C</option><option value="B">Factura B</option><option value="A">Factura A</option>
+                        <option value="NC_C">Nota de crédito C</option><option value="NC_B">Nota de crédito B</option>
+                    </select></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número *</label>
+                    <input id="_ifp-numero" type="text" placeholder="1245 → 0001-00001245" onblur="this.value=fmtNroFactura(this.value)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">CAE <span style="font-weight:400;color:#9ca3af">(opcional)</span></label>
+                <input id="_ifp-cae" type="text" placeholder="12345678901234" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace"></div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">PDF de la factura *</label>
+                <input id="_ifp-file" type="file" accept=".pdf" style="font-size:13px;width:100%">
+                <p style="margin:4px 0 0;font-size:11px;color:#6b7280">Máximo 5 MB · solo PDF</p></div>
+            <div id="_ifp-err" style="color:#991b1b;font-size:12px;display:none"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button id="_ifp-submit" class="btn btn-sm btn-primary" onclick="submitInvoiceFromPayment(${paymentId})">✅ Guardar factura</button>
+            </div>
+        </div>`);
+}
+async function submitInvoiceFromPayment(paymentId) {
+    const errEl = document.getElementById('_ifp-err');
+    const showErr = m => { errEl.textContent = m; errEl.style.display = ''; };
+    errEl.style.display = 'none';
+    const fileInput = document.getElementById('_ifp-file');
+    if (!fileInput?.files[0]) return showErr('Seleccioná un PDF');
+    const btn = document.getElementById('_ifp-submit');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    const form = new FormData();
+    form.append('pdf', fileInput.files[0]);
+    form.append('invoice_type', document.getElementById('_ifp-tipo').value || 'C');
+    const numero = document.getElementById('_ifp-numero').value.trim();
+    const cae = document.getElementById('_ifp-cae').value.trim();
+    if (numero) form.append('numero', numero);
+    if (cae) form.append('cae', cae);
+    try {
+        const resp = await fetch(`/admin/invoices/from-payment/${paymentId}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Error al guardar');
+        closeDynModal();
+        loadPaymentsAdmin();
     } catch (e) {
         showErr(e.message);
         btn.disabled = false; btn.textContent = '✅ Guardar factura';
