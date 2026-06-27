@@ -2465,6 +2465,24 @@ window.showPlanForm = async function(planId) {
                 ${plan?.promo_used_count > 0 ? `<p style="margin-top:8px;font-size:12px;color:var(--text-muted)">Registros usando esta promo: <strong>${plan.promo_used_count}</strong></p>` : ''}
             </div>
 
+            ${plan ? `
+            <!-- VENCIMIENTO REAL DEL PLAN (suspende cuentas) -->
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+                <label style="font-size:12px;display:block;margin-bottom:6px;font-weight:600">⏳ Vencimiento real del plan (suspende las cuentas)</label>
+                <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#991b1b;line-height:1.5">
+                    ⚠️ <strong>Distinto del "Tipo de límite" de arriba</strong> (eso es solo un aviso). Esta fecha <strong>suspende</strong> a las cuentas <strong>activas</strong> de este plan (estado "plan vencido") y se propaga a sus suscripciones.
+                    <br>Hoy el corte es en la fecha exacta y <strong>no cancela el débito de MercadoPago</strong> — no la uses en planes con cobro automático activo hasta completar la fase siguiente. Dejala vacía para no aplicar.
+                </div>
+                <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+                    <div style="flex:1;min-width:220px">
+                        <label style="font-size:12px;display:block;margin-bottom:4px">Fecha de vencimiento del plan</label>
+                        <input type="datetime-local" id="pf-plan-expiry" value="${plan?.plan_expiry_date ? String(plan.plan_expiry_date).slice(0,16) : ''}" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+                    </div>
+                    <button class="btn btn-sm btn-primary" onclick="savePlanExpiry(${plan.id}, false)">Guardar vencimiento</button>
+                    ${plan?.plan_expiry_date ? `<button class="btn btn-sm btn-secondary" onclick="savePlanExpiry(${plan.id}, true)">Quitar</button>` : ''}
+                </div>
+            </div>` : ''}
+
             <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
                 <button class="btn btn-primary" onclick="savePlanForm(${plan ? plan.id : 'null'})">${plan ? 'Guardar cambios' : 'Crear plan'}</button>
             </div>
@@ -2476,6 +2494,24 @@ window.togglePromoFields = function() {
     const t = document.getElementById('pf-promo-type').value;
     document.getElementById('pf-promo-date-wrap').style.display  = t === 'date'  ? 'block' : 'none';
     document.getElementById('pf-promo-quota-wrap').style.display = t === 'quota' ? 'block' : 'none';
+};
+
+// Vencimiento real del plan (suspende cuentas activas en esa fecha). Endpoint dedicado:
+// PUT /admin/plans/:id/expiry → setea plans.plan_expiry_date y lo propaga a las subs activas.
+window.savePlanExpiry = async function(planId, clear) {
+    const input = document.getElementById('pf-plan-expiry');
+    const val = clear ? null : (input?.value || null);
+    if (!clear && !val) { showAlert(document.getElementById('plan-alert'), 'Elegí una fecha o usá "Quitar".'); return; }
+    const msg = clear
+        ? '¿Quitar el vencimiento de este plan? Las cuentas dejan de tener fecha de corte.'
+        : '¿Aplicar este vencimiento? SUSPENDERÁ a las cuentas ACTIVAS de este plan en esa fecha (no cancela el cobro de MercadoPago). ¿Continuar?';
+    if (!confirm(msg)) return;
+    try {
+        await apiFetch(`/admin/plans/${planId}/expiry`, 'PUT', { plan_expiry_date: val });
+        showAlert(document.getElementById('plan-alert'), clear ? 'Vencimiento del plan quitado.' : 'Vencimiento del plan guardado y propagado a las cuentas activas.', 'success');
+    } catch (e) {
+        showAlert(document.getElementById('plan-alert'), e.message);
+    }
 };
 
 window.savePlanForm = async function(planId) {

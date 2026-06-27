@@ -390,7 +390,7 @@ function renderStatusBanner() {
         },
         cancelled: {
             color: '#374151',
-            msg: () => 'Tu suscripción fue cancelada.'
+            msg: () => 'Tu suscripción fue cancelada. Podés volver a suscribirte configurando un método de pago en Facturación.'
         },
     };
 

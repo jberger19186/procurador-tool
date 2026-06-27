@@ -209,14 +209,15 @@ router.post('/register', registerLimiter, async (req, res) => {
 
             const newUser = userResult.rows[0];
 
-            // Suscripción en estado suspended con trial de 20 ejecuciones
+            // Suscripción en estado suspended con trial de 20 ejecuciones.
+            // Hereda plan_expiry_date del plan (si el plan tiene fecha de retiro; si no, NULL).
             await client.query(`
                 INSERT INTO subscriptions (
                     user_id, plan, plan_id, status,
                     usage_limit, usage_count,
-                    expires_at
-                ) VALUES ($1, $2, $3, 'suspended', 20, 0, NOW() + INTERVAL '365 days')
-            `, [newUser.id, plan.name, plan.id]);
+                    expires_at, plan_expiry_date
+                ) VALUES ($1, $2, $3, 'suspended', 20, 0, NOW() + INTERVAL '365 days', $4)
+            `, [newUser.id, plan.name, plan.id, plan.plan_expiry_date || null]);
 
             // Incrementar contador de promo si aplica
             if (plan.promo_type === 'date' || plan.promo_type === 'quota') {
@@ -745,10 +746,11 @@ router.post('/portal-login', loginLimiter, async (req, res) => {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }
 
-        // Solo bloquear estados terminales — el resto accede al portal para ver su estado
+        // Bloquear solo 'rejected' (rechazo del admin, terminal). 'cancelled' (baja
+        // voluntaria) SÍ puede entrar al portal para volver a suscribirse y no quedar
+        // en un callejón sin salida — la reactivación real pasa por el checkout (pago).
         const hardBlocked = {
             rejected:  'Tu cuenta fue rechazada. Contactá al administrador.',
-            cancelled: 'Tu suscripción fue cancelada.',
         };
         if (hardBlocked[user.registration_status]) {
             return res.status(403).json({ error: hardBlocked[user.registration_status] });
