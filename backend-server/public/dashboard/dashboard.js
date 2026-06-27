@@ -4463,11 +4463,14 @@ function gotoPendingInvoice(paymentId, email) {
 function _flashRow(rowId) {
     const el = document.getElementById(rowId);
     if (!el) return;
+    // Limpiar cualquier fila resaltada previa (solo una a la vez)
+    document.querySelectorAll('tr.row-hl').forEach(r => { r.classList.remove('row-hl'); });
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    const orig = el.style.background;
-    el.style.transition = 'background .3s';
-    el.style.background = '#fde68a';
-    setTimeout(() => { el.style.background = orig; }, 1800);
+    // Resaltado PERSISTENTE (clase con !important para sobrevivir al hover) hasta que el
+    // usuario haga clic en la fila.
+    el.classList.add('row-hl');
+    const clear = () => { el.classList.remove('row-hl'); el.removeEventListener('click', clear); };
+    el.addEventListener('click', clear);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

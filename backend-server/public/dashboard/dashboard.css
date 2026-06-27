@@ -437,6 +437,10 @@ tr:hover td { background: #f9fafb; }
 /* ===== LOADING ===== */
 .loading { text-align: center; padding: 32px; color: var(--text-muted); font-size: 14px; }
 
+/* ===== FILA RESALTADA (navegación cruzada pago↔factura) — persiste hasta el clic ===== */
+tr.row-hl, tr.row-hl:hover { background: #fde68a !important; box-shadow: inset 4px 0 0 0 #d97706; transition: background .3s; }
+tr.row-hl td { background: transparent !important; }
+
 /* ===== HAMBURGER + SIDEBAR COLAPSABLE ===== */
 :root { --sidebar-w-collapsed: 64px; }
 #sidebar { transition: width .18s ease; }
