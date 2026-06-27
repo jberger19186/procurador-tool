@@ -6,7 +6,7 @@
 > **Estado de implementación:**
 > - ✅ **Fase 1 (bajo riesgo, sin tocar cobro) — HECHA** (2026-06-26, commit `678c92b`): botón de "vencimiento real del plan" en el panel, herencia de `plan_expiry_date` en altas nuevas, y `cancelled` retornable desde el portal (re-suscripción por checkout real). Ver §7 puntos 5, 6, 7.
 > - ✅ **Fase 2 — NÚCLEO HECHO** (2026-06-27, commit `30c59d6`, **validado E2E en staging**): cron de retiro respeta el período pago + **pausa el cobro en MP**, corte al fin del período → `suspended_plan_expired` con gracia 7d, aviso a 7 días. Ver §7 puntos 1, 2, 4. **Dormido en prod** hasta que un admin setee `plan_expiry_date`.
-> - ⏳ **Fase 2 — PENDIENTE: Change 3 (reactivación real)** — hoy la reactivación de un `suspended_plan_expired` vía `change-plan` es un STUB (reactiva gratis). Hacerlo pasar por checkout de MP (cobro real) **antes de usar el retiro en planes con cobro** (si no, hay fuga: el usuario se reactiva sin pagar). Ver §7 punto 3.
+> - ✅ **Fase 2 — Change 3 (reactivación real) HECHO** (2026-06-27, commit `9939474`): la reactivación de un `suspended_plan_expired` ya **no es gratis** — el usuario elige un plan activo y paga por checkout de MP (`/checkout/init` alinea el plan elegido; el webhook reactiva al cobrar). `change-plan` ya no permite `suspended_plan_expired`. **Fase 2 completa.** Ver §7 punto 3.
 
 ---
 
@@ -92,7 +92,7 @@ MercadoPago en Fase 5):
 
 1. ✅ (2026-06-27 `30c59d6`) **Cron de retiro a fin de período (no mismo día):** cron 5c — si `plan_expiry_date` pasó, **pausa el cobro en MP** (`pausePreapproval`) y programa `cancel_at = fin de período`; si el período ya terminó, suspende ya con gracia 7d. El paso a `suspended_plan_expired` al vencer `cancel_at` lo hace 5f.
 2. ✅ (2026-06-27 `30c59d6`) **Aviso a 7 días antes** (cron 5b: 30→7 días).
-3. ⏳ **Reactivación real (eliminar el stub):** que `/users/change-plan` en estado vencido **enrute por el checkout de MP** (cobro real del plan nuevo) en vez de "simula cobro OK"; cancelar el preapproval viejo (single-active ya lo hace). **Hacerlo antes de usar el retiro en planes con cobro.**
+3. ✅ (2026-06-27 `9939474`) **Reactivación real (stub eliminado):** el vencido elige un plan activo → `/checkout/init` **alinea la suscripción al plan elegido** (`plan`/`plan_id`/`plan_expiry_date`) y cobra por MP; el webhook reactiva (`registration_status='active'`, `applyRenewal`). `change-plan` ya **no** acepta `suspended_plan_expired` (era stub gratis). El portal enruta el vencido a `initCheckout(plan)`.
 4. ✅ (2026-06-27 `30c59d6`) **Fin del período → estado recuperable:** cron 5f bifurca por `plan_expiry_date` → retiro de plan = `suspended_plan_expired` + gracia 7d (NO `cancelled`). *Decisión:* el preapproval queda **pausado** (no cobra); no se cancela terminal a los 7 días — al reactivarse con plan nuevo, single-active limpia el viejo. La gracia 7d es informativa (el acceso ya se cortó al fin del período).
 5. ✅ **`cancelled` retornable:** `portal-login` ya permite `cancelled` (solo bloquea `rejected`); el portal ya tenía el camino de re-suscripción (`isCancelledExpired` → "Nueva suscripción" → checkout real). La reactivación-stub gratis **no** se usa para `cancelled`. App/extensión siguen bloqueadas.
 6. ✅ **Heredar `plan_expiry_date` en altas nuevas:** el INSERT de registro (`auth.js`) copia `plan.plan_expiry_date` (NULL si el plan no tiene).
