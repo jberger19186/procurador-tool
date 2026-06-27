@@ -56,6 +56,24 @@ router.post('/init', async (req, res) => {
       });
     }
 
+    // REACTIVACIÓN de un vencido (suspended_plan_expired) o cancelado (cancelled) eligiendo
+    // un plan NUEVO: alinear la suscripción al plan elegido ANTES del cobro. Así el webhook
+    // aplica los límites del plan correcto y se limpia el plan_expiry_date del plan retirado
+    // (si no, el cron de retiro lo volvería a suspender). El cobro real lo hace el checkout;
+    // no se reactiva gratis (eso elimina el stub de change-plan).
+    if (rs === 'suspended_plan_expired' || rs === 'cancelled') {
+      const { rows: [np] } = await db.query(
+        'SELECT id, name, plan_expiry_date FROM plans WHERE name = $1 AND active = true',
+        [plan_name]
+      );
+      if (!np) return res.status(400).json({ error: 'El plan elegido no está disponible.' });
+      await db.query(
+        'UPDATE subscriptions SET plan = $1, plan_id = $2, plan_expiry_date = $3, updated_at = NOW() WHERE user_id = $4',
+        [np.name, np.id, np.plan_expiry_date, userId]
+      );
+      logger.info('[Checkout] Reactivación: suscripción alineada al plan elegido', { userId, plan_name });
+    }
+
     // ¿Es una ACTUALIZACIÓN/RECUPERACIÓN de método (el usuario ya tiene un preapproval
     // vinculado) o el ALTA inicial? En la actualización/recuperación NO se puede usar el
     // checkout plan-based: no persiste external_reference, así que el nuevo preapproval

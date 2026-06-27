@@ -289,9 +289,12 @@ router.post('/change-plan', async (req, res) => {
         }
         const u = userResult.rows[0];
 
-        const allowedStatuses = ['active', 'suspended_plan_expired'];
+        // La reactivación de un vencido (suspended_plan_expired) ya NO pasa por acá (sería gratis,
+        // stub): va por el checkout real de MercadoPago (POST /checkout/init alinea el plan elegido
+        // y el webhook reactiva al cobrar). Acá solo upgrades/downgrades de cuentas activas.
+        const allowedStatuses = ['active'];
         if (!allowedStatuses.includes(u.registration_status)) {
-            return res.status(400).json({ error: 'El cambio de plan solo está disponible para cuentas activas o con plan vencido' });
+            return res.status(400).json({ error: 'El cambio de plan solo está disponible para cuentas activas. Para reactivar un plan vencido, configurá el pago en Facturación.' });
         }
 
         // Control de límite de cambios (solo en estado active)

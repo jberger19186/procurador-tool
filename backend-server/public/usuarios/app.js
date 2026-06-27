@@ -1322,6 +1322,13 @@ async function submitNewTicket(e) {
 
 // ─── CHANGE PLAN ─────────────────────────────────────────────────────────────
 async function changePlan(planName) {
+    // Plan vencido (suspended_plan_expired): reactivación por PAGO REAL del plan elegido,
+    // no el cambio-stub gratis. Va al checkout de MercadoPago.
+    if (state.account?.registrationStatus === 'suspended_plan_expired') {
+        if (!confirm(`Vas a reactivar tu cuenta con el plan "${planName}". Te llevamos a MercadoPago para completar el pago.`)) return;
+        closePlanModal();
+        return initCheckout(planName);
+    }
     if (!confirm(`¿Confirmar cambio al plan "${planName}"?`)) return;
     closePlanModal();
     try {
@@ -1593,14 +1600,17 @@ async function renderFact() {
 }
 
 // Inicia el checkout MP para configurar tarjeta
-async function initCheckout() {
+async function initCheckout(planName) {
     const acc = state.account;
     if (!acc) return;
+    // planName opcional: en la reactivación de un plan vencido el usuario elige un plan
+    // nuevo; en el resto se usa el plan actual de la cuenta.
+    const targetPlan = planName || acc.plan?.name || acc.plan;
 
     try {
         const res = await apiFetch('/usuarios/api/checkout/init', {
             method: 'POST',
-            body: JSON.stringify({ plan_name: acc.plan?.name || acc.plan }),
+            body: JSON.stringify({ plan_name: targetPlan }),
         });
         if (!res) return;
         if (res.status === 503) {
@@ -1618,7 +1628,7 @@ async function initCheckout() {
             // el portal sepa que el usuario pasó por el checkout de MP.
             // Válido 30 minutos — cubre el tiempo normal de completar una suscripción.
             localStorage.setItem('psc_checkout_pending', JSON.stringify({
-                plan: acc.plan?.name || acc.plan,
+                plan: targetPlan,
                 initiated: Date.now()
             }));
             window.location.href = data.init_point;
