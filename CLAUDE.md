@@ -1,7 +1,7 @@
 # CLAUDE.md — Procurador SCW
 
 > Guía maestra del proyecto para sesiones de trabajo con Claude.
-> Última actualización: 2026-06-26
+> Última actualización: 2026-06-27
 
 ---
 
@@ -28,10 +28,22 @@ la rama `main` que se pushea a producción**. Editar archivos ahí (ej. `CLAUDE.
 ## 🔄 Estado actual
 > Versión app Electron: **2.7.28** — publicada en GitHub Releases (auto-updater activo)
 > Versión extensión Chrome: **1.3.5** — subida al Chrome Web Store, ⏳ pendiente de aprobación de Google (en store activa: 1.3.4)
-> Última sesión: 2026-06-26 (**fix** `invoices.payment_id` UNIQUE — arregla error `ON CONFLICT` al subir factura PDF de un pago; botón **"Crear factura"** directo desde Pagos; **Fase 1 de vigencia de planes por fecha** (bajo riesgo, sin tocar cobro): botón "vencimiento real del plan" en el panel, herencia de `plan_expiry_date` en altas, `cancelled` retornable desde el portal. **Spec completa** en `docs/internal/spec-vigencia-planes-fecha.md` con Fase 2 (cobro/MP) pendiente para sesión con staging. Migración `20260626_invoices_payment_id_unique.sql`.)
+> Última sesión: 2026-06-27 (**Fase 2 núcleo** de vigencia de planes por fecha — cron de retiro respeta el período pago + **pausa el cobro en MP**, fin de período → `suspended_plan_expired` con gracia 7d, aviso a 7 días; **validado E2E en staging**, dormido en prod hasta setear `plan_expiry_date`; pendiente Change 3 reactivación real. Fixes: `invoices.updated_at` (subir PDF a factura con registro), resaltado de fila persistente hasta el clic. Migración `20260626b_invoices_updated_at.sql`.)
+> Sesión 2026-06-26: fix `invoices.payment_id` UNIQUE (`ON CONFLICT` al subir factura), botón "Crear factura" desde Pagos, **Fase 1** de vigencia de planes (botón vencimiento en panel, herencia en altas, `cancelled` retornable). Spec: `docs/internal/spec-vigencia-planes-fecha.md`.
 > Sesión previa 2026-06-25: dashboard reorden + menú colapsable, sección Pagos, asociación pago↔factura, RESUELTO, barra Monitor Partes, cancelación en historial, link al portal en login Electron — release **v2.7.28**.
 
 ### Últimas funcionalidades implementadas (listas en producción)
+
+- ✅ **Sesión 2026-06-27 — Fase 2 (núcleo) vigencia de planes + fixes facturación/UX** :
+  - **Fix `invoices.updated_at`** (migración `20260626b_invoices_updated_at.sql`, aplicada en prod): el endpoint `/upload` (y link/unlink) hacen `SET updated_at=NOW()` pero la columna no existía → *"column updated_at of relation invoices does not exist"* al subir el PDF a una factura con registro (`pending`). El camino `from-payment` no la usaba (por eso ese sí andaba). Additivo. (Junto con el `payment_id` UNIQUE de la sesión previa, cierra las columnas/restricciones que `invoices` tenía faltantes respecto del código.)
+  - **Resaltado de fila persistente:** en la navegación cruzada pago↔factura, la fila destino ahora queda **pintada hasta que se hace clic en ella** (antes era un destello de 1.8s). Clase CSS `.row-hl` con `!important` (sobrevive al hover) + listener de clic que la limpia. Una sola fila resaltada a la vez.
+  - **Fase 2 — NÚCLEO de vigencia de planes por fecha (commit `30c59d6`, validado E2E en staging, DORMIDO en prod):**
+    - **cron 5c (retiro):** si `plan_expiry_date` pasó → **pausa el cobro en MP** (`subscriptionService.pausePreapproval`) y **respeta el período pago**: programa `cancel_at = fin de período`; si el período ya terminó, suspende ya con **gracia 7 días**. Antes cortaba el mismo día y **no tocaba MP** (el gap detectado).
+    - **cron 5f:** bifurca por `plan_expiry_date` → retiro de plan termina en **`suspended_plan_expired`** (recuperable), la **cancelación voluntaria** sigue en **`cancelled`**.
+    - **cron 5b:** aviso de discontinuación a **7 días** (antes 30).
+    - **Validado E2E en staging** (crons forzados a cada minuto, usuario 215): (1) período terminado → suspende+gracia; (2) respeta período → programa `cancel_at`, sigue activo → fin de período → `suspended_plan_expired`; (3) regresión: cancel voluntaria → `cancelled`. Staging restaurado tras la prueba.
+    - **Dormido en prod** hasta que un admin setee `plan_expiry_date` (ningún plan lo tiene). **Pendiente Change 3 (reactivación real)** — hoy la reactivación de un vencido vía `change-plan` es STUB (gratis); hay que enrutarla por checkout de MP **antes de usar el retiro en planes con cobro**. Spec: `docs/internal/spec-vigencia-planes-fecha.md`.
+  - **Resguardos:** `.7z` `202606_27062026_ProcuradorTool.7z` + tag `pre-fase2-vigencia-2026-06-27`.
 
 - ✅ **Sesión 2026-06-26 — fix facturación + Fase 1 vigencia de planes por fecha** :
   - **Fix `invoices.payment_id` UNIQUE** (migración `20260626_invoices_payment_id_unique.sql`, aplicada en prod): el endpoint `from-payment` usa `ON CONFLICT (payment_id)` pero la tabla solo tenía FK → al subir el PDF de un pago sin factura aparecía *"there is no unique or exclusion constraint matching the ON CONFLICT specification"*. La restricción formaliza la invariante "1 factura por pago" (NULL permitido para facturas manuales). Como la subida fallaba, el pago quedaba en "Sin factura"; resuelto.
