@@ -754,7 +754,37 @@ async function cancelSubscription(userId) {
   return { cancelAt: sub.next_billing_date };
 }
 
+/**
+ * pausePreapproval — pausa el preapproval del usuario en MercadoPago (best-effort, NO toca la DB).
+ * Usado por el RETIRO DE PLAN para que no se cobre el próximo período del plan discontinuado.
+ * Es reversible (paused→authorized); al reactivarse con un plan nuevo, single-active cancela
+ * el viejo de todos modos. Devuelve true si pausó, false si no había preapproval o falló.
+ * @param {number} userId
+ * @param {string|null} externalSubId
+ */
+async function pausePreapproval(userId, externalSubId = null) {
+  try {
+    let extId = externalSubId;
+    if (!extId) {
+      const { rows: [sub] } = await db.query('SELECT external_subscription_id FROM subscriptions WHERE user_id = $1', [userId]);
+      extId = sub?.external_subscription_id || null;
+    }
+    const preapprovalId = await resolveRealPreapprovalId(userId, extId);
+    if (!preapprovalId) {
+      logger.warn('[SubscriptionService] pausePreapproval: sin preapproval identificable', { userId });
+      return false;
+    }
+    await preApprovalClient.update({ id: preapprovalId, body: { status: 'paused' } });
+    logger.info('[SubscriptionService] Preapproval pausado (retiro de plan)', { userId, preapprovalId });
+    return true;
+  } catch (err) {
+    logger.error('[SubscriptionService] Error pausando preapproval (retiro de plan)', { userId, err: err.message });
+    return false;
+  }
+}
+
 module.exports = {
+  pausePreapproval,
   createPreapproval,
   createReactivationPreapproval,
   createUpdatePreapproval,

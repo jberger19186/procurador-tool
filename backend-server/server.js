@@ -544,23 +544,23 @@ cron.schedule('0 * * * *', async () => {
     }
 }, { timezone: 'America/Argentina/Buenos_Aires' });
 
-// 5b. Aviso de vencimiento de plan — 30 días antes (diario 08:00 ART = 11:00 UTC)
+// 5b. Aviso de discontinuación de plan — 7 días antes (diario 08:00 ART = 11:00 UTC)
 cron.schedule('0 11 * * *', async () => {
     try {
         const expiring = await pool.query(`
             SELECT u.id, u.email, u.nombre, s.plan_expiry_date
             FROM subscriptions s JOIN users u ON u.id = s.user_id
-            WHERE s.plan_expiry_date BETWEEN NOW() AND NOW() + INTERVAL '31 days'
+            WHERE s.plan_expiry_date BETWEEN NOW() AND NOW() + INTERVAL '8 days'
               AND s.status = 'active'
               AND NOT EXISTS (
                 SELECT 1 FROM notifications n
                 WHERE n.user_id = s.user_id AND n.type = 'plan_expiry_warning'
-                  AND n.created_at > NOW() - INTERVAL '25 days'
+                  AND n.created_at > NOW() - INTERVAL '6 days'
               )
         `);
         for (const u of expiring.rows) {
             await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expiry_warning', $2)`,
-                [u.id, `Tu plan vence el ${new Date(u.plan_expiry_date).toLocaleDateString('es-AR')}. Seleccioná un nuevo plan.`]);
+                [u.id, `Tu plan se discontinúa el ${new Date(u.plan_expiry_date).toLocaleDateString('es-AR')}. Vas a tener que elegir un nuevo plan.`]);
             await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_expiry_warning', $2)`,
                 [u.id, JSON.stringify({ plan_expiry_date: u.plan_expiry_date })]);
             mailerCron.sendPlanExpiryWarningEmail(u.email, u.nombre, u.plan_expiry_date).catch(() => {});
@@ -571,27 +571,49 @@ cron.schedule('0 11 * * *', async () => {
     }
 }, { timezone: 'America/Argentina/Buenos_Aires' });
 
-// 5c. Suspensión automática por vencimiento de plan (diario 08:05 ART)
+// 5c. Retiro de plan por fecha (diario 08:05 ART)
+// Cuando plan_expiry_date pasó: RESPETA el período pago en curso. Pausa el cobro en MP
+// (no se cobra el próximo período del plan retirado) y programa el corte al fin del período.
+// Si el período ya terminó, suspende ahora con ventana de gracia de 7 días. El paso a
+// suspended_plan_expired al vencer cancel_at lo hace 5f (rama plan_expired).
 cron.schedule('5 11 * * *', async () => {
     try {
-        const expired = await pool.query(`
-            SELECT u.id, u.email, u.nombre
+        const subSvc = require('./services/subscriptionService');
+        const due = await pool.query(`
+            SELECT u.id, u.email, u.nombre,
+                   s.external_subscription_id,
+                   COALESCE(s.next_billing_date, s.expires_at) AS period_end
             FROM users u JOIN subscriptions s ON u.id = s.user_id
             WHERE u.registration_status = 'active'
               AND s.plan_expiry_date IS NOT NULL
               AND s.plan_expiry_date < NOW()
+              AND s.cancel_at IS NULL
         `);
-        for (const u of expired.rows) {
-            await pool.query(`UPDATE users SET registration_status = 'suspended_plan_expired', updated_at = NOW() WHERE id = $1`, [u.id]);
-            await pool.query(`UPDATE subscriptions SET status = 'suspended_plan_expired', suspension_cause = 'plan_expired', suspended_at = NOW(), updated_at = NOW() WHERE user_id = $1`, [u.id]);
-            await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'plan_expired_suspended')`, [u.id]);
-            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expired', $2)`,
-                [u.id, 'Tu plan venció. Seleccioná un nuevo plan en el portal para reactivar tu acceso.']);
-            mailerCron.sendPlanExpiredSuspendedEmail(u.email, u.nombre).catch(() => {});
+        for (const u of due.rows) {
+            const periodEnd = u.period_end ? new Date(u.period_end) : null;
+            // Pausar el cobro en MP cuanto antes (no cobrar el próximo período del plan retirado)
+            await subSvc.pausePreapproval(u.id, u.external_subscription_id).catch(() => {});
+            if (!periodEnd || periodEnd <= new Date()) {
+                // Período ya terminado → suspender ahora + ventana de gracia 7 días
+                await pool.query(`UPDATE users SET registration_status = 'suspended_plan_expired', updated_at = NOW() WHERE id = $1`, [u.id]);
+                await pool.query(`UPDATE subscriptions SET status = 'suspended_plan_expired', suspension_cause = 'plan_expired', suspended_at = NOW(), auto_renewal = FALSE, payment_grace_ends_at = NOW() + INTERVAL '7 days', updated_at = NOW() WHERE user_id = $1`, [u.id]);
+                await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'plan_expired_suspended')`, [u.id]);
+                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expired', $2)`,
+                    [u.id, 'Tu plan se discontinuó. Elegí un nuevo plan en el portal para reactivar tu acceso.']);
+                mailerCron.sendPlanExpiredSuspendedEmail(u.email, u.nombre).catch(() => {});
+            } else {
+                // Respetar el período pago: programar el corte al fin del período (el cobro ya
+                // quedó pausado). Al vencer cancel_at, 5f lo pasa a suspended_plan_expired.
+                await pool.query(`UPDATE subscriptions SET cancel_at = $2, auto_renewal = FALSE, updated_at = NOW() WHERE user_id = $1`, [u.id, periodEnd]);
+                await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_retirement_scheduled', $2)`,
+                    [u.id, JSON.stringify({ period_end: periodEnd })]);
+                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_discontinued', $2)`,
+                    [u.id, `Tu plan se discontinúa. Mantenés el acceso hasta el ${periodEnd.toLocaleDateString('es-AR')}; después vas a poder elegir un nuevo plan.`]);
+            }
         }
-        if (expired.rowCount > 0) logger.info(`[CRON] plan_expired_suspended: ${expired.rowCount} usuarios suspendidos`);
+        if (due.rowCount > 0) logger.info(`[CRON] plan_retirement: ${due.rowCount} cuentas procesadas`);
     } catch (err) {
-        logger.error('[CRON] Error en suspensión por vencimiento de plan:', err.message);
+        logger.error('[CRON] Error en retiro de plan:', err.message);
     }
 }, { timezone: 'America/Argentina/Buenos_Aires' });
 
@@ -640,7 +662,7 @@ cron.schedule('15 11 * * *', async () => {
 cron.schedule('20 11 * * *', async () => {
     try {
         const cancelled = await pool.query(`
-            SELECT u.id, s.external_subscription_id FROM users u
+            SELECT u.id, u.email, u.nombre, s.external_subscription_id, s.plan_expiry_date FROM users u
             JOIN subscriptions s ON u.id = s.user_id
             WHERE u.registration_status = 'active'
               AND s.cancel_at IS NOT NULL
@@ -658,8 +680,21 @@ cron.schedule('20 11 * * *', async () => {
               )
         `);
         for (const u of cancelled.rows) {
-            // El preapproval quedó PAUSADO al cancelar (reversible). Como el usuario no
-            // reactivó y venció el período, ahora se cancela DEFINITIVAMENTE en MP.
+            // RETIRO DE PLAN (plan_expiry_date pasado): el corte se programó por discontinuación
+            // del plan, NO por baja voluntaria. El preapproval ya está pausado (no cobra). Pasa a
+            // un estado RECUPERABLE (suspended_plan_expired): app bloqueada, portal abierto para
+            // elegir un nuevo plan. NO se marca cancelled (que es terminal sin retorno propio).
+            if (u.plan_expiry_date && new Date(u.plan_expiry_date) < new Date()) {
+                await pool.query(`UPDATE users SET registration_status = 'suspended_plan_expired', updated_at = NOW() WHERE id = $1`, [u.id]);
+                await pool.query(`UPDATE subscriptions SET status = 'suspended_plan_expired', suspension_cause = 'plan_expired', suspended_at = NOW(), payment_grace_ends_at = NOW() + INTERVAL '7 days', updated_at = NOW() WHERE user_id = $1`, [u.id]);
+                await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'plan_expired_suspended')`, [u.id]);
+                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expired', $2)`,
+                    [u.id, 'Tu plan se discontinuó. Elegí un nuevo plan en el portal para reactivar tu acceso.']);
+                mailerCron.sendPlanExpiredSuspendedEmail(u.email, u.nombre).catch(() => {});
+                continue;
+            }
+            // CANCELACIÓN VOLUNTARIA: el preapproval quedó PAUSADO al cancelar (reversible). Como
+            // el usuario no reactivó y venció el período, ahora se cancela DEFINITIVAMENTE en MP.
             const extId = u.external_subscription_id;
             if (extId && !extId.startsWith('pay-') && process.env.MP_ACCESS_TOKEN) {
                 try {
