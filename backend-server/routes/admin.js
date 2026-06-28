@@ -2899,6 +2899,8 @@ router.get('/invoices', authenticateAdmin, async (req, res) => {
             SELECT
                 i.id,
                 i.numero,
+                i.invoice_type,
+                i.cae,
                 i.amount,
                 i.pdf_url,
                 i.status,
@@ -3169,5 +3171,77 @@ async function linkInvoiceToPayment(db, invoiceId, paymentId) {
     }
     await db.query('UPDATE invoices SET payment_id = $1, updated_at = NOW() WHERE id = $2', [paymentId, invoiceId]);
 }
+
+// ── PUT /admin/payments/:id — editar un pago cargado MANUALMENTE ──────────────
+// Solo pagos con payment_method='manual' (no se editan los pagos reales de MercadoPago,
+// que reflejan transacciones efectivas).
+router.put('/payments/:id', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { id } = req.params;
+    const { amount, currency, status, payment_method, plan, external_payment_id, created_at } = req.body;
+    try {
+        const { rows: [p] } = await db.query('SELECT payment_method FROM payments WHERE id = $1', [id]);
+        if (!p) return res.status(404).json({ error: 'Pago no encontrado' });
+        if (p.payment_method !== 'manual') {
+            return res.status(400).json({ error: 'Solo se pueden editar pagos cargados manualmente (no los de MercadoPago).' });
+        }
+        if (amount != null && (isNaN(Number(amount)) || Number(amount) <= 0)) {
+            return res.status(400).json({ error: 'Monto inválido' });
+        }
+        await db.query(
+            `UPDATE payments SET
+                amount              = COALESCE($1, amount),
+                currency            = COALESCE($2, currency),
+                status              = COALESCE($3, status),
+                payment_method      = COALESCE($4, payment_method),
+                plan                = $5,
+                external_payment_id = $6,
+                created_at          = COALESCE($7, created_at)
+             WHERE id = $8`,
+            [
+                amount ?? null, currency || null, status || null, payment_method || null,
+                plan || null, external_payment_id || null, created_at || null, id
+            ]
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[admin payments edit] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── PUT /admin/invoices/:id/meta — editar metadata de una factura ─────────────
+// Campos que carga el admin a mano (tipo, número, CAE, monto, fecha). No toca el PDF
+// (eso se reemplaza con /upload) ni la vinculación al pago.
+router.put('/invoices/:id/meta', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { id } = req.params;
+    const { amount, numero, invoice_type, cae, issued_at } = req.body;
+    try {
+        const { rows: [inv] } = await db.query('SELECT id FROM invoices WHERE id = $1', [id]);
+        if (!inv) return res.status(404).json({ error: 'Factura no encontrada' });
+        if (amount != null && amount !== '' && (isNaN(Number(amount)) || Number(amount) < 0)) {
+            return res.status(400).json({ error: 'Monto inválido' });
+        }
+        await db.query(
+            `UPDATE invoices SET
+                amount       = COALESCE($1, amount),
+                numero       = $2,
+                invoice_type = COALESCE($3, invoice_type),
+                cae          = $4,
+                issued_at    = COALESCE($5, issued_at),
+                updated_at   = NOW()
+             WHERE id = $6`,
+            [
+                (amount === '' || amount == null) ? null : amount,
+                numero || null, invoice_type || null, cae || null, issued_at || null, id
+            ]
+        );
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[admin invoices edit] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 module.exports = router;

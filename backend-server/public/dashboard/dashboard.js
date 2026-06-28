@@ -3754,6 +3754,7 @@ async function loadIssuedInvoices() {
     el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:12px">Cargando…</div>';
     try {
         const data = await apiFetch(`/admin/invoices?search=${encodeURIComponent(search)}`);
+        _issuedCache = data?.invoices || [];
         if (!data?.invoices?.length) {
             el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center">Sin facturas emitidas</div>';
             return;
@@ -3774,6 +3775,7 @@ async function loadIssuedInvoices() {
                         <th style="text-align:left;padding:10px 12px;font-weight:600;color:#374151">Plan</th>
                         <th style="text-align:center;padding:10px 12px;font-weight:600;color:#374151">PDF</th>
                         <th style="text-align:center;padding:10px 12px;font-weight:600;color:#374151">Pago</th>
+                        <th style="text-align:center;padding:10px 12px;font-weight:600;color:#374151">Editar</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -3807,6 +3809,9 @@ async function loadIssuedInvoices() {
                             ${inv.payment_id
                                 ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro del pago" onclick="gotoPaymentRecord(${inv.payment_id},'${escHtml(inv.email||'')}')">Pago #${inv.payment_id}</a> <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 6px" onclick="unlinkInvoiceFromPayment(${inv.id},'facturas')" title="Desvincular">✕</button>`
                                 : `<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px" onclick="openLinkPaymentModal(${inv.id},'${escHtml(inv.email||'')}')">Asociar pago</button>`}
+                        </td>
+                        <td style="padding:10px 12px;text-align:center">
+                            <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px" title="Editar datos de la factura" onclick="openInvoiceEditModal(${inv.id})">✏️</button>
                         </td>
                     </tr>`).join('')}
                 </tbody>
@@ -4056,6 +4061,7 @@ async function loadPaymentsAdmin() {
     el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:12px">Cargando…</div>';
     try {
         const data = await apiFetch(`/admin/payments?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`);
+        _pagosCache = data?.payments || [];
         if (!data?.payments?.length) {
             el.innerHTML = '<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center">Sin pagos</div>';
             return;
@@ -4076,7 +4082,7 @@ async function loadPaymentsAdmin() {
                         ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro de la factura (emitida)" onclick="gotoInvoiceRecord(${p.invoice_id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</a>`
                         : `<a class="badge badge-yellow" style="cursor:pointer;text-decoration:none" title="Registro creado sin PDF — subir en Pendientes" onclick="gotoPendingInvoice(${p.id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id} · sin PDF</a>`
                 }</td>
-                <td style="white-space:nowrap">${p.invoice_id
+                <td style="white-space:nowrap">${p.payment_method === 'manual' ? `<button class="btn btn-sm btn-secondary" title="Editar pago manual" onclick="openPaymentEditModal(${p.id})">✏️</button> ` : ''}${p.invoice_id
                     ? `<button class="btn btn-sm btn-secondary" onclick="unlinkInvoiceFromPayment(${p.invoice_id},'pagos')">Desvincular</button>`
                     : `<button class="btn btn-sm btn-primary" onclick="openInvoiceFromPayment(${p.id},'${escHtml(p.email||'')}')">📎 Crear factura</button>
                        <button class="btn btn-sm btn-secondary" onclick="openLinkInvoiceModal(${p.id},'${escHtml(p.email||'')}')">Asociar</button>`}</td>
@@ -4420,6 +4426,124 @@ async function submitInvoiceFromPayment(paymentId) {
     } catch (e) {
         showErr(e.message);
         btn.disabled = false; btn.textContent = '✅ Guardar factura';
+    }
+}
+
+// ── EDITAR pago manual / factura (registros cargados a mano) ───────────────────
+let _pagosCache = [];
+let _issuedCache = [];
+
+function openPaymentEditModal(paymentId) {
+    const p = _pagosCache.find(x => x.id === paymentId);
+    if (!p) return;
+    const dateVal = p.created_at ? String(p.created_at).slice(0, 10) : '';
+    _injectModal(`${_modalHeader('✏️ Editar pago manual #' + p.id)}
+        <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:12px;color:#6b7280">Usuario: <strong>${escHtml(p.email || '')}</strong> (no editable acá)</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto *</label>
+                    <input id="_pe-amount" type="number" min="0" step="0.01" value="${p.amount != null ? Number(p.amount) : ''}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Moneda</label>
+                    <input id="_pe-currency" type="text" value="${escHtml(p.currency || 'ARS')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Estado</label>
+                    <select id="_pe-status" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
+                        ${['approved','pending','rejected','refunded'].map(s => `<option value="${s}" ${p.status===s?'selected':''}>${({approved:'Aprobado',pending:'Pendiente',rejected:'Rechazado',refunded:'Reembolsado'})[s]}</option>`).join('')}
+                    </select></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Método</label>
+                    <input id="_pe-method" type="text" value="${escHtml(p.payment_method || 'manual')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Fecha</label>
+                    <input id="_pe-date" type="date" value="${dateVal}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Plan / Concepto</label>
+                    <input id="_pe-plan" type="text" value="${escHtml(p.plan || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">ID externo <span style="font-weight:400;color:#9ca3af">(opcional)</span></label>
+                <input id="_pe-extid" type="text" value="${escHtml(p.external_payment_id || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            <div id="_pe-err" style="color:#991b1b;font-size:12px;display:none"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button id="_pe-submit" class="btn btn-sm btn-primary" onclick="submitPaymentEdit(${p.id})">💾 Guardar cambios</button>
+            </div>
+        </div>`);
+}
+async function submitPaymentEdit(paymentId) {
+    const errEl = document.getElementById('_pe-err');
+    const showErr = m => { errEl.textContent = m; errEl.style.display = ''; };
+    errEl.style.display = 'none';
+    const amount = document.getElementById('_pe-amount').value;
+    if (!amount || isNaN(amount) || Number(amount) <= 0) return showErr('El monto es obligatorio');
+    const btn = document.getElementById('_pe-submit');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+        await apiFetch(`/admin/payments/${paymentId}`, 'PUT', {
+            amount,
+            currency: document.getElementById('_pe-currency').value.trim() || 'ARS',
+            status: document.getElementById('_pe-status').value,
+            payment_method: document.getElementById('_pe-method').value.trim() || 'manual',
+            plan: document.getElementById('_pe-plan').value.trim() || null,
+            external_payment_id: document.getElementById('_pe-extid').value.trim() || null,
+            created_at: document.getElementById('_pe-date').value || null
+        });
+        closeDynModal();
+        loadPaymentsAdmin();
+    } catch (e) {
+        showErr(e.message);
+        btn.disabled = false; btn.textContent = '💾 Guardar cambios';
+    }
+}
+
+function openInvoiceEditModal(invoiceId) {
+    const inv = _issuedCache.find(x => x.id === invoiceId);
+    if (!inv) return;
+    const dateVal = (inv.issued_at || inv.created_at) ? String(inv.issued_at || inv.created_at).slice(0, 10) : '';
+    _injectModal(`${_modalHeader('✏️ Editar factura #' + inv.id)}
+        <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:12px;color:#6b7280">Usuario: <strong>${escHtml(inv.email || '')}</strong>. El PDF se reemplaza desde Pendientes (acá editás los datos).</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Tipo</label>
+                    <select id="_ie-tipo" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box">
+                        ${['C','B','A','NC_C','NC_B'].map(t => `<option value="${t}" ${inv.invoice_type===t?'selected':''}>${({C:'Factura C',B:'Factura B',A:'Factura A',NC_C:'Nota de crédito C',NC_B:'Nota de crédito B'})[t]}</option>`).join('')}
+                    </select></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto (ARS)</label>
+                    <input id="_ie-amount" type="number" min="0" step="0.01" value="${inv.amount != null ? Number(inv.amount) : ''}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número</label>
+                    <input id="_ie-numero" type="text" value="${escHtml(inv.numero || '')}" onblur="this.value=fmtNroFactura(this.value)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">CAE</label>
+                    <input id="_ie-cae" type="text" value="${escHtml(inv.cae || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace"></div>
+            </div>
+            <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Fecha de emisión</label>
+                <input id="_ie-date" type="date" value="${dateVal}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+            <div id="_ie-err" style="color:#991b1b;font-size:12px;display:none"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button id="_ie-submit" class="btn btn-sm btn-primary" onclick="submitInvoiceEdit(${inv.id})">💾 Guardar cambios</button>
+            </div>
+        </div>`);
+}
+async function submitInvoiceEdit(invoiceId) {
+    const errEl = document.getElementById('_ie-err');
+    const showErr = m => { errEl.textContent = m; errEl.style.display = ''; };
+    errEl.style.display = 'none';
+    const btn = document.getElementById('_ie-submit');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+        await apiFetch(`/admin/invoices/${invoiceId}/meta`, 'PUT', {
+            amount: document.getElementById('_ie-amount').value || null,
+            numero: document.getElementById('_ie-numero').value.trim() || null,
+            invoice_type: document.getElementById('_ie-tipo').value || null,
+            cae: document.getElementById('_ie-cae').value.trim() || null,
+            issued_at: document.getElementById('_ie-date').value || null
+        });
+        closeDynModal();
+        loadIssuedInvoices();
+    } catch (e) {
+        showErr(e.message);
+        btn.disabled = false; btn.textContent = '💾 Guardar cambios';
     }
 }
 
