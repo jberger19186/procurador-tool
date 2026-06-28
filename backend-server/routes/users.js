@@ -279,7 +279,7 @@ router.post('/change-plan', async (req, res) => {
             SELECT u.id, u.email, u.nombre, u.registration_status,
                    s.plan AS current_plan, s.plan_id AS current_plan_id,
                    s.plan_changes_this_cycle, s.next_billing_date,
-                   s.expires_at, s.scheduled_plan, s.payment_provider
+                   s.expires_at, s.scheduled_plan, s.payment_provider, s.cancel_at
             FROM users u JOIN subscriptions s ON u.id = s.user_id
             WHERE u.id = $1
         `, [req.user.id]);
@@ -288,6 +288,12 @@ router.post('/change-plan', async (req, res) => {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
         const u = userResult.rows[0];
+
+        // Cancelación programada pendiente: cambiar de plan es contradictorio (la cuenta se da
+        // de baja al fin del período). Primero hay que reactivar la suscripción.
+        if (u.cancel_at && new Date(u.cancel_at) > new Date()) {
+            return res.status(400).json({ error: 'Tenés una cancelación programada. Reactivá tu suscripción antes de cambiar de plan.' });
+        }
 
         // La reactivación de un vencido (suspended_plan_expired) ya NO pasa por acá (sería gratis,
         // stub): va por el checkout real de MercadoPago (POST /checkout/init alinea el plan elegido

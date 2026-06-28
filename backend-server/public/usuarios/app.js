@@ -1009,6 +1009,15 @@ function renderPlansModal() {
         return;
     }
 
+    // Cancelación programada: cambiar de plan es contradictorio. Primero hay que reactivar.
+    if (acc?.cancelAt && new Date(acc.cancelAt) > new Date()) {
+        container.innerHTML = `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;font-size:13px;color:#78350f;line-height:1.5">
+            <strong>Tenés una cancelación programada</strong> — tu suscripción se da de baja el ${formatDate(acc.cancelAt)}.<br>
+            Para cambiar de plan, primero <strong>reactivá tu suscripción</strong> en la sección <strong>Facturación</strong>.
+        </div>`;
+        return;
+    }
+
     if (!canChange) {
         container.innerHTML = `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#78350f">
             <strong>Límite de cambios alcanzado</strong><br>
