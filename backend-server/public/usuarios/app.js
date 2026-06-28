@@ -437,6 +437,15 @@ function renderStatusBanner() {
         return;
     }
 
+    // Cancelación programada (active, con cancel_at futuro): el usuario canceló pero sigue
+    // con acceso hasta el fin del período pago. Se avisa en el banner superior (Mi Plan).
+    if (rs === 'active' && acc.cancelAt && new Date(acc.cancelAt) > new Date()) {
+        banner.style.background = '#b45309';
+        bannerText.textContent = `Cancelación programada: tu suscripción se cancela el ${formatDate(acc.cancelAt)}. Seguís teniendo acceso hasta esa fecha. Podés reactivarla sin costo antes, en Facturación.`;
+        banner.style.display = 'flex';
+        return;
+    }
+
     const cfg = configs[rs];
     if (cfg) {
         banner.style.background = cfg.color;
