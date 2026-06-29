@@ -459,6 +459,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 | **D3** | **`npm audit fix` (sin --force)** | Backend + Electron tienen deps con CVEs (backend: 7 high · electron: 1 critical en dev/build + 5 high). Correr `npm audit fix` en staging → probar → prod. Detalle en revisión integral §2 | Media |
 | **D4** | **`npm audit fix --force` controlado** | Deps con breaking changes (mercadopago/uuid, axios, undici). Probar flujo de pagos completo en staging después de actualizar. Pre-lanzamiento público | Baja |
 | **D5** | **Limpiar temporales del repo** | Borrar `backend-server/test_legal_tmp.js`, `test_legal_full_tmp.js`, `seed_legal_tmp.js` (código muerto del seed legal) | Baja |
+| **D6** | **Carpeta de descargas por usuario (CUIT)** | La app recuerda varias cuentas pero todas las descargas (Excel, visores, PDFs) van a una sola carpeta compartida → se mezclan entre usuarios. Plan: insertar `usuarios\<CUIT>` como raíz, centralizar en helper `getUserDataDir(cuit)` en `main.js` y propagar a los scripts encriptados vía env `PROCURADOR_DATA_DIR` (re-encrypt + redeploy). Complejidad media, riesgo bajo-medio (sincronizar las 2 capas: scripts que escriben ↔ `main.js` que lee). **Plan detallado: `docs/internal/plan-descargas-por-usuario.md`** | Media |
 
 ---
 
