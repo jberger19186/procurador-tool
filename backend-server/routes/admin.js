@@ -1408,7 +1408,7 @@ router.get('/tickets/:id', authenticateAdmin, async (req, res) => {
         }
 
         const commentsResult = await db.query(`
-            SELECT tc.id, tc.author_role, tc.message, tc.visibility, tc.created_at,
+            SELECT tc.id, tc.author_role, tc.message, tc.visibility, tc.created_at, tc.edited_at,
                    u.email AS author_email
             FROM ticket_comments tc
             JOIN users u ON tc.author_id = u.id
@@ -1630,6 +1630,45 @@ router.post('/tickets/:id/comment', authenticateAdmin, async (req, res) => {
     } catch (error) {
         console.error('Error respondiendo ticket:', error);
         res.status(500).json({ error: 'Error respondiendo ticket' });
+    }
+});
+
+// Editar el texto de una respuesta de admin ya enviada
+// Solo permite editar comentarios cuyo author_role = 'admin' (no las del usuario).
+// No re-envía email ni cambia el estado del ticket — solo corrige el texto.
+router.put('/tickets/:ticketId/comment/:commentId', authenticateAdmin, async (req, res) => {
+    const { ticketId, commentId } = req.params;
+    const { message } = req.body;
+    const db = req.app.get('db');
+
+    if (!message || !message.trim()) {
+        return res.status(400).json({ error: 'El mensaje no puede estar vacío' });
+    }
+
+    try {
+        const check = await db.query(
+            `SELECT id, author_role FROM ticket_comments WHERE id = $1 AND ticket_id = $2`,
+            [commentId, ticketId]
+        );
+        if (check.rows.length === 0) {
+            return res.status(404).json({ error: 'Comentario no encontrado' });
+        }
+        if (check.rows[0].author_role !== 'admin') {
+            return res.status(403).json({ error: 'Solo se pueden editar respuestas de administradores' });
+        }
+
+        const result = await db.query(`
+            UPDATE ticket_comments
+               SET message = $1, edited_at = NOW()
+             WHERE id = $2
+            RETURNING id, author_role, message, visibility, created_at, edited_at
+        `, [message.trim(), commentId]);
+
+        console.log(`✏️ Admin ${req.user.id} editó el comentario #${commentId} del ticket #${ticketId}`);
+        res.json({ success: true, comment: result.rows[0] });
+    } catch (error) {
+        console.error('Error editando comentario:', error);
+        res.status(500).json({ error: 'Error editando comentario' });
     }
 });
 

@@ -1261,6 +1261,7 @@ async function renderTicketDetail(ticketId) {
         const data = await apiFetch(`/admin/tickets/${ticketId}`);
         const t = data.ticket;
         const comments = data.comments;
+        _currentTicketComments = comments || [];
         await getActivePlans(); // cache para el selector "cambiar plan" del beneficio
         // Trial = sin método de pago. La cortesía solo surte efecto en trial (suma al cupo
         // global); el ajuste por submódulo (*_bonus) solo importa en cuentas pagas.
@@ -1295,18 +1296,21 @@ async function renderTicketDetail(ticketId) {
                             comments.map(c => {
                                 const isInternal = c.visibility === 'internal';
                                 const bgStyle = isInternal ? 'background:#fef9c3;border-left:3px solid #ca8a04;padding:10px;border-radius:6px;margin-bottom:8px' : '';
+                                const isAdmin = c.author_role === 'admin';
                                 return `
                             <div class="comment ${c.author_role}" style="${bgStyle}">
-                                <div class="comment-avatar">${isInternal ? '🔒' : (c.author_role === 'admin' ? '👑' : '👤')}</div>
+                                <div class="comment-avatar">${isInternal ? '🔒' : (isAdmin ? '👑' : '👤')}</div>
                                 <div class="comment-body">
                                     <div class="comment-meta">
                                         ${isInternal ? '<span class="badge badge-yellow" style="font-weight:700">🔒 NOTA INTERNA</span> ' : ''}
                                         <strong>${c.author_email}</strong>
-                                        ${!isInternal ? `<span class="badge badge-${c.author_role === 'admin' ? 'yellow' : 'blue'}" style="margin-left:6px">${c.author_role === 'admin' ? 'Admin' : 'Usuario'}</span>` : ''}
+                                        ${!isInternal ? `<span class="badge badge-${isAdmin ? 'yellow' : 'blue'}" style="margin-left:6px">${isAdmin ? 'Admin' : 'Usuario'}</span>` : ''}
                                         · ${fmtDate(c.created_at)}
+                                        ${c.edited_at ? '<span style="font-size:11px;color:var(--text-muted);font-style:italic"> · editado</span>' : ''}
+                                        ${isAdmin ? `<button class="btn btn-sm btn-secondary" style="margin-left:8px;padding:1px 8px;font-size:11px" onclick="editComment(${t.id}, ${c.id})" title="Editar esta respuesta">✏️ Editar</button>` : ''}
                                         ${isInternal ? '<br><span style="font-size:11px;color:#854d0e;font-style:italic">Solo visible para administradores · No se envió email al usuario</span>' : ''}
                                     </div>
-                                    <div class="comment-text">${escHtml(c.message)}</div>
+                                    <div class="comment-text" id="comment-text-${c.id}">${escHtml(c.message)}</div>
                                 </div>
                             </div>`;
                             }).join('')}
@@ -1577,6 +1581,7 @@ window.loadTicketAdjustmentHistory = async function(userId) {
 // Variable global para trackear si el texto actual viene de una sugerencia IA
 let _currentAiLogId = null;
 let _currentAiSuggestion = '';
+let _currentTicketComments = []; // cache del hilo actual para editar respuestas
 
 window.updateReplyMode = function() {
     const vis = document.getElementById('reply-visibility')?.value;
@@ -1639,6 +1644,36 @@ window.replyTicket = async function(id) {
         }
         navigate('ticket-detail', id);
     } catch (e) { showAlert(document.getElementById('td-alert'), e.message); }
+};
+
+// ───── EDITAR RESPUESTA DE ADMIN ─────
+// Convierte el texto de un comentario de admin en un editor inline.
+window.editComment = function(ticketId, commentId) {
+    const c = (_currentTicketComments || []).find(x => x.id === commentId);
+    const textEl = document.getElementById(`comment-text-${commentId}`);
+    if (!c || !textEl || textEl.dataset.editing === '1') return;
+    textEl.dataset.editing = '1';
+    textEl.innerHTML = `
+        <textarea id="edit-msg-${commentId}" rows="4" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box"></textarea>
+        <div style="margin-top:6px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm btn-secondary" onclick="navigate('ticket-detail','${ticketId}')">Cancelar</button>
+            <button class="btn btn-sm btn-primary" onclick="saveEditComment(${ticketId}, ${commentId})">Guardar</button>
+        </div>`;
+    const ta = document.getElementById(`edit-msg-${commentId}`);
+    ta.value = c.message;        // por value → evita problemas de escape con comillas/saltos
+    ta.focus();
+};
+
+window.saveEditComment = async function(ticketId, commentId) {
+    const ta  = document.getElementById(`edit-msg-${commentId}`);
+    const msg = (ta?.value || '').trim();
+    if (!msg) { showAlert(document.getElementById('td-alert'), 'El mensaje no puede estar vacío'); return; }
+    try {
+        await apiFetch(`/admin/tickets/${ticketId}/comment/${commentId}`, 'PUT', { message: msg });
+        navigate('ticket-detail', ticketId);
+    } catch (e) {
+        showAlert(document.getElementById('td-alert'), e.message);
+    }
 };
 
 // Refresca el badge de modo según el toggle (sin guardar todavía)

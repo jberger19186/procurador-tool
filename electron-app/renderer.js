@@ -2489,6 +2489,9 @@ async function checkQuotaAlert() {
         // Encontrar el subsistema con mayor porcentaje de uso
         let worstKey = null, worstPct = 0;
         for (const [key, s] of Object.entries(result.account.usage)) {
+            // monitor_partes es un "stock" (cuántas partes tenés cargadas), no ejecuciones por
+            // período: llegar al máximo es normal y no amerita el aviso de "agotaste ejecuciones".
+            if (key === 'monitor_partes') continue;
             if (!s || s.limit === null || s.limit === undefined) continue; // ilimitado → skip
             const pct = Math.round(((s.used ?? 0) / (s.limit || 1)) * 100);
             if (pct > worstPct) { worstPct = pct; worstKey = key; }
