@@ -27,6 +27,8 @@ const { URL }           = require('url');
 
 // ─── Rutas y entorno ──────────────────────────────────────────────────────────
 function getDataPath() {
+    // PRIORIDAD 0: carpeta por usuario (CUIT) inyectada por main.js (descargas por usuario)
+    if (process.env.PROCURADOR_DATA_DIR) return process.env.PROCURADOR_DATA_DIR;
     if (process.env.APPDATA && process.env.APPDATA.includes('procurador-electron')) {
         return process.env.APPDATA;
     }

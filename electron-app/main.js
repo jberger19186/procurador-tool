@@ -969,6 +969,33 @@ function leerExtraEnvHeadless() {
     }
 }
 
+// ─── Carpeta de descargas por usuario (CUIT) ─────────────────────────────────
+// Devuelve la carpeta BASE de datos del usuario (sin 'descargas'), aislada por CUIT.
+// Mantener 'descargas' adentro evita reescribir las subrutas; solo cambia la raíz:
+//   %APPDATA%\procurador-electron\usuarios\<CUIT>\descargas\...
+// Fallback a la carpeta histórica (sin segmento de usuario) si no hay CUIT, para
+// no romper sesiones sin CUIT. Coincide con getDataPath() de los scripts (que hace
+// path.join(getDataPath(), 'descargas', ...)) vía la env var PROCURADOR_DATA_DIR.
+function getUserDataDir(cuit) {
+    const base = app.getPath('userData'); // %APPDATA%\procurador-electron
+    const safe = String(cuit || '').replace(/\D/g, ''); // solo dígitos (ruta válida en Windows)
+    return safe ? path.join(base, 'usuarios', safe) : base;
+}
+
+// Resuelve la carpeta 'descargas' del usuario logueado para los handlers "pasivos"
+// (abrir descargas, último Excel, visor, limpiar) que no tienen el CUIT a mano.
+async function resolveUserDescargasDir() {
+    let cuit = null;
+    try { cuit = (await authManager.verifySession())?.user?.cuit || null; } catch { /* fallback histórico */ }
+    return path.join(getUserDataDir(cuit), 'descargas');
+}
+
+// extraEnv para executeRemoteScriptAsLocal: headless + carpeta base por usuario.
+// Los scripts leen PROCURADOR_DATA_DIR con prioridad en getDataPath().
+function buildRunEnv(cuit) {
+    return { ...leerExtraEnvHeadless(), PROCURADOR_DATA_DIR: getUserDataDir(cuit) };
+}
+
 // ============ IPC HANDLERS - CONFIGURACIÓN (SIN CAMBIOS) ============
 
 ipcMain.handle('load-config', async () => {
@@ -1152,7 +1179,7 @@ ipcMain.handle('run-process', async (event, options = {}) => {
         console.log('🚀 Ejecutando proceso automático...');
         let result;
         try {
-            result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: leerExtraEnvHeadless() });
+            result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: buildRunEnv(cuit) });
         } finally {
             await releaseExecutionLock();
         }
@@ -1245,7 +1272,7 @@ ipcMain.handle('run-process-custom-date', async (event, fecha) => {
         await closeChromeProfile();
         let result;
         try {
-            result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: leerExtraEnvHeadless() });
+            result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: buildRunEnv(cuit) });
         } finally {
             await releaseExecutionLock();
             fs.writeFileSync(configPath, originalConfig);
@@ -1325,7 +1352,7 @@ ipcMain.handle('run-process-custom', async (event, { lines, fechaLimite }) => {
         try {
             result = await authManager.executeRemoteScriptAsLocal(
                 scriptName, [],
-                { cuitOverride: cuit, extraFiles: { 'config_proceso_custom.json': configCustom }, extraEnv: leerExtraEnvHeadless() }
+                { cuitOverride: cuit, extraFiles: { 'config_proceso_custom.json': configCustom }, extraEnv: buildRunEnv(cuit) }
             );
         } finally {
             await releaseExecutionLock();
@@ -1423,7 +1450,7 @@ ipcMain.handle('open-file', async (event, filePath) => {
 ipcMain.handle('open-downloads-folder', async () => {
     try {
         const { shell } = require('electron');
-        const descargasPath = path.join(app.getPath('userData'), 'descargas');
+        const descargasPath = await resolveUserDescargasDir();
 
         if (!fs.existsSync(descargasPath)) {
             fs.mkdirSync(descargasPath, { recursive: true });
@@ -1440,10 +1467,11 @@ ipcMain.handle('clean-folder', async (event, folderType) => {
     try {
         const fs = require('fs-extra');
         let targetPath;
+        const descargasBase = await resolveUserDescargasDir(); // carpeta del usuario logueado
 
         switch (folderType) {
             case 'temp':
-                targetPath = path.join(app.getPath('userData'), 'descargas');
+                targetPath = descargasBase;
 
                 if (!fs.existsSync(targetPath)) {
                     return { success: false, error: 'Carpeta de descargas no existe' };
@@ -1458,7 +1486,7 @@ ipcMain.handle('clean-folder', async (event, folderType) => {
                 break;
 
             case 'procesos':
-                targetPath = path.join(app.getPath('userData'), 'descargas', 'procesos_automaticos');
+                targetPath = path.join(descargasBase, 'procesos_automaticos');
 
                 if (!fs.existsSync(targetPath)) {
                     return { success: false, error: 'Carpeta de procesos no existe' };
@@ -1468,7 +1496,7 @@ ipcMain.handle('clean-folder', async (event, folderType) => {
                 break;
 
             case 'all':
-                targetPath = path.join(app.getPath('userData'), 'descargas');
+                targetPath = descargasBase;
 
                 if (!fs.existsSync(targetPath)) {
                     return { success: false, error: 'Carpeta de descargas no existe' };
@@ -1686,7 +1714,7 @@ ipcMain.handle('position-left', async () => {
 
 ipcMain.handle('get-visor-path', async () => {
     try {
-        const visorPath = path.join(app.getPath('userData'), 'descargas', 'visor_generado.html');
+        const visorPath = path.join(await resolveUserDescargasDir(), 'visor_generado.html');
 
         if (!fs.existsSync(visorPath)) {
             return { success: false, error: 'No se encontró el archivo visor_generado.html' };
@@ -1700,7 +1728,7 @@ ipcMain.handle('get-visor-path', async () => {
 
 ipcMain.handle('get-latest-excel', async () => {
     try {
-        const procesosPath = path.join(app.getPath('userData'), 'descargas', 'procesos_automaticos');
+        const procesosPath = path.join(await resolveUserDescargasDir(), 'procesos_automaticos');
 
         if (!fs.existsSync(procesosPath)) {
             return { success: false, error: 'No se encontró la carpeta de procesos' };
@@ -1825,7 +1853,7 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
             const result = await authManager.executeRemoteScriptAsLocal(
                 'informequickscwpjn.js',
                 [expediente, cuit],
-                { extraFiles: { 'config_informe.json': configInforme }, extraEnv: leerExtraEnvHeadless() }
+                { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit) }
             );
 
             // Abrir el PDF generado automáticamente
@@ -1888,7 +1916,7 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
                 const expResult = await authManager.executeRemoteScriptAsLocal(
                     'informequickscwpjn.js',
                     [expStr, cuit],
-                    { extraFiles: { 'config_informe.json': configInforme }, extraEnv: leerExtraEnvHeadless() }
+                    { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit) }
                 );
                 expSuccess = expResult.success;
                 mainWindow.webContents.send('process-log', {
@@ -1942,7 +1970,7 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
             try {
                 // __dirname apunta al root del asar en packaged, y a electron-app/ en dev
                 const informeDir = path.join(__dirname, 'informe');
-                const descargasPath = path.join(app.getPath('userData'), 'descargas');
+                const descargasPath = path.join(getUserDataDir(cuit), 'descargas');
 
                 if (!fs.existsSync(descargasPath)) {
                     fs.mkdirSync(descargasPath, { recursive: true });
@@ -2252,6 +2280,7 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
         // Para cuentas pagas remaining=999999 → no frena acá (rige el por-submódulo).
         const monSession = await authManager.verifySession();
         const monSub = monSession.subscription;
+        const cuit = monSession?.user?.cuit || null; // para la carpeta de descargas por usuario
         if (monSession.success && monSub?.remaining !== null && monSub?.remaining <= 0) {
             return {
                 success: false,
@@ -2279,7 +2308,7 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
         const result = await authManager.executeRemoteScriptAsLocal(
             'procesarMonitoreo.js',
             [],
-            { extraFiles: { 'config_monitoreo.json': configMonitoreo }, extraEnv: leerExtraEnvHeadless() }
+            { extraFiles: { 'config_monitoreo.json': configMonitoreo }, extraEnv: buildRunEnv(cuit) }
         );
 
         // Parsear RESULT del output (executeRemoteScriptAsLocal retorna { success, output, executionTime })
@@ -2299,7 +2328,7 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
         if (resultados.length > 0) {
             try {
                 const visorHtml = generarVisorMonitoreo(modo, resultados);
-                const descDir   = path.join(app.getPath('userData'), 'descargas');
+                const descDir   = path.join(getUserDataDir(cuit), 'descargas');
                 if (!fs.existsSync(descDir)) fs.mkdirSync(descDir, { recursive: true });
                 const visorPath = path.join(descDir, 'visor_monitoreo.html');
                 fs.writeFileSync(visorPath, visorHtml, 'utf8');
@@ -2492,7 +2521,7 @@ ipcMain.handle('monitor-generar-visor-guardado', async (event, tipo) => {
         }
 
         const visorHtml = generarVisorMonitoreo(tipo === 'novedades' ? 'novedades' : 'inicial', resultados);
-        const descDir   = path.join(app.getPath('userData'), 'descargas');
+        const descDir   = await resolveUserDescargasDir();
         if (!fs.existsSync(descDir)) fs.mkdirSync(descDir, { recursive: true });
         const fname     = tipo === 'novedades' ? 'visor_novedades_guardado.html' : 'visor_expedientes_guardado.html';
         const visorPath = path.join(descDir, fname);
