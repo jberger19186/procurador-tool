@@ -2471,7 +2471,7 @@ window.showPlanForm = async function(planId) {
                 <label style="font-size:12px;display:block;margin-bottom:6px;font-weight:600">⏳ Vencimiento real del plan (suspende las cuentas)</label>
                 <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#991b1b;line-height:1.5">
                     ⚠️ <strong>Distinto del "Tipo de límite" de arriba</strong> (eso es solo un aviso). Esta fecha <strong>suspende</strong> a las cuentas <strong>activas</strong> de este plan (estado "plan vencido") y se propaga a sus suscripciones.
-                    <br>Hoy el corte es en la fecha exacta y <strong>no cancela el débito de MercadoPago</strong> — no la uses en planes con cobro automático activo hasta completar la fase siguiente. Dejala vacía para no aplicar.
+                    <br>Al vencer: se <strong>pausa el cobro en MercadoPago</strong> (no se cobra la renovación) y se respeta el período ya pago — el acceso se corta al fin de ese período. El usuario queda en estado recuperable y puede elegir un nuevo plan desde el portal. Dejala vacía para no aplicar.
                 </div>
                 <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
                     <div style="flex:1;min-width:220px">
