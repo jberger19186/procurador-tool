@@ -63,7 +63,7 @@ router.post('/init', async (req, res) => {
     // no se reactiva gratis (eso elimina el stub de change-plan).
     if (rs === 'suspended_plan_expired' || rs === 'cancelled') {
       const { rows: [np] } = await db.query(
-        'SELECT id, name, plan_expiry_date FROM plans WHERE name = $1 AND active = true',
+        "SELECT id, name, plan_expiry_date FROM plans WHERE name = $1 AND active = true AND visibility = 'public'",
         [plan_name]
       );
       if (!np) return res.status(400).json({ error: 'El plan elegido no está disponible.' });

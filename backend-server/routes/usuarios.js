@@ -99,7 +99,7 @@ router.get('/plans', async (req, res) => {
                    batch_executions_limit, monitor_partes_limit, extension_flows,
                    promo_type, promo_end_date, promo_max_users, promo_used_count
             FROM plans
-            WHERE active = true
+            WHERE active = true AND visibility = 'public'
             ORDER BY COALESCE(price_ars, price_usd) ASC NULLS FIRST, id ASC
         `);
 

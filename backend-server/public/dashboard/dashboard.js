@@ -452,9 +452,17 @@ async function renderUserDetail(userId) {
                             </div>
                             <button class="btn btn-sm btn-primary" onclick="updateSub(${u.id})">Aplicar</button>
                         </div>
+                        ${u.payment_provider ? `<div style="font-size:11px;color:var(--text-muted);line-height:1.45;background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:7px 9px">
+                            💳 Paga por MercadoPago. <strong>Upgrade</strong> = inmediato (el nuevo monto se cobra desde el próximo vencimiento, sin cobrar diferencia ni reembolsar el período actual). <strong>Downgrade</strong> = se programa para el fin del ciclo (el usuario conserva sus límites actuales hasta entonces).
+                        </div>` : ''}
+                        ${u.cancel_at && new Date(u.cancel_at) > new Date() ? `<div style="font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:7px 9px">
+                            🚫 Cancelación programada para el <strong>${fmtDate(u.cancel_at)}</strong> (fin del período pago). Reversible hasta esa fecha.
+                        </div>` : ''}
                         <div style="display:flex;gap:6px;flex-wrap:wrap">
                             ${u.registration_status === 'active' ? `<button class="btn btn-sm btn-danger" onclick="adminSuspendUser(${u.id})">⏸ Suspender</button>` : ''}
                             ${['suspended_admin','suspended','suspended_plan_expired'].includes(u.registration_status) ? `<button class="btn btn-sm btn-success" onclick="reactivateSub(${u.id})">▶ Reactivar</button>` : ''}
+                            ${u.payment_provider && !(u.cancel_at && new Date(u.cancel_at) > new Date()) ? `<button class="btn btn-sm btn-danger" onclick="adminCancelSub(${u.id})">🚫 Cancelar al fin de ciclo</button>` : ''}
+                            ${u.cancel_at && new Date(u.cancel_at) > new Date() ? `<button class="btn btn-sm btn-success" onclick="adminReactivateCancel(${u.id})">↩ Deshacer cancelación</button>` : ''}
                             <button class="btn btn-sm btn-secondary" onclick="resetUsage(${u.id})">🔄 Resetear uso</button>
                         </div>
                     </div>
@@ -884,6 +892,27 @@ window.resetUsage = async function(id) {
     try {
         await apiFetch(`/admin/subscriptions/${id}/reset-usage`, 'POST');
         showAlert(document.getElementById('ud-alert'), 'Contador reseteado.', 'success');
+        setTimeout(() => navigate('user-detail', id), 1200);
+    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
+};
+
+// Cancela la suscripción al fin del ciclo (pausa el cobro en MP, acceso hasta cancel_at).
+// Reversible con "Deshacer cancelación" mientras no venza. Queda en el historial de la cuenta.
+window.adminCancelSub = async function(id) {
+    if (!confirm('¿Cancelar la suscripción al finalizar el período actual?\n\nSe pausa el cobro en MercadoPago (no se cobra la renovación) y el usuario mantiene el acceso hasta el fin del período pago. Es reversible hasta esa fecha.')) return;
+    try {
+        const r = await apiFetch(`/admin/subscriptions/${id}/cancel`, 'POST');
+        showAlert(document.getElementById('ud-alert'), r.message || 'Cancelación programada.', 'success');
+        setTimeout(() => navigate('user-detail', id), 1200);
+    } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
+};
+
+// Deshace una cancelación programada (reanuda el preapproval en MP, sin cobro nuevo).
+window.adminReactivateCancel = async function(id) {
+    if (!confirm('¿Deshacer la cancelación programada?\n\nLa suscripción sigue activa y se renueva en la fecha original, sin generar un cobro nuevo.')) return;
+    try {
+        const r = await apiFetch(`/admin/subscriptions/${id}/reactivate-cancel`, 'POST');
+        showAlert(document.getElementById('ud-alert'), r.message || 'Cancelación revertida.', 'success');
         setTimeout(() => navigate('user-detail', id), 1200);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
@@ -1885,11 +1914,14 @@ function eventLabel(type) {
         plan_downgrade_scheduled: '⬇️ Downgrade programado',
         plan_downgrade_cancelled: '❎ Downgrade cancelado',
         plan_changed_by_admin: '🔧 Plan cambiado (admin)',
+        plan_downgrade_scheduled_by_admin: '⬇️ Downgrade programado (admin)',
         reactivated_plan_selection: '🔄 Reactivación con plan',
         trial_exhausted_blocked: '🔴 Trial agotado',
         subscription_cancelled_expired: '🗑️ Suscripción vencida/cancelada',
         subscription_cancel_scheduled: '🚫 Cancelación programada',
         subscription_cancel_reverted: '↩️ Cancelación revertida',
+        subscription_cancelled_by_admin: '🚫 Cancelación al fin de ciclo (admin)',
+        subscription_cancel_reverted_by_admin: '↩️ Cancelación revertida (admin)',
     };
     return map[type] || type;
 }
@@ -1897,7 +1929,7 @@ function eventDetail(e) {
     let p = e.payload;
     if (typeof p === 'string') { try { p = JSON.parse(p); } catch (_) { p = {}; } }
     p = p || {};
-    if (e.event_type === 'subscription_cancel_scheduled' && p.cancel_at) {
+    if ((e.event_type === 'subscription_cancel_scheduled' || e.event_type === 'subscription_cancelled_by_admin') && p.cancel_at) {
         return `Se cancela el ${fmtDate(p.cancel_at)} (fin del período pago)`;
     }
     if (p.from && p.to) {
@@ -2470,6 +2502,13 @@ window.showPlanForm = async function(planId) {
                         </select>
                     </div>
                 </div>
+                <div style="margin-top:12px">
+                    <label style="font-size:12px;display:block;margin-bottom:4px">Visibilidad</label>
+                    <select id="pf-visibility" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+                        <option value="public" ${(plan?.visibility || 'public') === 'public' ? 'selected' : ''}>Público — el usuario lo ve y lo puede elegir (registro + portal)</option>
+                        <option value="private" ${plan?.visibility === 'private' ? 'selected' : ''}>Privado — solo el administrador lo asigna (oculto al usuario)</option>
+                    </select>
+                </div>
             </div>
 
             <!-- CONFIGURACIÓN DE PROMO -->
@@ -2567,6 +2606,7 @@ window.savePlanForm = async function(planId) {
         price_usd:    document.getElementById('pf-price-usd').value ? parseFloat(document.getElementById('pf-price-usd').value) : null,
         price_ars:    document.getElementById('pf-price-ars').value ? parseFloat(document.getElementById('pf-price-ars').value) : null,
         plan_type:    document.getElementById('pf-plan-type').value || null,
+        visibility:   document.getElementById('pf-visibility')?.value || 'public',
         promo_type:   promoType,
         promo_end_date:   promoType === 'date'  ? (document.getElementById('pf-promo-date').value || null) : null,
         promo_max_users:  promoType === 'quota' ? (parseInt(document.getElementById('pf-promo-quota').value) || null) : null,

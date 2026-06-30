@@ -347,7 +347,16 @@ async function updatePreapprovalAmount(userId, planName) {
     logger.info('[SubscriptionService] Cambio de plan sin preapproval MP vinculado — no se ajusta el monto', { userId });
     return false;
   }
-  const amount = PLAN_PRICES[planName];
+  // Precio del plan nuevo: primero el map hardcodeado (promos), fallback al precio real
+  // de la tabla `plans` (price_ars). Esto habilita cobrar cualquier plan — público o
+  // privado — sin tener que agregarlo al map. MP no prorratea: rige desde el próximo cobro.
+  let amount = PLAN_PRICES[planName];
+  if (!amount) {
+    const { rows: [p] } = await db.query(
+      'SELECT price_ars, price_usd FROM plans WHERE name = $1', [planName]
+    );
+    amount = Number(p?.price_ars ?? p?.price_usd ?? 0) || null;
+  }
   if (!amount) {
     logger.warn('[SubscriptionService] Plan sin precio configurado — no se ajusta el monto en MP', { userId, planName });
     return false;

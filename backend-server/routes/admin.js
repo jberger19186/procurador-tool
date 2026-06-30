@@ -8,6 +8,7 @@ const { getCacheStats, clearCache } = require('../utils/scriptEncryption');
 const { adminLimiter } = require('../middleware/rateLimiter');
 const { isBlacklisted } = require('../middleware/tokenBlacklist');
 const { sendTicketReplyEmail } = require('../utils/mailer');
+const { updatePreapprovalAmount, cancelSubscription, reactivateSubscription } = require('../services/subscriptionService');
 
 // ── Multer: almacenamiento de PDFs de facturas ────────────────────────────────
 const invoicesDir = path.join(__dirname, '../public/invoices');
@@ -1101,6 +1102,50 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
         // los usos consumidos (usage_count) y el estado trial. El salto a 999999 +
         // enforcement por submódulo recién aplica cuando hay pago real.
         const isTrial = prev && !prev.payment_provider;
+        const planPrice = (p) => Number(p?.price_ars ?? p?.price_usd ?? 0);
+
+        // ¿Es un DOWNGRADE de una cuenta PAGA? (precio nuevo < precio actual, ambos conocidos)
+        // Solo aplica si ya hay suscripción con plan actual y el plan nuevo proviene de la
+        // tabla (tiene id/precio). Un downgrade se programa para el fin del ciclo (justo:
+        // el usuario conserva los límites altos que pagó hasta entonces).
+        let isDowngrade = false;
+        if (!isTrial && prev?.current_plan && planData.id) {
+            const { rows: [cur] } = await db.query(
+                'SELECT price_ars, price_usd FROM plans WHERE name = $1', [prev.current_plan]
+            );
+            isDowngrade = planPrice(cur) > 0 && planPrice(planData) < planPrice(cur);
+        }
+
+        if (isDowngrade) {
+            // Downgrade JUSTO: no se tocan límites ni contadores ahora. Se programa en
+            // scheduled_plan; el cron diario (25 11 * * *) lo aplica en apply_at y ajusta
+            // el monto en MercadoPago al plan rebajado.
+            const { rows: [s] } = await db.query(
+                'SELECT next_billing_date, expires_at FROM subscriptions WHERE user_id = $1', [userId]
+            );
+            let applyAt = s?.next_billing_date || s?.expires_at;
+            if (!applyAt) { applyAt = new Date(); applyAt.setDate(applyAt.getDate() + (planData.period_days || 30)); }
+            const scheduled = { plan: planData.name, plan_id: planData.id, apply_at: applyAt };
+
+            await db.query(
+                `UPDATE subscriptions SET scheduled_plan = $2, updated_at = NOW() WHERE user_id = $1`,
+                [userId, JSON.stringify(scheduled)]
+            );
+            await db.query(
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_downgrade_scheduled_by_admin', $2)`,
+                [userId, JSON.stringify({ from: prev.current_plan, to: planData.name, apply_at: applyAt, admin_id: req.user.id })]
+            );
+            const fechaStr = new Date(applyAt).toLocaleDateString('es-AR');
+            await db.query(
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_downgrade_scheduled', $2)`,
+                [userId, `Tu plan cambiará a ${planData.display_name || planData.name} el ${fechaStr}. Conservás tus límites actuales hasta esa fecha.`]
+            );
+            console.log(`📉 Downgrade a "${planData.name}" PROGRAMADO para ${fechaStr} (usuario ${userId}) por admin: ${req.user.id}`);
+            return res.json({
+                success: true, type: 'downgrade_scheduled', applyAt,
+                message: `Downgrade a ${planData.name} programado para el ${fechaStr}. El usuario conserva sus límites actuales hasta entonces y el monto en MercadoPago se ajusta en esa fecha.`
+            });
+        }
 
         let expiresAt = null;
         if (isTrial) {
@@ -1110,8 +1155,9 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
                 WHERE user_id = $1
             `, [userId, planData.name, planData.id]);
         } else {
-            // Cuenta paga (o sin suscripción previa) → plan activo con enforcement por
-            // submódulo; el tope global no debe cortar al mezclar módulos → usage_limit=999999.
+            // Upgrade / mismo precio / activación de cuenta paga → INMEDIATO. Plan activo con
+            // enforcement por submódulo; el tope global no debe cortar al mezclar módulos →
+            // usage_limit=999999.
             expiresAt = new Date();
             expiresAt.setDate(expiresAt.getDate() + (durationDays || planData.period_days || 30));
             await db.query(`
@@ -1125,6 +1171,13 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
                     scheduled_plan = NULL,
                     updated_at = NOW()
             `, [userId, planData.name, planData.id, expiresAt]);
+
+            // Ajustar el monto que cobra MercadoPago al plan nuevo (best-effort). MP no
+            // prorratea: el período actual ya pagado queda como está; el nuevo monto rige
+            // desde el próximo cobro. Solo si la cuenta paga por MP.
+            if (prev?.payment_provider) {
+                updatePreapprovalAmount(userId, planData.name).catch(() => {});
+            }
         }
 
         // Registrar el cambio de plan en el historial de la cuenta (visible en la ficha)
@@ -1184,6 +1237,55 @@ router.post('/subscriptions/:userId/reactivate', authenticateAdmin, async (req, 
     } catch (error) {
         console.error('Error reactivando suscripción:', error);
         res.status(500).json({ error: 'Error reactivando suscripción' });
+    }
+});
+
+// Cancelar la suscripción al FIN DEL CICLO (pausa el cobro en MP, acceso hasta cancel_at).
+// Reutiliza el mismo mecanismo que la cancelación del portal del usuario:
+// pausa el preapproval (reversible), setea cancel_at = next_billing_date, registra el
+// evento en el historial y el cron de vencimiento cierra la cuenta en esa fecha.
+router.post('/subscriptions/:userId/cancel', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    try {
+        const { rows: [sub] } = await db.query(
+            'SELECT payment_provider, cancel_at FROM subscriptions WHERE user_id = $1', [userId]
+        );
+        if (!sub) return res.status(404).json({ error: 'El usuario no tiene suscripción' });
+        if (sub.cancel_at) return res.status(400).json({ error: 'La suscripción ya tiene una cancelación programada' });
+
+        const { cancelAt } = await cancelSubscription(userId);
+        // Rastro adicional de que la acción la hizo el admin (cancelSubscription ya inserta
+        // subscription_cancel_scheduled; este evento deja constancia del autor).
+        await db.query(
+            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'subscription_cancelled_by_admin', $2)`,
+            [userId, JSON.stringify({ cancel_at: cancelAt, admin_id: req.user.id })]
+        );
+        console.log(`🚫 Cancelación al fin de ciclo programada para usuario ${userId} por admin: ${req.user.id} (cancel_at=${cancelAt})`);
+        res.json({ success: true, cancel_at: cancelAt, message: 'La suscripción se cancelará al finalizar el período actual. Es reversible hasta esa fecha.' });
+    } catch (error) {
+        console.error('Error cancelando suscripción (admin):', error.message);
+        res.status(500).json({ error: error.message || 'Error cancelando suscripción' });
+    }
+});
+
+// Revertir una cancelación programada (deshacer si se hizo por error). Reanuda el
+// preapproval en MP (paused → authorized) sin generar un cobro nuevo; el cobro sigue en
+// la fecha original. Solo válido mientras cancel_at no venció.
+router.post('/subscriptions/:userId/reactivate-cancel', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const db = req.app.get('db');
+    try {
+        await reactivateSubscription(userId);
+        await db.query(
+            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'subscription_cancel_reverted_by_admin', $2)`,
+            [userId, JSON.stringify({ admin_id: req.user.id })]
+        );
+        console.log(`↩️ Cancelación revertida para usuario ${userId} por admin: ${req.user.id}`);
+        res.json({ success: true, message: 'Cancelación revertida. La suscripción sigue activa y se renueva en la fecha original.' });
+    } catch (error) {
+        console.error('Error revirtiendo cancelación (admin):', error.message);
+        res.status(400).json({ error: error.message || 'Error revirtiendo la cancelación' });
     }
 });
 
@@ -1820,12 +1922,13 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
         batch_executions_limit, batch_expedientes_limit,
         informe_limit,
         monitor_partes_limit, monitor_novedades_limit,
-        period_days, extension_flows
+        period_days, extension_flows, visibility
     } = req.body;
 
     if (!name || !display_name) {
         return res.status(400).json({ error: 'name y display_name son obligatorios' });
     }
+    const vis = visibility === 'private' ? 'private' : 'public';
 
     try {
         const result = await db.query(`
@@ -1833,8 +1936,8 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
                 proc_executions_limit, proc_expedientes_limit,
                 batch_executions_limit, batch_expedientes_limit,
                 informe_limit, monitor_partes_limit, monitor_novedades_limit, period_days,
-                extension_flows)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                extension_flows, visibility)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
             RETURNING *
         `, [
             name.toUpperCase(), display_name, description || null,
@@ -1843,7 +1946,7 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
             informe_limit ?? 10,
             monitor_partes_limit ?? 3, monitor_novedades_limit ?? 10,
             period_days ?? 30,
-            JSON.stringify(extension_flows ?? [])
+            JSON.stringify(extension_flows ?? []), vis
         ]);
         console.log(`Plan "${name}" creado por admin: ${req.user.id}`);
         res.json({ success: true, plan: result.rows[0] });
@@ -1863,7 +1966,7 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
         proc_executions_limit, proc_expedientes_limit,
         batch_executions_limit, batch_expedientes_limit,
         informe_limit, monitor_partes_limit, monitor_novedades_limit,
-        period_days, active, extension_flows,
+        period_days, active, extension_flows, visibility,
         // Campos de promo
         price_usd, price_ars, plan_type,
         promo_type, promo_end_date, promo_max_users, promo_alert_days
@@ -1891,8 +1994,9 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
                 promo_end_date = $17,
                 promo_max_users = COALESCE($18, promo_max_users),
                 promo_alert_days = COALESCE($19, promo_alert_days),
+                visibility = COALESCE($20, visibility),
                 updated_at = NOW()
-            WHERE id = $20
+            WHERE id = $21
             RETURNING *
         `, [
             display_name, description,
@@ -1906,6 +2010,7 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
             promo_end_date !== undefined ? promo_end_date : undefined,
             promo_max_users ?? null,
             promo_alert_days ?? null,
+            (visibility === 'public' || visibility === 'private') ? visibility : null,
             planId
         ]);
 

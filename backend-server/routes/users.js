@@ -313,9 +313,10 @@ router.post('/change-plan', async (req, res) => {
             });
         }
 
-        // Verificar que el plan nuevo existe y está activo
+        // Verificar que el plan nuevo existe, está activo y es público (un usuario no puede
+        // auto-asignarse un plan privado; esos los asigna solo el administrador).
         const planResult = await db.query(
-            `SELECT * FROM plans WHERE name = $1 AND active = true`,
+            `SELECT * FROM plans WHERE name = $1 AND active = true AND visibility = 'public'`,
             [plan_name.toUpperCase()]
         );
         if (planResult.rows.length === 0) {

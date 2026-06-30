@@ -66,6 +66,7 @@ router.get('/plan-availability', async (req, res) => {
                    proc_executions_limit, informe_limit, monitor_novedades_limit,
                    batch_executions_limit, extension_flows
             FROM plans
+            WHERE visibility = 'public'
             ORDER BY id
         `);
 
@@ -159,9 +160,10 @@ router.post('/register', registerLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Debes aceptar los Términos y Condiciones' });
         }
 
-        // Verificar plan
+        // Verificar plan — solo planes públicos son elegibles en el registro (los privados
+        // los asigna únicamente el administrador).
         const planResult = await db.query(`
-            SELECT * FROM plans WHERE name = $1
+            SELECT * FROM plans WHERE name = $1 AND visibility = 'public'
         `, [plan_name]);
 
         if (planResult.rows.length === 0) {
