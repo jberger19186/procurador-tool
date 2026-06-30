@@ -14,7 +14,7 @@
 - **Fase 5 (Cobranza):** ✅ **Flujo completo validado en sandbox** — alta/cancelación/reactivación/suspensión funcionando; facturación manual operativa (PDF generado en ARCA y subido por admin); Facturante automático pendiente de contratar (B3 + C1)
 - **Fase 6 (Staging/Release seguro):** ✅ **Completa** — staging gemelo (`staging-api`, puerto 3444), backups pre-deploy, rollback de 3 capas probado con simulacros, seguridad 100% (M-1/M-2 + B-1..B-8). Ver `flujo-staging-rollback.md` + `runbook-comandos.md`
 
-### Versión Electron actual: **v2.7.14** (último release estable, GitHub Releases)
+### Versión Electron actual: **v2.7.31** (último release estable, GitHub Releases)
 
 ### Tags Git relevantes (rollback points)
 ```
