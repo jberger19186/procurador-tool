@@ -66,7 +66,7 @@ async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null) {
 
         // 6. Guardar HTML generado
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-        const nombreArchivo = `visor_batch_${timestamp}.html`;
+        const nombreArchivo = `informe-lote_visor_${timestamp}.html`;
         const carpetaDescargas = config.rutas?.descargas || 'descargas';
         const rutaHTML = path.join(carpetaDescargas, nombreArchivo);
 

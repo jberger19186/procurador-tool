@@ -97,7 +97,8 @@ window.addEventListener('DOMContentLoaded', function() {
 </script>`;
 
     const htmlFinal = template.replace('<!-- DATOS_EMBEBIDOS -->', scriptEmbebido);
-    const visorPath = path.join(getDataPath(), 'descargas', 'visor_generado.html');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const visorPath = path.join(getDataPath(), 'descargas', `procurar-lote_visor_${timestamp}.html`);
     const dirPath = path.dirname(visorPath);
     if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
     fs.writeFileSync(visorPath, htmlFinal, 'utf8');

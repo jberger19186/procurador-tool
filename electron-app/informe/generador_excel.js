@@ -54,7 +54,7 @@ async function generarExcelBatch(rutaResumenJSON, config) {
 
         // 6. Guardar archivo
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-        const nombreArchivo = `informe_batch_${timestamp}.xlsx`;
+        const nombreArchivo = `informe-lote_${timestamp}.xlsx`;
         const rutaExcel = path.join(config.rutas?.descargas || 'descargas', nombreArchivo);
 
         await workbook.xlsx.writeFile(rutaExcel);

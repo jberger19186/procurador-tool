@@ -1260,7 +1260,7 @@ async function openDownloadsFolder() {
 async function cleanFolder(type) {
     const messages = {
         temp: '¿Eliminar todas las carpetas *_temp?',
-        procesos: '¿Eliminar carpeta procesos_automaticos completa?',
+        procesos: '¿Eliminar archivos de procuración individual (Excel, JSON, visores)?',
         all: '¿Eliminar TODO el contenido de descargas?'
     };
 

@@ -457,19 +457,18 @@ async function procesarNovedadesCompleto(config) {
 
         const timestamp = new Date().toISOString()
             .replace(/[:.]/g, '-')
-            .replace('T', '_')
             .substring(0, 19);
 
-        const dirPath = path.join(getDataPath(), 'descargas', 'procesos_automaticos');
+        const dirPath = path.join(getDataPath(), 'descargas');
 
         if (!fs.existsSync(dirPath)) {
             fs.mkdirSync(dirPath, { recursive: true });
         }
 
         // JSON completo
-        const jsonPath = path.join(dirPath, `proceso_${timestamp}.json`);
+        const jsonPath = path.join(dirPath, `procurar-individual_${timestamp}.json`);
         fs.writeFileSync(jsonPath, JSON.stringify(resultados, null, 2));
-        console.log(`   📄 JSON: proceso_${timestamp}.json`);
+        console.log(`   📄 JSON: procurar-individual_${timestamp}.json`);
 
         // JSON con nombre fijo (para el visor)
         const jsonFijoPath = path.join(getDataPath(), 'descargas', 'ultimo_proceso.json');
@@ -488,13 +487,13 @@ async function procesarNovedadesCompleto(config) {
             console.log("\n📊 Generando archivo Excel...");
             const excelPath = await generarExcel(resultados, timestamp, config.excel.incluirMovimientos);
             if (excelPath) {
-                console.log(`   ✅ Excel: proceso_${timestamp}.xlsx`);
+                console.log(`   ✅ Excel: procurar-individual_${timestamp}.xlsx`);
             }
         }
 
         // ============ GENERAR VISOR CON DATOS EMBEBIDOS ============
         console.log("\n🌐 Generando visor HTML...");
-        const visorPath = await generarVisorConDatos(resultados);
+        const visorPath = await generarVisorConDatos(resultados, timestamp);
         console.log(`   ✅ Visor: visor_generado.html`);
 
         // ============ NOTIFICACIÓN ============
@@ -751,7 +750,7 @@ async function generarExcel(resultados, timestamp, incluirMovimientos) {
             sheetMovimientos.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
         }
 
-        const excelPath = path.join(getDataPath(), 'descargas', 'procesos_automaticos', `proceso_${timestamp}.xlsx`);
+        const excelPath = path.join(getDataPath(), 'descargas', `procurar-individual_${timestamp}.xlsx`);
         await workbook.xlsx.writeFile(excelPath);
 
         return excelPath;
@@ -811,7 +810,7 @@ Ver archivos adjuntos para más detalles.`,
 }
 
 // ============ GENERAR VISOR CON DATOS EMBEBIDOS ============
-async function generarVisorConDatos(resultados) {
+async function generarVisorConDatos(resultados, timestamp) {
     // Detectar si estamos en producción sin usar electron.app
     // Si process.resourcesPath existe y es diferente de __dirname, estamos empaquetados
     const isDev = !process.resourcesPath || process.resourcesPath === __dirname;
@@ -856,7 +855,8 @@ window.addEventListener('DOMContentLoaded', function() {
 
     const htmlFinal = template.replace('<!-- DATOS_EMBEBIDOS -->', scriptEmbebido);
 
-    const visorPath = path.join(getDataPath(), 'descargas', 'visor_generado.html');
+    const ts = timestamp || new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const visorPath = path.join(getDataPath(), 'descargas', `procurar-individual_visor_${ts}.html`);
 
     // Asegurar que existe el directorio
     const dirPath = path.dirname(visorPath);

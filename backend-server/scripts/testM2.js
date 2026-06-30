@@ -2143,7 +2143,8 @@ async function generarPDFExpediente(
 
     // Guardar el PDF
     let expedienteNombre = (datosGenerales.expediente || "Expediente_Desconocido").replace(/[\/:"*?<>|]/g, "_");
-    let filePath = path.join(getDataPath(), 'descargas', `expediente_${expedienteNombre}.pdf`);
+    const pdfTimestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    let filePath = path.join(getDataPath(), 'descargas', `informe_${expedienteNombre}_${pdfTimestamp}.pdf`);
 
     // Footer en la última página
     dibujarFooter(page, pageCount);

@@ -1495,13 +1495,16 @@ ipcMain.handle('clean-folder', async (event, folderType) => {
                 break;
 
             case 'procesos':
-                targetPath = path.join(descargasBase, 'procesos_automaticos');
+                targetPath = descargasBase;
 
                 if (!fs.existsSync(targetPath)) {
-                    return { success: false, error: 'Carpeta de procesos no existe' };
+                    return { success: false, error: 'Carpeta de descargas no existe' };
                 }
 
-                fs.removeSync(targetPath);
+                fs.readdirSync(targetPath).filter(f =>
+                    f.startsWith('procurar-individual_') &&
+                    (f.endsWith('.xlsx') || f.endsWith('.json') || f.endsWith('.html'))
+                ).forEach(f => fs.removeSync(path.join(targetPath, f)));
                 break;
 
             case 'all':
@@ -1723,13 +1726,14 @@ ipcMain.handle('position-left', async () => {
 
 ipcMain.handle('get-visor-path', async () => {
     try {
-        const visorPath = path.join(await resolveUserDescargasDir(), 'visor_generado.html');
-
-        if (!fs.existsSync(visorPath)) {
-            return { success: false, error: 'No se encontró el archivo visor_generado.html' };
+        const descargas = await resolveUserDescargasDir();
+        const files = fs.existsSync(descargas)
+            ? fs.readdirSync(descargas).filter(f => f.startsWith('procurar-') && f.includes('visor') && f.endsWith('.html')).sort().reverse()
+            : [];
+        if (files.length === 0) {
+            return { success: false, error: 'No se encontró visor de procuración' };
         }
-
-        return { success: true, path: visorPath };
+        return { success: true, path: path.join(descargas, files[0]) };
     } catch (error) {
         return { success: false, error: error.message };
     }
@@ -1737,20 +1741,20 @@ ipcMain.handle('get-visor-path', async () => {
 
 ipcMain.handle('get-latest-excel', async () => {
     try {
-        const procesosPath = path.join(await resolveUserDescargasDir(), 'procesos_automaticos');
+        const descargas = await resolveUserDescargasDir();
 
-        if (!fs.existsSync(procesosPath)) {
-            return { success: false, error: 'No se encontró la carpeta de procesos' };
+        if (!fs.existsSync(descargas)) {
+            return { success: false, error: 'No se encontró la carpeta de descargas' };
         }
 
-        const files = fs.readdirSync(procesosPath);
-        const excelFiles = files.filter(f => f.endsWith('.xlsx')).sort().reverse();
+        const files = fs.readdirSync(descargas);
+        const excelFiles = files.filter(f => f.startsWith('procurar-individual_') && f.endsWith('.xlsx')).sort().reverse();
 
         if (excelFiles.length === 0) {
-            return { success: false, error: 'No se encontraron archivos Excel' };
+            return { success: false, error: 'No se encontraron archivos Excel de procuración' };
         }
 
-        const latestExcel = path.join(procesosPath, excelFiles[0]);
+        const latestExcel = path.join(descargas, excelFiles[0]);
         return {
             success: true,
             path: latestExcel,
@@ -2006,6 +2010,8 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
                     total: batchResults.length,
                     exitosos
                 });
+                // Limpiar resumen_orquestador (input temporal ya consumido)
+                try { fs.unlinkSync(resumenPath); } catch {}
             } catch (genError) {
                 console.error('❌ Error generando reportes batch:', genError.message);
                 mainWindow.webContents.send('process-log', {
@@ -2339,7 +2345,8 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
                 const visorHtml = generarVisorMonitoreo(modo, resultados);
                 const descDir   = path.join(getUserDataDir(cuit), 'descargas');
                 if (!fs.existsSync(descDir)) fs.mkdirSync(descDir, { recursive: true });
-                const visorPath = path.join(descDir, 'visor_monitoreo.html');
+                const monitorTs = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+                const visorPath = path.join(descDir, `monitor-${modo}_visor_${monitorTs}.html`);
                 fs.writeFileSync(visorPath, visorHtml, 'utf8');
                 const { shell } = require('electron');
                 await shell.openPath(visorPath);
@@ -2532,7 +2539,7 @@ ipcMain.handle('monitor-generar-visor-guardado', async (event, tipo) => {
         const visorHtml = generarVisorMonitoreo(tipo === 'novedades' ? 'novedades' : 'inicial', resultados);
         const descDir   = await resolveUserDescargasDir();
         if (!fs.existsSync(descDir)) fs.mkdirSync(descDir, { recursive: true });
-        const fname     = tipo === 'novedades' ? 'visor_novedades_guardado.html' : 'visor_expedientes_guardado.html';
+        const fname     = tipo === 'novedades' ? 'monitor-guardado-novedades.html' : 'monitor-guardado-expedientes.html';
         const visorPath = path.join(descDir, fname);
         fs.writeFileSync(visorPath, visorHtml, 'utf8');
         const { shell } = require('electron');
