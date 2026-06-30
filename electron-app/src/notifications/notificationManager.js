@@ -54,15 +54,36 @@ class NotificationManager {
     }
 
     /**
-     * Notificación de inicio de proceso
+     * Notificación de inicio de proceso.
+     * Recibe una etiqueta amigable del tipo de proceso (ej: "Procurar",
+     * "Informe Por Lote"). Si llega el nombre crudo del script (.js), lo
+     * traduce con la tabla de respaldo para no mostrar el filename al usuario.
      */
-    notifyProcessStarted(scriptName) {
+    notifyProcessStarted(processLabel) {
         if (!this.enabled) return;
 
         const title = '🚀 Proceso Iniciado';
-        const body = `Ejecutando: ${scriptName}`;
+        const body = `Ejecutando: ${this.friendlyLabel(processLabel)}`;
 
         this.show(title, body, 'info');
+    }
+
+    /**
+     * Traduce un identificador de proceso a una etiqueta para el usuario.
+     * Si ya viene una etiqueta amigable (sin .js) la devuelve tal cual;
+     * si viene un nombre de script lo mapea (respaldo defensivo).
+     */
+    friendlyLabel(value) {
+        if (!value) return 'Proceso';
+        if (!String(value).endsWith('.js')) return value; // ya es etiqueta amigable
+        const map = {
+            'procesarNovedadesCompleto.js': 'Procurar',
+            'procesarCustomExpedientes.js': 'Procurar Por Lote',
+            'informequickscwpjn.js': 'Informe',
+            'procesarMonitoreo.js': 'Monitor',
+            'listarSCWPJN.js': 'Listado de expedientes',
+        };
+        return map[value] || 'Proceso';
     }
 
     /**

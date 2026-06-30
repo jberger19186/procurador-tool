@@ -1,5 +1,12 @@
 ﻿const { app, BrowserWindow, Menu, ipcMain, clipboard, safeStorage, shell } = require('electron');
 
+// Título de las notificaciones de Windows (AppUserModelID).
+// Debe coincidir con build.appId para que el instalador NSIS lo resuelva al
+// nombre "Procurador SCW" del acceso directo. Sin esto Windows muestra
+// "electron.app.Electron". (En `npm start` puede seguir mostrando el default;
+// se valida en la app instalada.)
+app.setAppUserModelId('com.procurador.scw');
+
 // Ignorar EPIPE (broken pipe) al correr desde terminal — no es un error real
 process.stdout.on('error', (err) => { if (err.code !== 'EPIPE') throw err; });
 process.stderr.on('error', (err) => { if (err.code !== 'EPIPE') throw err; });
@@ -1188,7 +1195,7 @@ ipcMain.handle('run-process', async (event, options = {}) => {
         console.log('🚀 Ejecutando proceso automático...');
         let result;
         try {
-            result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: buildRunEnv(cuit) });
+            result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: buildRunEnv(cuit), processLabel: 'Procurar' });
         } finally {
             await releaseExecutionLock();
         }
@@ -1281,7 +1288,7 @@ ipcMain.handle('run-process-custom-date', async (event, fecha) => {
         await closeChromeProfile();
         let result;
         try {
-            result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: buildRunEnv(cuit) });
+            result = await authManager.executeRemoteScriptAsLocal(scriptName, [], { cuitOverride: cuit, extraEnv: buildRunEnv(cuit), processLabel: 'Procurar (por fecha)' });
         } finally {
             await releaseExecutionLock();
             fs.writeFileSync(configPath, originalConfig);
@@ -1361,7 +1368,7 @@ ipcMain.handle('run-process-custom', async (event, { lines, fechaLimite }) => {
         try {
             result = await authManager.executeRemoteScriptAsLocal(
                 scriptName, [],
-                { cuitOverride: cuit, extraFiles: { 'config_proceso_custom.json': configCustom }, extraEnv: buildRunEnv(cuit) }
+                { cuitOverride: cuit, extraFiles: { 'config_proceso_custom.json': configCustom }, extraEnv: buildRunEnv(cuit), processLabel: 'Procurar Por Lote' }
             );
         } finally {
             await releaseExecutionLock();
@@ -1419,7 +1426,7 @@ ipcMain.handle('list-expedientes', async (event, fechaLimite) => {
 
         const scriptName = 'listarSCWPJN.js';
         await closeChromeProfile();
-        const result = await authManager.executeRemoteScriptAsLocal(scriptName, [fechaLimite]);
+        const result = await authManager.executeRemoteScriptAsLocal(scriptName, [fechaLimite], { processLabel: 'Listado de expedientes' });
 
         mainWindow.webContents.send('process-finished', {
             code: result.success ? 0 : 1,
@@ -1866,7 +1873,7 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
             const result = await authManager.executeRemoteScriptAsLocal(
                 'informequickscwpjn.js',
                 [expediente, cuit],
-                { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit) }
+                { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit), processLabel: 'Informe' }
             );
 
             // Abrir el PDF generado automáticamente
@@ -1913,6 +1920,9 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
         mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Iniciando batch (${validLines.length} expedientes)...` });
         await closeChromeProfile();
 
+        // Una sola notificación para todo el lote (las individuales van con silentStart)
+        authManager.notificationManager.notifyProcessStarted('Informe Por Lote');
+
         for (let i = 0; i < validLines.length; i++) {
             const expStr = validLines[i].expediente;
 
@@ -1929,7 +1939,7 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
                 const expResult = await authManager.executeRemoteScriptAsLocal(
                     'informequickscwpjn.js',
                     [expStr, cuit],
-                    { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit) }
+                    { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit), silentStart: true }
                 );
                 expSuccess = expResult.success;
                 mainWindow.webContents.send('process-log', {
@@ -2323,7 +2333,7 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
         const result = await authManager.executeRemoteScriptAsLocal(
             'procesarMonitoreo.js',
             [],
-            { extraFiles: { 'config_monitoreo.json': configMonitoreo }, extraEnv: buildRunEnv(cuit) }
+            { extraFiles: { 'config_monitoreo.json': configMonitoreo }, extraEnv: buildRunEnv(cuit), processLabel: modo === 'novedades' ? 'Monitor (novedades)' : 'Monitor (consulta inicial)' }
         );
 
         // Parsear RESULT del output (executeRemoteScriptAsLocal retorna { success, output, executionTime })

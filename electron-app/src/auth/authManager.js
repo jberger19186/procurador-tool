@@ -385,15 +385,20 @@ class AuthManager {
         const { fork } = require('child_process');
         const fs = require('fs');
         const path = require('path');
-        const { cuitOverride, extraFiles } = options;
+        const { cuitOverride, extraFiles, processLabel, silentStart } = options;
 
         return new Promise(async (resolve, reject) => {
             try {
                 console.log(`\n🚀 Iniciando ejecución segura de: ${scriptName}`);
 
-                // ✅ NOTIFICACIÓN: Proceso iniciado
-                this.notificationManager.notifyProcessStarted(scriptName);
-                this.securityMetrics.recordNotification();
+                // ✅ NOTIFICACIÓN: Proceso iniciado.
+                // Muestra la etiqueta amigable del tipo de proceso (processLabel),
+                // con respaldo al mapeo por nombre de script. silentStart la omite
+                // (ej: lote de informes, que dispara una sola notificación global).
+                if (!silentStart) {
+                    this.notificationManager.notifyProcessStarted(processLabel || scriptName);
+                    this.securityMetrics.recordNotification();
+                }
 
                 // 1. Obtener código del caché, verificando si el servidor tiene una versión más reciente
                 let code = this.scriptCache.get(scriptName);
