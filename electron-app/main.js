@@ -1731,16 +1731,35 @@ ipcMain.handle('position-left', async () => {
     }
 });
 
+/**
+ * Devuelve el archivo más reciente de `descargas` que cumpla el filtro,
+ * ordenando por fecha de modificación real (mtime) — NO por nombre.
+ * (Ordenar por nombre fallaba: "procurar-lote_*" siempre ganaba a
+ *  "procurar-individual_*" por orden alfabético, sin importar la hora.)
+ */
+function latestFileBy(descargas, filterFn) {
+    if (!fs.existsSync(descargas)) return null;
+    const candidatos = fs.readdirSync(descargas)
+        .filter(filterFn)
+        .map(name => {
+            const full = path.join(descargas, name);
+            let mtime = 0;
+            try { mtime = fs.statSync(full).mtimeMs; } catch {}
+            return { name, full, mtime };
+        })
+        .sort((a, b) => b.mtime - a.mtime); // más reciente primero
+    return candidatos[0] || null;
+}
+
 ipcMain.handle('get-visor-path', async () => {
     try {
         const descargas = await resolveUserDescargasDir();
-        const files = fs.existsSync(descargas)
-            ? fs.readdirSync(descargas).filter(f => f.startsWith('procurar-') && f.includes('visor') && f.endsWith('.html')).sort().reverse()
-            : [];
-        if (files.length === 0) {
+        const latest = latestFileBy(descargas,
+            f => f.startsWith('procurar-') && f.includes('visor') && f.endsWith('.html'));
+        if (!latest) {
             return { success: false, error: 'No se encontró visor de procuración' };
         }
-        return { success: true, path: path.join(descargas, files[0]) };
+        return { success: true, path: latest.full };
     } catch (error) {
         return { success: false, error: error.message };
     }
@@ -1749,23 +1768,15 @@ ipcMain.handle('get-visor-path', async () => {
 ipcMain.handle('get-latest-excel', async () => {
     try {
         const descargas = await resolveUserDescargasDir();
-
-        if (!fs.existsSync(descargas)) {
-            return { success: false, error: 'No se encontró la carpeta de descargas' };
-        }
-
-        const files = fs.readdirSync(descargas);
-        const excelFiles = files.filter(f => f.startsWith('procurar-individual_') && f.endsWith('.xlsx')).sort().reverse();
-
-        if (excelFiles.length === 0) {
+        const latest = latestFileBy(descargas,
+            f => f.startsWith('procurar-individual_') && f.endsWith('.xlsx'));
+        if (!latest) {
             return { success: false, error: 'No se encontraron archivos Excel de procuración' };
         }
-
-        const latestExcel = path.join(descargas, excelFiles[0]);
         return {
             success: true,
-            path: latestExcel,
-            filename: excelFiles[0]
+            path: latest.full,
+            filename: latest.name
         };
     } catch (error) {
         return { success: false, error: error.message };
