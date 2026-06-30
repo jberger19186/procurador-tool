@@ -3,8 +3,9 @@
 // node informequickscwpjn.js "CAF 068920/2018" 27320694359
 
 const path = require('path');
-// directorio 'descargas' dentro de este proyecto
-const DOWNLOADS_DIR = path.join(__dirname, 'descargas');
+// directorio 'descargas' del usuario logueado (CUIT) inyectado por main.js vía
+// PROCURADOR_DATA_DIR. Fallback a __dirname si no viene (retrocompatible).
+const DOWNLOADS_DIR = path.join(process.env.PROCURADOR_DATA_DIR || __dirname, 'descargas');
 const fs = require('fs');
 const testM2 = require('./testM2');
 const {
