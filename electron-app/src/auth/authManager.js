@@ -763,14 +763,15 @@ class AuthManager {
 
                     // 10. COPIAR archivos generados desde carpeta temporal a userData
                     try {
+                        // Los scripts escriben directo en la carpeta final del usuario vía
+                        // getDataPath()/PROCURADOR_DATA_DIR, por lo que tempDir/descargas casi
+                        // nunca existe. Solo copiamos si realmente hay algo, y al destino correcto
+                        // (la carpeta del usuario por CUIT), SIN crear una carpeta raíz vacía.
                         const tempDescargasPath = path.join(tempDir, 'descargas');
-                        const finalDescargasPath = path.join(app.getPath('userData'), 'descargas');
-
-                        if (!fs.existsSync(finalDescargasPath)) {
-                            fs.mkdirSync(finalDescargasPath, { recursive: true });
-                        }
 
                         if (fs.existsSync(tempDescargasPath)) {
+                            const userBase = (options.extraEnv && options.extraEnv.PROCURADOR_DATA_DIR) || app.getPath('userData');
+                            const finalDescargasPath = path.join(userBase, 'descargas');
                             console.log('📦 Copiando archivos generados...');
 
                             const copyRecursive = (src, dest) => {
