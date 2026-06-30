@@ -1,7 +1,9 @@
 # Plan de implementación — Carpeta de descargas por usuario (CUIT)
 
-> Estado: **diseñado, sin implementar** (documento de referencia para cuando se encare).
-> Creado: 2026-06-29.
+> Estado: **✅ IMPLEMENTADO y en producción (2026-06-30, release app v2.7.30).**
+> Creado: 2026-06-29. Implementado: 2026-06-30.
+> Commits: `c4ec0ac` (impl) · `d2f8a3b` (fix informequick) · `87c7112` (release). Validado E2E con CUIT 27320694359.
+> **Hallazgo de la implementación:** `informequickscwpjn.js` (§5.3) **sí** requería cambio — su `DOWNLOADS_DIR=__dirname/descargas` resolvía `__dirname`→raíz `userData` en el `fork` (no a la carpeta temporal como se asumía acá), dejando los backups `_temp/<exp>_backup/*.json` en la carpeta compartida. Fix: `DOWNLOADS_DIR = path.join(process.env.PROCURADOR_DATA_DIR || __dirname, 'descargas')`. Lo cazó la prueba E2E en vivo.
 > Complejidad estimada: **media** · Riesgo: **bajo-medio** (contenible con prueba E2E de 2 cuentas).
 > Componentes afectados: app Electron (`main.js`) + scripts encriptados (`backend-server/scripts/`).
 > **Sin cambios de DB.** Sin tocar cobranza, auth ni la zona protegida de cifrado/credenciales.
@@ -227,13 +229,13 @@ Probar primero en local (`npm start`) o staging. Recién después: release Elect
 
 ## 9. Checklist de implementación
 
-- [ ] **Fase 1** — `getUserDataDir(cuit)` en `main.js`
-- [ ] **Fase 1** — migrar ~11 usos de `app.getPath('userData')/descargas` al helper (con fallback)
-- [ ] **Fase 1** — `clean-folder` limpia solo la carpeta del usuario
-- [ ] **Fase 2** — `PROCURADOR_DATA_DIR` con prioridad 0 en `getDataPath()` (5 scripts)
-- [ ] **Fase 2** — resolver caso `informequickscwpjn.js`
-- [ ] **Fase 2** — setear `PROCURADOR_DATA_DIR` en `main.js` antes de cada flujo + en `env` de los `fork`
-- [ ] **Fase 2** — re-encriptar + redeploy scripts (`reencrypt_scripts.js` + `pm2 restart`)
-- [ ] **Prueba E2E** con 2 CUIT distintos (§7)
-- [ ] **Release** Electron (checklist CLAUDE.md) + bump versión + tag
-- [ ] **Fase 3** (opcional) — decidir política de migración de datos viejos
+- [x] **Fase 1** — `getUserDataDir(cuit)` en `main.js` (+ `resolveUserDescargasDir()` / `buildRunEnv(cuit)`)
+- [x] **Fase 1** — migrar los usos de `app.getPath('userData')/descargas` al helper (con fallback)
+- [x] **Fase 1** — `clean-folder` limpia solo la carpeta del usuario
+- [x] **Fase 2** — `PROCURADOR_DATA_DIR` con prioridad 0 en `getDataPath()` (5 scripts)
+- [x] **Fase 2** — resolver caso `informequickscwpjn.js` (sí requirió fix — ver header)
+- [x] **Fase 2** — setear `PROCURADOR_DATA_DIR` en `main.js` antes de cada flujo (vía `extraEnv`/`buildRunEnv`)
+- [x] **Fase 2** — re-encriptar + redeploy scripts (`reencrypt_scripts.js` + `pm2 restart`)
+- [x] **Prueba E2E** — validada con 1 CUIT real (27320694359) en vivo + harness automático (21/21) que simula 2 CUIT y la retrocompatibilidad. Las 3 vías (procuración/informe/monitor) escriben en `usuarios\<CUIT>\descargas`, raíz intacta
+- [x] **Release** Electron v2.7.30 + tag `electron-v2.7.30`
+- [ ] **Fase 3** (opcional, NO hecho) — migración de datos viejos: se dejó la raíz `descargas\` como legado (no se migra, según lo recomendado)
