@@ -982,17 +982,26 @@ function getUserDataDir(cuit) {
     return safe ? path.join(base, 'usuarios', safe) : base;
 }
 
+// Último CUIT conocido de la sesión activa. Evita que un verifySession con un blip
+// transitorio (sin user.cuit) haga caer los handlers pasivos al fallback de la raíz
+// y cree una carpeta 'descargas' vacía ahí. Se alimenta en cada flujo de ejecución
+// (buildRunEnv) y en cada resolución exitosa.
+let _lastKnownCuit = null;
+
 // Resuelve la carpeta 'descargas' del usuario logueado para los handlers "pasivos"
 // (abrir descargas, último Excel, visor, limpiar) que no tienen el CUIT a mano.
 async function resolveUserDescargasDir() {
     let cuit = null;
-    try { cuit = (await authManager.verifySession())?.user?.cuit || null; } catch { /* fallback histórico */ }
+    try { cuit = (await authManager.verifySession())?.user?.cuit || null; } catch { /* blip → cache */ }
+    if (cuit) _lastKnownCuit = cuit;       // recordar para próximas resoluciones
+    else cuit = _lastKnownCuit;            // usar el último conocido en vez de la raíz
     return path.join(getUserDataDir(cuit), 'descargas');
 }
 
 // extraEnv para executeRemoteScriptAsLocal: headless + carpeta base por usuario.
 // Los scripts leen PROCURADOR_DATA_DIR con prioridad en getDataPath().
 function buildRunEnv(cuit) {
+    if (cuit) _lastKnownCuit = cuit;       // los flujos de ejecución alimentan el cache de CUIT
     return { ...leerExtraEnvHeadless(), PROCURADOR_DATA_DIR: getUserDataDir(cuit) };
 }
 
