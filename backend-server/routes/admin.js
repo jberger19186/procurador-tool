@@ -7,8 +7,23 @@ const multer = require('multer');
 const { getCacheStats, clearCache } = require('../utils/scriptEncryption');
 const { adminLimiter } = require('../middleware/rateLimiter');
 const { isBlacklisted } = require('../middleware/tokenBlacklist');
-const { sendTicketReplyEmail } = require('../utils/mailer');
-const { updatePreapprovalAmount, cancelSubscription, reactivateSubscription } = require('../services/subscriptionService');
+const bcrypt = require('bcrypt');
+const crypto = require('crypto');
+const { sendTicketReplyEmail, sendAdminCreatedUserEmail } = require('../utils/mailer');
+const { validatePassword } = require('../utils/passwordPolicy');
+const { updatePreapprovalAmount, cancelSubscription, reactivateSubscription, pausePreapproval } = require('../services/subscriptionService');
+
+// Validación de CUIT/CUIL (mismo algoritmo que routes/auth.js)
+function validarCuitAdmin(cuit) {
+    const clean = String(cuit || '').replace(/[-\s]/g, '');
+    if (!/^\d{11}$/.test(clean)) return false;
+    const mult = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+    let sum = 0;
+    for (let i = 0; i < 10; i++) sum += parseInt(clean[i]) * mult[i];
+    const rem = sum % 11;
+    const check = rem === 0 ? 0 : rem === 1 ? 9 : 11 - rem;
+    return check === parseInt(clean[10]);
+}
 
 // ── Multer: almacenamiento de PDFs de facturas ────────────────────────────────
 const invoicesDir = path.join(__dirname, '../public/invoices');
@@ -199,6 +214,115 @@ router.put('/scripts/:scriptName/toggle', authenticateAdmin, async (req, res) =>
 });
 
 // ==================== USUARIOS ====================
+
+// Alta de usuario por el administrador (suple el registro público). Crea la cuenta con la
+// contraseña que fija el admin, le asigna un plan, y envía un email con las credenciales +
+// recomendación de cambiar la contraseña + enlace de verificación de email. El usuario queda
+// en pending_email hasta que verifica; al verificar → pending_activation (trial), salvo que el
+// plan sea de $0 (cortesía) → queda activo con ese plan y su vigencia (ver /auth/verify-email).
+router.post('/users', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const {
+        nombre, apellido, email, password, cuit,
+        domicilio, telefono, planId, plan, durationDays
+    } = req.body;
+
+    // Validaciones
+    const required = { nombre, apellido, email, password, cuit };
+    for (const [k, v] of Object.entries(required)) {
+        if (!v || String(v).trim() === '') return res.status(400).json({ error: `El campo '${k}' es requerido` });
+    }
+    const pwdCheck = validatePassword(password, email);
+    if (!pwdCheck.valid) return res.status(400).json({ error: pwdCheck.error });
+    if (!validarCuitAdmin(cuit)) return res.status(400).json({ error: 'CUIT/CUIL inválido. Verificá el formato y dígito verificador.' });
+
+    try {
+        // Resolver el plan (por id o por nombre). El admin puede asignar planes privados también.
+        let planData;
+        if (planId) {
+            const r = await db.query('SELECT * FROM plans WHERE id = $1', [planId]);
+            if (r.rows.length === 0) return res.status(400).json({ error: 'Plan no encontrado' });
+            planData = r.rows[0];
+        } else if (plan) {
+            const r = await db.query('SELECT * FROM plans WHERE name = $1', [plan.toUpperCase()]);
+            if (r.rows.length === 0) return res.status(400).json({ error: 'Plan no encontrado' });
+            planData = r.rows[0];
+        } else {
+            return res.status(400).json({ error: 'Se requiere plan o planId' });
+        }
+
+        const cleanCuit = String(cuit).replace(/[-\s]/g, '');
+        const cleanEmail = email.trim().toLowerCase();
+
+        const client = await db.connect();
+        try {
+            await client.query('BEGIN');
+
+            // Unicidad de email y CUIT
+            const dup = await client.query('SELECT id FROM users WHERE email = $1', [cleanEmail]);
+            if (dup.rows.length > 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'El email ya está registrado' }); }
+            const cuitDup = await client.query('SELECT id FROM users WHERE cuit = $1', [cleanCuit]);
+            if (cuitDup.rows.length > 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'El CUIT ya está registrado en el sistema' }); }
+
+            const hashed = await bcrypt.hash(password, 12);
+            const token = crypto.randomBytes(32).toString('hex');
+            const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+            const ins = await client.query(`
+                INSERT INTO users (
+                    nombre, apellido, email, telefono, password_hash, cuit, domicilio,
+                    registration_status, toc_accepted_at, admin_created,
+                    email_verified, email_verify_token, email_verify_expires
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,'pending_email',NOW(),true,false,$8,$9)
+                RETURNING id
+            `, [
+                nombre.trim(), apellido.trim(), cleanEmail,
+                (telefono || '').trim() || null, hashed, cleanCuit,
+                domicilio ? JSON.stringify(domicilio) : null,
+                token, tokenExpires
+            ]);
+            const newUserId = ins.rows[0].id;
+
+            // Vigencia (plan_expiry_date): si es un plan de cortesía ($0) y el admin fijó días,
+            // se guarda para que al verificar el email la cuenta arranque con esa fecha de corte.
+            const priceKnown = planData.price_ars != null || planData.price_usd != null;
+            const price = Number(planData.price_ars ?? planData.price_usd ?? 0);
+            let planExpiry = planData.plan_expiry_date || null;
+            if (priceKnown && price === 0 && durationDays) {
+                planExpiry = new Date();
+                planExpiry.setDate(planExpiry.getDate() + (parseInt(durationDays) || 30));
+            }
+
+            await client.query(`
+                INSERT INTO subscriptions (
+                    user_id, plan, plan_id, status, usage_limit, usage_count, expires_at, plan_expiry_date
+                ) VALUES ($1, $2, $3, 'suspended', 20, 0, NOW() + INTERVAL '365 days', $4)
+            `, [newUserId, planData.name, planData.id, planExpiry]);
+
+            await client.query(
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'user_created_by_admin', $2)`,
+                [newUserId, JSON.stringify({ plan: planData.name, admin_id: req.user.id })]
+            );
+
+            await client.query('COMMIT');
+
+            // Email con credenciales + recomendación de cambio + enlace de verificación.
+            sendAdminCreatedUserEmail(cleanEmail, nombre.trim(), password, token).catch(() => {});
+
+            console.log(`👤 Usuario ${cleanEmail} creado por admin ${req.user.id} (plan ${planData.name})`);
+            res.status(201).json({ success: true, userId: newUserId, message: 'Usuario creado. Se le envió un email con sus credenciales y el enlace de verificación.' });
+        } catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        if (error.code === '23505') return res.status(400).json({ error: 'El email o CUIT ya está registrado' });
+        console.error('Error creando usuario (admin):', error.message);
+        res.status(500).json({ error: 'Error creando el usuario' });
+    }
+});
 
 // Listar todos los usuarios
 router.get('/users', authenticateAdmin, async (req, res) => {
@@ -1103,6 +1227,58 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
         // enforcement por submódulo recién aplica cuando hay pago real.
         const isTrial = prev && !prev.payment_provider;
         const planPrice = (p) => Number(p?.price_ars ?? p?.price_usd ?? 0);
+
+        // CORTESÍA: asignar un plan de $0 (gratuito) con vigencia. Aplica de inmediato, fija la
+        // vigencia (plan_expiry_date = hoy + días del campo al lado del selector) y, si el usuario
+        // venía pagando, PAUSA el cobro en MercadoPago para no seguir cobrando. Al vencer la fecha,
+        // el cron de vigencia (5 11) pasa la cuenta a suspended_plan_expired y el portal ofrece
+        // reactivar eligiendo un plan público + método de pago.
+        // Solo un precio EXPLÍCITO de 0 es cortesía. Un plan sin precio (null, ej. BASIC/PRO/
+        // ENTERPRISE "próximamente") NO se trata como cortesía → sigue la lógica normal.
+        const priceKnown = planData.price_ars != null || planData.price_usd != null;
+        const isCourtesy = priceKnown && planPrice(planData) === 0 && planData.id;
+        if (isCourtesy) {
+            const dias = parseInt(durationDays) || 30;
+            const expiry = new Date();
+            expiry.setDate(expiry.getDate() + dias);
+
+            await db.query(`
+                INSERT INTO subscriptions (user_id, plan, plan_id, status, expires_at, plan_expiry_date, usage_limit, period_start)
+                VALUES ($1, $2, $3, 'active', $4, $4, 999999, NOW())
+                ON CONFLICT (user_id) DO UPDATE
+                SET plan = $2, plan_id = $3, status = 'active', expires_at = $4, plan_expiry_date = $4,
+                    usage_limit = 999999, period_start = NOW(),
+                    proc_usage = 0, batch_usage = 0, informe_usage = 0, monitor_novedades_usage = 0,
+                    proc_bonus = 0, batch_bonus = 0, informe_bonus = 0, monitor_novedades_bonus = 0, monitor_partes_bonus = 0,
+                    scheduled_plan = NULL, cancel_at = NULL, updated_at = NOW()
+            `, [userId, planData.name, planData.id, expiry]);
+
+            // Activar la cuenta (salvo que aún no verificó el email → sigue pending_email).
+            await db.query(
+                `UPDATE users SET registration_status = 'active', updated_at = NOW() WHERE id = $1 AND registration_status <> 'pending_email'`,
+                [userId]
+            );
+
+            // Si venía pagando por MP, pausar el preapproval para cortar los cobros sucesivos.
+            if (prev?.payment_provider) {
+                pausePreapproval(userId).catch(() => {});
+            }
+
+            const fechaStr = expiry.toLocaleDateString('es-AR');
+            await db.query(
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'courtesy_plan_assigned_by_admin', $2)`,
+                [userId, JSON.stringify({ plan: planData.name, expiry, dias, was_paying: !!prev?.payment_provider, admin_id: req.user.id })]
+            );
+            await db.query(
+                `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'courtesy_plan', $2)`,
+                [userId, `Se te asignó el plan ${planData.display_name || planData.name} de cortesía con acceso hasta el ${fechaStr}.`]
+            );
+            console.log(`🎁 Plan de cortesía "${planData.name}" asignado a usuario ${userId} hasta ${fechaStr} por admin: ${req.user.id}`);
+            return res.json({
+                success: true, type: 'courtesy', expiry,
+                message: `Plan de cortesía "${planData.name}" asignado con acceso hasta el ${fechaStr}.${prev?.payment_provider ? ' Se pausó el cobro en MercadoPago.' : ''}`
+            });
+        }
 
         // ¿Es un DOWNGRADE de una cuenta PAGA? (precio nuevo < precio actual, ambos conocidos)
         // Solo aplica si ya hay suscripción con plan actual y el plan nuevo proviene de la

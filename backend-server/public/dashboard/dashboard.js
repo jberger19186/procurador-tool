@@ -326,6 +326,7 @@ async function renderUsers() {
         document.getElementById('content').innerHTML = `
         <div class="page-header">
             <div><h2>Usuarios</h2><p>${users.length} usuarios registrados</p></div>
+            <button class="btn btn-primary" onclick="openAddUserModal()">＋ Agregar usuario</button>
         </div>
         <div class="filter-bar">
             <input type="text" id="user-search" placeholder="Buscar por email..." oninput="filterUsers()" style="min-width:240px">
@@ -369,6 +370,86 @@ window.filterUsers = function() {
     document.querySelectorAll('#users-table tbody tr').forEach(row => {
         row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
     });
+};
+
+// ───── ALTA DE USUARIO (admin) ─────
+// Crea un usuario desde el dashboard (suple el registro público). Se le envía un email con
+// las credenciales + el enlace de verificación. Si el plan es de $0, el campo "días" fija la
+// vigencia (la cuenta arranca activa con esa cortesía al verificar el email).
+window.openAddUserModal = async function() {
+    let plans = [];
+    try { const d = await apiFetch('/admin/plans'); plans = d.plans || []; } catch (e) {}
+    const planPrice = (p) => Number(p.price_ars ?? p.price_usd ?? 0);
+    const opts = plans.map(p => {
+        const pr = planPrice(p);
+        const tag = pr === 0 ? ' [GRATIS]' : ` ($${pr})`;
+        const vis = p.visibility === 'private' ? ' 🔒' : '';
+        return `<option value="${p.id}" data-price="${pr}">${escHtml(p.display_name || p.name)}${tag}${vis}</option>`;
+    }).join('');
+    const fld = 'width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box';
+    const lbl = 'font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px';
+    _injectModal(`${_modalHeader('👤 Agregar usuario')}
+        <div style="padding:22px;display:flex;flex-direction:column;gap:14px;max-height:70vh;overflow-y:auto">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="${lbl}">Nombre *</label><input id="_au-nombre" type="text" style="${fld}"></div>
+                <div><label style="${lbl}">Apellido *</label><input id="_au-apellido" type="text" style="${fld}"></div>
+            </div>
+            <div><label style="${lbl}">Email *</label><input id="_au-email" type="email" autocomplete="off" style="${fld}"></div>
+            <div><label style="${lbl}">Contraseña * <span style="font-weight:400;color:#9ca3af">(mín. 8, con letra y número; el usuario la cambia luego)</span></label>
+                <input id="_au-password" type="text" autocomplete="new-password" style="${fld}"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="${lbl}">CUIT/CUIL *</label><input id="_au-cuit" type="text" placeholder="20123456789" style="${fld}"></div>
+                <div><label style="${lbl}">Teléfono <span style="font-weight:400;color:#9ca3af">(opcional)</span></label><input id="_au-tel" type="text" style="${fld}"></div>
+            </div>
+            <div><label style="${lbl}">Plan *</label>
+                <select id="_au-plan" style="${fld};background:#fff" onchange="_auToggleVigencia()">${opts}</select></div>
+            <div id="_au-vig-wrap" style="display:none">
+                <label style="${lbl}">Vigencia (días de cortesía)</label>
+                <input id="_au-dias" type="number" min="1" max="3650" value="30" style="${fld}">
+                <p style="font-size:11px;color:#6b7280;margin:6px 0 0">Plan de $0: al verificar el email, la cuenta queda <strong>activa</strong> con acceso por estos días. Al vencer, se ofrece reactivar eligiendo un plan público + pago.</p>
+            </div>
+            <div id="_au-err" style="color:#991b1b;font-size:12px;display:none"></div>
+            <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:9px 11px;font-size:11px;color:#075985">
+                Se enviará un email al usuario con sus credenciales + recomendación de cambiar la contraseña + enlace de verificación. Queda en <strong>pending_email</strong> hasta que verifique.
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button id="_au-submit" class="btn btn-sm btn-primary" onclick="submitAddUser()">✅ Crear usuario</button>
+            </div>
+        </div>`);
+    _auToggleVigencia();
+};
+
+window._auToggleVigencia = function() {
+    const sel = document.getElementById('_au-plan');
+    const price = Number(sel?.options[sel.selectedIndex]?.dataset.price || 0);
+    const wrap = document.getElementById('_au-vig-wrap');
+    if (wrap) wrap.style.display = price === 0 ? 'block' : 'none';
+};
+
+window.submitAddUser = async function() {
+    const err = document.getElementById('_au-err');
+    const g = (id) => document.getElementById(id)?.value.trim();
+    const sel = document.getElementById('_au-plan');
+    const price = Number(sel?.options[sel.selectedIndex]?.dataset.price || 0);
+    const body = {
+        nombre: g('_au-nombre'), apellido: g('_au-apellido'),
+        email: g('_au-email'), password: document.getElementById('_au-password')?.value || '',
+        cuit: g('_au-cuit'), telefono: g('_au-tel') || null,
+        planId: parseInt(sel?.value),
+    };
+    if (price === 0) body.durationDays = parseInt(document.getElementById('_au-dias')?.value) || 30;
+    const btn = document.getElementById('_au-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Creando…'; }
+    try {
+        const r = await apiFetch('/admin/users', 'POST', body);
+        closeDynModal();
+        renderUsers();
+        alert(r.message || 'Usuario creado.');
+    } catch (e) {
+        if (err) { err.textContent = e.message; err.style.display = 'block'; }
+        if (btn) { btn.disabled = false; btn.textContent = '✅ Crear usuario'; }
+    }
 };
 
 // ───── DETALLE USUARIO ─────

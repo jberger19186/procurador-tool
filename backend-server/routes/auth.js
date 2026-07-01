@@ -310,7 +310,8 @@ router.get('/verify-email', async (req, res) => {
 
     try {
         const result = await db.query(`
-            SELECT u.id, u.email, u.nombre, u.apellido, u.email_change_prev_status, p.display_name AS plan_name
+            SELECT u.id, u.email, u.nombre, u.apellido, u.email_change_prev_status, u.admin_created,
+                   p.display_name AS plan_name, p.price_ars, p.price_usd
             FROM users u
             JOIN subscriptions s ON u.id = s.user_id
             JOIN plans p ON s.plan_id = p.id
@@ -339,9 +340,18 @@ router.get('/verify-email', async (req, res) => {
         // (no 'pending_activation') para que la cuenta "continúe como venía" sin re-activación.
         // En el alta nueva (sin estado previo) el flujo es el normal → pending_activation.
         const isEmailChange = !!user.email_change_prev_status;
-        const targetStatus  = (isEmailChange && user.email_change_prev_status !== 'pending_email')
-            ? user.email_change_prev_status
-            : 'pending_activation';
+        // Un usuario creado por el admin con un plan de $0 (cortesía) queda ACTIVO al verificar
+        // el email (el admin ya lo aprobó al darlo de alta) y empieza a usar la suscripción hasta
+        // su fecha de vencimiento (plan_expiry_date, seteada en el alta). El resto sigue el flujo
+        // normal → pending_activation (trial).
+        // Solo un precio EXPLÍCITO de 0 (cortesía) activa la cuenta al verificar. Un plan sin
+        // precio (null) NO → sigue el flujo normal (pending_activation / trial).
+        const priceKnown = user.price_ars != null || user.price_usd != null;
+        const planPrice = Number(user.price_ars ?? user.price_usd ?? 0);
+        const isCourtesyActivation = !isEmailChange && user.admin_created && priceKnown && planPrice === 0;
+        const targetStatus = isEmailChange
+            ? ((user.email_change_prev_status !== 'pending_email') ? user.email_change_prev_status : 'pending_activation')
+            : (isCourtesyActivation ? 'active' : 'pending_activation');
 
         const verifyClient = await db.connect();
         try {
@@ -355,6 +365,15 @@ router.get('/verify-email', async (req, res) => {
                     email_verify_expires = NULL
                 WHERE id = $1
             `, [user.id, targetStatus]);
+            // Cortesía: activar la suscripción para que el plan sea usable de inmediato. El
+            // enforcement queda por submódulo (usage_limit=999999); expires_at/plan_expiry_date
+            // ya se fijaron en el alta y el cron de vigencia corta el acceso en esa fecha.
+            if (isCourtesyActivation) {
+                await verifyClient.query(
+                    `UPDATE subscriptions SET status = 'active', usage_limit = 999999, period_start = NOW(), updated_at = NOW() WHERE user_id = $1`,
+                    [user.id]
+                );
+            }
             await verifyClient.query(
                 `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, $2, $3)`,
                 [user.id, isEmailChange ? 'email_changed_verified' : 'email_verified',

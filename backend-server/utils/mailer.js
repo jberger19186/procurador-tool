@@ -449,6 +449,33 @@ async function sendPaymentFailedEmail(email, graceEndDate) {
     return sendEmail(email, 'Acción requerida: actualizá tu método de pago — Procurador SCW', html);
 }
 
+// Email para un usuario dado de alta por el administrador: incluye las credenciales
+// (email + contraseña temporal que fijó el admin), la recomendación de cambiarla, y el
+// enlace de verificación de email (mismo flujo que el registro público).
+async function sendAdminCreatedUserEmail(email, nombre, password, token) {
+    const baseUrl = process.env.BASE_URL || 'https://api.procuradortool.com';
+    const link = `${baseUrl}/auth/verify-email?token=${token}`;
+    await sendEmail(
+        email,
+        'Tu cuenta en Procurador SCW — datos de acceso',
+        emailLayout(`
+          ${p(`Hola <strong>${nombre}</strong>,`)}
+          ${p('El equipo de Procurador SCW te dio de alta una cuenta. Estos son tus datos de acceso:')}
+          ${infoBox(`<strong>Usuario (email):</strong> ${email}<br><strong>Contraseña temporal:</strong> ${password}`)}
+          ${p('<strong>Importante:</strong> por seguridad, te recomendamos cambiar esta contraseña la primera vez que ingreses, desde el portal de usuarios (sección Mi Perfil).')}
+          ${p('Primero, verificá tu email haciendo clic en el botón:')}
+          ${btnPrimary(link, 'Verificar mi email')}
+          <p style="font-size:12px;color:#6b7280;margin:0 0 8px">
+            Este enlace vence en 24 horas.
+          </p>
+          <p style="font-size:12px;color:#9ca3af;margin:0">
+            Si el botón no funciona, copiá este enlace:<br>
+            <a href="${link}" style="color:#d97706;word-break:break-all">${link}</a>
+          </p>
+        `)
+    );
+}
+
 async function sendMail({ to, subject, text, html }) {
     return sendEmail(to, subject, html || `<p>${text}</p>`);
 }
@@ -457,6 +484,7 @@ module.exports = {
     sendEmail,
     sendMail,
     sendEmailVerification,
+    sendAdminCreatedUserEmail,
     sendWelcomeEmail,
     sendAdminNewUserAlert,
     sendPromoExpirationWarning,
