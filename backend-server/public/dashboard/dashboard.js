@@ -778,10 +778,17 @@ window.updateSub = async function(id) {
     const planId = parseInt(sel.value);
     const planLabel = sel.options[sel.selectedIndex]?.text || '';
     const durationDays = parseInt(document.getElementById('days-input').value) || 30;
-    if (!confirm(`¿Cambiar el plan a "${planLabel}" por ${durationDays} días? Se reseteará el uso actual.`)) return;
+    if (!confirm(
+        `¿Aplicar el plan "${planLabel}"?\n\n` +
+        `• Upgrade (plan más caro): se aplica de inmediato; el campo "días" fija el período de acceso.\n` +
+        `• Downgrade (más barato): se programa para el fin del ciclo actual (el usuario conserva sus límites hasta entonces); el campo "días" no aplica.\n` +
+        `• Si paga por MercadoPago: el nuevo monto rige desde el próximo cobro (no se cobra diferencia ahora ni se reembolsa el período actual).`
+    )) return;
     try {
-        await apiFetch('/admin/subscriptions', 'POST', { userId: id, planId, durationDays });
-        showAlert(document.getElementById('ud-alert'), `Plan actualizado a "${planLabel}" por ${durationDays} días.`, 'success');
+        // El backend devuelve el mensaje exacto según lo que hizo (upgrade inmediato /
+        // downgrade programado / trial), así que lo mostramos tal cual en vez de asumir.
+        const r = await apiFetch('/admin/subscriptions', 'POST', { userId: id, planId, durationDays });
+        showAlert(document.getElementById('ud-alert'), r.message || `Plan actualizado a "${planLabel}".`, 'success');
         setTimeout(() => navigate('user-detail', id), 1200);
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
