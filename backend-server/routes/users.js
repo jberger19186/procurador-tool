@@ -339,10 +339,12 @@ router.post('/change-plan', async (req, res) => {
             await client.query('BEGIN');
             // Tope global: para cuentas PAGAS rige el enforcement por submódulo, así que
             // usage_limit = 999999 (el global no debe cortar al mezclar módulos). Solo el
-            // trial/legacy sin pago usa el límite de proc del plan como tope global.
+            // trial/legacy sin pago usa el límite de proc del plan como tope global — salvo
+            // que el plan no limite proc (0, ej. EXTENSION_PROMO): ahí se conserva el cupo
+            // actual (usage_limit=0 violaría check_usage_limit_positive).
             const newUsageLimit = (u.payment_provider || newPlan.proc_executions_limit === -1)
                 ? 999999
-                : newPlan.proc_executions_limit;
+                : (newPlan.proc_executions_limit > 0 ? newPlan.proc_executions_limit : null);
 
             if (isReactivation || isUpgrade) {
                 // Aplica inmediatamente (stub: simula cobro OK)
@@ -352,7 +354,7 @@ router.post('/change-plan', async (req, res) => {
                 await client.query(`
                     UPDATE subscriptions SET
                         plan = $1, plan_id = $2, status = 'active',
-                        usage_limit = $3,
+                        usage_limit = COALESCE($3, usage_limit),
                         expires_at = $4,
                         next_billing_date = $4,
                         period_start = NOW(),

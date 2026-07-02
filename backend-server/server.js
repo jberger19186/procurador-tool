@@ -733,14 +733,18 @@ cron.schedule('25 11 * * *', async () => {
             const newPlanResult = await pool.query(`SELECT * FROM plans WHERE id = $1`, [sp.plan_id]);
             if (newPlanResult.rows.length === 0) continue;
             const np = newPlanResult.rows[0];
-            // Pago → enforcement por submódulo (usage_limit=999999); trial/legacy → límite de proc.
-            const newUsageLimit = (u.payment_provider || np.proc_executions_limit === -1) ? 999999 : np.proc_executions_limit;
+            // Pago → enforcement por submódulo (usage_limit=999999). SIN pago (trial/activado
+            // sin método) → conservar el cupo actual (mismo criterio que el cambio de plan del
+            // admin): recalcularlo del plan podía dar 0 (ej. EXTENSION_PROMO, proc=0) y violar
+            // check_usage_limit_positive → el UPDATE fallaba y el scheduled_plan quedaba
+            // reintentando a diario sin aplicarse.
+            const newUsageLimit = (u.payment_provider || np.proc_executions_limit === -1) ? 999999 : null;
             const newExpiry = new Date();
             newExpiry.setDate(newExpiry.getDate() + (np.period_days || 30));
 
             await pool.query(`
                 UPDATE subscriptions SET
-                    plan = $1, plan_id = $2, usage_limit = $3,
+                    plan = $1, plan_id = $2, usage_limit = COALESCE($3, usage_limit),
                     expires_at = $4, next_billing_date = $4,
                     period_start = NOW(),
                     plan_changes_this_cycle = 0,
