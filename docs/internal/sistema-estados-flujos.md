@@ -1,6 +1,6 @@
 # Documentación interna — Estados, errores y flujos del sistema
 **Procurador SCW** · Uso interno del equipo  
-Última actualización: 2026-06-04 (gating de acceso en 2 niveles + candado CUIT/verify-session)
+Última actualización: 2026-07-02 (planes público/privado + cambio de plan admin↔MP + cortesía con vigencia + alta de usuarios por admin)
 
 ---
 
@@ -71,13 +71,18 @@
 
 ## 3. Planes disponibles
 
-| Plan | Tipo | Precio aprox. | Límites app | Extensión |
-|---|---|---|---|---|
-| `EXTENSION_PROMO` | extension | USD 1/mes | Sin acceso | 5 flujos |
-| `COMBO_PROMO` | combo | USD 9.99/mes | 50 proc · 10 inf · 3 partes | Incluida |
-| `BASIC` | electron | TBD | 50 proc · 10 inf · 3 partes | No |
-| `PRO` | electron | TBD | 200 proc · 50 inf · 10 partes | No |
-| `ENTERPRISE` | electron | TBD | Ilimitado · 50 partes | No |
+| Plan | Tipo | Precio | Visibilidad | Activo | Límites app | Extensión |
+|---|---|---|---|---|---|---|
+| `EXTENSION_PROMO` | extension | $1.500 ARS/mes | público | ✅ | Sin acceso | 5 flujos |
+| `COMBO_PROMO` | combo | $15.000 ARS/mes | público | ✅ | 50 proc · 50 inf · 20 batch · 20 partes · 50 nov | Incluida |
+| `BASIC` | electron | (sin precio) | público | ❌ próximamente | 50 proc · 10 inf · 3 partes | No |
+| `PRO` | electron | (sin precio) | público | ❌ próximamente | 200 proc · 50 inf · 10 partes | No |
+| `ENTERPRISE` | electron | (sin precio) | público | ❌ próximamente | ∞ · 50 partes | No |
+| `CORTESIA` (ej.) | combo | **$0 ARS** | **privado** | ✅ | según se configure | según tipo |
+
+**Visibilidad (`plans.visibility`, 2026-06/07):** `public` = el usuario lo ve y lo puede elegir (registro + portal); `private` = **solo lo asigna el admin**, no aparece en las listas del usuario ni puede autoasignárselo (blindado en registro, `/users/change-plan`, checkout). El usuario que ya lo tiene asignado ve sus límites normal. Ver `guia-planes-vigencia-cortesia.md`.
+
+**Precio y MercadoPago:** `updatePreapprovalAmount` lee `price_ars` de la tabla `plans` → cualquier plan con precio > 0 es cobrable (incluidos privados). Precio explícito **$0** = **cortesía** (ver flujos nuevos). Precio **null** (BASIC/PRO/ENTERPRISE) = "sin precio", **NO** es cortesía.
 
 **Trial = hasta configurar el método de pago (modelo desde 06/2026):**
 El trial son **20 usos** (`usage_limit=20`, contador `usage_count`) que rigen **mientras `payment_provider IS NULL`** (no se configuró el pago), sin importar el `status`.
@@ -463,15 +468,18 @@ Refresca historial reciente en el card (últimos 5 ajustes del usuario)
 | 429 | Rate limit alcanzado | Demasiados intentos en la ventana de tiempo |
 | 503 | Servicio de IA no disponible | ANTHROPIC_API_KEY no configurada en .env |
 
-### Errores de cron jobs
+### Crons (horarios en ART, `America/Argentina/Buenos_Aires`)
 
 | Cron | Frecuencia | Acción |
 |---|---|---|
-| Trial agotado | Cada hora | usage_count >= usage_limit → `rejected` |
-| Plan vencido | Diario 02:00 UTC | plan_expiry_date < NOW() → `suspended_plan_expired` |
-| Cancel_at vencido | Diario 02:00 UTC | cancel_at < NOW() → `cancelled` |
-| Scheduled plan | Diario 02:00 UTC | apply_at < NOW() → aplica nuevo plan |
-| Heartbeat lock | Cada 5 min | Limpia active_executions sin heartbeat en 3 min |
+| Trial agotado | Cada hora | `usage_count >= usage_limit` → **solo notifica** (NO rechaza; el usuario puede configurar el pago para continuar) |
+| Aviso discontinuación | Diario `5c`/prev | `plan_expiry_date` entre hoy y +8 días → notifica + email al usuario |
+| **Retiro de plan** | Diario **`5 11`** | `plan_expiry_date < NOW()` → **pausa el cobro en MP** (`pausePreapproval`) + **respeta el período pago**: si el período no terminó, programa `cancel_at = fin de período`; si ya terminó, suspende ahora con gracia 7d |
+| **Aplicar downgrade** | Diario **`25 11`** | `scheduled_plan.apply_at < NOW()` → aplica el plan rebajado + `updatePreapprovalAmount` en MP. Para cuentas SIN pago conserva el cupo actual (COALESCE, no viola `check_usage_limit_positive`) |
+| Suspensión plan vencido | Diario `5f` | al vencer `cancel_at` por retiro → `suspended_plan_expired` (recuperable) |
+| Cancelación voluntaria | Diario | al vencer `cancel_at` por cancelación → `cancelled` (con guard: no cancela si hubo pago aprobado reciente) |
+| Gracia de pago vencida | Diario `30 11` | `payment_grace_ends_at < NOW()` → `suspended` (pago fallido) |
+| Heartbeat lock | Cada 5 min | Limpia `active_executions` sin heartbeat en 3 min |
 
 ---
 
@@ -668,3 +676,94 @@ Admin genera factura en ARCA → descarga PDF →
 > **Facturas manuales** (sin pago asociado): admin → tab "Emitidas" → "＋ Nueva factura manual" → POST `/admin/invoices/manual` con `user_id`, `amount`, `issued_at`, PDF.
 
 > **Facturante automático:** desactivado (cron comentado, `processInvoice()` no-op si `FACTURANTE_WSDL_URL` vacío). Para activar: completar vars `FACTURANTE_*` en `.env`, descomentar cron en `server.js`, reiniciar con `--update-env`.
+
+---
+
+## 9. Flujos de gestión de planes por admin (2026-06/07)
+
+> Todo esto se opera desde el dashboard admin. Referencia de uso: `manual-administrador.md`. Comportamiento: `guia-planes-vigencia-cortesia.md`.
+
+### 9.1 Planes público/privado (`plans.visibility`)
+
+```
+GET /auth/plan-availability  (registro)  → WHERE visibility = 'public'
+GET /usuarios/api/plans      (portal)    → WHERE active = true AND visibility = 'public'
+GET /admin/plans             (admin)     → sin filtro (ve todos)
+
+Blindaje anti-autoasignación (server-side, no solo UI):
+  /auth/register          → AND visibility = 'public'
+  /users/change-plan      → AND active = true AND visibility = 'public'
+  /checkout/init (react.) → AND active = true AND visibility = 'public'
+```
+Migración `20260630_plan_visibility.sql` (default `public`).
+
+### 9.2 Cambio de plan por admin ↔ MercadoPago (`POST /admin/subscriptions`)
+
+```
+Detecta upgrade/downgrade por price_ars del plan actual vs nuevo:
+
+UPGRADE (o mismo precio / activación) → INMEDIATO
+  → plan/plan_id, status active, usage_limit=999999, expires_at recalculado
+  → si payment_provider: updatePreapprovalAmount(userId, plan)  ← ajusta monto en MP
+      (MP NO prorratea: el nuevo monto rige desde el próximo cobro; sin cobro inmediato)
+
+DOWNGRADE (precio nuevo < actual, ambos conocidos) → PROGRAMADO a fin de ciclo
+  → scheduled_plan = { plan, plan_id, apply_at = next_billing_date }
+  → conserva límites altos hasta apply_at
+  → el cron `25 11` lo aplica y ahí baja el monto en MP
+  → evento plan_downgrade_scheduled_by_admin
+
+TRIAL / sin payment_provider → cambia solo plan, conserva cupo (no toca MP)
+```
+
+### 9.3 Cancelar al fin de ciclo desde admin (reversible)
+
+```
+POST /admin/subscriptions/:id/cancel        → cancelSubscription()
+  → pausePreapproval en MP (paused) + cancel_at = next_billing_date + auto_renewal=false
+  → eventos subscription_cancel_scheduled + subscription_cancelled_by_admin
+  → guard: rechaza si ya hay cancel_at
+
+POST /admin/subscriptions/:id/reactivate-cancel  → reactivateSubscription()
+  → reanuda preapproval (paused→authorized), sin cobro nuevo + cancel_at=NULL
+  → guard: falla si el preapproval no es reanudable (pide reconfigurar método)
+  → eventos subscription_cancel_reverted + subscription_cancel_reverted_by_admin
+```
+
+### 9.4 Alta de usuarios por admin (`POST /admin/users`)
+
+```
+Admin → "＋ Agregar usuario" (nombre, apellido, email, CONTRASEÑA que fija el admin,
+        cuit, teléfono, plan, [días de vigencia si el plan es $0])
+  → valida (password policy, CUIT, unicidad email/cuit)
+  → crea user pending_email + users.admin_created = true + email_verify_token
+  → crea subscription (suspended, trial 20); si plan $0 + días → plan_expiry_date = hoy+días
+  → sendAdminCreatedUserEmail: credenciales + recomendación de cambiarla + link de verificación
+  → queda pending_email hasta que el usuario verifica
+
+Al verificar el email (GET /auth/verify-email):
+  → admin_created && plan precio EXPLÍCITO 0 → registration_status='active' + sub activa
+     (arranca la cortesía con su vigencia)
+  → resto → pending_activation (trial), flujo normal
+```
+Migración `20260701_admin_created_users.sql`.
+
+### 9.5 Plan de cortesía con vigencia (plan precio explícito $0)
+
+```
+Asignar plan $0 por admin (POST /admin/subscriptions, rama isCourtesy):
+  → aplica YA: status active, usage_limit=999999, plan_expiry_date = hoy + días
+  → si el usuario VENÍA PAGANDO (payment_provider): pausePreapproval en MP → corta cobros
+  → registration_status='active' (salvo pending_email → verifica primero)
+  → evento courtesy_plan_assigned_by_admin { plan, dias, expiry, was_paying, admin_id }
+
+Los 3 escenarios (todos aplican de inmediato):
+  a) usuario que ya pagó   → pausa MP + vigencia (la cortesía empieza HOY, no al fin del período pago)
+  b) usuario en trial      → sale del trial, queda activo con vigencia
+  c) usuario creado por admin → queda activo al verificar el email
+
+Al vencer plan_expiry_date → cron `5 11` → suspended_plan_expired → el portal ofrece
+reactivar eligiendo un plan público + pago (checkout real).
+```
+
+> ⚠️ **Constraint eliminada:** `check_plan_valid` (restringía `subscriptions.plan` a 5 nombres hardcodeados) fue removida (`20260701_drop_check_plan_valid.sql`) — bloqueaba asignar planes privados/cortesía con nombres nuevos. Integridad por FK `plan_id`.

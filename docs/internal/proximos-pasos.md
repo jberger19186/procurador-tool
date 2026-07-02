@@ -1,46 +1,44 @@
 # Próximos pasos — Handoff para sesiones nuevas
 
 > **Documento de continuidad.** Después de `/clear`, leer este archivo + CLAUDE.md da el contexto suficiente para retomar.
-> Última actualización: 2026-06-02 (Seguridad 100% + Staging/Rollback completos · Fase 5 cobranza validada en sandbox)
+> **CLAUDE.md es la fuente de verdad** (tiene el detalle sesión a sesión). Este archivo resume el estado y los pendientes.
+> Última actualización: 2026-07-02 (Cobranza en prod · planes público/privado + cambio de plan admin + cortesía con vigencia · validado E2E T1–T13 incl. MP sandbox real)
 
 ---
 
 ## 📍 ESTADO ACTUAL DEL PROYECTO
 
-- **Fase 1 (Aplicación):** En curso — UI rediseñada, refactor pendiente
-- **Fase 2 (Backend):** Pendiente — backups programados, hardening secretos
-- **Fase 3 (Comercial):** 🔄 En curso — landing actualizada + branding unificado en landing/dashboard/portal
-- **Fase 4 (Soporte):** ✅ **CERRADA** (tag `fase4-completa`, commit `bc0ce2e`)
-- **Fase 5 (Cobranza):** ✅ **Flujo completo validado en sandbox** — alta/cancelación/reactivación/suspensión funcionando; facturación manual operativa (PDF generado en ARCA y subido por admin); Facturante automático pendiente de contratar (B3 + C1)
-- **Fase 6 (Staging/Release seguro):** ✅ **Completa** — staging gemelo (`staging-api`, puerto 3444), backups pre-deploy, rollback de 3 capas probado con simulacros, seguridad 100% (M-1/M-2 + B-1..B-8). Ver `flujo-staging-rollback.md` + `runbook-comandos.md`
+- **Fase 1 (Aplicación):** ✅ En producción — v2.7.35. UI estable; descargas por usuario (CUIT); unificación de nombres de archivos; notificaciones y visor pulidos.
+- **Fase 2 (Backend):** ✅ Backups automáticos + hardening RSA en `.env`.
+- **Fase 3 (Comercial):** ✅ Landing + branding unificados; planes públicos/privados operativos.
+- **Fase 4 (Soporte):** ✅ **CERRADA** (tag `fase4-completa`).
+- **Fase 5 (Cobranza):** ✅ **En producción, MP en sandbox** — ciclo completo validado E2E contra preapproval real (alta/upgrade/downgrade/cancelar-reanudar/cortesía). Facturación manual operativa. **Pendiente: B3** (pasar MP a producción real) + **C1** (Facturante automático).
+- **Fase 6 (Staging/Release seguro):** ✅ **Completa** — staging gemelo (`staging-api`, puerto 3444, DB `procurador_db_staging`), backups pre-deploy, rollback de 3 capas probado, seguridad 100%. Ver `flujo-staging-rollback.md` + `runbook-comandos.md`.
 
-### Versión Electron actual: **v2.7.35** (último release estable, GitHub Releases)
+### Features en producción (junio–julio 2026)
+- **Descargas por usuario (CUIT)** — aisladas en `usuarios\<CUIT>\descargas\` vía `PROCURADOR_DATA_DIR` (v2.7.30).
+- **Planes públicos/privados** (`plans.visibility`) — el privado solo lo asigna el admin; el usuario no puede autoasignárselo.
+- **Cambio de plan por admin ↔ MercadoPago** — upgrade inmediato + `updatePreapprovalAmount`; downgrade programado a fin de ciclo (cron `25 11`).
+- **Cancelar al fin de ciclo desde admin** (reversible) — pausa/reanuda el preapproval en MP.
+- **Alta de usuarios por admin** (`POST /admin/users`, botón "＋ Agregar usuario") — email con credenciales + verificación; `users.admin_created`.
+- **Plan de cortesía con vigencia** (plan precio explícito $0) — aplica ya, `plan_expiry_date`, pausa MP si pagaba; usuario admin_created con $0 queda activo al verificar email.
+- 📄 Comportamiento detallado: `guia-planes-vigencia-cortesia.md` · Operación del dashboard: `manual-administrador.md`.
+
+### Versión Electron actual: **v2.7.35** (último release estable, GitHub Releases). Extensión Chrome: 1.3.5.
 
 ### Tags Git relevantes (rollback points)
 ```
-bloque1-icono-v2.7.13        ← último estable (FAQs actualizadas + documentación completa)
-bloque1-icono-v2.7.12        ← flujo registro + activación completo
-bloque1-icono-v2.7.10        ← ícono oficial resuelto
-bloque1-branding-ars-toggle  ← branding + pricing + toggle registro
+electron-v2.7.35             ← último release Electron estable
+pre-visor-mtime-2026-06-30   ← pre fix visor/excel por mtime
+pre-nombres-modulos-2026-06-30 · pre-descargas-usuario-2026-06-29
 fase4-completa               ← cierre Fase 4 soporte
-fase4-item3                  ← cierre Item 3 (visibilidad + AI suggest + ajustes)
-fase4-item2                  ← cierre Item 2 (prioridad IA)
-fase4-item1                  ← cierre Item 1 (email respuesta)
-pre-fase4                    ← snapshot inicial Fase 4
 ```
+> Cada release Electron tiene su tag `electron-vX.Y.Z`. Ver `git tag -l "electron-*" --sort=-creatordate`.
 
-### Backups disponibles
-```
-C:\Users\JONATHAN\Desktop\ProcuradorBackups\
-├── procurador_db_FASE4_COMPLETA_*.sql       ← USAR ESTE para restore reciente
-├── procurador_db_post_item3_migration_*.sql
-├── procurador_db_post_migration_*.sql
-├── procurador_db_20260522_0946.sql           (pre-Fase 4)
-└── server_files_20260522_0946/
-    ├── .env                                   (secrets backend)
-    └── keys/ (private.pem + public.pem)
-```
-Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
+### Backups
+- **On-demand `.7z`** → `OneDrive\Documentos\z-noc files\z-automatizacion\<YYYYMM_DDMMYYYY>_ProcuradorTool.7z` (DB + `.env` + keys + certs + código). Procedimiento en CLAUDE.md → "Variante: backup comprimido .7z".
+- **Automático diario** 03:00 → DO Spaces (30d) + local `/var/backups/procurador/`.
+- **Pre-deploy on-demand**: `ops/backup-now.sh [prod|staging]`. Restore: `ops/restore-db.sh`.
 
 ---
 
@@ -95,8 +93,8 @@ Live snapshot DigitalOcean: `pre-fase4-20260522` (en panel DO)
 - ⬜ Firmar instalador `.exe` (elimina warning SmartScreen)
 - Docs: https://learn.microsoft.com/en-us/azure/trusted-signing/
 
-### 4️⃣ BLOQUE 4 — Pago & Facturación ← **PRÓXIMA FASE A EJECUTAR**
-Ver sección detallada abajo "PLAN FASE 5 — COBRANZA".
+### 4️⃣ BLOQUE 4 — Pago & Facturación ✅ **EJECUTADO** (en prod, MP sandbox)
+Cobranza completa validada E2E. Pendiente solo **B3** (MP a producción real). El plan histórico detallado está más abajo ("PLAN FASE 5 — COBRANZA") como referencia del scope ejecutado.
 
 ### 5️⃣ BLOQUE 5 — Soporte & FAQs & Chat & Tickets ✅ COMPLETADO (Fase 4)
 - ✅ FAQs expandidas (34 preguntas, 7 categorías)
@@ -128,11 +126,13 @@ Ver sección detallada abajo "PLAN FASE 5 — COBRANZA".
 
 ---
 
-## 💳 PLAN FASE 5 — COBRANZA (✅ implementado · validado en sandbox)
+## 💳 PLAN FASE 5 — COBRANZA (✅ EJECUTADO · en producción con MP sandbox · HISTÓRICO)
 
-> **Estado actual (2026-05-30):** flujo end-to-end funcionando con MercadoPago sandbox.
+> **Estado (2026-07-02):** flujo end-to-end en producción, MP en sandbox. Ciclo completo
+> validado E2E contra preapproval real (alta/upgrade/downgrade/cancelar-reanudar/cortesía).
 > Falta: pasar a producción MP (B3 en CLAUDE.md) y contratar Facturante (C1).
 > La facturación opera en **modo manual** (admin sube PDF de ARCA al dashboard).
+> **El plan de abajo se conserva como referencia histórica del scope ejecutado.**
 >
 > Ver detalle completo en `CLAUDE.md → Estado Fase 5 — Cobranza` y los flujos en
 > `sistema-estados-flujos.md → Flujos de cobranza (Fase 5)`.
@@ -375,38 +375,38 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 
 ---
 
-## 🎯 ORDEN SUGERIDO (actualizado 2026-05-27)
+## 🎯 ORDEN SUGERIDO (actualizado 2026-07-02)
 
 ```
-1. ✅ BLOQUE 1 (branding completo)
-2. ✅ PRE-LANZAMIENTO: links descarga + flujo registro/activación completo
-3. ✅ BLOQUE 6 (backups automáticos + hardening RSA a env vars)
-     ↓
-4. ✅ PRE-LANZAMIENTO: smoke tests manual 48/48 (dashboard + script PJN + extensión Chrome) + extensión Chrome Store v1.3.3
-     ↓
-5. FASE 5 / BLOQUE 4 (cobranza + facturación) ← PRÓXIMO
-     ↓
-── DIFERIDOS (en este orden) ──────────────────────────────
-6.  Actualizar imágenes extensión Chrome Web Store
-7.  Code Signing Azure (.exe — tiempos externos, iniciar en paralelo)
-8.  Entorno staging (PM2 separado + DB staging + subdominio)
-9.  Análisis de seguridad profundo
-10. Smoke tests CI GitHub Actions (pre-deploy)
-11. Limpiar CRX del backend (migrar 2 handlers en main.js)
+✅ HECHO: Bloque 1 (branding) · registro/activación · Bloque 6 (backups+hardening) ·
+   smoke tests 48/48 · extensión Chrome Store · FASE 5 cobranza (en prod, MP sandbox) ·
+   staging+rollback · descargas por CUIT · planes público/privado · cambio de plan admin+MP ·
+   cancelar fin de ciclo · alta de usuarios por admin · cortesía con vigencia.
+
+── PRÓXIMOS (en este orden) ───────────────────────────────
+1.  Pulir bot de ayuda IA (prompt: más resolutivo + regla de oro reforzada)  ← PRÓXIMO
+2.  B3 — MercadoPago a PRODUCCIÓN real (hoy corre en sandbox)
+3.  Actualizar imágenes extensión Chrome Web Store
+4.  Code Signing Azure (.exe — tiempos externos, iniciar en paralelo)
+5.  npm audit fix (D3/D4) en staging → prod
+6.  Análisis de seguridad externo (SEC-1) · Smoke tests CI GitHub Actions (SEC-2)
+7.  Limpiar temporales del repo (D5) + CRX muerto del backend
 ── Al momento del lanzamiento público ─────────────────────
-12. Activar BASIC/PRO/ENTERPRISE en DB (1 línea SQL, Bloque 2)
+8.  Activar BASIC/PRO/ENTERPRISE en DB (1 línea SQL, Bloque 2)
 ── Post-volumen (>20-30 tickets cerrados) ─────────────────
-13. Base de Conocimiento IA (KB)
-14. Borradores masivos con IA
+9.  Base de Conocimiento IA (KB) · Borradores masivos con IA
 ```
 
 ---
 
 ## 🔗 DOCS RELACIONADOS
 
-- `CLAUDE.md` — guía maestra del proyecto
+- `CLAUDE.md` — guía maestra del proyecto (fuente de verdad, detalle sesión a sesión)
 - `docs/manual-de-usuario.md` — manual de usuario final (público)
-- `docs/internal/sistema-estados-flujos.md` — flujos técnicos del sistema (incl. flujos IA y email Fase 4)
+- `docs/internal/manual-administrador.md` — **manual de operación del dashboard admin** (usuarios, planes, cortesía, cobranza)
+- `docs/internal/guia-planes-vigencia-cortesia.md` — comportamiento de vigencia por fecha + público/privado + cortesía $0
+- `docs/internal/sistema-estados-flujos.md` — flujos técnicos del sistema (IA, email, cobranza, vigencia de planes)
+- `docs/internal/spec-vigencia-planes-fecha.md` — spec de diseño de vigencia de planes
 - `docs/internal/mejoras-futuras.md` — KB + borradores masivos (diferidos)
 - `docs/internal/rollback-fase4.md` — procedimientos restore Fase 4
 - Plan QA: `C:\Users\JONATHAN\.claude\plans\foamy-giggling-badger.md`

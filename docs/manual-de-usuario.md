@@ -45,6 +45,8 @@ Ingresá tu email y contraseña de Procurador (no de tu cuenta PJN). La app te g
 
 Al registrarte, recibís un email de verificación en la casilla con la que te registraste. Ese email contiene un enlace que debés hacer click para activar tu dirección.
 
+> **¿Tu cuenta la creó el equipo de Procurador?** Si no te registraste vos sino que el equipo te dio de alta, vas a recibir un email con **tus datos de acceso** (usuario y una **contraseña temporal**) más el **enlace de verificación**. Hacé click en el enlace para verificar tu email; después ingresá con esa contraseña y, por seguridad, **cambiala** desde el portal web → **Mi Perfil**. Si te asignaron un plan de cortesía, tu cuenta queda activa al verificar el email, con acceso hasta la fecha de vencimiento indicada.
+
 **Si no recibiste el email:**
 1. Revisá la carpeta de spam/correo no deseado
 2. Iniciá sesión en el portal web (`api.procuradortool.com/usuarios/`)
@@ -243,7 +245,15 @@ Accedé en: **`https://api.procuradortool.com/usuarios/`**
 | **Soporte** | Tus tickets de soporte con historial de respuestas |
 | **Asistente IA** | Chat conversacional con historial de mensajes |
 | **Ayuda** | Preguntas frecuentes y manual de usuario completo |
-| **Reactivar cuenta** | Solo visible si tu cuenta está suspendida |
+| **Reactivar cuenta** | Solo visible si tu cuenta está suspendida o el plan venció |
+
+### Si tu plan vence o se discontinúa
+Si tu plan tiene una fecha de vencimiento (por ejemplo, un acceso de cortesía o un plan con vigencia limitada), al llegar esa fecha tu cuenta pasa a estado **suspendido por plan vencido**:
+
+- **Antes del vencimiento** recibís un aviso (in-app y por email) de que el plan se discontinúa.
+- Si venías pagando, **el cobro automático se pausa** — no se te cobra la renovación del plan discontinuado.
+- **Mientras tengas período pago en curso, conservás el acceso** hasta el fin de ese período.
+- Una vez suspendida, podés seguir **ingresando al portal web** (no a la app/extensión) y ahí elegir un **plan disponible** y **configurar el pago** para reactivar tu cuenta. Al pagar, el acceso se restablece con el plan elegido.
 
 ### Sección Ayuda
 La sección **Ayuda** del portal web incluye las mismas 34 preguntas frecuentes de la app Electron, con filtro por categorías (Procuración, Informe, Monitor, Extensión, Cuenta, Errores, Privacidad) y buscador por texto. También podés acceder al **Manual de usuario completo** en línea haciendo click en "📖 Ver manual" — se despliega directamente en la página sin necesidad de descargar ningún archivo.
