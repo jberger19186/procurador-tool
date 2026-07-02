@@ -138,22 +138,7 @@ router.get('/plans', async (req, res) => {
 // Rate limit: 20 mensajes por usuario por hora (en memoria compartida con /client/ai/chat)
 const webChatRateLimits = new Map(); // userId → { count, resetAt }
 
-const WEB_SYSTEM_PROMPT = `Sos el asistente de soporte de Procurador SCW, una plataforma SaaS de automatización judicial para abogados y procuradores argentinos.
-
-Tu rol es ayudar a los usuarios con dudas sobre:
-- Procuración de expedientes en el SCW del PJN
-- Generación de informes de estado de expedientes
-- Monitor de partes (seguimiento automático de partes en el PJN)
-- Extensión de Chrome para autocompletar datos en portales del PJN
-- Gestión de cuenta, plan y suscripción
-
-Reglas de comportamiento:
-- Respondé siempre en español rioplatense (vos, hacé, ingresá).
-- Sé conciso y directo. Máximo 3 párrafos cortos por respuesta.
-- Si la consulta excede tu conocimiento o requiere acceso a datos del usuario, indicá que abra un ticket de soporte.
-- Nunca inventes funcionalidades que no existan. Si no sabés algo, decilo.
-- No respondas sobre temas ajenos al producto (política, finanzas, etc.).
-- Las credenciales del PJN nunca pasan por los servidores de Procurador; se guardan solo en Chrome del usuario.`;
+const { AI_SUPPORT_SYSTEM_PROMPT } = require('../utils/aiSupportPrompt');
 
 router.post('/ai-chat', authenticateToken, async (req, res) => {
     const { messages } = req.body;
@@ -188,8 +173,8 @@ router.post('/ai-chat', authenticateToken, async (req, res) => {
         const https = require('https');
         const payload = JSON.stringify({
             model: 'claude-haiku-4-5',
-            max_tokens: 400,
-            system: WEB_SYSTEM_PROMPT,
+            max_tokens: 500,
+            system: AI_SUPPORT_SYSTEM_PROMPT,
             messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content }))
         });
 

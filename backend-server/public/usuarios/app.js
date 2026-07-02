@@ -2075,6 +2075,22 @@ function getManualHTML() {
     </div>
 
     <div class="manual-section">
+        <h2>Si tu cuenta la creó el equipo</h2>
+        <p>Si no te registraste vos sino que el equipo te dio de alta, recibís un email con tus <strong>datos de acceso</strong> (usuario y una <strong>contraseña temporal</strong>) más el <strong>enlace de verificación</strong>. Hacé clic en el enlace para verificar tu email, ingresá con esa contraseña y, por seguridad, <strong>cambiala</strong> desde <em>Mi Perfil</em>. Si te asignaron un plan de cortesía, tu cuenta queda activa al verificar el email, con acceso hasta la fecha de vencimiento indicada.</p>
+    </div>
+
+    <div class="manual-section">
+        <h2>Si tu plan vence o se discontinúa</h2>
+        <p>Si tu plan tiene fecha de vencimiento (por ejemplo un acceso de cortesía o un plan con vigencia limitada), al llegar esa fecha tu cuenta pasa a <strong>suspendida por plan vencido</strong>:</p>
+        <ul>
+            <li>Antes del vencimiento recibís un aviso (in-app y por email).</li>
+            <li>Si venías pagando, <strong>el cobro automático se pausa</strong> — no se cobra la renovación del plan discontinuado.</li>
+            <li>Mientras tengas período pago en curso, <strong>conservás el acceso</strong> hasta el fin de ese período.</li>
+            <li>Una vez suspendida, seguís pudiendo <strong>ingresar al portal web</strong> (no a la app/extensión) y ahí elegir un <strong>plan disponible</strong> y <strong>configurar el pago</strong> para reactivar. Al pagar, el acceso se restablece.</li>
+        </ul>
+    </div>
+
+    <div class="manual-section">
         <h2>Soporte</h2>
         <p>Si tenés algún problema no cubierto acá:</p>
         <ul>
