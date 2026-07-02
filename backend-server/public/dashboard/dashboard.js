@@ -382,9 +382,12 @@ window.openAddUserModal = async function() {
     const planPrice = (p) => Number(p.price_ars ?? p.price_usd ?? 0);
     const opts = plans.map(p => {
         const pr = planPrice(p);
-        const tag = pr === 0 ? ' [GRATIS]' : ` ($${pr})`;
+        // Solo precio EXPLÍCITO 0 es cortesía [GRATIS]; precio null (ej. BASIC) no es gratis.
+        const known = p.price_ars != null || p.price_usd != null;
+        const gratis = known && pr === 0;
+        const tag = gratis ? ' [GRATIS]' : (pr > 0 ? ` ($${pr})` : ' [sin precio]');
         const vis = p.visibility === 'private' ? ' 🔒' : '';
-        return `<option value="${p.id}" data-price="${pr}">${escHtml(p.display_name || p.name)}${tag}${vis}</option>`;
+        return `<option value="${p.id}" data-gratis="${gratis ? 1 : 0}">${escHtml(p.display_name || p.name)}${tag}${vis}</option>`;
     }).join('');
     const fld = 'width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box';
     const lbl = 'font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px';
@@ -422,23 +425,23 @@ window.openAddUserModal = async function() {
 
 window._auToggleVigencia = function() {
     const sel = document.getElementById('_au-plan');
-    const price = Number(sel?.options[sel.selectedIndex]?.dataset.price || 0);
+    const gratis = sel?.options[sel.selectedIndex]?.dataset.gratis === '1';
     const wrap = document.getElementById('_au-vig-wrap');
-    if (wrap) wrap.style.display = price === 0 ? 'block' : 'none';
+    if (wrap) wrap.style.display = gratis ? 'block' : 'none';
 };
 
 window.submitAddUser = async function() {
     const err = document.getElementById('_au-err');
     const g = (id) => document.getElementById(id)?.value.trim();
     const sel = document.getElementById('_au-plan');
-    const price = Number(sel?.options[sel.selectedIndex]?.dataset.price || 0);
+    const gratis = sel?.options[sel.selectedIndex]?.dataset.gratis === '1';
     const body = {
         nombre: g('_au-nombre'), apellido: g('_au-apellido'),
         email: g('_au-email'), password: document.getElementById('_au-password')?.value || '',
         cuit: g('_au-cuit'), telefono: g('_au-tel') || null,
         planId: parseInt(sel?.value),
     };
-    if (price === 0) body.durationDays = parseInt(document.getElementById('_au-dias')?.value) || 30;
+    if (gratis) body.durationDays = parseInt(document.getElementById('_au-dias')?.value) || 30;
     const btn = document.getElementById('_au-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Creando…'; }
     try {

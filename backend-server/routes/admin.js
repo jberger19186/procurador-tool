@@ -2098,7 +2098,8 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
         batch_executions_limit, batch_expedientes_limit,
         informe_limit,
         monitor_partes_limit, monitor_novedades_limit,
-        period_days, extension_flows, visibility
+        period_days, extension_flows, visibility,
+        price_usd, price_ars, plan_type
     } = req.body;
 
     if (!name || !display_name) {
@@ -2107,13 +2108,15 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
     const vis = visibility === 'private' ? 'private' : 'public';
 
     try {
+        // El precio se persiste desde el alta (antes solo lo guardaba la edición → un plan de
+        // cortesía creado con precio 0 quedaba con precio null, que NO cuenta como cortesía).
         const result = await db.query(`
             INSERT INTO plans (name, display_name, description,
                 proc_executions_limit, proc_expedientes_limit,
                 batch_executions_limit, batch_expedientes_limit,
                 informe_limit, monitor_partes_limit, monitor_novedades_limit, period_days,
-                extension_flows, visibility)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                extension_flows, visibility, price_usd, price_ars, plan_type)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
             RETURNING *
         `, [
             name.toUpperCase(), display_name, description || null,
@@ -2122,7 +2125,8 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
             informe_limit ?? 10,
             monitor_partes_limit ?? 3, monitor_novedades_limit ?? 10,
             period_days ?? 30,
-            JSON.stringify(extension_flows ?? []), vis
+            JSON.stringify(extension_flows ?? []), vis,
+            price_usd ?? null, price_ars ?? null, plan_type ?? null
         ]);
         console.log(`Plan "${name}" creado por admin: ${req.user.id}`);
         res.json({ success: true, plan: result.rows[0] });
