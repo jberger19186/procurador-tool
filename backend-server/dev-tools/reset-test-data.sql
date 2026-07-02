@@ -1,7 +1,8 @@
 -- reset-test-data.sql
--- Reset de datos para pruebas. Conserva usuarios 6, 7 (admins) y 19 (procuradortool).
--- Borra usuarios de prueba 5, 81, 93, 94, 95, 96, 97, 162, 214 y TODOS los datos transaccionales.
--- Ejecutar dentro de una transacción.
+-- Reset de datos para pruebas. Conserva SOLO los admins 6, 7.
+-- Borra usuarios no-admin 236 (procuradortool@gmail.com), 237 (jberger_86@hotmail.com)
+-- y TODOS los datos transaccionales. Ejecutar dentro de una transacción.
+-- Última actualización: 2026-07-02.
 
 BEGIN;
 
@@ -16,6 +17,7 @@ DELETE FROM webhook_events;
 DELETE FROM usage_logs;
 DELETE FROM usage_adjustments;
 DELETE FROM usage_extras;
+DELETE FROM commercial_benefits;
 
 DELETE FROM user_events;
 DELETE FROM admin_events;
@@ -30,14 +32,14 @@ DELETE FROM monitor_partes;
 
 DELETE FROM active_executions;
 
--- ── 2. Borrar dependencias de los 9 usuarios de prueba ──────────────────────
-DELETE FROM user_legal_acceptances WHERE user_id IN (5,81,93,94,95,96,97,162,214);
-DELETE FROM subscriptions          WHERE user_id IN (5,81,93,94,95,96,97,162,214);
+-- ── 2. Borrar dependencias de los usuarios no-admin ─────────────────────────
+DELETE FROM user_legal_acceptances WHERE user_id IN (236,237);
+DELETE FROM subscriptions          WHERE user_id IN (236,237);
 
--- ── 3. Borrar los usuarios de prueba ────────────────────────────────────────
-DELETE FROM users WHERE id IN (5,81,93,94,95,96,97,162,214);
+-- ── 3. Borrar los usuarios no-admin ─────────────────────────────────────────
+DELETE FROM users WHERE id IN (236,237);
 
--- ── 4. Resetear suscripciones de los usuarios conservados (6,7,19) ──────────
+-- ── 4. Resetear suscripciones de los admins conservados (6,7) ───────────────
 UPDATE subscriptions
 SET payment_provider          = NULL,
     external_subscription_id  = NULL,
@@ -53,7 +55,7 @@ SET payment_provider          = NULL,
     usage_count               = 0,
     proc_usage                = 0,
     informe_usage             = 0,
-    batch_usage               = 0,
+    batch_usage                = 0,
     monitor_novedades_usage   = 0,
     scheduled_plan            = NULL,
     plan_changes_this_cycle   = 0,
@@ -61,7 +63,7 @@ SET payment_provider          = NULL,
     next_billing_date         = NULL,
     checkout_initiated_at     = NULL,
     updated_at                = NOW()
-WHERE user_id IN (6,7,19);
+WHERE user_id IN (6,7);
 
 COMMIT;
 
@@ -74,4 +76,5 @@ UNION ALL SELECT 'support_tickets', COUNT(*) FROM support_tickets
 UNION ALL SELECT 'usage_logs', COUNT(*) FROM usage_logs
 UNION ALL SELECT 'notifications', COUNT(*) FROM notifications
 UNION ALL SELECT 'webhook_events', COUNT(*) FROM webhook_events
+UNION ALL SELECT 'commercial_benefits', COUNT(*) FROM commercial_benefits
 ORDER BY tabla;
