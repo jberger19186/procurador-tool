@@ -272,8 +272,8 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U7.1 | Cancelar suscripción | cancel_at; MP paused; banner; acceso hasta fin de período | ⚠️ PASS parcial — `POST /usuarios/api/checkout/cancel` (usuario 239, sin pago real) → `cancel_at` seteado, `status` sigue `active` (acceso hasta fin de período); la parte "MP paused" no aplica (no hay preapproval real en esta corrida, el código lo maneja con un warning sin bloquear) |
-| U7.2 | Reactivar antes del vencimiento | MP authorized; sin cobro nuevo | ⚠️ Comportamiento distinto al esperado por falta de un pago real: `POST /usuarios/api/checkout/reactivate` → 400 "No se pudo reanudar la suscripción en MercadoPago..." (correcto, ya que no hay preapproval real que reanudar); `cancel_at` no se tocó (sin efectos secundarios). Requiere completar U4.2 para probar el camino feliz real |
+| U7.1 | Cancelar suscripción | cancel_at; MP paused; banner; acceso hasta fin de período | ✅ **Confirmado con preapproval MP real** (post U4.2): `POST /usuarios/api/checkout/cancel` → `cancel_at` seteado, `status` sigue `active`; verificado por **API real de MercadoPago** que el preapproval pasó a `status:'paused'` |
+| U7.2 | Reactivar antes del vencimiento | MP authorized; sin cobro nuevo | ✅ **Confirmado con preapproval MP real**: `POST /usuarios/api/checkout/reactivate` → mensaje "se reanudó... no se generó un cobro nuevo"; verificado por API real de MP que el preapproval volvió a `status:'authorized'`; `cancel_at` limpiado en DB |
 
 ### U8. Pago rechazado → gracia → suspensión → recuperación
 
