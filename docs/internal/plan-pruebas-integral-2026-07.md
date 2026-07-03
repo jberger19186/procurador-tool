@@ -255,7 +255,7 @@ Cuando SÍ hay un horario límite indicado:
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
 | U5.1 | Límite de submódulo alcanzado | Bloqueo del módulo con mensaje; otros siguen | ✅ Con MP real activo (2do checkout, usuario 239): `proc_usage=50` (=límite) → `POST /client/scripts/log-execution {subsystem:'proc'}` → 403 "Has alcanzado el límite de procuraciones"; en el mismo estado, `subsystem:'informe'` → 200, incrementa normalmente (0→1) — confirma que el bloqueo es por submódulo, no global. Contadores revertidos a 0 después |
-| U5.2 | Renovación mensual (sim-renewal) | Contadores 0; pago+factura nuevos; next_billing +1 mes | ⏭️ Pendiente — no ejecutado en esta corrida (requiere correr `dev-tools/sim-renewal.js` en el servidor) |
+| U5.2 | Renovación mensual (sim-renewal) | Contadores 0; pago+factura nuevos; next_billing +1 mes | ✅ Ejecutado `node dev-tools/sim-renewal.js 224 239 COMBO_PROMO 15000` en el servidor (usuario 239 con `proc_usage=10` forzado antes, para ver el reset): pago #45 insertado (`approved`), `applyRenewal` reseteó `usage_count`/`proc_usage` a 0, `next_billing_date` +1 mes, factura #42 encolada en `pending` |
 | U5.3 | Banner de cuota (app) | Correcto según submódulo | ✅ Mismos datos de U5.1 confirmados vía `/client/account` (`usage.proc.remaining:0`, resto con cupo) — es la fuente que alimenta el banner; no se verificó el render visual en la app Electron (fuera de alcance sin computer-use) |
 
 ### U6. Cambio de plan (self-service)
