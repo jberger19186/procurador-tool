@@ -262,11 +262,11 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U6.1 | Upgrade | Inmediato + monto MP próximo ciclo | |
-| U6.2 | Downgrade | Programado; banner; límites conservados | |
-| U6.3 | Cancelar downgrade programado | Vuelve a plan actual; contador devuelto | |
-| U6.4 | 3er cambio en el ciclo | Rechazado (tope 2) | |
-| U6.5 | Cambio con cancelación pendiente | Bloqueado con mensaje | |
+| U6.1 | Upgrade | Inmediato + monto MP próximo ciclo | ⏭️ Pendiente — requiere usuario con `payment_provider` configurado (MP real, bloqueado por Chrome desconectado en U4.2). Sin pago, `/users/change-plan` trata todo cambio como programado ("downgrade" en el mensaje, incluso volviendo a un plan de mayor precio) — comportamiento esperable dado que no hay una suscripción MP que cobrar de inmediato |
+| U6.2 | Downgrade | Programado; banner; límites conservados | ✅ Usuario 239 (sin pago) `POST /users/change-plan {plan_name:'EXTENSION_PROMO'}` → programado para fin de ciclo (`applyAt`), `scheduled_plan` seteado, plan actual (COMBO_PROMO) y sus límites intactos mientras tanto |
+| U6.3 | Cancelar downgrade programado | Vuelve a plan actual; contador devuelto | ✅ `POST /users/cancel-scheduled-plan` → `scheduled_plan=null`, plan sigue COMBO_PROMO, **`plan_changes_this_cycle` vuelve de 2 a 1** (el cambio deshecho no cuenta) |
+| U6.4 | 3er cambio en el ciclo | Rechazado (tope 2) | ✅ 2 cambios seguidos OK (`plan_changes_this_cycle`→2), 3er intento → 400 "Ya realizaste 2 cambios en este período. Podrás cambiar tu plan a partir del [fecha]" |
+| U6.5 | Cambio con cancelación pendiente | Bloqueado con mensaje | ✅ Con `cancel_at` seteado (SQL) → `/users/change-plan` → 400 "Tenés una cancelación programada. Reactivá tu suscripción antes de cambiar de plan." — `cancel_at` limpiado después de la prueba |
 
 ### U7. Cancelar / reactivar (portal)
 
