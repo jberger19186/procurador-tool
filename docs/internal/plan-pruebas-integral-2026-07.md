@@ -121,7 +121,7 @@ Cuando SÍ hay un horario límite indicado:
 | A1.3 | Alta con CUIT duplicado | Rechazo con mensaje claro | ✅ "El CUIT ya está registrado en el sistema" |
 | A1.4 | Alta con CUIT inválido (dígito verificador) | Rechazo | ✅ "CUIT/CUIL inválido. Verificá el formato y dígito verificador." |
 | A1.5 | Alta con contraseña débil (sin número / <8) | Rechazo con requisito específico | ✅ "La contraseña debe incluir al menos una letra y un número." |
-| A1.6 | Reenviar verificación a `pending_email` | Nuevo email llega, token nuevo funciona | ⚠️ PASS parcial — botón "📧 Reenviar verificación" en ficha de usuario 239 clickeado sin error visible en UI. NO se confirmó la llegada del nuevo email ni se probó el token nuevo (requiere que el operador revise la casilla `jberger_86@hotmail.com` — pendiente para la próxima corrida) |
+| A1.6 | Reenviar verificación a `pending_email` | Nuevo email llega, token nuevo funciona | ✅ El operador confirmó 2 emails recibidos (14:43 alta con credenciales, 14:45 reenvío de verificación); click en el link del 14:45 → verificado por SQL: `email_verified=true`, `registration_status` pasó de `pending_email` a `pending_activation` (trial), `subscriptions.usage_count=0/usage_limit=20/status=suspended` — coincide con el modelo de trial documentado |
 | A1.7 | Activar usuario en trial | `active`, conserva usos restantes del trial | |
 | A1.8 | Suspender usuario activo (con motivo) | `suspended_admin`, no puede loguear app; ve motivo | |
 | A1.9 | Reactivar suspendido | Vuelve a `active` | |
@@ -295,10 +295,10 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U10.1 | Email con credenciales + verificación | Llega completo | |
-| U10.2 | Verificar con plan $0 | Activo con cortesía y vigencia | |
-| U10.3 | Verificar con plan pago | pending_activation (trial) | |
-| U10.4 | Cambiar contraseña temporal | Funciona; login con la nueva | |
+| U10.1 | Email con credenciales + verificación | Llega completo | ✅ Reusa A1.1/A1.6: usuario 239 recibió email de alta (14:43, credenciales) y de reenvío de verificación (14:45); operador confirmó recepción de ambos |
+| U10.2 | Verificar con plan $0 | Activo con cortesía y vigencia | ⏭️ Pendiente — no se probó en esta corrida (el usuario 239 tiene plan pago COMBO_PROMO, no CORTESIA) |
+| U10.3 | Verificar con plan pago | pending_activation (trial) | ✅ Reusa A1.1/A1.6: usuario 239 (plan COMBO_PROMO) verificó email → `registration_status='pending_activation'`, `usage_limit=20`, trial activo |
+| U10.4 | Cambiar contraseña temporal | Funciona; login con la nueva | ⏭️ Pendiente |
 
 ### U11. Portal completo
 
