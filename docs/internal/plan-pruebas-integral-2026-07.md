@@ -91,6 +91,23 @@ Pedirle SOLO esto, cuando corresponda:
 ### Registro de resultados
 Completar la columna "Resultado" de cada caso EN ESTE ARCHIVO (✅/❌/⚠️/⏭️ + nota breve) y commitear al final de cada bloque con mensajes `test: resultados bloque X`. Los bugs van a la tabla de Hallazgos con: severidad (crítico/alto/medio/bajo), caso que lo detectó, descripción reproducible y propuesta de fix (sin implementarla).
 
+### Corte de tiempo (time-boxing)
+
+> El operador puede indicar, al arrancar una corrida, un **horario límite** (y opcionalmente un margen de extensión). Si no se indica ninguno, la corrida no tiene corte y sigue el orden de ejecución hasta el final o hasta que el operador la detenga.
+
+Cuando SÍ hay un horario límite indicado:
+
+1. **No arrancar un bloque nuevo** si, a su ritmo estimado, no va a poder completar al menos un caso atómico completo antes del límite.
+2. **Nunca cortar a mitad de un caso atómico** (ej. un checkout de MP a mitad de camino, un usuario a medio crear, una transacción SQL sin commitear). Terminá el caso en curso —y solo ese— aunque cruce el horario, usando el margen de extensión si existe para ese fin exclusivamente (no para arrancar casos nuevos).
+3. **Chequeo de proximidad:** ~10-15 minutos antes del límite, evaluar si conviene cerrar ahí en vez de arrancar un bloque grande (ej. no arrancar recién U12 con PJN real si quedan 12 minutos).
+4. **Al llegar al límite** (o agotar el margen de extensión): parar de arrancar trabajo nuevo y ejecutar el checklist de cierre parcial:
+   - Completar la columna Resultado de todo lo ejecutado hasta ahí.
+   - Agregar una fila al **Registro de ejecución** con fecha/hora, bloques y casos cubiertos, y **qué quedó pendiente** (próximo caso a retomar).
+   - Dejar la DB en un estado consistente (sin transacciones a medias) — no hace falta revertir lo ya probado, salvo que el operador lo pida.
+   - Commit + push de los resultados parciales.
+   - Informar al operador: resumen de lo hecho, hallazgos detectados hasta el corte, y desde qué caso retomar la próxima vez.
+5. Si el operador pidió posibilidad de posponer el límite, puede pedírselo brevemente al notar que se acerca la hora ("quedan ~10 min, estoy en el caso X, ¿extiendo Y minutos o corto acá?") — sin interrumpir el trabajo en curso para preguntar, solo avisar al ir cerrando.
+
 ---
 
 ## BLOQUE A — Óptica del ADMINISTRADOR
