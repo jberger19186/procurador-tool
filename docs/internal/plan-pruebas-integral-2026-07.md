@@ -149,8 +149,8 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| A3.1 | Upgrade con MP activo | Inmediato; monto MP ajustado al nuevo (sin cobro ya) | |
-| A3.2 | Downgrade con MP activo | Programado a fin de ciclo; límites conservados; evento | |
+| A3.1 | Upgrade con MP activo | Inmediato; monto MP ajustado al nuevo (sin cobro ya) | ✅ Con MP real activo (post U4.2): upgrade a un plan de prueba a $20.000 (más caro que COMBO_PROMO $15.000) → **inmediato** (`usage_limit=999999`, plan aplicado ya), y confirmado por **API real de MercadoPago** (`GET /preapproval/:id`) que `transaction_amount` pasó a 20000 sin cobro inmediato (`status` sigue `authorized`) — el cobro nuevo rige recién el próximo ciclo. Revertido a COMBO_PROMO/$15.000 (DB + MP) al cierre |
+| A3.2 | Downgrade con MP activo | Programado a fin de ciclo; límites conservados; evento | ✅ Con MP real activo: downgrade a un plan más barato → `type:'downgrade_scheduled'`, `scheduled_plan` seteado, límites del plan actual conservados hasta el `applyAt`, mensaje aclara que el monto en MP se ajusta recién en esa fecha |
 | A3.3 | Cambio de plan a usuario en trial | Solo cambia plan; conserva cupo 20 | ✅ Usuario 241 (trial): `POST /admin/subscriptions {userId:241,plan:'EXTENSION_PROMO'}` → mensaje "Plan del trial actualizado (se conservan los usos de prueba)"; verificado por SQL: `usage_count=0`, `usage_limit=20` (sin resetear a 999999) |
 | A3.4 | Cortesía $0 a usuario pagando | Aplica ya + vigencia + pausa preapproval MP | |
 | A3.5 | Cortesía $0 a usuario trial | Activo con vigencia | |
