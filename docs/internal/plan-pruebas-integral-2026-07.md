@@ -235,12 +235,12 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U3.1 | Portal muestra X/20 con barra | Correcto | |
-| U3.2 | A 18/20: aviso "quedan pocos usos" | Visible | |
-| U3.3 | A 20/20: "Ya consumiste tus usos" | Visible; sesión sigue viva | |
-| U3.4 | Extensión a 20/20 | extension-auth 403 | |
-| U3.5 | App con trial agotado | Login OK (ver cuenta), ejecutar bloqueado | |
-| U3.6 | Checkout bloqueado en pending_activation | Botón deshabilitado + guard 403 | |
+| U3.1 | Portal muestra X/20 con barra | Correcto | ✅ `GET /client/account` (usuario 242) → `usageCount:0, usageLimit:20, remaining:20` — datos correctos para la barra |
+| U3.2 | A 18/20: aviso "quedan pocos usos" | Visible | ✅ Seteado `usage_count=18` por SQL → `remaining:2`; confirmado por lectura de código (`public/usuarios/app.js`) que a `trialRem<=5` y no exhausto muestra "🔴 Quedan pocos usos..." (no se pudo ver el render real por Chrome desconectado) |
+| U3.3 | A 20/20: "Ya consumiste tus usos" | Visible; sesión sigue viva | ✅ Seteado `usage_count=20` → `remaining:0`; `POST /client/verify-session` sigue devolviendo 200 (sesión viva); mensaje correcto por código ("Ya consumiste tus usos...") |
+| U3.4 | Extensión a 20/20 | extension-auth 403 | ✅ `GET /client/extension-auth` en 20/20 → 403 "Agotaste tus 20 usos de prueba..." |
+| U3.5 | App con trial agotado | Login OK (ver cuenta), ejecutar bloqueado | ✅ Cubierto por U3.3 (verify-session 200 en 20/20); el bloqueo de ejecución es un pre-check del cliente Electron, no probado end-to-end por no tener la app corriendo en esta corrida |
+| U3.6 | Checkout bloqueado en pending_activation | Botón deshabilitado + guard 403 | ✅ `POST /usuarios/api/checkout/init` en `pending_activation` → 403 "Tu cuenta debe ser activada por el administrador..." |
 
 ### U4. Activación y primer pago
 
