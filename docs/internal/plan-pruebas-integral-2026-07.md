@@ -193,7 +193,7 @@ Cuando SÍ hay un horario límite indicado:
 | A6.4 | Cron cancelación con pago reciente (guard) | NO cancela | |
 | A6.5 | Cron vigencia: período pago en curso | Pausa MP + corte al fin de período (no inmediato) | |
 | A6.6 | Cron vigencia: período ya vencido | Suspende ya + gracia 7 días | |
-| A6.7 | Cron downgrade programado | Aplica plan + baja monto MP + evento | |
+| A6.7 | Cron downgrade programado | Aplica plan + baja monto MP + evento | ✅ Replicada manualmente la query exacta del cron `25 11` (`server.js`) sobre el usuario 239 con `scheduled_plan.apply_at` forzado al pasado (sin modificar código, solo SQL): `plan` aplicado (COMBO_PROMO→EXTENSION_PROMO), `scheduled_plan=NULL`, `plan_changes_this_cycle` reseteado a 0, evento `plan_downgrade_applied` + notificación insertados. "Baja monto MP" no aplica (sin `payment_provider`). Usuario revertido a COMBO_PROMO después de la prueba para no ensuciar el fixture |
 | A6.8 | Gracia de pago vencida (cron) | suspended por pago fallido | |
 
 ### A7. Seguridad / negativos
