@@ -215,21 +215,21 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U1.1 | Registro OK por formulario (plan público) | pending_email + email de verificación | |
-| U1.2 | CUIT inválido | Error específico | |
-| U1.3 | Email ya registrado | Error | |
-| U1.4 | CUIT ya registrado | Error | |
-| U1.5 | Contraseña débil | Error con requisito | |
-| U1.6 | Plan privado NO listado en el form | Ausente | |
+| U1.1 | Registro OK por formulario (plan público) | pending_email + email de verificación | ✅ `POST /auth/register` (usuario `jberger_86+u4@hotmail.com`, id 242) → 201, confirmado por SQL `registration_status='pending_email'` |
+| U1.2 | CUIT inválido | Error específico | ⏭️ SKIP — bloqueado por rate limit de registro (ver nota) |
+| U1.3 | Email ya registrado | Error | ⏭️ SKIP — bloqueado por rate limit de registro |
+| U1.4 | CUIT ya registrado | Error | ⏭️ SKIP — bloqueado por rate limit de registro |
+| U1.5 | Contraseña débil | Error con requisito | ⏭️ SKIP — bloqueado por rate limit de registro |
+| U1.6 | Plan privado NO listado en el form | Ausente | ✅ Ya verificado indirectamente en A2.2/A2.4 (`GET /auth/plan-availability`, que es lo que consume el form de registro, no lista los planes privados) |
 
 ### U2. Verificación de email
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U2.1 | Click en link → verificado | pending_activation, trial 20 | |
-| U2.2 | Reenvío de verificación desde portal | Nuevo email funciona | |
-| U2.3 | Link ya usado | Página "ya verificado" | |
-| U2.4 | Token vencido (forzado) | Error claro + camino de reenvío | |
+| U2.1 | Click en link → verificado | pending_activation, trial 20 | ✅ Usuario 242: `GET /auth/verify-email?token=...` (token real de DB) → 200, confirmado por SQL `registration_status='pending_activation'`, `usage_count=0/usage_limit=20` |
+| U2.2 | Reenvío de verificación desde portal | Nuevo email funciona | ⏭️ Pendiente — no ejecutado en esta corrida |
+| U2.3 | Link ya usado | Página "ya verificado" | ❌ **FAIL** — ver Hallazgo #1: muestra el error genérico de token inválido/expirado en vez de "ya verificado" (bug de código, rama inalcanzable) |
+| U2.4 | Token vencido (forzado) | Error claro + camino de reenvío | ⏭️ Pendiente — no ejecutado en esta corrida |
 
 ### U3. Trial (20 usos compartidos)
 
@@ -340,7 +340,7 @@ Cuando SÍ hay un horario límite indicado:
 
 | # | Sev | Tipo | Caso | Descripción | Propuesta |
 |---|---|---|---|---|---|
-| | | | | | |
+| 1 | Bajo | Bug (UX) | U2.3 | Al reusar un link de verificación de email ya usado, se espera la página "ya verificado". En cambio muestra el error genérico "El enlace de verificación es inválido o expiró. Contactá al administrador...". Causa: `routes/auth.js` (`GET /verify-email`, rama `alreadyVerified`) busca `WHERE email_verify_token = $1 AND email_verified = true`, pero al verificar exitosamente el mismo endpoint **limpia `email_verify_token` a NULL** — la rama que maneja "ya verificado" queda inalcanzable (dead code), el segundo click siempre cae en el error genérico. Confirmado reproduciendo con un token real (usuario id 242): 1ª llamada 200 verificado, 2ª llamada mismo token → 400 genérico. Riesgo: usuarios que reabren un email viejo o hacen doble click pueden creer que su verificación falló y contactar soporte sin necesidad | No limpiar `email_verify_token` al verificar (dejarlo, solo togglear `email_verified=true`), o guardar el token en una columna separada de "último token usado" antes de limpiarlo, para que la rama `alreadyVerified` pueda matchear correctamente |
 
 ---
 
