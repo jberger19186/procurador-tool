@@ -194,7 +194,7 @@ Cuando SÍ hay un horario límite indicado:
 | A6.5 | Cron vigencia: período pago en curso | Pausa MP + corte al fin de período (no inmediato) | |
 | A6.6 | Cron vigencia: período ya vencido | Suspende ya + gracia 7 días | ✅ Replicada la rama "período ya terminado" del cron `5 11` sobre usuario 239 (`plan_expiry_date`/`next_billing_date`/`expires_at` forzados al pasado): `registration_status='suspended_plan_expired'`, `subscriptions.status='suspended_plan_expired'`, `suspension_cause='plan_expired'`, `payment_grace_ends_at`=+7 días. Usuario restaurado a `active` limpio después de encadenar con U9 |
 | A6.7 | Cron downgrade programado | Aplica plan + baja monto MP + evento | ✅ Replicada manualmente la query exacta del cron `25 11` (`server.js`) sobre el usuario 239 con `scheduled_plan.apply_at` forzado al pasado (sin modificar código, solo SQL): `plan` aplicado (COMBO_PROMO→EXTENSION_PROMO), `scheduled_plan=NULL`, `plan_changes_this_cycle` reseteado a 0, evento `plan_downgrade_applied` + notificación insertados. "Baja monto MP" no aplica (sin `payment_provider`). Usuario revertido a COMBO_PROMO después de la prueba para no ensuciar el fixture |
-| A6.8 | Gracia de pago vencida (cron) | suspended por pago fallido | |
+| A6.8 | Gracia de pago vencida (cron) | suspended por pago fallido | ✅ Replicada la query/lógica exacta del cron `30 11` sobre usuario 239 (`payment_grace_ends_at` forzado al pasado): `registration_status='suspended'`, `subscriptions.status='suspended'`, `suspension_cause='payment'`, evento `payment_failed_suspended`. Confirmado además (U8.2) que el login sigue permitido en este estado (`portal-login` → 200). Usuario restaurado a `active` limpio al cierre |
 
 ### A7. Seguridad / negativos
 
@@ -279,9 +279,9 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U8.1 | Pago rechazado (simulado) | Gracia 3 días; banner ámbar portal+app; notificación | |
-| U8.2 | Gracia vencida (cron) | suspended; ejecutar bloqueado; login permite ver/pagar | |
-| U8.3 | Pagar estando suspendido | Recuperado; single-active | |
+| U8.1 | Pago rechazado (simulado) | Gracia 3 días; banner ámbar portal+app; notificación | ⏭️ Pendiente — no ejecutado en esta corrida (requiere simular el webhook `payment` rechazado; necesita firma HMAC real, fuera de alcance sin acceso al secreto) |
+| U8.2 | Gracia vencida (cron) | suspended; ejecutar bloqueado; login permite ver/pagar | ✅ Ver A6.8 (mismo caso, usuario 239) — `suspended`/`payment`, `portal-login` sigue devolviendo 200 en ese estado |
+| U8.3 | Pagar estando suspendido | Recuperado; single-active | ⏭️ Pendiente — requiere un pago real (Chrome desconectado) |
 
 ### U9. Plan vencido → reactivación
 
