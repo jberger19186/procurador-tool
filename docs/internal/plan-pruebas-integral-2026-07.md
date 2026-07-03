@@ -136,8 +136,8 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| A2.1 | Crear plan público pago (precio en el alta) | Aparece en registro y portal; precio persistido | |
-| A2.2 | Crear plan privado pago | NO aparece en registro/portal; admin lo ve | |
+| A2.1 | Crear plan público pago (precio en el alta) | Aparece en registro y portal; precio persistido | ✅ Plan `TEST_PUBLICO_A21` ($5.000 ARS, combo, público) creado vía dashboard; verificado presente y `available:true` en `GET /auth/plan-availability` |
+| A2.2 | Crear plan privado pago | NO aparece en registro/portal; admin lo ve | ✅ Plan `TEST_PRIVADO_A22` ($8.000 ARS, combo, privado) creado vía dashboard; verificado AUSENTE en `GET /auth/plan-availability` (no listado); visible en el listado admin de Planes |
 | A2.3 | Crear plan cortesía ($0 explícito, privado) | Etiqueta [GRATIS]; habilita campo vigencia en alta de usuario | |
 | A2.4 | Cambiar visibilidad público→privado en caliente | Desaparece del registro/portal al instante | |
 | A2.5 | Editar límites/precio de un plan | Persisten; usuarios del plan ven límites nuevos | |
@@ -349,3 +349,4 @@ Cuando SÍ hay un horario límite indicado:
 | Fecha | Bloques ejecutados | Notas |
 |---|---|---|
 | 2026-07-03 | Corrida parcial A1.1–A1.5 (smoke del plan) — **REVERTIDA** | Los 5 casos dieron PASS (alta OK + 4 rechazos con mensajes correctos: email dup, CUIT dup, CUIT inválido, contraseña débil). El usuario creado (id 238) se borró de la DB para arrancar la ejecución formal desde cero. La matriz queda vacía a propósito. |
+| 2026-07-03 14:30–14:50 | Backup DB (`/tmp/backup_prod_pre_testrun_20260703_143117.sql` en el server) + verificación estado inicial (solo admins 6/7, 6 planes) + **A2.1 y A2.2 ejecutados y PASS** | Corte por horario límite (14:30–15:00, sin extensión pedida por no haber caso en curso a medio terminar). Quedan creados en prod (no son destructivos, quedan como fixtures válidos para retomar A2): plan `TEST_PUBLICO_A21` (id a confirmar, público, $5.000 ARS) y `TEST_PRIVADO_A22` (privado, $8.000 ARS). **Pendiente retomar desde A2.3** (crear/verificar plan cortesía — el plan `CORTESIA` ya existe de una sesión previa, falta el caso formal de esta corrida: A2.3 en adelante), luego A2.4–A2.8, y seguir el resto del orden de ejecución (A1, U1/U2, etc.) según la sección "Orden de ejecución recomendado". Sin hallazgos de bugs hasta el momento. |
