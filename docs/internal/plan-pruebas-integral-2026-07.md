@@ -129,8 +129,8 @@ Cuando SÍ hay un horario límite indicado:
 | A1.11 | Rechazar manteniendo trial (keep_trial) | Sigue `pending_activation` con usos | ✅ Usuario nuevo id 241 (`jberger_86+u3@hotmail.com`, email marcado verificado por admin para llegar a trial) → `POST /admin/users/241/reject {mode:'keep_trial'}` vía `apiFetch`; verificado por SQL: `registration_status` sigue en `pending_activation` (no cambia), evento `rejected_keep_trial` con `reason` correcto |
 | A1.12 | Editar email del usuario | Suspende a `pending_email`, email de verificación al NUEVO correo; al verificar restaura estado previo | ✅ Usuario 241: botón "✉️ Editar email" habilita el campo → cambiado a `jberger_86+u3nuevo@hotmail.com` + Guardar email; verificado por SQL: `email` actualizado, `registration_status='pending_email'`, `email_verified=false` (no se probó la restauración del estado previo al re-verificar, por tiempo) |
 | A1.13 | Editar email a uno ya tomado | Rechazo | ✅ Intenté cambiar el email del usuario 241 a `jberger_86+u1@hotmail.com` (ya usado por el usuario 239) → verificado por SQL que el email NO cambió (quedó en `u3nuevo`); no se capturó el texto exacto del mensaje de error en UI (toast ya no visible al momento de inspeccionar) |
-| A1.14 | Blanquear contraseña | Usuario puede loguear con la nueva | |
-| A1.15 | Historial de la cuenta registra todo lo anterior | Eventos con fecha y autor | |
+| A1.14 | Blanquear contraseña | Usuario puede loguear con la nueva | ⚠️ PASS parcial — `POST /auth/admin/send-password-reset {userId:239}` (vía token admin real de `/auth/admin-login`, sin depender del dashboard) → `{"success":true,"message":"Email de reset enviado..."}`; confirmado por SQL que `password_reset_token`/`password_reset_expires` se generaron. NO se completó el ciclo (click del link + nueva contraseña + login) por tiempo — queda pendiente |
+| A1.15 | Historial de la cuenta registra todo lo anterior | Eventos con fecha y autor | ✅ `GET /admin/users/239` devuelve `events[]` completo y en orden: `user_created_by_admin`→`email_verified`→`activated`→`admin_suspended` (con `reason`)→`admin_reactivated`, cada uno con `admin_id` y `created_at` |
 
 ### A2. Gestión de planes
 
@@ -151,16 +151,16 @@ Cuando SÍ hay un horario límite indicado:
 |---|---|---|---|
 | A3.1 | Upgrade con MP activo | Inmediato; monto MP ajustado al nuevo (sin cobro ya) | |
 | A3.2 | Downgrade con MP activo | Programado a fin de ciclo; límites conservados; evento | |
-| A3.3 | Cambio de plan a usuario en trial | Solo cambia plan; conserva cupo 20 | |
+| A3.3 | Cambio de plan a usuario en trial | Solo cambia plan; conserva cupo 20 | ✅ Usuario 241 (trial): `POST /admin/subscriptions {userId:241,plan:'EXTENSION_PROMO'}` → mensaje "Plan del trial actualizado (se conservan los usos de prueba)"; verificado por SQL: `usage_count=0`, `usage_limit=20` (sin resetear a 999999) |
 | A3.4 | Cortesía $0 a usuario pagando | Aplica ya + vigencia + pausa preapproval MP | |
 | A3.5 | Cortesía $0 a usuario trial | Activo con vigencia | |
 | A3.6 | Campo días en upgrade | Fija expires_at | |
 | A3.7 | Cancelar al fin de ciclo | cancel_at + preapproval paused + banner | |
 | A3.8 | Deshacer cancelación | preapproval authorized + cancel_at limpio | |
-| A3.9 | Resetear uso | usage_count=0 | |
-| A3.10 | Ajuste ±bonus por submódulo | Límite efectivo cambia en app/portal | |
-| A3.11 | Usos extra (cortesía ±N) | Suma/resta a usage_limit; visible "(+N)" | |
-| A3.12 | Beneficio comercial (con y sin ticket) | Registrado en historial de beneficios | |
+| A3.9 | Resetear uso | usage_count=0 | ✅ Usuario 239: seteado `usage_count=7` por SQL, luego `POST /admin/subscriptions/239/reset-usage` → confirmado `usage_count=0` |
+| A3.10 | Ajuste ±bonus por submódulo | Límite efectivo cambia en app/portal | ✅ `POST /admin/subscriptions/239/adjust {subsystem:'proc',amount:10}` → `proc_bonus=10` confirmado por SQL. (No se verificó visualmente en app/portal por no tener sesión de esos clientes en esta corrida) |
+| A3.11 | Usos extra (cortesía ±N) | Suma/resta a usage_limit; visible "(+N)" | ✅ `POST /admin/users/239/extra-usage {extra_uses:5}` → `usage_limit` 20→25; luego `{extra_uses:-5}` → vuelve a 20. Ambos signos funcionan correctamente (no se verificó el "(+N)" visible en portal/app en esta corrida) |
+| A3.12 | Beneficio comercial (con y sin ticket) | Registrado en historial de beneficios | ✅ Sin ticket: `POST /admin/users/239/apply-benefit {benefit_type:'usage_reset',benefit_value:'proc'}` → registrado (`ticket_id:null`). Con ticket: creado ticket #22 (portal-login como user 239) + `POST /admin/tickets/22/apply-benefit {..,value:'informe'}` → registrado con `ticket_id:22`; confirmado que el ticket **NO se auto-resolvió** (`status` sigue `open`), coincide con el comportamiento documentado |
 
 ### A4. Cobranza (pagos y facturas)
 
