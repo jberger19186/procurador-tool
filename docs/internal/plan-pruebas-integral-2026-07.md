@@ -316,16 +316,16 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U12.1 | Login estados: trial / activo / suspendido | Mensajes y banners correctos | |
-| U12.2 | Mi Cuenta: contadores y barras | Fieles a DB | |
-| U12.3 | Procuración individual (PJN real) | Ejecuta; visor abre; contadores +1 | |
-| U12.4 | Procuración batch (PJN real) | Ejecuta; visor batch correcto | |
-| U12.5 | Informe individual (PJN real) | PDF/Excel generados | |
-| U12.6 | Informe batch (PJN real) | Excel+visor batch | |
-| U12.7 | Monitor: alta de parte + consulta (PJN real) | Parte agregada; consulta corre | |
-| U12.8 | Bloqueo por límite de submódulo (pre-check) | Toast antes de abrir Chrome | |
-| U12.9 | SSO al portal desde la app | Auto-login correcto | |
-| U12.10 | Archivos en carpeta del usuario (CUIT) | descargas/ correcta, raíz intacta | |
+| U12.1 | Login estados: trial / activo / suspendido | Mensajes y banners correctos | ✅ Usuario principal `procuradortool@gmail.com` (id 243, creado en esta corrida vía admin, plan COMBO_PROMO, `active`) → login con credenciales recordadas en la app → "Sesión: Activa", carga correctamente |
+| U12.2 | Mi Cuenta: contadores y barras | Fieles a DB | ✅ Panel "Mi Cuenta": CUIT 27320694359, plan "Extensión + App Electron — Beta", Activo, vencimiento 03/07/2027, período 30 días restantes, uso por subsistema 0/50 proc · 0/20 batch (máx 10 exp/ejecución) · 0/50 informes · 0/20 monitor partes · 0/50 monitor novedades — coincide exactamente con el plan COMBO_PROMO en DB |
+| U12.3 | Procuración individual (PJN real) | Ejecuta; visor abre; contadores +1 | ✅ Ejecutado con PJN real (CUIT 27320694359): login automático en SCW, extracción de 3 expedientes reales de la cuenta (FCR 9078/2021, FCR 6705/2025, CAF 018685/2024) — **3/3 exitosos, 0 fallidos, 49s**. Visor auto-abrió con los resultados reales. Verificado por DB: `usage_count`/`proc_usage` pasaron de 0→1 (cuenta por ejecución, no por expediente — coincide con el modelo `proc_executions_limit` vs `proc_expedientes_limit`) |
+| U12.4 | Procuración batch (PJN real) | Ejecuta; visor batch correcto | ⏭️ Pendiente en esta corrida |
+| U12.5 | Informe individual (PJN real) | PDF/Excel generados | ⏭️ Pendiente en esta corrida |
+| U12.6 | Informe batch (PJN real) | Excel+visor batch | ⏭️ Pendiente en esta corrida |
+| U12.7 | Monitor: alta de parte + consulta (PJN real) | Parte agregada; consulta corre | ⏭️ Pendiente en esta corrida |
+| U12.8 | Bloqueo por límite de submódulo (pre-check) | Toast antes de abrir Chrome | ⏭️ Pendiente en esta corrida |
+| U12.9 | SSO al portal desde la app | Auto-login correcto | ⏭️ Pendiente en esta corrida |
+| U12.10 | Archivos en carpeta del usuario (CUIT) | descargas/ correcta, raíz intacta | ✅ Confirmado por la ruta real del visor generado: `...\procurador-electron\usuarios\27320694359\descargas\procurar-individual_visor_2026-07-03T23-09-57.html` — carpeta por CUIT correcta |
 
 ### U13. Extensión Chrome (gates por API)
 
