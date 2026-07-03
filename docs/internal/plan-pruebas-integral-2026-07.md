@@ -166,11 +166,11 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| A4.1 | Alta de pago manual | Aparece en Pagos y en historial del usuario | |
-| A4.2 | Crear factura desde pago (subir PDF) | Vinculada; visible en portal del usuario | |
-| A4.3 | Factura manual sin pago | Registrada; visible para el usuario | |
-| A4.4 | Asociar/desasociar pago↔factura | Links cruzados navegan y resaltan | |
-| A4.5 | Editar registro manual (pago/factura) | Cambios persisten; no-manuales rechazados | |
+| A4.1 | Alta de pago manual | Aparece en Pagos y en historial del usuario | ✅ `POST /admin/payments/manual` (user 239, $15.000, COMBO_PROMO) → pago id 41; confirmado en `GET /admin/payments?search=...` |
+| A4.2 | Crear factura desde pago (subir PDF) | Vinculada; visible en portal del usuario | ✅ `POST /admin/invoices/from-payment/41` (multipart, PDF de prueba) → invoice id 38 vinculada; confirmado visible en `GET /usuarios/api/invoices` del usuario 239 |
+| A4.3 | Factura manual sin pago | Registrada; visible para el usuario | ✅ `POST /admin/invoices/manual` (user 239, $5.000, sin `payment_id`) → invoice id 39; visible en el portal del usuario |
+| A4.4 | Asociar/desasociar pago↔factura | Links cruzados navegan y resaltan | ✅ Pago nuevo id 42 (sin factura) → `POST /admin/invoices/39/link-payment {payment_id:42}` → linkeado (confirmado `invoice_id:39` en el pago); luego `POST /admin/invoices/39/unlink-payment` → deslinkeado (`invoice_id:null`). (No se probó la navegación/resaltado visual de UI, sin Chrome) |
+| A4.5 | Editar registro manual (pago/factura) | Cambios persisten; no-manuales rechazados | ✅ `PUT /admin/payments/41 {amount:16000}` → persistido (confirmado por SQL). El rechazo de pagos no-manuales está confirmado por lectura de código (`if (p.payment_method !== 'manual') return 400`), no se pudo probar en vivo por no tener ningún pago de MercadoPago real en esta corrida |
 
 ### A5. Tickets y soporte
 
@@ -246,9 +246,9 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U4.1 | Admin activa → botón de pago habilitado | Portal lo muestra | |
-| U4.2 | Checkout MP sandbox completo | Preapproval vinculado; pago registrado; límites plan; contadores 0 | |
-| U4.3 | Volver del checkout sin pagar | NO marca pago (configured:false) | |
+| U4.1 | Admin activa → botón de pago habilitado | Portal lo muestra | ✅ `PUT /admin/users/242/registro {registration_status:'active'}` → `activated:true`; luego `POST /usuarios/api/checkout/init` ya NO da 403, devuelve `init_point` real de MP sandbox |
+| U4.2 | Checkout MP sandbox completo | Preapproval vinculado; pago registrado; límites plan; contadores 0 | ⏭️ Pendiente — requiere completar el pago en la página hospedada por MercadoPago (Chrome desconectado en esta corrida). El `init_point` quedó generado y disponible para retomar |
+| U4.3 | Volver del checkout sin pagar | NO marca pago (configured:false) | ✅ `POST /usuarios/api/checkout/confirm {}` (sin `preapproval_id`) → `{configured:false}`; confirmado por SQL que `payment_provider` sigue NULL |
 
 ### U5. Vida paga
 
