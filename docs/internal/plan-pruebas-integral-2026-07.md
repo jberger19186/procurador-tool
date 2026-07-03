@@ -17,6 +17,82 @@
 
 ---
 
+## Datos de prueba (provistos por el operador)
+
+### Usuario principal (para app Electron + PJN real)
+| Campo | Valor |
+|---|---|
+| Email | `procuradortool@gmail.com` |
+| Contraseña | `TestPass2025!` |
+| CUIT | `27320694359` (tiene credenciales PJN reales — **el operador las carga en Chrome cuando corresponda**) |
+
+> Este usuario se **crea durante el plan** (registro público U1.1 o alta admin) con esos datos. Es el que ejecuta los bloques U12 (app + PJN). Gmail también recibe alias `procuradortool+xx@gmail.com` si hacen falta variantes.
+
+### Usuarios secundarios
+`jberger_86+u1@hotmail.com`, `+u2`, `+u3`… con contraseña `Prueba1234`. CUITs válidos pre-generados (dígito verificador OK): `20300000011 · 20300000029 · 20300000038 · 20300000046 · 20300000054 · 20300000062`.
+
+### Expedientes PJN (jurisdicción FCR)
+- `FCR 18745/2017` · `FCR 6705/2025` · `FCR 18745/2018`
+- **TXT para batch** (formato validado contra `parseExpedienteStr`: `SIGLA NUMERO/AAAA` por línea): **`docs/internal/expedientes-prueba-fcr.txt`**
+- Uso: procuración individual (1 expediente), procuración batch (el TXT), informe individual, informe batch (el TXT).
+
+### Partes para el Monitor (jurisdicción FCR)
+- `DON COCHO`
+- `LA TOSTADORA MODERNA`
+
+### MercadoPago sandbox
+- Cuentas comprador/vendedor de prueba y tarjeta: ver **CLAUDE.md → "Credenciales de sandbox MercadoPago"** (comprador `TESTUSER4310268003253553318`; la tarjeta de prueba ya está guardada en esa cuenta — el checkout no pide CVV).
+- Prod corre MP en **sandbox** (B3 pendiente) → los cobros no son reales.
+
+---
+
+## Instrucciones para el EJECUTOR (sesión nueva, modelo Sonnet 5)
+
+> Este plan está pensado para ejecutarse **íntegramente por Claude** en una sesión nueva, sin contexto previo. Leé esta sección completa antes de arrancar.
+
+### Reglas innegociables
+1. **NO modificar código** (ni backend, ni dashboard, ni app, ni scripts). Si encontrás un bug: documentalo en la sección "Hallazgos" con severidad y propuesta, y seguí. Solo se permite editar ESTE documento (resultados) y datos de DB para acelerar estados.
+2. **Backup de la DB antes de arrancar** (`ssh … "sudo -u postgres pg_dump procurador_db > /tmp/backup_prod_pre_testrun_$(date +%Y%m%d_%H%M%S).sql"`).
+3. Acciones destructivas fuera del alcance del plan → preguntar al operador.
+
+### Herramientas y accesos
+- **Servidor/DB:** `ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94` · DB prod `procurador_db` vía `sudo -u postgres psql`. (El warning `could not change directory to "/root"` es inofensivo.)
+- **Dashboard admin:** `https://api.procuradortool.com/dashboard/` vía **Chrome MCP** (extensión Claude in Chrome). Las credenciales del admin están **recordadas** en el form (solo click en "Ingresar").
+- **Portal usuario:** `https://api.procuradortool.com/usuarios/` (login con los usuarios de prueba) o por API: `POST /auth/portal-login {email,password}` → token → `Authorization: Bearer`.
+- **App Electron:** el operador la deja **abierta con credenciales recordadas**; se maneja con las herramientas de escritorio (computer-use). Pedir el permiso de la app cuando se llegue a U12.
+- **MercadoPago API (verificaciones):** desde el server: `TOK=$(grep '^MP_ACCESS_TOKEN=' /var/www/procurador/backend-server/.env | cut -d= -f2)` y `curl https://api.mercadopago.com/preapproval/<id> -H "Authorization: Bearer $TOK"`. **No imprimir el token.**
+
+### Aprendizajes operativos (evitan horas perdidas)
+- **JWT firmado a mano NO valida** contra el proceso de prod (misterio de entorno conocido). Para actuar como admin usá el **dashboard en Chrome** (sesión real); como usuario, `portal-login` por API funciona perfecto.
+- **Diálogos nativos bloquean la automatización.** Al entrar al dashboard, ejecutar por JS: `window.confirm=()=>true; window.alert=(m)=>{window._lastAlert=m};` — re-ejecutarlo tras cada recarga de página (las navegaciones SPA con `navigate()` lo conservan).
+- El dashboard expone helpers globales útiles por JS: `navigate('users'|'plans'|'user-detail', id)`, `apiFetch(path, method, body)` (usa el token real de la sesión — ideal para negativos de API), `openAddUserModal()`, `updateSub(id)`, `adminCancelSub(id)`, `adminReactivateCancel(id)`.
+- El **search de preapprovals de MP tarda en indexar** tras cambios — reintenta a los pocos segundos antes de concluir.
+- Tras cancelar/pausar en MP, verificar SIEMPRE por API (`GET /preapproval/:id → status`), no por el panel.
+- Los crons corren a las 11:0x UTC (08 ART). Para no esperar: forzá fechas por SQL y ejecutá la **misma query/lógica del cron** manualmente (copiala de `server.js`, crons `5 11` retiro · `25 11` downgrade · `30 11` gracia) vía un script one-off `node /tmp/...` con requires por ruta absoluta a `node_modules` del server, o esperá la corrida diaria si el timing lo permite.
+- `dev-tools/sim-renewal.js` simula el cobro mensual (renovación) sin esperar el ciclo.
+
+### Coordinación con el operador (humano)
+Pedirle SOLO esto, cuando corresponda:
+1. **Emails**: cuando un caso requiera "click en el link de verificación", avisarle QUÉ casilla y QUÉ email (los de hotmail llegan a `jberger_86@hotmail.com`; los del principal a `procuradortool@gmail.com`). Agrupá los pedidos para no interrumpirlo a cada rato.
+2. **Credenciales PJN**: antes de U12.3+ pedirle que las cargue en el Chrome de la app (Configuración → Seguridad → Agregar contraseña SCW) si no están.
+3. **App abierta**: antes de U12, pedirle que abra la app con las credenciales del usuario principal recordadas.
+
+### Orden de ejecución recomendado
+1. **Preparación:** backup DB → verificar estado inicial (solo admins 6/7, MP 0 preapprovals vivos, prod health 200).
+2. **A2** (planes: crear el plan cortesía y un plan privado de prueba — los usa todo lo demás).
+3. **A1** (usuarios) + **U1/U2** (registro público + verificación) — acumulan los usuarios de prueba.
+4. **U3** (trial) → **U4** (activación + checkout MP) → **U5–U8** (vida paga, cambios, cancelaciones, gracia).
+5. **U9/U10** (vigencia/cortesía) + **A3** (suscripciones desde ficha, reusa el usuario pago).
+6. **A4** (cobranza) + **A5** (tickets) + **U11** (portal).
+7. **A6** (contingencias) + **A7** (seguridad).
+8. **U12** (app Electron + PJN real con los expedientes/partes de arriba) + **U13** (extensión por API).
+9. **Cierre:** completar Hallazgos → informe al operador → reset DB (script `dev-tools/reset-test-data.sql`, actualizar IDs) + cancelar preapprovals MP creados + backup `.7z` + entrada en CLAUDE.md.
+
+### Registro de resultados
+Completar la columna "Resultado" de cada caso EN ESTE ARCHIVO (✅/❌/⚠️/⏭️ + nota breve) y commitear al final de cada bloque con mensajes `test: resultados bloque X`. Los bugs van a la tabla de Hallazgos con: severidad (crítico/alto/medio/bajo), caso que lo detectó, descripción reproducible y propuesta de fix (sin implementarla).
+
+---
+
 ## BLOQUE A — Óptica del ADMINISTRADOR
 
 ### A1. Gestión de usuarios
@@ -255,4 +331,4 @@
 
 | Fecha | Bloques ejecutados | Notas |
 |---|---|---|
-| | | |
+| 2026-07-03 | Corrida parcial A1.1–A1.5 (smoke del plan) — **REVERTIDA** | Los 5 casos dieron PASS (alta OK + 4 rechazos con mensajes correctos: email dup, CUIT dup, CUIT inválido, contraseña débil). El usuario creado (id 238) se borró de la DB para arrancar la ejecución formal desde cero. La matriz queda vacía a propósito. |
