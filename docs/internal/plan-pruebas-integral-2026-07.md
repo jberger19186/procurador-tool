@@ -176,12 +176,12 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| A5.1 | Usuario crea ticket → admin responde | Email al usuario; estado in_progress | |
-| A5.2 | Nota interna | Usuario NO la ve en su portal | |
-| A5.3 | Priorizar con IA | Prioridad + razonamiento; badge 🤖 | |
-| A5.4 | Proyectar respuesta con IA | Sugerencia editable; no auto-envía | |
-| A5.5 | Editar respuesta enviada | Label "editado"; sin nuevo email | |
-| A5.6 | Resolver ticket | Usuario lo ve RESUELTO | |
+| A5.1 | Usuario crea ticket → admin responde | Email al usuario; estado in_progress | ✅ Ticket #22 creado por usuario 239 (portal-login) → admin comenta (visibility:external) → `status` pasa a `in_progress` |
+| A5.2 | Nota interna | Usuario NO la ve en su portal | ✅ Comentario `visibility:internal` agregado; `GET /tickets/22` (vista usuario) solo devuelve el comentario externo, el interno no aparece |
+| A5.3 | Priorizar con IA | Prioridad + razonamiento; badge 🤖 | ✅ `POST /admin/tickets/ai-prioritize {ticket_ids:[22]}` → `priority='low'`, `priority_source='ai'`, `priority_notes` con razonamiento coherente |
+| A5.4 | Proyectar respuesta con IA | Sugerencia editable; no auto-envía | ✅ `POST /admin/tickets/22/ai-suggest-reply` → devuelve texto sugerido + `log_id` (telemetría); no se envía automáticamente (queda en la respuesta, no se inserta como comentario) |
+| A5.5 | Editar respuesta enviada | Label "editado"; sin nuevo email | ✅ `PUT /admin/tickets/22/comment/35` → `message` actualizado + `edited_at` seteado |
+| A5.6 | Resolver ticket | Usuario lo ve RESUELTO | ✅ `PUT /admin/tickets/22/status {status:'resolved'}` → confirmado `status='resolved'` en la vista del usuario (el portal lo etiqueta "RESUELTO") |
 
 ### A6. Contingencias
 
