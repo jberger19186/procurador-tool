@@ -262,7 +262,7 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U6.1 | Upgrade | Inmediato + monto MP próximo ciclo | ⏭️ Pendiente — requiere usuario con `payment_provider` configurado (MP real, bloqueado por Chrome desconectado en U4.2). Sin pago, `/users/change-plan` trata todo cambio como programado ("downgrade" en el mensaje, incluso volviendo a un plan de mayor precio) — comportamiento esperable dado que no hay una suscripción MP que cobrar de inmediato |
+| U6.1 | Upgrade | Inmediato + monto MP próximo ciclo | ✅ Con MP real activo (2do checkout): `/users/change-plan` a un plan más caro → `type:'upgrade'`, aplicado de inmediato (`usage_limit=999999`); confirmado por **API real de MP** que `transaction_amount` se ajustó sin cobro inmediato (`status` sigue `authorized`). Revertido a COMBO_PROMO/$15.000 (DB + MP) y el plan de prueba a privado/$5.000 al cierre |
 | U6.2 | Downgrade | Programado; banner; límites conservados | ✅ Usuario 239 (sin pago) `POST /users/change-plan {plan_name:'EXTENSION_PROMO'}` → programado para fin de ciclo (`applyAt`), `scheduled_plan` seteado, plan actual (COMBO_PROMO) y sus límites intactos mientras tanto |
 | U6.3 | Cancelar downgrade programado | Vuelve a plan actual; contador devuelto | ✅ `POST /users/cancel-scheduled-plan` → `scheduled_plan=null`, plan sigue COMBO_PROMO, **`plan_changes_this_cycle` vuelve de 2 a 1** (el cambio deshecho no cuenta) |
 | U6.4 | 3er cambio en el ciclo | Rechazado (tope 2) | ✅ 2 cambios seguidos OK (`plan_changes_this_cycle`→2), 3er intento → 400 "Ya realizaste 2 cambios en este período. Podrás cambiar tu plan a partir del [fecha]" |
