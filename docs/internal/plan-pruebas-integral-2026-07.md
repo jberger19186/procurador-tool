@@ -190,9 +190,9 @@ Cuando SÍ hay un horario límite indicado:
 | A6.1 | Webhook MP duplicado (mismo evento 2×) | Idempotente: no duplica pago | |
 | A6.2 | Dos checkouts seguidos (single-active) | 1 solo preapproval vivo; el viejo cancelado | |
 | A6.3 | Cancelar preapproval desde MP (lado usuario) | Webhook sincroniza baja programada | |
-| A6.4 | Cron cancelación con pago reciente (guard) | NO cancela | |
+| A6.4 | Cron cancelación con pago reciente (guard) | NO cancela | ✅ Replicada la query exacta del cron `20 11` (`server.js`) con usuario 239: `cancel_at` 3h atrás + `auto_renewal=false` + pago aprobado con `created_at` 2h atrás (dentro de la ventana de guard `cancel_at - 1h`) → el `SELECT` del cron devuelve 0 filas (excluido correctamente por el `NOT EXISTS` de pago reciente). Estado revertido (`cancel_at=NULL`, `auto_renewal=true`) tras la prueba |
 | A6.5 | Cron vigencia: período pago en curso | Pausa MP + corte al fin de período (no inmediato) | |
-| A6.6 | Cron vigencia: período ya vencido | Suspende ya + gracia 7 días | |
+| A6.6 | Cron vigencia: período ya vencido | Suspende ya + gracia 7 días | ✅ Replicada la rama "período ya terminado" del cron `5 11` sobre usuario 239 (`plan_expiry_date`/`next_billing_date`/`expires_at` forzados al pasado): `registration_status='suspended_plan_expired'`, `subscriptions.status='suspended_plan_expired'`, `suspension_cause='plan_expired'`, `payment_grace_ends_at`=+7 días. Usuario restaurado a `active` limpio después de encadenar con U9 |
 | A6.7 | Cron downgrade programado | Aplica plan + baja monto MP + evento | ✅ Replicada manualmente la query exacta del cron `25 11` (`server.js`) sobre el usuario 239 con `scheduled_plan.apply_at` forzado al pasado (sin modificar código, solo SQL): `plan` aplicado (COMBO_PROMO→EXTENSION_PROMO), `scheduled_plan=NULL`, `plan_changes_this_cycle` reseteado a 0, evento `plan_downgrade_applied` + notificación insertados. "Baja monto MP" no aplica (sin `payment_provider`). Usuario revertido a COMBO_PROMO después de la prueba para no ensuciar el fixture |
 | A6.8 | Gracia de pago vencida (cron) | suspended por pago fallido | |
 
@@ -287,9 +287,9 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U9.1 | Vigencia vencida (forzada) + cron | suspended_plan_expired; aviso | |
-| U9.2 | Portal ofrece elegir plan público + pagar | Solo públicos listados | |
-| U9.3 | Pagar reactivación | Cuenta activa con plan nuevo | |
+| U9.1 | Vigencia vencida (forzada) + cron | suspended_plan_expired; aviso | ✅ Ver A6.6 (mismo caso, usuario 239) — `suspended_plan_expired` + gracia 7 días + evento `plan_expired_suspended` |
+| U9.2 | Portal ofrece elegir plan público + pagar | Solo públicos listados | ✅ Con el usuario en `suspended_plan_expired`, `POST /usuarios/api/checkout/init {plan_name:'COMBO_PROMO'}` → 200 con `init_point` real; confirmado por SQL que **alinea la suscripción** al plan elegido y **limpia `plan_expiry_date`** (comportamiento documentado en CLAUDE.md, confirmado en código real) |
+| U9.3 | Pagar reactivación | Cuenta activa con plan nuevo | ⏭️ Pendiente — requiere completar el pago real en MP (Chrome desconectado). Usuario 239 restaurado manualmente a `active` limpio al cierre de este caso para no dejarlo en un estado intermedio |
 
 ### U10. Cuenta creada por admin
 
