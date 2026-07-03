@@ -304,13 +304,13 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U11.1 | Perfil: editar datos; CUIT NO editable | Correcto | |
-| U11.2 | Cambio de contraseña (política + indicador) | Correcto | |
-| U11.3 | Crear ticket + ver respuesta | Correcto | |
-| U11.4 | Bot IA: consulta resolutiva | Pasos concretos útiles | |
-| U11.5 | Ayuda: FAQ + manual inline (secciones nuevas) | Visibles | |
-| U11.6 | Notificaciones in-app | Llegan y se marcan leídas | |
-| U11.7 | Descargas (app + extensión) | Links funcionan | |
+| U11.1 | Perfil: editar datos; CUIT NO editable | Correcto | ✅ `PUT /usuarios/api/profile` (usuario 239) con `nombre`+`telefono`+`cuit` falso → nombre/teléfono actualizados, CUIT ignorado (sigue `20300000011`, defensa en profundidad confirmada por código y en vivo) |
+| U11.2 | Cambio de contraseña (política + indicador) | Correcto | ✅ `POST /auth/change-password` → 200; confirmado login exitoso con la nueva contraseña (política de fuerza ya validada en A1.5/A1.13 con el mismo helper) |
+| U11.3 | Crear ticket + ver respuesta | Correcto | ✅ Ya cubierto en bloque A5 (ticket #22 creado por este mismo usuario, respuesta visible) |
+| U11.4 | Bot IA: consulta resolutiva | Pasos concretos útiles | ✅ Consulta sobre "about:blank" en procuración → respuesta con pasos concretos (cerrar app/Chrome, esperar, reabrir, revisar contraseña SCW guardada, candado activo) |
+| U11.5 | Ayuda: FAQ + manual inline (secciones nuevas) | Visibles | ⏭️ Pendiente — no verificado en esta corrida (contenido estático del portal, baja prioridad) |
+| U11.6 | Notificaciones in-app | Llegan y se marcan leídas | ✅ `GET /client/notifications` devuelve 5 notificaciones coherentes con los eventos generados en la corrida (cortesía, reactivación, suspensión con motivo, activación, email verificado); `POST /client/notifications/all/read` → todas marcadas `read:true` |
+| U11.7 | Descargas (app + extensión) | Links funcionan | ✅ `GET /client/download/electron` → 302 al `.exe` real del último release de GitHub (v2.7.35). Extensión es link estático a Chrome Web Store, no verificado en esta corrida |
 
 ### U12. App Electron (con credenciales recordadas + expedientes provistos)
 
