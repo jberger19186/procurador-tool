@@ -247,7 +247,7 @@ Cuando SÍ hay un horario límite indicado:
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
 | U4.1 | Admin activa → botón de pago habilitado | Portal lo muestra | ✅ `PUT /admin/users/242/registro {registration_status:'active'}` → `activated:true`; luego `POST /usuarios/api/checkout/init` ya NO da 403, devuelve `init_point` real de MP sandbox |
-| U4.2 | Checkout MP sandbox completo | Preapproval vinculado; pago registrado; límites plan; contadores 0 | ⏭️ Pendiente — requiere completar el pago en la página hospedada por MercadoPago (Chrome desconectado en esta corrida). El `init_point` quedó generado y disponible para retomar |
+| U4.2 | Checkout MP sandbox completo | Preapproval vinculado; pago registrado; límites plan; contadores 0 | ✅ **Checkout MP sandbox REAL completado** (Chrome reconectó): portal → Facturación → "Configurar método de pago" → MP (tarjeta de prueba ya guardada, sin pedir CVV) → "Pagar suscripción" → **aprobado**, operación `166202947035` → volver al sitio → confirmado por API: `payment_provider='mercadopago'`, `external_subscription_id` vinculado, `usage_limit=999999`, contadores en 0, `next_billing_date` seteado; pago #43 registrado (`status='approved'`, plan COMBO_PROMO) con **factura auto-generada en `pending`** (invoice_id 40, esperando PDF) — coincide exactamente con el flujo documentado |
 | U4.3 | Volver del checkout sin pagar | NO marca pago (configured:false) | ✅ `POST /usuarios/api/checkout/confirm {}` (sin `preapproval_id`) → `{configured:false}`; confirmado por SQL que `payment_provider` sigue NULL |
 
 ### U5. Vida paga
