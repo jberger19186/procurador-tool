@@ -227,9 +227,9 @@ Cuando SÍ hay un horario límite indicado:
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
 | U2.1 | Click en link → verificado | pending_activation, trial 20 | ✅ Usuario 242: `GET /auth/verify-email?token=...` (token real de DB) → 200, confirmado por SQL `registration_status='pending_activation'`, `usage_count=0/usage_limit=20` |
-| U2.2 | Reenvío de verificación desde portal | Nuevo email funciona | ⏭️ Pendiente — no ejecutado en esta corrida |
+| U2.2 | Reenvío de verificación desde portal | Nuevo email funciona | ✅ Usuario 241 (`pending_email`) → `POST /auth/resend-verification` → mensaje genérico de éxito; nuevo `email_verify_token` generado; verificado con el nuevo token → 200, `registration_status` pasó a `pending_activation` |
 | U2.3 | Link ya usado | Página "ya verificado" | ❌ **FAIL** — ver Hallazgo #1: muestra el error genérico de token inválido/expirado en vez de "ya verificado" (bug de código, rama inalcanzable) |
-| U2.4 | Token vencido (forzado) | Error claro + camino de reenvío | ⏭️ Pendiente — no ejecutado en esta corrida |
+| U2.4 | Token vencido (forzado) | Error claro + camino de reenvío | ✅ Token forzado a vencido por SQL (usuario 239, revertido después) → `GET /auth/verify-email` → 400 "El enlace de verificación es inválido o expiró. Contactá al administrador para que te reenvíe el email de verificación." |
 
 ### U3. Trial (20 usos compartidos)
 
