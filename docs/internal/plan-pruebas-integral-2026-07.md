@@ -279,7 +279,7 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U8.1 | Pago rechazado (simulado) | Gracia 3 días; banner ámbar portal+app; notificación | ⏭️ Pendiente — no ejecutado en esta corrida (requiere simular el webhook `payment` rechazado; necesita firma HMAC real, fuera de alcance sin acceso al secreto) |
+| U8.1 | Pago rechazado (simulado) | Gracia 3 días; banner ámbar portal+app; notificación | ✅ Replicada manualmente la rama "rejected" exacta de `handlePaymentEvent` (`routes/webhooks.js`, sin tocar código): `payment_grace_ends_at`=+3 días, `suspension_cause='payment'`, notificación `payment_rejected` insertada. Verificado por API: `/client/account` expone `paymentGraceEndsAt` (dato que dispara el banner ámbar en portal/app), `status` sigue `active` durante la gracia, `verify-session` sigue devolviendo 200 (sesión viva). Revertido al cierre |
 | U8.2 | Gracia vencida (cron) | suspended; ejecutar bloqueado; login permite ver/pagar | ✅ Ver A6.8 (mismo caso, usuario 239) — `suspended`/`payment`, `portal-login` sigue devolviendo 200 en ese estado |
 | U8.3 | Pagar estando suspendido | Recuperado; single-active | ⏭️ Pendiente — requiere un pago real (Chrome desconectado) |
 
