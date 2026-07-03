@@ -322,7 +322,7 @@ Cuando SÍ hay un horario límite indicado:
 | U12.4 | Procuración batch (PJN real) | Ejecuta; visor batch correcto | ⏭️ Pendiente en esta corrida |
 | U12.5 | Informe individual (PJN real) | PDF/Excel generados | ✅ Informe generado para expediente real `FCR 9078/2021` (uno de los detectados en U12.3): PDF con carátula, juzgado, situación y movimientos reales con links "Ver documento" — `informe_FCR 9078_2021_2026-07-03T23-14-57.pdf` en la carpeta del usuario (CUIT) |
 | U12.6 | Informe batch (PJN real) | Excel+visor batch | ⏭️ Pendiente en esta corrida |
-| U12.7 | Monitor: alta de parte + consulta (PJN real) | Parte agregada; consulta corre | ⏭️ Pendiente en esta corrida |
+| U12.7 | Monitor: alta de parte + consulta (PJN real) | Parte agregada; consulta corre | ✅ Parte "DON COCHO" (jurisdicción FCR) agregada (toast "Parte agregada", 1/20). "Consulta Inicial" ejecutada contra el PJN real: login automático con CUIT correcto, **115 expedientes reales encontrados** en el visor de resultados. Verificado por DB que la consulta inicial NO consumió `monitor_novedades_usage` (sigue en 0) — coincide con el modelo documentado (solo las consultas de "novedades" consumen) |
 | U12.8 | Bloqueo por límite de submódulo (pre-check) | Toast antes de abrir Chrome | ⏭️ Pendiente en esta corrida |
 | U12.9 | SSO al portal desde la app | Auto-login correcto | ⏭️ Pendiente en esta corrida |
 | U12.10 | Archivos en carpeta del usuario (CUIT) | descargas/ correcta, raíz intacta | ✅ Confirmado por la ruta real del visor generado: `...\procurador-electron\usuarios\27320694359\descargas\procurar-individual_visor_2026-07-03T23-09-57.html` — carpeta por CUIT correcta |
