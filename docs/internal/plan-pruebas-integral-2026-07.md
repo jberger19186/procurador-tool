@@ -331,8 +331,8 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Resultado |
 |---|---|---|---|
-| U13.1 | extension-login según estado (trial/activo/suspendido) | Permite/bloquea correcto | |
-| U13.2 | Flujos según plan (extension_flows) | Lista correcta | |
+| U13.1 | extension-login según estado (trial/activo/suspendido) | Permite/bloquea correcto | ✅ Usuario 239 activo → `POST /auth/extension-login` → 200 con token; luego `suspended_admin` (SQL) → mismo endpoint → 403 "Tu cuenta fue suspendida por el administrador." Usuario restaurado a `active` |
+| U13.2 | Flujos según plan (extension_flows) | Lista correcta | ✅ Respuesta de `extension-login` incluye `enabledFlows:['consulta','escritos1','escritos2','notificaciones','deox']` — coincide con `extension_flows` configurado en el plan COMBO_PROMO |
 
 ---
 
