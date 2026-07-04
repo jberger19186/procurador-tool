@@ -311,7 +311,7 @@ router.get('/verify-email', async (req, res) => {
     try {
         const result = await db.query(`
             SELECT u.id, u.email, u.nombre, u.apellido, u.email_change_prev_status, u.admin_created,
-                   p.display_name AS plan_name, p.price_ars, p.price_usd
+                   p.display_name AS plan_name, p.price_ars, p.price_usd, s.plan_expiry_date
             FROM users u
             JOIN subscriptions s ON u.id = s.user_id
             JOIN plans p ON s.plan_id = p.id
@@ -321,14 +321,26 @@ router.get('/verify-email', async (req, res) => {
         `, [token]);
 
         if (result.rows.length === 0) {
-            // Verificar si el token ya fue usado (email ya verificado con este token)
-            const alreadyVerified = await db.query(
-                'SELECT id, nombre FROM users WHERE email_verify_token = $1 AND email_verified = true',
-                [token]
-            );
+            // Verificar si el token ya fue usado (email ya verificado con este token).
+            // IMPORTANTE: esta rama solo es alcanzable porque el flujo de verificación NO
+            // borra `email_verify_token` al verificar (ver el UPDATE de abajo). Si se
+            // volviera a nulificar el token, esta consulta nunca matchearía y el segundo
+            // click siempre caería en el error genérico de "inválido o expiró".
+            const alreadyVerified = await db.query(`
+                SELECT u.nombre, u.admin_created, p.price_ars, p.price_usd, s.plan_expiry_date
+                FROM users u
+                JOIN subscriptions s ON u.id = s.user_id
+                JOIN plans p ON s.plan_id = p.id
+                WHERE u.email_verify_token = $1 AND u.email_verified = true
+            `, [token]);
             if (alreadyVerified.rows.length > 0) {
-                return res.send(renderVerifyPage('success',
-                    `Tu email ya fue verificado anteriormente. El administrador activará tu cuenta en breve. Tenés 20 ejecuciones de prueba disponibles en la app.`));
+                const a = alreadyVerified.rows[0];
+                const av_priceKnown = a.price_ars != null || a.price_usd != null;
+                const av_isCourtesy = a.admin_created && av_priceKnown && Number(a.price_ars ?? a.price_usd ?? 0) === 0;
+                const av_until = a.plan_expiry_date ? ` hasta el ${new Date(a.plan_expiry_date).toLocaleDateString('es-AR')}` : '';
+                return res.send(renderVerifyPage('success', av_isCourtesy
+                    ? `Tu email ya fue verificado y tu cuenta está activa con acceso de cortesía${av_until}. Ya podés usar la app.`
+                    : `Tu email ya fue verificado anteriormente. El administrador activará tu cuenta en breve. Tenés 20 ejecuciones de prueba disponibles en la app.`));
             }
             return res.status(400).send(renderVerifyPage('error',
                 'El enlace de verificación es inválido o expiró. Contactá al administrador para que te reenvíe el email de verificación.'));
@@ -352,16 +364,24 @@ router.get('/verify-email', async (req, res) => {
         const targetStatus = isEmailChange
             ? ((user.email_change_prev_status !== 'pending_email') ? user.email_change_prev_status : 'pending_activation')
             : (isCourtesyActivation ? 'active' : 'pending_activation');
+        // Fecha de vencimiento de la cortesía, para los mensajes (si aplica).
+        const courtesyUntil = user.plan_expiry_date
+            ? ` hasta el ${new Date(user.plan_expiry_date).toLocaleDateString('es-AR')}`
+            : '';
 
         const verifyClient = await db.connect();
         try {
             await verifyClient.query('BEGIN');
+            // NO se borra email_verify_token: se deja para que un segundo click en el mismo
+            // enlace pueda detectarse como "ya verificado" (ver la rama alreadyVerified arriba)
+            // en vez de mostrar el error genérico de "inválido o expiró". El token queda inerte
+            // igual (email_verified=true bloquea la re-verificación) y se pisa si el admin
+            // cambia el email o el usuario pide reenvío. Sí se limpia el expires como refuerzo.
             await verifyClient.query(`
                 UPDATE users
                 SET email_verified = true,
                     registration_status = $2,
                     email_change_prev_status = NULL,
-                    email_verify_token = NULL,
                     email_verify_expires = NULL
                 WHERE id = $1
             `, [user.id, targetStatus]);
@@ -379,12 +399,14 @@ router.get('/verify-email', async (req, res) => {
                 [user.id, isEmailChange ? 'email_changed_verified' : 'email_verified',
                  JSON.stringify({ plan: user.plan_name, email: user.email })]
             );
+            const verifyNotifMsg = isEmailChange
+                ? 'Verificaste tu nuevo email. Tu cuenta quedó reactivada.'
+                : isCourtesyActivation
+                    ? `Tu email fue verificado. Tu cuenta está activa con acceso de cortesía${courtesyUntil}.`
+                    : 'Tu email fue verificado. Tenés 20 usos de prueba disponibles.';
             await verifyClient.query(
                 `INSERT INTO notifications (user_id, type, message) VALUES ($1, $2, $3)`,
-                [user.id, isEmailChange ? 'email_changed' : 'email_verified',
-                 isEmailChange
-                    ? 'Verificaste tu nuevo email. Tu cuenta quedó reactivada.'
-                    : 'Tu email fue verificado. Tenés 20 usos de prueba disponibles.']
+                [user.id, isEmailChange ? 'email_changed' : 'email_verified', verifyNotifMsg]
             );
             await verifyClient.query('COMMIT');
         } catch (e) {
@@ -402,7 +424,9 @@ router.get('/verify-email', async (req, res) => {
         res.send(renderVerifyPage('success',
             isEmailChange
                 ? `¡Listo ${user.nombre}! Verificaste tu nuevo email y tu cuenta quedó reactivada. Ya podés usar la app con normalidad.`
-                : `¡Hola ${user.nombre}! Tu email fue confirmado. El administrador activará tu cuenta en breve. Mientras tanto, tenés 20 ejecuciones de prueba disponibles en la app.`));
+                : isCourtesyActivation
+                    ? `¡Hola ${user.nombre}! Tu email fue confirmado y tu cuenta ya está activa con acceso de cortesía${courtesyUntil}. Ya podés usar la app.`
+                    : `¡Hola ${user.nombre}! Tu email fue confirmado. El administrador activará tu cuenta en breve. Mientras tanto, tenés 20 ejecuciones de prueba disponibles en la app.`));
 
     } catch (error) {
         logger.error('Error en verify-email:', error.message);
