@@ -1106,10 +1106,16 @@ async function checkSubsystemLimit(subsystem, planName) {
     try {
         const acc = await authManager.backendClient.getAccount();
         if (!acc?.success) return { blocked: false };
-        // Solo cuentas PAGAS se rigen por límites de subsistema. El trial (sin método
-        // de pago) usa el cupo GLOBAL de 20 usos compartidos para cualquier mezcla de
-        // subsistemas — ese tope lo aplica el check de remaining global en cada handler.
-        if (!acc.account?.paymentProvider) return { blocked: false };
+        // El límite por submódulo lo enforza el servidor en /client/scripts/log-execution
+        // para CUALQUIER cuenta con un límite finito (no mira payment_provider). Este
+        // pre-check lo espeja para frenar ANTES de abrir Chrome y correr la automatización.
+        // Antes gateaba por payment_provider (`if (!paymentProvider) return no-block`): una
+        // cuenta con el submódulo agotado pero SIN método de pago —p. ej. cortesía/comp con
+        // el cupo global inflado a 999999— corría toda la automatización contra el PJN y
+        // recién el servidor rechazaba el conteo (403 en log-execution), sin avisar al
+        // usuario. El trial NORMAL no se ve afectado: su cupo global de 20 (chequeado en cada
+        // handler) lo frena antes de llegar al límite del submódulo, y una cuenta con acceso
+        // ilimitado real tiene el límite en -1 (unlimited) → se saltea abajo.
         const u = acc.account?.usage?.[subsystem];
         if (!u || u.unlimited || u.remaining === null || u.remaining === undefined) {
             return { blocked: false };
