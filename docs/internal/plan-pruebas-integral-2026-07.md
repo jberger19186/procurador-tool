@@ -298,7 +298,7 @@ Cuando SÍ hay un horario límite indicado:
 | U10.1 | Email con credenciales + verificación | Llega completo | ✅ Reusa A1.1/A1.6: usuario 239 recibió email de alta (14:43, credenciales) y de reenvío de verificación (14:45); operador confirmó recepción de ambos |
 | U10.2 | Verificar con plan $0 | Activo con cortesía y vigencia | ✅ PASS funcional (⚠️ ver Hallazgo #4, mensaje engañoso) — usuario nuevo creado por admin con `planId:6` (CORTESIA), verificado con el token real de email → confirmado por DB: `registration_status='active'`, `subscriptions.status='active'`, `usage_limit=999999`. La lógica de activación por cortesía funciona correctamente; el problema encontrado es solo de mensaje (ver Hallazgo #4) |
 | U10.3 | Verificar con plan pago | pending_activation (trial) | ✅ Reusa A1.1/A1.6: usuario 239 (plan COMBO_PROMO) verificó email → `registration_status='pending_activation'`, `usage_limit=20`, trial activo |
-| U10.4 | Cambiar contraseña temporal | Funciona; login con la nueva | ⏭️ Pendiente |
+| U10.4 | Cambiar contraseña temporal | Funciona; login con la nueva | ✅ Usuario 245 (creado por admin, contraseña temporal `Prueba1234`) → `POST /auth/change-password` con la nueva → 200. Verificado: login con la vieja → 401 "Credenciales inválidas"; login con la nueva → 200 — bloque **U10 cerrado 4/4** |
 
 ### U11. Portal completo
 
