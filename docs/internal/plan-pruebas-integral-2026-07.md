@@ -217,9 +217,9 @@ Cuando SÍ hay un horario límite indicado:
 |---|---|---|---|
 | U1.1 | Registro OK por formulario (plan público) | pending_email + email de verificación | ✅ `POST /auth/register` (usuario `jberger_86+u4@hotmail.com`, id 242) → 201, confirmado por SQL `registration_status='pending_email'` |
 | U1.2 | CUIT inválido | Error específico | ✅ Rate limit ya había expirado (~5h después); `POST /auth/register` con CUIT `20300000012` (dígito verificador incorrecto) → "CUIT/CUIL inválido. Verificá el formato y dígito verificador." |
-| U1.3 | Email ya registrado | Error | ⏭️ SKIP — el intento dio un error distinto por un campo mal armado en el payload de prueba (`toc_accepted` es el nombre real, no `aceptaTerminos`/`acceptTerms`), y el 2do intento volvió a activar el rate limit (máx. ~3/hora) antes de poder corregirlo y reintentar |
-| U1.4 | CUIT ya registrado | Error | ⏭️ SKIP — bloqueado por el mismo rate limit (activado en el intento anterior) |
-| U1.5 | Contraseña débil | Error con requisito | ⏭️ SKIP — bloqueado por el mismo rate limit; retomar junto con U1.3/U1.4 cuando expire (~1h) usando el campo correcto `toc_accepted:true` |
+| U1.3 | Email ya registrado | Error | ✅ Rate limit ya expirado; payload correcto con `toc_accepted:true` → "El email ya está registrado" (CUIT fresco, email de `jberger_86+u1@hotmail.com`) |
+| U1.4 | CUIT ya registrado | Error | ⏭️ SKIP — el rate limit se reactivó tras solo 2 intentos (límite muy ajustado, ~2/hora); retomar cuando expire (~1h) con `{"cuit":"20300000011", email nuevo}` |
+| U1.5 | Contraseña débil | Error con requisito | ⏭️ SKIP — bloqueado por el mismo rate limit; retomar junto con U1.4 |
 | U1.6 | Plan privado NO listado en el form | Ausente | ✅ Ya verificado indirectamente en A2.2/A2.4 (`GET /auth/plan-availability`, que es lo que consume el form de registro, no lista los planes privados) |
 
 ### U2. Verificación de email
