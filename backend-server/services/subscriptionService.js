@@ -92,6 +92,16 @@ const PLAN_REASONS = {
   EXTENSION_PROMO: 'Procurador SCW — EXTENSION PROMO'
 };
 
+// MercadoPago limita el campo `reason` del preapproval a 40 caracteres; si se
+// excede, la API rechaza la creación con "reason has more than 40 characters".
+// capReason garantiza el tope de forma defensiva: los nombres base de
+// PLAN_REASONS ya entran holgados (28/32), pero un sufijo o un plan nuevo con
+// nombre largo no deben volver a romper el límite (antes se agregaban sufijos
+// como "(actualización de método de pago)" que llevaban el total a 66 chars y
+// colgaban el checkout de cambio de método / reactivación).
+const MP_REASON_MAX = 40;
+const capReason = (text) => String(text).slice(0, MP_REASON_MAX);
+
 /**
  * createReactivationPreapproval — crea un preapproval CUSTOM (sin plan) con free_trial
  * igual a los días que le quedan del período ya pagado, para que la reactivación NO
@@ -125,12 +135,12 @@ async function createReactivationPreapproval(userId) {
   // pagador sea un test user (collector y payer deben ser ambos reales o ambos de prueba)
   // → override por MP_SANDBOX_PAYER_EMAIL. Quitar esa env var al pasar a MP producción (B3).
   const payerEmail = process.env.MP_SANDBOX_PAYER_EMAIL || sub.email || '';
-  // MP muestra el free_trial como "X días gratis"; aclaramos en el título que esos
-  // días corresponden al período que el usuario ya tenía pagado (no es una promo nueva).
   const baseReason = PLAN_REASONS[planName] || `Procurador SCW — ${planName}`;
-  const reason = freeTrialDays >= 1
-    ? `${baseReason} (reactivación · ${freeTrialDays} días ya abonados)`
-    : baseReason;
+  // Sin sufijo descriptivo: el sufijo "(reactivación · N días ya abonados)"
+  // superaba el límite de 40 caracteres de MP y hacía fallar la creación del
+  // preapproval. El nombre base ya identifica el plan en el panel de MP.
+  // (MP igualmente muestra el free_trial al usuario como "X días gratis".)
+  const reason = capReason(baseReason);
   const body = {
     reason,
     external_reference: `user_${userId}`,
@@ -189,8 +199,11 @@ async function createUpdatePreapproval(userId) {
 
   const payerEmail = process.env.MP_SANDBOX_PAYER_EMAIL || sub.email || '';
   const baseReason = PLAN_REASONS[planName] || `Procurador SCW — ${planName}`;
+  // Sin sufijo "(actualización de método de pago)": superaba el límite de 40
+  // caracteres de MP (66 chars para COMBO_PROMO) y MP rechazaba el preapproval,
+  // colgando el checkout de "Cambiar método". El nombre base ya lo identifica.
   const body = {
-    reason:             `${baseReason} (actualización de método de pago)`,
+    reason:             capReason(baseReason),
     external_reference: `user_${userId}`,
     payer_email:        payerEmail,
     back_url:           REACTIVATION_BACK_URL,
