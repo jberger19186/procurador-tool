@@ -1,8 +1,9 @@
 -- reset-test-data.sql
 -- Reset de datos para pruebas. Conserva SOLO los admins 6, 7.
--- Borra usuarios no-admin 236 (procuradortool@gmail.com), 237 (jberger_86@hotmail.com)
--- y TODOS los datos transaccionales. Ejecutar dentro de una transacción.
--- Última actualización: 2026-07-02.
+-- Borra usuarios no-admin 239-243,245-247 (usuarios de prueba de la corrida
+-- del plan-pruebas-integral-2026-07) y TODOS los datos transaccionales.
+-- Ejecutar dentro de una transacción.
+-- Última actualización: 2026-07-04.
 
 BEGIN;
 
@@ -33,11 +34,15 @@ DELETE FROM monitor_partes;
 DELETE FROM active_executions;
 
 -- ── 2. Borrar dependencias de los usuarios no-admin ─────────────────────────
-DELETE FROM user_legal_acceptances WHERE user_id IN (236,237);
-DELETE FROM subscriptions          WHERE user_id IN (236,237);
+DELETE FROM user_legal_acceptances WHERE user_id IN (239,240,241,242,243,245,246,247);
+DELETE FROM subscriptions          WHERE user_id IN (239,240,241,242,243,245,246,247);
 
 -- ── 3. Borrar los usuarios no-admin ─────────────────────────────────────────
-DELETE FROM users WHERE id IN (236,237);
+DELETE FROM users WHERE id IN (239,240,241,242,243,245,246,247);
+
+-- ── 3b. Borrar los planes de prueba creados durante la corrida (A2.1/A2.2) ──
+-- No se borra CORTESIA (id 6): es un plan de producto real, no un artefacto de prueba.
+DELETE FROM plans WHERE name IN ('TEST_PUBLICO_A21', 'TEST_PRIVADO_A22');
 
 -- ── 4. Resetear suscripciones de los admins conservados (6,7) ───────────────
 UPDATE subscriptions
