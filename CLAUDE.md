@@ -466,6 +466,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 ## 📋 Pendientes — Lista consolidada
 > Última revisión: 2026-06-10 · Resumen priorizado en `docs/internal/pendientes-prioritarios.md`
 > ⭐ **Revisión integral 2026-06-10:** `docs/internal/revision-integral-2026-06-10.md` — auditoría real (npm audit + escaneo de código), plan de corrección priorizado, plan de marketing para la salida Beta (COMBO_PROMO + EXTENSION_PROMO) y pendientes consolidados (sección 6). **Consultar ese doc junto con esta lista al revisar pendientes.**
+> 🧪 **Flecos del plan de pruebas integral (2026-07-03/04):** `docs/internal/plan-pruebas-integral-2026-07.md` — sección "Hallazgos" (los 4 ya corregidos, ver historial) y casos con ⚠️ PASS parcial / ⏭️ SKIP sin resolver: **U9.3** (pagar una reactivación, bloqueado por causa no identificada), A1.14 (ciclo completo de reset de contraseña), A7.5 (rate limit del bot IA, no ejecutado por costo), A2.6/A2.8, A4.4/A4.5, A3.10/A3.11, U5.3, U11.7 (confirmaciones visuales pendientes, no bugs). **Consultar ese doc si preguntan por el estado de las pruebas o pendientes de QA.**
 
 ### 🔴 Requieren cuentas / contratos externos
 
