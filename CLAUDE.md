@@ -484,7 +484,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 | # | Tarea | Detalle | Urgencia |
 |---|---|---|---|
 | **D1** | **GRANT DEFAULT PRIVILEGES DB** | `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO procurador_user;` — evita grants manuales en futuras migraciones | Baja |
-| **D2** | **SSL api.procuradortool.com** | Vence **2026-06-29**. `certbot.timer` activo pero verificar que renueve: `ssh … "certbot renew --dry-run"` | Media |
+| ~~**D2**~~ | ~~**SSL api.procuradortool.com**~~ | ✅ Verificado (2026-07-04): `certbot.timer` renovó solo, ahora vence **2026-08-28**. Sin acción pendiente | — |
 | **D3** | **`npm audit fix` (sin --force)** | Backend + Electron tienen deps con CVEs (backend: 7 high · electron: 1 critical en dev/build + 5 high). Correr `npm audit fix` en staging → probar → prod. Detalle en revisión integral §2 | Media |
 | **D4** | **`npm audit fix --force` controlado** | Deps con breaking changes (mercadopago/uuid, axios, undici). Probar flujo de pagos completo en staging después de actualizar. Pre-lanzamiento público | Baja |
 | **D5** | **Limpiar temporales del repo** | Borrar `backend-server/test_legal_tmp.js`, `test_legal_full_tmp.js`, `seed_legal_tmp.js` (código muerto del seed legal) | Baja |
@@ -534,7 +534,7 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 ---
 
 ### SSL api.procuradortool.com
-`certbot.timer` activo — renueva automáticamente 2×/día cuando faltan ≤30 días. Vence 2026-06-29. Verificar con `certbot renew --dry-run` antes del 01/06.
+`certbot.timer` activo — renueva automáticamente 2×/día cuando faltan ≤30 días. Vence **2026-08-28** (verificado 2026-07-04, renovó solo desde el vencimiento anterior sin intervención).
 
 ---
 
@@ -793,7 +793,7 @@ git -C "C:/Users/JONATHAN/source/repos/ProcuradorTool" diff --name-only fase4-co
 | **Brevo** (ex Sendinblue) | SMTP transaccional — emails que salen con @procuradortool.com | jberger19186@gmail.com |
 | **Chrome Web Store** | Distribución extensión Chrome (store: v1.3.4 ✅ · v1.3.5 ⏳ en revisión de Google) | jberger19186@gmail.com / Publisher: Jonathan Berger |
 | **Anthropic** | API de Claude Haiku para el chat IA del Asistente — ✅ activa en producción | console.anthropic.com |
-| **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-06-29) | sin cuenta — corre en el servidor |
+| **Let's Encrypt / certbot** | SSL gratuito para api.procuradortool.com — renovación automática cada 90 días (vence 2026-08-28, verificado 2026-07-04) | sin cuenta — corre en el servidor |
 | **Azure Trusted Signing** | Code Signing del instalador .exe — ⬜ pendiente contratar | — |
 | **MercadoPago / Stripe** | Pagos y suscripciones recurrentes — ⬜ pendiente integrar | — |
 
@@ -831,7 +831,7 @@ ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot renew"
 | **Archivo entorno** | `.env` | `.env.staging` (overrides + MP sandbox fijo) |
 | **Acceso** | público | basic auth — usuario `equipo`, `/etc/nginx/.htpasswd-staging` |
 | **MercadoPago** | sandbox (real al activar B3) | **sandbox fijo** (nunca real) |
-| **SSL** | certbot (vence 2026-06-29) | certbot (vence 2026-08-31) |
+| **SSL** | certbot (vence 2026-08-28) | certbot (vence 2026-08-31) |
 
 > **Backups:** diario automático 03:00 → DO Spaces (30d) + local `/var/backups/procurador/`. On-demand pre-deploy: `ops/backup-now.sh`. Restauración: `ops/restore-db.sh`.
 > **Scripts ops en el servidor:** `/var/www/procurador/ops/` (`backup-now.sh`, `restore-db.sh`, `drill-rollback.sh`, `drill-code-rollback.sh`).
@@ -896,7 +896,7 @@ scp -i C:/Users/JONATHAN/.ssh/do_procurador <archivo_local> root@142.93.64.94:<r
 | Base de datos | `procurador_db` (usuario: `procurador_user`) |
 
 ### Nginx — sitios activos
-- **`api.procuradortool.com`** → `/etc/nginx/sites-available/procurador` → proxy a Express en `https://localhost:3443` — SSL con certbot (vence 2026-06-29)
+- **`api.procuradortool.com`** → `/etc/nginx/sites-available/procurador` → proxy a Express en `https://localhost:3443` — SSL con certbot (vence 2026-08-28)
 - **`procuradortool.com`** → `/etc/nginx/sites-available/procuradortool` → sirve landing estática — SSL vía Cloudflare
 
 ### Release de la app Electron
@@ -2167,7 +2167,7 @@ Usuario final (Windows)
                          → HTTPS → api.procuradortool.com
 
 Servidor DigitalOcean (142.93.64.94 — Ubuntu)
-  ├── Nginx: api.procuradortool.com → Express 3443 (SSL certbot, vence 2026-06-29)
+  ├── Nginx: api.procuradortool.com → Express 3443 (SSL certbot, vence 2026-08-28)
   ├── Nginx: procuradortool.com → landing estática (SSL Cloudflare)
   ├── PM2: procurador-api (proceso Node.js)
   └── PostgreSQL 14: procurador_db (usuario: procurador_user)
