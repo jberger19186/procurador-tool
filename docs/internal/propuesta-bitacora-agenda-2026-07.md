@@ -6,6 +6,8 @@
 > Cambios v3: **selección múltiple** en la tabla de los visores (captura en lote) + link 📁 a la ficha de casos ya seguidos; **exportación** (Excel legible + JSON restaurable, global y por caso) e **importación/restauración** desde backup con modos reemplazar/combinar, vista previa dry-run y respaldo automático previo.
 > Cambios v4: alta **manual** de expedientes explicitada; ficha = vista integral del caso (datos + bitácora + historial) vs. sección Bitácora = vista temporal (calendario); **personalización de la ficha** (orden de secciones, registros visibles, modal "ver todos"); deep-links con **pestaña única reutilizada** (`target` fijo), sesión en uso sin re-login y botón Volver coherente vía History API.
 > Cambios v5: sección de **autosuficiencia y fuentes**; **riesgo y complejidad explicados sin tecnicismos** (qué se toca en web y app, qué no se toca, reversibilidad); **estimación de costos** con números reales del servidor; alcance del historial precisado (**2+2 POR CASO**, alimentado por cada corrida); límite del querystring explicado y regla de recorte; **historial con selector última/anteúltima + modal**; botones "💾 Guardar procuración/informe" en visores (selección múltiple y modal del caso); **filtros y agrupación** en la vista global; **campos por tipo de entrada** orientados a la práctica jurídica (ref. Lex-Doctor + Google); vencimientos visibles en la ficha; edición global y por caso con acciones masivas; sección de **preguntas abiertas**.
+> Cambios v6: **se desacopla "guardar ficha básica" de "guardar snapshot de procuración/informe"** (dos acciones independientes en vez de una combinada); **se reemplaza el mecanismo de transporte** de GET-por-querystring a **POST por formulario oculto autoenviado** (misma pestaña con nombre fijo, sin CORS, pero sin el límite práctico de ~2.000 caracteres — elimina la restricción de "hasta 10 casos sin movimientos" del modo lote); **el botón de Bitácora se muda del sidebar al topbar** (una sola aparición, en la misma barra que los tabs Procurar/Informe/Monitor/Descargas y el botón de cerrar ventana); **se agrega el paso del tour de onboarding** que faltaba para explicar el botón nuevo.
+> Cambios v6.1: se agrega la **evaluación técnica del transporte POST** (§4.1.1) con la cadena de límites reales (Nginx 1MB / Express 100KB por defecto, ambos config nuestra → subir a 5MB), tamaños medidos en corridas reales (1 expediente ≈4,2KB, tope `maxMovimientos`=15), tabla de escenarios (individual/lote/corrida grande), la inflación por URL-encoding y su mitigación, y el patrón **Post/Redirect/Get** para que la SPA reciba el payload con URL limpia. Conclusión: tras subir el límite del body, no hay límite práctico para los tamaños reales (corrida de 100 exp. ≈400KB entra con >10× de margen).
 
 ---
 
@@ -49,7 +51,7 @@ Puntos fijados en esta versión:
 | Backend Express + PostgreSQL | 3 tablas nuevas + endpoints CRUD. Sin dependencias nuevas. |
 | Notificaciones in-app (`user_notifications`) | No se usan para los avisos de bitácora (los avisos viven en el banner de la propia Bitácora), pero quedan disponibles para hitos puntuales si hiciera falta. |
 | Tabla `plans` + `/client/account` | Gating por plan: flag `bitacora_enabled` expuesto a la app y al portal. |
-| App Electron (sidebar, `openPortalSection`) | Acceso rápido a la Bitácora del portal vía SSO + generación condicional de los botones en los visores. |
+| App Electron (topbar, `openPortalSection`) | Acceso rápido a la Bitácora del portal vía SSO + generación condicional de los botones en los visores. |
 
 ---
 
@@ -157,24 +159,74 @@ Bitácora     [ ☆ Establecer como principal ]       ← estado disponible
 
 ## 4. Captura desde los visores — diseño técnico
 
-### 4.1 Mecanismo: deep-link al portal (opción A — confirmada)
+### 4.1 Mecanismo: deep-link al portal, por formulario POST (opción A revisada)
 
-Los visores son HTML estáticos abiertos con `file://`, sin sesión. El botón de captura arma una URL:
+Los visores son HTML estáticos abiertos con `file://`, sin sesión. **Se descartó el link GET con datos en el querystring** (ver el porqué abajo) a favor de un **formulario HTML oculto que se autoenvía por POST** al hacer clic:
 
+```html
+<form id="pscBitacoraForm" method="POST"
+      action="https://api.procuradortool.com/usuarios/capture"
+      target="procurador_portal" style="display:none">
+  <input name="goto"     value="bitacora-nueva">
+  <input name="tipo"     value="vencimiento">
+  <input name="exp"      value="FCR 1234/2021">
+  <input name="jur">  <input name="dep">  <input name="car">
+  <input name="sit">  <input name="fproc" value="2026-07-05">
+  <input name="origen"   value="procuracion">
+  <input name="movs">  <!-- JSON de movimientos, sin recortar -->
+</form>
+<script>document.getElementById('pscBitacoraForm').submit();</script>
 ```
-https://api.procuradortool.com/usuarios/?goto=bitacora-nueva
-  &tipo=vencimiento
-  &exp=FCR%201234%2F2021 &jur=... &dep=... &car=...
-  &sit=... &fproc=2026-07-05 &origen=procuracion
-  &movs=<hasta 5 movimientos: fecha + descripción truncada a ~120 chars, URL-encoded>
-```
 
-y la abre en el navegador. El portal (con sesión activa, o tras login) abre el modal "Nueva entrada" **pre-cargado** con los datos del caso y el snapshot compacto de la corrida.
+y el navegador navega la pestaña `procurador_portal` a ese POST. El portal (con sesión activa, o tras login) abre el modal "Nueva entrada" **pre-cargado** con los datos del caso y el snapshot completo de la corrida.
 
-- **Sin token embebido en el HTML** (que sería compartible por error) y **sin abrir CORS** a `file://`.
-- Cuando el visor se abre automáticamente desde la app (flujo principal), el link puede llevar el hash SSO como ya hace `openPortalSection` → el usuario cae **logueado, con el modal abierto y los campos completos**: 1 clic + guardar.
+- **Por qué POST-formulario y no GET-link (el cambio de esta versión):** un envío de `<form>` es una **navegación de página completa** —igual que hacer clic en un link—, **no** una llamada `fetch`/AJAX; por eso **no dispara CORS** aunque el origen sea `file://null`, exactamente la misma propiedad que tenía el link GET. La diferencia es dónde viajan los datos: un GET los lleva en la **URL** (limitada a ~2.000 caracteres prácticos); un POST los lleva en el **body de la petición**, sin ese límite (el único tope pasa a ser el `body-parser` del servidor, configurable a varios MB — trivial para cualquier snapshot real). **Resultado: desaparece la necesidad de recortar movimientos o de limitar la selección múltiple a 10 casos** (ver §4.2, corregido más abajo). El único costo es que el botón dispara un formulario invisible en vez de ser un link — imperceptible para el usuario, sigue siendo "un clic".
+- **Sin token embebido en el HTML** (que sería compartible por error) — el POST no necesita transportar credenciales, solo los datos del caso ya conocidos por el usuario.
+- Cuando el visor se abre automáticamente desde la app (flujo principal), el formulario puede llevar además el hash SSO como ya hace `openPortalSection` → el usuario cae **logueado, con el modal abierto y los campos completos**: 1 clic + guardar.
 - Si el usuario reabre el HTML días después desde la carpeta, pasa por el login del portal y sigue el mismo flujo (aceptable).
-- **Límite del querystring — SÍ hay tope, y esta es la regla**: la URL de un deep-link tiene un límite práctico (~2.000 caracteres para funcionar en cualquier navegador/servidor sin sorpresas; técnicamente los navegadores toleran más, pero no conviene apostar a eso). **Un JSON de caso muy extenso NO pasa entero**: el visor lo recorta con una regla fija y determinística antes de armar el link — situación actual + fecha de corrida + hasta 5 movimientos, cada uno con la descripción truncada a ~120 caracteres; si el caso tenía más movimientos, el snapshot registra la cantidad omitida ("+ 12 movimientos más en el visor local"). El usuario nunca pierde información real: el detalle completo siempre queda en su visor/Excel/PDF local (y el snapshot lo dice). **El historial del caso guarda un resumen ejecutivo, no la corrida íntegra** — es una decisión de diseño, coherente con el tope 2+2. Si a futuro se quisiera el detalle completo por caso, la vía correcta no es estirar la URL sino que la app lo suba por su propia sesión autenticada (anotado como evolución en Preguntas abiertas, §13/Q10).
+- **Enlaces livianos siguen siendo GET simples**: no todo necesita el formulario — un link "Ver ficha" (`goto=expediente&id=…`, sin payload de datos) sigue siendo un `<a>` normal; el POST-formulario se usa solo donde viaja un snapshot o una selección múltiple.
+
+#### 4.1.1 Límites reales, tamaños medidos y patrón de recepción (evaluación técnica)
+
+Como el POST reemplaza el tope de ~2.000 caracteres de la URL por el tope del body del servidor —que es **configuración nuestra**—, conviene dejar los números concretos para quien implemente.
+
+**La cadena de límites (cada capa con su tope por defecto):**
+
+| Capa | Límite por defecto | ¿Quién lo controla? |
+|---|---|---|
+| Navegador (form POST) | Sin límite práctico (a diferencia de una URL) | — |
+| **Nginx** (`client_max_body_size`) | **1 MB** | Nosotros (config del server) |
+| **Express** (`express.json`/`urlencoded`) | **100 KB** (hoy sin `limit:` explícito en `server.js`) | Nosotros (una línea) |
+
+El binding real hoy es Express con 100 KB. Ambos topes que importan son nuestros: se suben a `5mb` con una línea cada uno (`express.json({ limit: '5mb' })` en la ruta de captura + `client_max_body_size 5m;` en Nginx).
+
+**Tamaños reales medidos** (corridas del CUIT de prueba 27320694359):
+
+| Unidad | Tamaño real |
+|---|---|
+| 1 movimiento | ~170–380 bytes (mediana ~230) |
+| 1 expediente completo (15 movimientos — tope `maxMovimientos` de la config) | **~4,2 KB** |
+| Corrida de 3 expedientes (JSON entero) | ~19 KB |
+
+**Escenarios contra los límites:**
+
+| Escenario | Payload estimado | Veredicto |
+|---|---|---|
+| Captura individual (1 caso) | ~4 KB (peor caso realista con 100 movimientos: ~25 KB) | ✅ Entra incluso con el default de 100 KB |
+| Lote ~10 casos con snapshot | ~40 KB | ✅ Entra en 100 KB |
+| Lote ~20–25 casos con snapshot | ~80–100 KB | ⚠️ Roza el default → subir el límite |
+| Corrida grande (50–100 exp. con snapshot) | ~200–400 KB | ❌ Excede 100 KB → **requiere subir el límite** (a 5 MB entra con >10× de margen) |
+
+**La inflación por URL-encoding (a tener en cuenta):** un `<form>` por defecto codifica en `application/x-www-form-urlencoded`, y como el JSON está lleno de `{ } " : ,` y acentos, el encoding **infla ~2–3×** (cada carácter especial → `%XX`). Un JSON de 40 KB puede viajar como ~100 KB. **Mitigación: subir el body limit a 5 MB** (holgadísimo, sin costo) y no micro-optimizar. Alternativa innecesaria: `enctype="text/plain"` para no inflar.
+
+**Patrón de recepción — Post/Redirect/Get (PRG):** el POST aterriza en el portal (una SPA); para que la SPA reciba los datos de forma limpia:
+1. El visor hace POST a `/usuarios/capture` con el payload.
+2. El servidor guarda el payload un instante (sesión o registro efímero con id) y responde con **303 redirect** a la URL limpia del portal (`/usuarios/?goto=bitacora-nueva&draft=<id>`).
+3. La SPA carga, lee `draft=<id>`, pide el payload al backend y abre el modal pre-cargado.
+
+Ventajas del PRG: evita el "¿reenviar formulario?" al refrescar, deja la URL limpia (el payload no queda en el historial del navegador), y el límite es 100% server-side. Es exactamente cómo funcionan los SSO/SAML por POST binding (mandan tokens de varios KB así) — técnica estándar y de bajo riesgo.
+
+**Veredicto:** complejidad baja (form oculto + `.submit()` en el visor; una línea de límite en Express y Nginx; PRG en el endpoint). Tras el ajuste de límite, **no hay límite práctico** para los tamaños de datos reales — una corrida de 100 expedientes (~400 KB) entra con margen enorme en 5 MB. El único límite que queda es de **usabilidad** (revisar decenas de filas antes de guardar), no técnico → por eso la pantalla de revisión del lote pagina/agrupa (§4.2), pero el transporte ya no impone tope.
 
 **Una sola pestaña del portal + botón Volver coherente.** El caso típico es trabajar el visor y disparar varias capturas seguidas — no puede ser que cada clic abra una pestaña nueva del portal. Diseño:
 
@@ -195,7 +247,7 @@ La tabla del visor suma una **columna de checkboxes** y una barra de acciones qu
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│ ☑ 3 seleccionados  [💾 Guardar procuración de seleccionados]              │
+│ ☑ 3 seleccionados  [📌 Guardar casos]  [💾 Guardar procuración]           │
 │                    [＋ Crear entradas…]                        [✕ limpiar] │
 ├───┬──────────────┬──────────────────────┬──────────────┬─────────┬─────────┤
 │ ☑ │ FCR 1234/21  │ PEREZ c/ GOMEZ s/…   │ Juzg. Fed. 2 │ DESPACHO│ 📁 ficha│
@@ -205,9 +257,12 @@ La tabla del visor suma una **columna de checkboxes** y una barra de acciones qu
 └───┴──────────────┴──────────────────────┴──────────────┴─────────┴─────────┘
 ```
 
-- **"💾 Guardar procuración de seleccionados"** (en visores de informe: **"💾 Guardar informe de seleccionados"**): crea/actualiza la ficha de todos los seleccionados **y les guarda el snapshot de esta corrida** en su historial (deep-link `goto=expediente-guardar-lote`). El rótulo del botón dice lo que el usuario está guardando (la procuración o el informe del caso), pero la mecánica es una sola: ficha + snapshot del tipo que corresponde al visor. El portal confirma con el resultado ("3 casos guardados: 2 nuevos, 1 actualizado").
+Tres acciones independientes sobre la selección (**ficha básica** y **snapshot** ya no van pegados — corrección de esta versión):
+
+- **"📌 Guardar casos"**: crea/actualiza **solo la ficha** (expediente, jurisdicción, dependencia, carátula, situación actual) de todos los seleccionados — **sin** tocar el historial de snapshots. Para el que quiere empezar a seguir varios casos sin comprometerse a nada más.
+- **"💾 Guardar procuración de seleccionados"** (en visores de informe: **"💾 Guardar informe de seleccionados"**): crea/actualiza la ficha **y además** guarda el snapshot de esta corrida (con sus movimientos) en el historial de cada seleccionado. Es "Guardar casos" + adjuntar el snapshot en un solo paso, para el que ya sabe que quiere ambas cosas.
 - **"＋ Crear entradas…"**: elige un tipo (Vencimiento/Tarea/Nota) y abre en el portal una **pantalla de revisión del lote**: una fila editable por caso (título pre-cargado, fecha con la calculadora de plazos aplicable a todos o por fila) → "Guardar todo". Sirve al caso real de "estos 5 tienen traslado, les pongo vencimiento a todos".
-- **Límite práctico**: el deep-link viaja por querystring (~2.000 chars seguros), así que en modo lote viaja solo la ficha compacta de cada caso (expediente, jurisdicción, dependencia, carátula truncada, situación) **sin movimientos** — alcanza para ~10 casos por envío; el visor limita la selección a 10 con aviso ("hasta 10 casos por vez"). Para lotes con snapshot completo, la evolución natural es que la app suba el lote por su propia sesión y el link solo lo referencie (fase posterior, si el uso lo pide).
+- **Sin límite artificial de selección**: al viajar por POST (§4.1) y no por querystring, ya no hace falta topear la selección a 10 casos ni recortar los movimientos del lote — el usuario puede tildar todos los expedientes de un batch grande. El único límite razonable es de **usabilidad**, no de transporte: la pantalla de revisión de "Crear entradas…" pagina o agrupa si el lote es muy largo (ej. >30 filas), para que siga siendo cómoda de revisar antes de guardar.
 
 #### b) Fila / modal del caso — captura individual (trabajo caso por caso)
 
@@ -219,13 +274,15 @@ En cada fila, el botón compacto `📔+` despliega el mini-menú:
 │ ＋ Tarea                   │
 │ ＋ Nota                    │
 │ ───────────────────────── │
-│ 💾 Guardar procuración     │   ← en visores de informe: "💾 Guardar informe"
+│ 📌 Guardar caso            │   ← solo ficha, sin snapshot
+│ 💾 Guardar procuración     │   ← ficha + snapshot · en informes: "💾 Guardar informe"
 └───────────────────────────┘
 ```
 
-- Las tres primeras opciones abren el deep-link con `tipo=` correspondiente → modal de entrada pre-cargado (acá sí viaja el snapshot con movimientos, §4.1). Al guardar la entrada, el snapshot también se suma al historial del caso — capturar una entrada ya implica guardar la procuración/informe de ese momento.
-- **"💾 Guardar procuración"** (o "💾 Guardar informe", según el visor) crea/actualiza la ficha del caso y guarda el snapshot de esta corrida en su historial, **sin** crear entrada de bitácora — para el que quiere conservar el resultado aunque hoy no tenga nada que agendar. Toast de confirmación, sin más fricción.
-- **En el modal de movimientos** del visor se repite la misma botonera, incluido el botón **"💾 Guardar procuración"** de ese caso puntual; en ese contexto, el movimiento que se está mirando viaja pre-cargado como descripción de la entrada ("Nuevo despacho del 04/07: 'Traslado a la actora…' → vencimiento").
+- Las tres primeras opciones abren el formulario POST con `tipo=` correspondiente → modal de entrada pre-cargado (viaja el snapshot completo con movimientos, §4.1, sin recorte). Al guardar la entrada, el snapshot también se suma al historial del caso — capturar una entrada ya implica guardar la procuración/informe de ese momento.
+- **"📌 Guardar caso"** crea/actualiza **solo la ficha** del expediente (datos básicos, sin snapshot) — para el que quiere empezar a seguirlo sin comprometer todavía el historial. Toast de confirmación, sin más fricción.
+- **"💾 Guardar procuración"** (o "💾 Guardar informe", según el visor) hace lo mismo que "Guardar caso" **y además** adjunta el snapshot de esta corrida al historial — para el que ya sabe que quiere conservar el resultado, aunque hoy no tenga nada que agendar.
+- **En el modal de movimientos** del visor se repite la misma botonera, incluidos ambos botones de guardado para ese caso puntual; en ese contexto, el movimiento que se está mirando viaja pre-cargado como descripción de la entrada ("Nuevo despacho del 04/07: 'Traslado a la actora…' → vencimiento").
 
 #### c) Casos ya seguidos — link a la ficha
 
@@ -419,7 +476,7 @@ Botón **"⬆ Restaurar backup"** junto al de exportar. El usuario sube su archi
 
 - **Mi Plan**: píldora "★ Es tu pantalla principal / ☆ Establecer como principal" (§3.4). Si la Bitácora está deshabilitada por plan, la píldora de Bitácora no aparece y `home_section` vuelve a Mi Plan.
 - **Menú lateral del portal**: ítem "📔 Bitácora" (con sub-ítem o tab interna "Mis expedientes"). Si el plan no la incluye: ítem visible pero con candado + landing de upsell, o directamente oculto — **a decidir comercialmente** (recomendación: visible con candado, es marketing gratis).
-- **App Electron**: ítem de sidebar "📔 Bitácora" → `openPortalSection('bitacora')` (SSO). Opcional fase 2: badge con el conteo de vencidos-sin-confirmar (un GET liviano al abrir la app).
+- **App Electron — botón en el topbar (única aparición)**: la barra superior de la app (`index.html`, `.topbar`) hoy trae en una sola fila el logo, los tabs Procurar/Informe/Monitor/Descargas, y — al margen derecho, después de un spacer — los controles de ventana (minimizar/maximizar/**cerrar**). El botón **"📔 Bitácora"** se agrega **ahí**, entre los tabs y el spacer, como un botón propio (no un tab más: los tabs cambian la vista interna de la app, este abre el portal externo vía SSO) → `openPortalSection('bitacora')`. **Vive en un solo lugar** — no se duplica en el sidebar. Fase 3 (opcional): badge rojo con el conteo de vencidos-sin-confirmar, mismo patrón visual que el badge de "novedades" que ya existe en el ítem Monitor del sidebar.
 
 ---
 
@@ -556,8 +613,9 @@ POST                 /usuarios/api/bitacora/:id/done      — check / uncheck de
 GET                  /usuarios/api/bitacora/avisos        — banner: vencidos sin confirmar (ventana N días) + próximos (N días)
 GET/POST/PUT/DELETE  /usuarios/api/expedientes            — CRUD de fichas (DELETE con flag ?entries=keep|delete)
 GET                  /usuarios/api/expedientes/:id        — ficha + entradas + snapshots
-POST                 /usuarios/api/expedientes/capture    — endpoint del deep-link: upsert ficha + snapshot (+ entrada si tipo≠guardar)
-POST                 /usuarios/api/expedientes/capture-lote — lote: upsert de hasta 10 fichas + creación de entradas revisadas
+POST                 /usuarios/capture                    — recibe el POST-form del visor (body hasta 5MB): stashea el payload y hace 303 redirect al portal (PRG, §4.1.1). Upsert de ficha; snapshot solo si la acción lo incluye (§4.2)
+GET                  /usuarios/api/capture-draft/:id       — la SPA recupera el payload stasheado tras el redirect (Post/Redirect/Get)
+POST                 /usuarios/api/expedientes/capture-lote — lote: upsert de fichas (+ snapshots si aplica) sin tope de cantidad; creación de entradas revisadas
 GET                  /client/bitacora/seguidos            — (app Electron, JWT de app) claves de casos ya seguidos, para marcar el visor
 GET                  /usuarios/api/bitacora/export        — exportación (params: alcance=todo|entradas|expediente, formato=xlsx|json, rango)
 POST                 /usuarios/api/bitacora/import        — restauración desde backup JSON (params: modo=reemplazar|combinar, dry_run=1 para la vista previa; transaccional)
@@ -574,7 +632,7 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 | `plans.bitacora_enabled` | Flag por plan, editable desde el form de planes del dashboard admin (checkbox "Incluye Bitácora"). |
 | Backend (`routes/usuarios.js`) | Middleware en todos los endpoints de bitácora/expedientes: 403 con mensaje claro si el plan no la incluye. **Es el gate real.** |
 | Portal | Con flag off: ítem de menú con candado + pantalla explicativa (o oculto, a decidir); píldora "principal" no disponible; `home_section` forzado a `plan`. |
-| App Electron / visores | `main.js` lee el flag de `/client/account` al generar cada visor e inyecta `bitacoraEnabled` → botonera presente o ausente. Ítem de sidebar de la app: mismo criterio. |
+| App Electron / visores | `main.js` lee el flag de `/client/account` al generar cada visor e inyecta `bitacoraEnabled` → botonera presente o ausente. Botón del topbar de la app: mismo criterio (oculto si el plan no la incluye, salvo que se decida mostrarlo con candado como upsell — mismo criterio que el ítem del menú del portal). |
 | Cambio de plan | Al bajar a un plan sin Bitácora los **datos no se borran** (fichas y entradas quedan en la base); solo se bloquea el acceso. Al volver a subir, todo reaparece. Evita destrucción de datos por decisiones comerciales. |
 | Trial | A decidir: recomendación — **Bitácora habilitada durante el trial** (es el gancho de conversión más visual del producto), se corta si el plan pago elegido no la incluye. |
 
@@ -650,7 +708,7 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 
 ### Fase 1 — Núcleo (backend + portal)
 1. Migraciones (4 tablas + 2 columnas) + seed de feriados AR 2026/2027.
-2. Endpoints CRUD + capture + avisos + gate de plan.
+2. Endpoints CRUD + capture (POST-form con PRG, §4.1.1) + avisos + gate de plan. Incluye subir el límite del body a `5mb` en la ruta de captura (`express.json`/`urlencoded`) y `client_max_body_size 5m;` en Nginx.
 3. Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos) + sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas).
 4. Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal.
 5. Checkbox "Incluye Bitácora" en el form de planes del admin.
@@ -665,7 +723,7 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 4. **Mini-visor del informe individual** (nuevo, desde `main.js`, sin tocar scripts encriptados).
 5. Inyección de `bitacoraEnabled` por visor según plan.
 6. Deep-links con SSO cuando el visor se abre desde la app.
-7. Ítem "📔 Bitácora" en el sidebar de la app.
+7. Botón "📔 Bitácora" en el **topbar** de la app (una sola aparición, junto a los tabs — no en el sidebar) + actualización del **tour de onboarding** (`onboarding/tour.js`): el paso 2 existente (`target: '.tab-nav'`, "Navegación — tabs principales") se extiende para mencionar el botón nuevo, o se agrega un paso propio inmediatamente después si visualmente queda separado de los tabs — el mecanismo de spotlight multi-elemento (`targets: [...]`, usado hoy para agrupar "Ver tour" + "Asistente IA" en una sola card) permite resolverlo sin duplicar pasos.
 - **Entregable**: el circuito completo F1/F1b/F1c/F2/F3. Un release de Electron (vX.Y.Z) siguiendo el checklist del proyecto.
 
 ### Fase 3 — Pulido y palancas
@@ -684,7 +742,7 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 |---|---|---|
 | 1 | Alcance del calendario puede inflar la fase 1 (drag&drop, vista horaria) | v1: vista mes + lista, entradas all-day por defecto, repetición simple. Sin drag&drop. |
 | 2 | Deep-link sin sesión (visor reabierto días después) → pasa por login | Aceptable; el flujo principal (visor auto-abierto) lleva SSO. Los parámetros del deep-link sobreviven al ciclo de login (patrón `pending_goto` ya existente en el portal). |
-| 3 | Datos del caso viajan por querystring (URL) | Solo datos que ya son del usuario, por HTTPS, hacia nuestro propio dominio. Truncado a ~2.000 chars. Sin credenciales ni tokens. |
+| 3 | Datos del caso viajan por POST desde un HTML `file://` | Solo datos que ya son del usuario, por HTTPS hacia nuestro propio dominio (`target` fijo, sin CORS por ser navegación, no fetch). Sin credenciales ni tokens en el payload. Sin límite de tamaño artificial (§4.1) |
 | 4 | Duplicados por variaciones del número de expediente (espacios, formato) | Normalizar la clave (uppercase, colapsar espacios) en el upsert de `capture`. Si aun así se duplica, el usuario puede borrar la ficha sobrante. |
 | 5 | Feriados/inhábiles varían por jurisdicción | v1: feriados nacionales + ferias, editables por admin; disclaimer "verificá el plazo" junto a la calculadora. Jurisdicciones por usuario: futuro. |
 | 6 | ¿Ítem de Bitácora visible con candado u oculto en planes sin la feature? | Recomendación: visible con candado (upsell). A confirmar. |
@@ -716,7 +774,7 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 | Q7 | ¿El mini-visor del informe individual se abre siempre, o se respeta la config "abrir visor automáticamente"? | Respeta la config existente | — |
 | Q8 | ¿Distinguir "hecho procesal" vs "extraprocesal" en el check (como Lex-Doctor), o alcanza el check simple + campo carácter opcional? | Check simple + carácter opcional en Vencimiento | — |
 | Q9 | Nombres finales de las secciones: ¿"Bitácora" y "Mis expedientes" quedan? | Quedan | — |
-| Q10 | ¿Subida del snapshot completo por la app (sin el recorte del querystring) como evolución? | Diferido; solo si los usuarios reclaman más detalle en el historial | — |
+| Q10 | ~~¿Subida del snapshot completo por la app (sin el recorte del querystring) como evolución?~~ | **Resuelta en v6**: el cambio a POST-formulario (§4.1) transporta el snapshot completo desde el primer momento, sin recorte ni evolución pendiente | — |
 | Q11 | Feriados: ¿los mantiene el admin desde el dashboard? ¿Se cargan ferias judiciales por jurisdicción o solo la nacional? | Admin los mantiene; v1 solo nacional + ferias de enero/julio | — |
 | Q12 | ¿La importación/restauración entra en Fase 1 o se difiere? (§11, nota de la Fase 1) | Entra en Fase 1 (la propuesta la incluye completa) | — |
 
