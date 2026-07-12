@@ -81,3 +81,10 @@ tests/**/__pycache__/
 # ─── Generador de diagramas (vendored mermaid + temporales) ──
 docs/_mermaid.min.js
 docs/_diagrama_tmp.html
+
+# ─── Artefactos locales de sesión / dev (no versionar) ──────
+.claude/
+tests/*.png
+tests/tests/
+ext-header-preview.png
+extension-app/imagenes/old/
