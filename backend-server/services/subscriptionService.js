@@ -297,12 +297,15 @@ async function applyTrialBonus(subscriptionId, planName, nextBillingDate, client
          -- Sin esto, next_billing_date quedaba NULL durante el primer período →
          -- cancelar/pausar/reactivar se rompían (cancel_at=NULL, gracia a NOW(),
          -- reactivación con cobro inmediato duplicado).
-         next_billing_date  = $2,
+         -- next_billing_date usa $4 (no $2): trial_bonus_until es timestamptz y
+         -- next_billing_date es timestamp sin tz; reusar el mismo parámetro para
+         -- ambos da "inconsistent types deduced for parameter $2".
+         next_billing_date  = $4,
          last_payment_at    = NOW(),
          status             = 'active',
          updated_at         = NOW()
      WHERE id = $3`,
-    [newUsageLimit, nextBillingDate, subscriptionId]
+    [newUsageLimit, nextBillingDate, subscriptionId, nextBillingDate]
   );
 
   logger.info('[SubscriptionService] Trial bonus aplicado', { subscriptionId, newUsageLimit, nextBillingDate });
