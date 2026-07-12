@@ -484,6 +484,13 @@ if (signer.isReady()) {
 cron.schedule('0 3 1 * *', async () => {
     logger.info('🔄 [CRON] Iniciando reset mensual de uso...');
     try {
+        // M1: el reset per-ciclo de las cuentas pagas lo hace applyRenewal en la fecha de
+        // cobro real de cada usuario. Este cron mensual solo debe ser una RED DE SEGURIDAD,
+        // no la vía principal. Antes reseteaba TODAS las activas el día 1, con dos efectos
+        // malos: (a) un trial activado sin pago (payment_provider IS NULL) recibía 20 usos
+        // nuevos cada mes → trial renovable para siempre; (b) un pago facturado (ej.) el 20
+        // recibía un SEGUNDO reset el día 1 → hasta ~2× cuota por ciclo. Ahora: se excluyen
+        // los trials (solo pagas) y no se re-resetea dentro del ciclo (period_start reciente).
         const result = await pool.query(`
             UPDATE subscriptions
             SET proc_usage              = 0,
@@ -494,6 +501,8 @@ cron.schedule('0 3 1 * *', async () => {
                 period_start            = NOW(),
                 updated_at              = NOW()
             WHERE status = 'active'
+              AND payment_provider IS NOT NULL
+              AND period_start < NOW() - INTERVAL '27 days'
             RETURNING user_id
         `);
         logger.info(`✅ [CRON] Reset mensual completado: ${result.rowCount} suscripciones reseteadas`);
