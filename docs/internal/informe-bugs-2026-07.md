@@ -4,6 +4,9 @@
 > Método: revisión en paralelo de 3 zonas (backend cobranza/auth · backend ejecución/cuotas · app Electron) + verificación manual de cada hallazgo alto/crítico contra el código real (archivo:línea).
 > Alcance: solo lectura. No se modificó ningún archivo. Todos los `archivo:línea` refieren al estado del repo en `main` al 2026-07-10 (último commit `b950ba8`).
 
+> **Estado de corrección (actualizado 2026-07-12):** ✅ **Lote 2A CERRADO** — C1, C2, A1, M4, A4, A2, A3 corregidos y deployados a prod. C1/C2/A1/M4 verificados **E2E con pago sandbox real** (el E2E cazó además un bug de tipos en `applyTrialBonus` que solo se veía al aplicar un pago real). A4 verificado en prod. A2/A3 por inspección + boot + validación SQL. Commits: `29521f0` (C1), `06e5cb1`+`5ba31e8` (A1), `0ea2bfa` (C2+M4), `9b46a51` (A4), `f9bd833` (A2+A3). **Pendientes:** Lote 2B (M1, M2/SEC-4, M3, B2, B4, B5, B8), Lote 2C (Electron: A5, A6, M5, M6, M8, M10, B1, B6), Lote 2D (U9.3). Ver plan `plan-implementacion-integral-2026-07.md`.
+> **Hallazgo del E2E (relevante para B3):** el pago plan-based real **no se atribuye solo** (sin `external_reference`, `payer_email` ≠ email del portal, el `payment` de MP no trae `preapproval_id`). A2/A3 acotan el claim/IDOR pero la atribución automática del primer pago plan-based sigue siendo frágil → validar con un pago sandbox real en la prep de B3.
+
 ---
 
 ## 0. Cómo leer este informe
