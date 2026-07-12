@@ -18,25 +18,33 @@ router.post('/execution/start', authenticateToken, async (req, res) => {
     }
 
     try {
-        // 1. Limpiar locks expirados de todos los usuarios
-        await db.query(`DELETE FROM active_executions WHERE expires_at < NOW()`);
-
-        // 2. Verificar si existe un lock activo para este usuario
-        const existing = await db.query(
-            `SELECT machine_id FROM active_executions WHERE user_id = $1`,
+        // SEC-4/M2: enforcement del trial ANTES de ejecutar. El trial (payment_provider
+        // IS NULL) tiene 20 usos globales compartidos. El pre-check del cliente no es
+        // confiable (un cliente adulterado podría saltearlo) y log-execution corre DESPUÉS
+        // de la ejecución. Este gate —por el que pasa TODA ejecución— frena antes de correr.
+        const subRes = await db.query(
+            `SELECT s.payment_provider, s.usage_count, s.usage_limit
+             FROM subscriptions s WHERE s.user_id = $1`,
             [userId]
         );
-
-        if (existing.rows.length > 0 && existing.rows[0].machine_id !== machineId) {
-            return res.status(409).json({
+        const sub = subRes.rows[0];
+        if (sub && !sub.payment_provider && sub.usage_count >= sub.usage_limit) {
+            return res.status(403).json({
                 success: false,
-                code:    'DEVICE_LOCKED',
-                error:   'Hay una ejecución en curso en otro dispositivo. Esperá a que finalice o aguardá 30 minutos.'
+                code:    'TRIAL_EXHAUSTED',
+                error:   'Agotaste tus usos de prueba. Contactá al administrador para activar tu cuenta.'
             });
         }
 
-        // 3. Upsert: adquirir o renovar lock para este dispositivo
-        await db.query(`
+        // 1. Limpiar locks expirados de todos los usuarios
+        await db.query(`DELETE FROM active_executions WHERE expires_at < NOW()`);
+
+        // 2. M3: adquisición ATÓMICA del lock. Antes el SELECT y el upsert eran pasos
+        //    separados (TOCTOU): dos dispositivos podían pasar el SELECT y ambos upsertear,
+        //    corriendo a la vez. Ahora el INSERT ... ON CONFLICT DO UPDATE solo renueva si
+        //    el lock vivo es del MISMO dispositivo (WHERE machine_id = EXCLUDED.machine_id);
+        //    si otro dispositivo lo tiene, 0 filas → 409. Es una sola sentencia atómica.
+        const lock = await db.query(`
             INSERT INTO active_executions
                 (user_id, machine_id, script_name, started_at, last_heartbeat, expires_at)
             VALUES
@@ -47,7 +55,17 @@ router.post('/execution/start', authenticateToken, async (req, res) => {
                 started_at     = NOW(),
                 last_heartbeat = NOW(),
                 expires_at     = NOW() + INTERVAL '${TTL_MINUTES} minutes'
+            WHERE active_executions.machine_id = EXCLUDED.machine_id
+            RETURNING id
         `, [userId, machineId, scriptName || null]);
+
+        if (lock.rows.length === 0) {
+            return res.status(409).json({
+                success: false,
+                code:    'DEVICE_LOCKED',
+                error:   `Hay una ejecución en curso en otro dispositivo. Esperá a que finalice o aguardá ${TTL_MINUTES} minutos.`
+            });
+        }
 
         return res.json({
             success:            true,
