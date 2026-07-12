@@ -1058,7 +1058,7 @@ router.get('/forgot-password', (req, res) => {
 });
 
 // ─── POST /auth/forgot-password  (envía el reset email) ───────────────────────
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', loginLimiter, async (req, res) => {
     const { email } = req.body || {};
     const db = req.app.get('db');
 
@@ -1075,16 +1075,6 @@ router.post('/forgot-password', async (req, res) => {
     <p>Te enviamos un enlace para restablecer tu contraseña.<br>Revisá tu bandeja de entrada (y la carpeta de spam).</p>
     </div></body></html>`;
 
-    const notFoundPage = (emailVal) => `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-    <title>Email no encontrado — Procurador SCW</title>
-    <style>${cardStyle} h2{color:#dc2626}</style>
-    </head><body><div class="card"><div style="font-size:48px;margin-bottom:12px">⚠️</div>
-    <h2>Procurador SCW</h2>
-    <p>No encontramos ninguna cuenta asociada al email <strong>${emailVal}</strong>.</p>
-    <p>Verificá que sea el email con el que te registraste, o <a href="/register">creá una cuenta nueva</a>.</p>
-    <p style="margin-top:20px"><a href="/auth/forgot-password">← Volver</a></p>
-    </div></body></html>`;
-
     if (!email) return res.redirect('/auth/forgot-password');
 
     try {
@@ -1093,7 +1083,9 @@ router.post('/forgot-password', async (req, res) => {
             [email.toLowerCase().trim(), 'admin']
         );
         if (result.rows.length === 0) {
-            return res.send(notFoundPage(email));
+            // A4: respuesta genérica idéntica exista o no la cuenta (anti-enumeración).
+            // Antes se reflejaba el email sin escapar en notFoundPage → XSS reflejado.
+            return res.send(successPage);
         }
         const u = result.rows[0];
         const token   = require('crypto').randomBytes(32).toString('hex');
