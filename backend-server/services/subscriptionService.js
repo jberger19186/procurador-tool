@@ -271,7 +271,7 @@ async function linkPreapproval(userId, preapprovalId) {
  * @param {string} planName
  * @param {Date}   nextBillingDate
  */
-async function applyTrialBonus(subscriptionId, planName, nextBillingDate) {
+async function applyTrialBonus(subscriptionId, planName, nextBillingDate, client = db) {
   const limits = PLAN_LIMITS[planName];
   if (!limits) throw new Error(`Plan desconocido: ${planName}`);
 
@@ -283,7 +283,7 @@ async function applyTrialBonus(subscriptionId, planName, nextBillingDate) {
   // + 5 informes = 50 global ≥ límite, con submódulos aún disponibles).
   const newUsageLimit = 999999;
 
-  await db.query(
+  await client.query(
     `UPDATE subscriptions
      SET usage_limit        = $1,
          trial_bonus_until  = $2,
@@ -316,14 +316,14 @@ async function applyTrialBonus(subscriptionId, planName, nextBillingDate) {
  * @param {string} planName
  * @param {Date}   nextBillingDate
  */
-async function applyRenewal(subscriptionId, planName, nextBillingDate) {
+async function applyRenewal(subscriptionId, planName, nextBillingDate, client = db) {
   const limits = PLAN_LIMITS[planName];
   if (!limits) throw new Error(`Plan desconocido: ${planName}`);
 
   // Igual que applyTrialBonus: el global queda desactivado (999999); rige el submódulo.
   const baseProcLimit = 999999;
 
-  await db.query(
+  await client.query(
     `UPDATE subscriptions
      SET usage_limit             = $1,
          usage_count             = 0,

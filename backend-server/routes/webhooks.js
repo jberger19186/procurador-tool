@@ -101,13 +101,17 @@ router.post('/mercadopago', verifyMPSignature, async (req, res) => {
       );
       const isNew = rowCount > 0;
       const isPreapproval = (type === 'preapproval' || type === 'subscription_preapproval');
+      const isPayment     = (type === 'payment' || type === 'subscription_authorized_payment');
 
-      // Los PAGOS se deduplican estricto: un mismo pago no debe procesarse 2 veces
-      // (evita doble factura / doble aplicación). Los PREAPPROVALS se procesan SIEMPRE:
-      // un mismo preapproval emite varios eventos en su ciclo (authorized→paused→
-      // cancelled) con el MISMO id → dedup por id perdería los cambios de estado. El sync
-      // de estado (handlePreapprovalEvent) es idempotente, así que reprocesar es inocuo.
-      if (!isNew && !isPreapproval) {
+      // C2: PAGOS y PREAPPROVALS se reprocesan SIEMPRE (aunque el id ya esté en
+      // webhook_events). MP emite varios webhooks para el MISMO id a lo largo del ciclo
+      // (pago: pending→approved; preapproval: authorized→paused→cancelled). Deduplicar por
+      // existencia del id perdía el evento posterior — el bug C2 descartaba el 'approved'
+      // que llegaba tras el 'pending' → pago perdido. Ambos handlers son idempotentes
+      // (handlePaymentEvent salta si el pago ya está approved; handlePreapprovalEvent
+      // sincroniza estado), así que reprocesar es seguro. Solo se ignoran duplicados de
+      // tipos no manejados (que de todos modos no harían nada).
+      if (!isNew && !isPreapproval && !isPayment) {
         logger.info('[Webhooks] Evento duplicado ignorado', { externalId, type });
         return;
       }
@@ -190,66 +194,100 @@ async function handlePaymentEvent(paymentId) {
     return;
   }
 
-  // Guardar el pago en la tabla payments (upsert por external_payment_id)
-  const { rows: [savedPayment] } = await db.query(
-    `INSERT INTO payments
-       (user_id, subscription_id, external_payment_id, amount, currency, status, plan, period_start, raw_response)
-     VALUES ($1, $2, $3, $4, 'ARS', $5, $6, NOW(), $7)
-     ON CONFLICT (external_payment_id) DO UPDATE
-       SET status = EXCLUDED.status, raw_response = EXCLUDED.raw_response
-     RETURNING id`,
-    [
-      sub.user_id, sub.sub_id, String(paymentId),
-      transaction_amount, status,
-      sub.plan, JSON.stringify(payment)
-    ]
+  // C2 (idempotencia): MP envía varios webhooks para el MISMO payment.id a medida que
+  // cambia de estado (pending → approved). Antes se deduplicaba por existencia del id en
+  // webhook_events, así que el 'approved' que llegaba tras un 'pending' se descartaba y el
+  // pago se perdía. Ahora los pagos SIEMPRE se reprocesan (ver handler principal) y la
+  // idempotencia se resuelve acá: si este pago YA estaba 'approved', el bono/renovación ya
+  // se aplicó en una transacción committeada anterior → no repetir.
+  const { rows: [prevPay] } = await db.query(
+    `SELECT status FROM payments WHERE external_payment_id = $1`,
+    [String(paymentId)]
   );
+  const alreadyApproved = prevPay && prevPay.status === 'approved';
 
   if (status === 'approved') {
-    const nextBillingDate = new Date();
-    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
-
-    const isFirstPayment = !sub.trial_bonus_until;
-
-    if (isFirstPayment) {
-      // Primer pago → aplicar trial bonus (usage_limit = plan + 20)
-      await applyTrialBonus(sub.sub_id, sub.plan, nextBillingDate);
-      logger.info('[Webhooks] Primer pago aprobado — trial bonus aplicado', { userId: sub.user_id });
-    } else {
-      // Renovación (o pago luego de fallo) → sin bonus, limpia gracia
-      await applyRenewal(sub.sub_id, sub.plan, nextBillingDate);
-      logger.info('[Webhooks] Renovación/recuperación aprobada', { userId: sub.user_id });
+    if (alreadyApproved) {
+      logger.info('[Webhooks] Pago approved ya aplicado — idempotente, se omite', { paymentId });
+      return;
     }
 
-    // Marcar método de pago configurado en la suscripción
-    // (preapprovalId puede ser null en sandbox — usamos el paymentId como fallback)
-    await db.query(
-      `UPDATE subscriptions
-       SET payment_provider          = 'mercadopago',
-           external_subscription_id  = COALESCE(NULLIF(external_subscription_id, ''), $1),
-           updated_at                = NOW()
-       WHERE id = $2`,
-      [preapprovalId || `pay-${paymentId}`, sub.sub_id]
-    );
+    const nextBillingDate = new Date();
+    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+    const isFirstPayment = !sub.trial_bonus_until;
 
-    // Si la cuenta estaba suspendida por falta de pago → reactivar
-    // (puede ocurrir si el usuario pagó después de que venció la gracia)
-    await db.query(
-      `UPDATE users
-       SET registration_status = 'active', updated_at = NOW()
-       WHERE id = $1
-         AND registration_status IN ('suspended', 'suspended_plan_expired')`,
-      [sub.user_id]
-    );
+    // C2 + M4: transacción atómica. El pago se marca 'approved' en la MISMA transacción
+    // que aplica el bono/renovación, marca el método de pago y reactiva la cuenta. Si algo
+    // falla en el medio → ROLLBACK completo → el pago NO queda 'approved' → el reintento de
+    // MP reprocesa desde cero (el guard alreadyApproved solo ve pagos ya committeados).
+    const client = await db.connect();
+    let savedPaymentId;
+    try {
+      await client.query('BEGIN');
 
-    // Crear registro de factura pendiente (fire-and-forget)
-    // El admin sube el PDF manualmente desde el dashboard → sección Facturación
-    // (Facturante automático desactivado hasta contratar el servicio)
-    enqueueInvoice(savedPayment.id).catch(err =>
+      const { rows: [savedPayment] } = await client.query(
+        `INSERT INTO payments
+           (user_id, subscription_id, external_payment_id, amount, currency, status, plan, period_start, raw_response)
+         VALUES ($1, $2, $3, $4, 'ARS', $5, $6, NOW(), $7)
+         ON CONFLICT (external_payment_id) DO UPDATE
+           SET status = EXCLUDED.status, raw_response = EXCLUDED.raw_response
+         RETURNING id`,
+        [sub.user_id, sub.sub_id, String(paymentId), transaction_amount, status, sub.plan, JSON.stringify(payment)]
+      );
+      savedPaymentId = savedPayment.id;
+
+      if (isFirstPayment) {
+        await applyTrialBonus(sub.sub_id, sub.plan, nextBillingDate, client);
+      } else {
+        await applyRenewal(sub.sub_id, sub.plan, nextBillingDate, client);
+      }
+
+      // Marcar método de pago configurado (preapprovalId puede ser null en sandbox → fallback)
+      await client.query(
+        `UPDATE subscriptions
+         SET payment_provider          = 'mercadopago',
+             external_subscription_id  = COALESCE(NULLIF(external_subscription_id, ''), $1),
+             updated_at                = NOW()
+         WHERE id = $2`,
+        [preapprovalId || `pay-${paymentId}`, sub.sub_id]
+      );
+
+      // Si la cuenta estaba suspendida por falta de pago → reactivar
+      await client.query(
+        `UPDATE users
+         SET registration_status = 'active', updated_at = NOW()
+         WHERE id = $1 AND registration_status IN ('suspended', 'suspended_plan_expired')`,
+        [sub.user_id]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;   // propaga → processed_at NO se marca → MP reintenta y reprocesa limpio
+    } finally {
+      client.release();
+    }
+
+    logger.info('[Webhooks] Pago aprobado aplicado (tx atómica)', { userId: sub.user_id, isFirstPayment });
+
+    // Factura pendiente fuera de la transacción (secundaria; protegida por UNIQUE payment_id
+    // → un reintento no duplica). Fire-and-forget.
+    enqueueInvoice(savedPaymentId).catch(err =>
       logger.error('[Webhooks] Error creando registro de factura', { paymentId, err: err.message })
     );
 
-  } else if (status === 'rejected') {
+  } else {
+    // No aprobado (pending / rejected / etc.): registrar el pago para auditoría.
+    await db.query(
+      `INSERT INTO payments
+         (user_id, subscription_id, external_payment_id, amount, currency, status, plan, period_start, raw_response)
+       VALUES ($1, $2, $3, $4, 'ARS', $5, $6, NOW(), $7)
+       ON CONFLICT (external_payment_id) DO UPDATE
+         SET status = EXCLUDED.status, raw_response = EXCLUDED.raw_response`,
+      [sub.user_id, sub.sub_id, String(paymentId), transaction_amount, status, sub.plan, JSON.stringify(payment)]
+    );
+
+    if (status === 'rejected') {
     // Pago rechazado → gracia de 3 días
     const graceEnd = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
@@ -274,6 +312,7 @@ async function handlePaymentEvent(paymentId) {
     );
 
     logger.warn('[Webhooks] Pago rechazado — gracia otorgada', { userId: sub.user_id, graceEnd });
+    }
   }
 }
 
