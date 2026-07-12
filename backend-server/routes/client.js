@@ -339,14 +339,11 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
                 });
             }
 
-            // Incrementar contador específico de forma atómica
-            const bonusColName = {
-                'proc_usage':               'proc_bonus',
-                'batch_usage':              'batch_bonus',
-                'informe_usage':            'informe_bonus',
-                'monitor_novedades_usage':  'monitor_novedades_bonus'
-            }[usageCol];
-
+            // Incrementar contador específico de forma atómica.
+            // effectiveLimit ya incluye el bonus (limitVal + bonusVal), así que
+            // se compara el uso CRUDO contra él. Antes se sumaba el bonus también
+            // del lado izquierdo (usage + bonus < limit + bonus), lo que cancelaba
+            // el bonus algebraicamente y bloqueaba en el límite base (bug C1).
             let updateQuery;
             let updateParams;
             if (effectiveLimit !== null) {
@@ -356,7 +353,7 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
                         usage_count = usage_count + 1
                     WHERE user_id = $1
                       AND expires_at > NOW()
-                      AND (${usageCol} + COALESCE(${bonusColName}, 0)) < $2
+                      AND ${usageCol} < $2
                     RETURNING ${usageCol}, usage_count
                 `;
                 updateParams = [userId, effectiveLimit];
