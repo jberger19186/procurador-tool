@@ -293,6 +293,13 @@ async function applyTrialBonus(subscriptionId, planName, nextBillingDate) {
          batch_usage        = 0,
          monitor_novedades_usage = 0,
          period_start       = NOW(),
+         -- A1: el primer pago debe dejar la suscripción en un estado consistente.
+         -- Sin esto, next_billing_date quedaba NULL durante el primer período →
+         -- cancelar/pausar/reactivar se rompían (cancel_at=NULL, gracia a NOW(),
+         -- reactivación con cobro inmediato duplicado).
+         next_billing_date  = $2,
+         last_payment_at    = NOW(),
+         status             = 'active',
          updated_at         = NOW()
      WHERE id = $3`,
     [newUsageLimit, nextBillingDate, subscriptionId]
