@@ -23,12 +23,21 @@ router.put('/profile', authenticateToken, async (req, res) => {
         const values = [];
         let idx = 1;
 
-        if (nombre !== undefined) { fields.push(`nombre = $${idx++}`); values.push(nombre.trim()); }
-        if (apellido !== undefined) { fields.push(`apellido = $${idx++}`); values.push(apellido.trim()); }
-        if (telefono !== undefined) { fields.push(`telefono = $${idx++}`); values.push(telefono.trim()); }
+        // B2: procesar solo strings. Antes el guard usaba falsy (!nombre) pero las ramas
+        // usaban !== undefined → un body como {nombre: null, apellido: "X"} pasaba el guard
+        // y ejecutaba null.trim() → TypeError (500). Con typeof, un campo null/no-string se
+        // ignora en vez de crashear.
+        if (typeof nombre === 'string') { fields.push(`nombre = $${idx++}`); values.push(nombre.trim()); }
+        if (typeof apellido === 'string') { fields.push(`apellido = $${idx++}`); values.push(apellido.trim()); }
+        if (typeof telefono === 'string') { fields.push(`telefono = $${idx++}`); values.push(telefono.trim()); }
         // domicilio es jsonb: siempre serializar (un string plano como "Calle 123" no es
         // JSON válido y rompía el UPDATE; JSON.stringify lo convierte en string JSON)
-        if (domicilio !== undefined) { fields.push(`domicilio = $${idx++}`); values.push(JSON.stringify(domicilio)); }
+        if (domicilio !== undefined && domicilio !== null) { fields.push(`domicilio = $${idx++}`); values.push(JSON.stringify(domicilio)); }
+
+        // Si no quedó ningún campo real para actualizar (todos null/no-string), no tocar la fila.
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'Al menos un campo válido debe ser proporcionado' });
+        }
 
         fields.push(`updated_at = NOW()`);
         values.push(userId);
