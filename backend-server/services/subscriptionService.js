@@ -250,10 +250,40 @@ async function linkPreapproval(userId, preapprovalId) {
     throw new Error(`La suscripción en MercadoPago no está autorizada (estado: ${preapproval.status})`);
   }
 
+  // A3 (anti-IDOR): el preapproval_id llega en el body del confirm (viaja en el
+  // back_url del redirect de MP → historial del navegador, link reenviado, PC de
+  // estudio compartida). Sin validar dueño, un usuario autenticado podía vincularse
+  // el preapproval autorizado de OTRO. Se rechaza si:
+  //   (a) ya está vinculado a otra suscripción,
+  //   (b) su external_reference apunta a otro user_{id},
+  //   (c) su payer_email pertenece a otra cuenta registrada.
+  // El flujo plan-based legítimo pasa: el preapproval propio no está vinculado aún y
+  // (en plan-based) no trae external_reference ni payer_email de otra cuenta.
+  const { rows: [owner] } = await db.query(
+    'SELECT user_id FROM subscriptions WHERE external_subscription_id = $1',
+    [preapprovalId]
+  );
+  if (owner && owner.user_id !== userId) {
+    throw new Error('Este preapproval ya está asociado a otra cuenta');
+  }
+  const extRef = preapproval.external_reference || '';
+  if (extRef.startsWith('user_') && extRef !== `user_${userId}`) {
+    throw new Error('El preapproval no pertenece a esta cuenta');
+  }
+  const payerEmail = (preapproval.payer_email || '').toLowerCase();
+  if (payerEmail) {
+    const { rows: [other] } = await db.query(
+      'SELECT id FROM users WHERE lower(email) = $1 AND id <> $2',
+      [payerEmail, userId]
+    );
+    if (other) throw new Error('El preapproval pertenece a otra cuenta');
+  }
+
   await db.query(
     `UPDATE subscriptions
      SET external_subscription_id = $1,
          payment_provider          = 'mercadopago',
+         checkout_initiated_at     = NULL,
          updated_at                = NOW()
      WHERE user_id = $2`,
     [preapprovalId, userId]
@@ -487,14 +517,20 @@ async function markPaymentConfigured(userId) {
   //     ventana de minutos (aceptable en Beta; el más reciente gana, el otro se
   //     resuelve manualmente).
   if (!authorized && subRow.checkout_initiated_at) {
-    const windowStart = new Date(new Date(subRow.checkout_initiated_at).getTime() - 2 * 60 * 1000);
+    const initiatedAt = new Date(subRow.checkout_initiated_at).getTime();
+    const windowStart = new Date(initiatedAt - 2 * 60 * 1000);
+    // A2: techo de la ventana. Antes solo había piso → un checkout_initiated_at viejo
+    // (nunca se limpiaba) permitía reclamar el pago de OTRO usuario hecho semanas/meses
+    // después. Ahora el preapproval debe haberse creado dentro de [inicio-2min, inicio+30min].
+    const windowEnd = new Date(initiatedAt + 30 * 60 * 1000);
     const ourPlanIds = [process.env.MP_PLAN_COMBO_PROMO_ID, process.env.MP_PLAN_EXTENSION_PROMO_ID].filter(Boolean);
     const candidates = [];
     for (const p of searchResults) {
       if (p.status !== 'authorized') continue;
       if (!ourPlanIds.includes(p.preapproval_plan_id)) continue;
       if (p.external_reference || p.payer_email) continue;     // atribuible por otra vía → no reclamar
-      if (new Date(p.date_created) < windowStart) continue;
+      const created = new Date(p.date_created);
+      if (created < windowStart || created > windowEnd) continue;
       const { rows: [linked] } = await db.query(
         'SELECT 1 FROM subscriptions WHERE external_subscription_id = $1', [p.id]
       );
@@ -565,6 +601,9 @@ async function markPaymentConfigured(userId) {
          external_subscription_id  = $1,
          cancel_at                 = NULL,
          auto_renewal              = TRUE,
+         -- A2: limpiar la marca del checkout una vez vinculado, para que un
+         -- checkout_initiated_at rancio no habilite reclamar pagos futuros ajenos.
+         checkout_initiated_at     = NULL,
          updated_at                = NOW()
      WHERE user_id = $2`,
     [authorized.id, userId]
