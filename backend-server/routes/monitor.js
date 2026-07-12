@@ -651,11 +651,23 @@ router.post('/log', async (req, res) => {
     const userId = req.user.id;
 
     try {
+        // B5: usar parte_id solo si la parte es del usuario. Antes se insertaba el parte_id
+        // del body sin validar dueño → un usuario podía loguear contra partes ajenas y
+        // contaminar el historial por parte que ve el admin (IDOR de escritura).
+        let validParteId = null;
+        if (parte_id) {
+            const { rows } = await db.query(
+                'SELECT 1 FROM monitor_partes WHERE id = $1 AND user_id = $2',
+                [parte_id, userId]
+            );
+            if (rows.length > 0) validParteId = parte_id;
+        }
+
         await db.query(
             `INSERT INTO monitor_consultas_log
                  (parte_id, user_id, modo, total_encontrados, nuevos_detectados, tiempo_ejecucion_ms, error)
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [parte_id || null, userId, modo || null, total_encontrados || 0,
+            [validParteId, userId, modo || null, total_encontrados || 0,
              nuevos_detectados || 0, tiempo_ejecucion_ms || null, error || null]
         );
 
