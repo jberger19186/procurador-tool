@@ -68,10 +68,13 @@ router.post('/verify-session', authenticateToken, async (req, res) => {
             });
         }
 
+        // B4: expires_at NULL = sin vencimiento (no expirada). Antes new Date(null) daba
+        // epoch 1970 → cualquier suscripción activa sin expires_at (ej. admins/cuentas
+        // reseteadas) recibía 403 "expirada" con mensaje engañoso.
         const now = new Date();
-        const expiresAt = new Date(user.expires_at);
+        const expiresAt = user.expires_at ? new Date(user.expires_at) : null;
 
-        if (expiresAt < now) {
+        if (expiresAt && expiresAt < now) {
             return res.status(403).json({
                 error: 'Tu suscripción ha expirado',
                 action: 'renew'
@@ -783,7 +786,19 @@ router.post('/notifications/:id/read', authenticateToken, async (req, res) => {
 // ─── POST /client/ai/chat ─────────────────────────────────────────────────────
 // Chat híbrido: llama a Claude Haiku como fallback cuando el FAQ local no matchea.
 // Rate limit: 20 mensajes por usuario por hora (en memoria).
+// Nota: al reiniciar el proceso (PM2 max_memory_restart) el contador se reinicia — límite
+// inherente al rate-limit en memoria; aceptable por el bajo costo de Haiku. Persistir en DB
+// sería la mejora futura si el abuso escala.
 const aiChatRateLimits = new Map(); // userId → { count, resetAt }
+// B8: podar entradas vencidas periódicamente para que el Map no crezca sin límite.
+let aiChatLastSweep = 0;
+function sweepAiChatRateLimits(now) {
+    if (now - aiChatLastSweep < 600000) return;   // como mucho cada 10 min
+    aiChatLastSweep = now;
+    for (const [uid, rl] of aiChatRateLimits) {
+        if (now > rl.resetAt) aiChatRateLimits.delete(uid);
+    }
+}
 
 const { AI_SUPPORT_SYSTEM_PROMPT } = require('../utils/aiSupportPrompt');
 
@@ -799,6 +814,7 @@ router.post('/ai/chat', authenticateToken, async (req, res) => {
     // Rate limit por usuario: 20 mensajes/hora
     const userId = req.user.id;
     const now = Date.now();
+    sweepAiChatRateLimits(now);
     const rl = aiChatRateLimits.get(userId) || { count: 0, resetAt: now + 3600000 };
     if (now > rl.resetAt) { rl.count = 0; rl.resetAt = now + 3600000; }
     if (rl.count >= 20) {
