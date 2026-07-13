@@ -864,21 +864,65 @@ ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94 "certbot renew"
 
 Cuando se genera y publica una nueva release de la app Electron, hacer estos pasos **en orden**:
 
-0. **Probar la versión sin instalar:** `npm start` (corre desde el código) y/o `npm run build:dir` (build real sin instalador). No publicar sin probar.
+0. **Probar la versión sin instalar:** `npm start` (corre desde el código) y/o `npm run build:dir` (build real sin instalador — verificar que el `.exe` empaquetado arranca limpio, `isPackaged:true`, sin errores). No publicar sin probar.
 1. Bumping de versión en `electron-app/package.json` (`"version"` + `"build.buildVersion"` si existe)
 2. **`git tag electron-vX.Y.Z` + push del tag** (fija el código fuente de esta versión, necesario para rollback / fix-forward)
-3. `npm run release` en `electron-app/` → genera instalador y lo sube a GitHub Releases
-4. **Actualizar en `backend-server/public/usuarios/app.js`**: la línea de versión en `download-item-desc` (ej: `v2.7.14`)
-   *(el link de descarga es dinámico via `/client/download/electron` → no necesita actualización)*
-5. Deploy `app.js` al servidor + `pm2 restart procurador-api`
+3. `npm run release` en `electron-app/` → genera instalador y lo sube a GitHub Releases (requiere `GH_TOKEN`, ver recuadro abajo)
+4. **Actualizar el texto de versión visible en 5 lugares** (el LINK de descarga en sí es dinámico, ver nota más abajo — solo el texto/número que ve el usuario hay que tocarlo a mano):
+   - `backend-server/public/usuarios/app.js` → línea de `download-item-desc` (ej: `· v2.7.37`)
+   - `backend-server/public/landing/index.html` → **4 menciones**: título de la ventana falsa del hero (`tb-title`), badge de la statusbar simulada (`ssb-accent`), badge "Versión X.X.X" del hero, y el footer (`foot-meta`). Atajo para encontrarlas todas: `grep -n "v2\.7\.\|Versión 2\.7\." backend-server/public/landing/index.html`
+5. Deploy de los archivos tocados al servidor:
+   - `app.js` → `/var/www/procurador/backend-server/public/usuarios/app.js` + `pm2 restart procurador-api`
+   - `landing/index.html` → `/var/www/procurador/backend-server/public/landing/index.html` (la landing la sirve **Nginx estático directo**, no Express — no hace falta `pm2 restart`, el cambio es inmediato)
+   - Verificar en vivo: `curl -s https://procuradortool.com | grep -o "v2\.7\.[0-9]*\|Versión 2\.7\.[0-9]*"` → debe mostrar solo la versión nueva
 6. Hacer commit + push
 
 > **Rollback de la app:** estrategia **fix-forward** — re-publicar el código bueno con una versión mayor nueva (el auto-updater no degrada). Detalle en `docs/internal/flujo-release-electron.md` §5.
 > **Backup de versiones:** automático — GitHub Releases conserva cada `.exe` publicado + el git tag conserva el código fuente.
 
 > **Nota sobre el link de descarga**: el portal usa `https://api.procuradortool.com/client/download/electron`
-> que consulta la GitHub API en tiempo real y redirige al `.exe` del último release.
-> Solo hay que actualizar el texto de versión visible (ej: `v2.7.14`), no la URL.
+> (`routes/client.js`, handler `GET /download/electron`) que consulta la GitHub API en tiempo real
+> (`GET /repos/jberger19186/procurador-tool/releases/latest`) y hace `res.redirect()` al `.exe` del
+> último release. **Esta URL nunca se toca ni se hardcodea** — se resuelve sola con cada `npm run release`.
+> Verificado funcionando (2026-07-13): tras publicar v2.7.37, el endpoint devolvió `Location:
+> https://github.com/.../releases/download/v2.7.37/Procurador-SCW-Setup-2.7.37.exe` sin tocar código.
+> Solo el **texto** que el usuario lee (paso 4 arriba) requiere edición manual — el enlace en sí, no.
+
+> **Cómo recuperar `GH_TOKEN` sin pegarlo a mano** (Windows Credential Manager, vía PowerShell):
+> el token vive guardado con `cmdkey` bajo el destino `GitHub - https://api.github.com/jberger19186`
+> (listalo con `cmdkey /list | Select-String github` si cambia). Se lee con la API nativa `CredRead`
+> de `advapi32.dll` (P/Invoke) — **el blob viene en UTF8, no en Unicode/UTF16** pese a que la struct
+> `CREDENTIAL` es `CharSet.Unicode` (ojo con ese detalle, da un string corrupto si se decodifica mal).
+> Patrón que funciona (todo en una sola invocación de PowerShell, el tipo no persiste entre llamadas):
+> ```powershell
+> $sig = @"
+> using System;
+> using System.Runtime.InteropServices;
+> public class CredManagerX {
+>     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+>     public static extern bool CredRead(string target, int type, int reservedFlag, out IntPtr credentialPtr);
+>     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+>     public struct CREDENTIAL {
+>         public int Flags; public int Type; public IntPtr TargetName; public IntPtr Comment;
+>         public long LastWritten; public int CredentialBlobSize; public IntPtr CredentialBlob;
+>         public int Persist; public int AttributeCount; public IntPtr Attributes;
+>         public IntPtr TargetAlias; public IntPtr UserName;
+>     }
+> }
+> "@
+> Add-Type -TypeDefinition $sig
+> $ptr = [IntPtr]::Zero
+> [CredManagerX]::CredRead("GitHub - https://api.github.com/jberger19186", 1, 0, [ref]$ptr) | Out-Null
+> $cred = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [type][CredManagerX+CREDENTIAL])
+> $bytes = New-Object byte[] $cred.CredentialBlobSize
+> [System.Runtime.InteropServices.Marshal]::Copy($cred.CredentialBlob, $bytes, 0, $cred.CredentialBlobSize)
+> $env:GH_TOKEN = [System.Text.Encoding]::UTF8.GetString($bytes)
+> Set-Location "C:\Users\JONATHAN\source\repos\ProcuradorTool\electron-app"
+> npm run release
+> ```
+> El token nunca se imprime en texto plano — solo se valida por longitud/prefijo si hace falta debug
+> (`$env:GH_TOKEN.Length`, `$env:GH_TOKEN.Substring(0,4)`). Usado y confirmado funcionando en el
+> release v2.7.37 (2026-07-13).
 
 ---
 
