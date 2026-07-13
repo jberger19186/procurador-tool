@@ -20,7 +20,9 @@ Se identificaron **2 hallazgos accionables nuevos** (no conocidos antes de esta 
 
 Más hallazgos menores (dependencias, device-binding, defensa en profundidad) detallados abajo.
 
-**Veredicto:** **apto para Beta controlada tras corregir XSS-1** (una hora de trabajo, solo frontend del dashboard). NET-1 debería cerrarse antes del público. El resto son mejoras de robustez sin urgencia.
+**Veredicto:** **apto para Beta controlada.** **XSS-1 y NET-1 ya fueron corregidos y verificados el mismo día** (ver estados abajo). El resto son mejoras de robustez sin urgencia (DEP-1 Electron EOL a planificar; DEP-2/AUTH-1/BIZ-1/UPL-1 opcionales).
+
+> **Actualización 2026-07-13 (cierre):** los 2 hallazgos accionables se corrigieron en esta misma sesión. XSS-1 → escapado de campos de usuario en `dashboard.js` (deployado a prod, verificado en browser). NET-1 → `ufw` activado en el server (solo 22/80/443; Express 3443/3444/3000/3001 ya no accesibles desde internet, verificado). **Nota operativa:** la config de `ufw` vive en el server (no en el repo) — si se reinstala el server, reactivar con `ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable`.
 
 ---
 
@@ -28,8 +30,8 @@ Más hallazgos menores (dependencias, device-binding, defensa en profundidad) de
 
 | ID | Sev. | Bloque | Estado |
 |---|---|---|---|
-| **XSS-1** | Alta | 4 (inyección) | Abierto — corregir antes de Beta |
-| **NET-1** | Media | 5 (config) | Abierto — corregir antes del público |
+| **XSS-1** | Alta | 4 (inyección) | ✅ **Corregido (2026-07-13)** — campos de usuario escapados en el dashboard (`escHtml`/`escAttr`), verificado en browser (0 tags `<img>` al renderizar el payload). Deployado a prod. Commit del fix en `dashboard.js` |
+| **NET-1** | Media | 5 (config) | ✅ **Corregido (2026-07-13)** — `ufw` activado en el server (allow solo 22/80/443). Verificado: puertos 3443/3444/3000/3001 bloqueados desde afuera (000/timeout), prod sigue 200 por Nginx, basic-auth de staging ya no bypasseable |
 | **DEP-1** | Media | 1 (deps) | Abierto — Electron 28 EOL, upgrade planificado |
 | **DEP-2** | Baja | 1 (deps) | Abierto — nodemailer <9 (params server-side, bajo riesgo real) |
 | **AUTH-1** | Baja/Info | 2 (sesión) | Abierto — JWT no atado a dispositivo (sessionKey/machineId sin usar) |
