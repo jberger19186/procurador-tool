@@ -33,7 +33,7 @@ Más hallazgos menores (dependencias, device-binding, defensa en profundidad) de
 | **XSS-1** | Alta | 4 (inyección) | ✅ **Corregido (2026-07-13)** — campos de usuario escapados en el dashboard (`escHtml`/`escAttr`), verificado en browser (0 tags `<img>` al renderizar el payload). Deployado a prod. Commit del fix en `dashboard.js` |
 | **NET-1** | Media | 5 (config) | ✅ **Corregido (2026-07-13)** — `ufw` activado en el server (allow solo 22/80/443). Verificado: puertos 3443/3444/3000/3001 bloqueados desde afuera (000/timeout), prod sigue 200 por Nginx, basic-auth de staging ya no bypasseable |
 | **DEP-1** | Media | 1 (deps) | ✅ **Corregido (2026-07-13)** — Electron 28→43.1.0 (+ builder 24→26, updater 6.8.3→6.8.9). Cero cambios de código (la app ya seguía patrones modernos). Verificado: `npm start` + `.exe` empaquetado real, todos los módulos de seguridad OK |
-| **DEP-2** | Baja | 1 (deps) | ✅ **Corregido (2026-07-13)** — nodemailer 6.9.14→9.0.3, `npm audit` backend en 0 vulnerabilidades. Verificado con envío de email real (id de mensaje devuelto por Brevo) |
+| **DEP-2** | Baja | 1 (deps) | ✅ **Corregido y verificado (2026-07-13)** — nodemailer 6.9.14→9.0.3, `npm audit` backend en 0 vulnerabilidades. Email de prueba real recibido y confirmado por el operador (bandeja de Gmail, formato/branding OK) |
 | **AUTH-1** | Baja/Info | 2 (sesión) | Abierto — JWT no atado a dispositivo (sessionKey/machineId sin usar) |
 | **BIZ-1** | Baja | 6 (negocio) | Aceptado — descarga de script no gateada (ejecución sí, SEC-4) |
 | **UPL-1** | Baja | 4 (uploads) | Abierto — mimetype declarado por el cliente, no sniffeado |
