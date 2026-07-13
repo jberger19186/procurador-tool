@@ -85,6 +85,61 @@ function showAlert(el, type, msg) {
     }
 }
 
+// ─── Toast / confirm no bloqueantes ───────────────────────────────────────────
+// Reemplazan alert()/confirm() en el flujo de checkout: los diálogos nativos del
+// navegador BLOQUEAN el hilo del renderer hasta que el usuario hace click en
+// "Aceptar" — esto causaba que herramientas de automatización (que no manejan
+// diálogos nativos) reportaran la página como "congelada" (ver U9.3 en
+// plan-pruebas-integral-2026-07.md). No cambia ninguna lógica del flujo, solo la UI.
+function ensureToastContainer() {
+    let c = document.getElementById('toast-container');
+    if (!c) {
+        c = document.createElement('div');
+        c.id = 'toast-container';
+        c.style.cssText = 'position:fixed;top:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:10px;max-width:380px';
+        document.body.appendChild(c);
+    }
+    return c;
+}
+
+function showToast(message, type = 'info') {
+    const colors = {
+        success: { bg: '#ecfdf5', border: '#10b981', text: '#065f46', icon: '✅' },
+        error:   { bg: '#fef2f2', border: '#ef4444', text: '#991b1b', icon: '❌' },
+        info:    { bg: '#eff6ff', border: '#1e40af', text: '#1e3a8a', icon: 'ℹ️' },
+    };
+    const c = colors[type] || colors.info;
+    const container = ensureToastContainer();
+    const el = document.createElement('div');
+    el.style.cssText = `background:${c.bg};border:1px solid ${c.border};color:${c.text};padding:12px 16px;border-radius:10px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.1);display:flex;align-items:flex-start;gap:10px;animation:toastIn .2s ease-out`;
+    el.innerHTML = `<span style="flex-shrink:0">${c.icon}</span><span style="flex:1;line-height:1.4">${escapeHtml(message)}</span><span style="cursor:pointer;opacity:.6;flex-shrink:0" onclick="this.parentElement.remove()">✕</span>`;
+    container.appendChild(el);
+    const autoDismissMs = type === 'error' ? 7000 : 5000;
+    setTimeout(() => { el.style.animation = 'toastOut .2s ease-in'; setTimeout(() => el.remove(), 200); }, autoDismissMs);
+}
+
+// Modal de confirmación no bloqueante. Devuelve una Promise<boolean> — se usa con
+// await en vez de la llamada síncrona bloqueante de confirm().
+function showConfirm(message, { confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' } = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:10001;display:flex;align-items:center;justify-content:center;padding:20px';
+        overlay.innerHTML = `
+            <div style="background:var(--card-bg,#fff);border-radius:12px;padding:24px;max-width:420px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+                <p style="font-size:14px;color:var(--text,#1f2937);line-height:1.5;white-space:pre-line;margin:0 0 20px">${escapeHtml(message)}</p>
+                <div style="display:flex;justify-content:flex-end;gap:8px">
+                    <button class="btn btn-outline btn-sm" data-role="cancel">${escapeHtml(cancelLabel)}</button>
+                    <button class="btn btn-primary btn-sm" data-role="confirm">${escapeHtml(confirmLabel)}</button>
+                </div>
+            </div>`;
+        const close = (result) => { overlay.remove(); resolve(result); };
+        overlay.querySelector('[data-role="confirm"]').onclick = () => close(true);
+        overlay.querySelector('[data-role="cancel"]').onclick = () => close(false);
+        overlay.onclick = (e) => { if (e.target === overlay) close(false); };
+        document.body.appendChild(overlay);
+    });
+}
+
 function limitDisplay(val) {
     if (val === null || val === undefined) return '∞';
     if (val === -1) return '∞';
@@ -1343,11 +1398,11 @@ async function changePlan(planName) {
     // Plan vencido (suspended_plan_expired): reactivación por PAGO REAL del plan elegido,
     // no el cambio-stub gratis. Va al checkout de MercadoPago.
     if (state.account?.registrationStatus === 'suspended_plan_expired') {
-        if (!confirm(`Vas a reactivar tu cuenta con el plan "${planName}". Te llevamos a MercadoPago para completar el pago.`)) return;
+        if (!(await showConfirm(`Vas a reactivar tu cuenta con el plan "${planName}". Te llevamos a MercadoPago para completar el pago.`))) return;
         closePlanModal();
         return initCheckout(planName);
     }
-    if (!confirm(`¿Confirmar cambio al plan "${planName}"?`)) return;
+    if (!(await showConfirm(`¿Confirmar cambio al plan "${planName}"?`))) return;
     closePlanModal();
     try {
         const res = await apiFetch('/users/change-plan', {
@@ -1357,32 +1412,32 @@ async function changePlan(planName) {
         if (!res) return;
         const data = await res.json();
         if (!res.ok) {
-            alert(data.error || 'Error al cambiar el plan.');
+            showToast(data.error || 'Error al cambiar el plan.', 'error');
         } else {
-            alert(data.message || 'Plan actualizado correctamente.');
+            showToast(data.message || 'Plan actualizado correctamente.', 'success');
             await loadAccount();
             renderPlan();
         }
     } catch (e) {
-        alert('Error de conexión. Intentá de nuevo.');
+        showToast('Error de conexión. Intentá de nuevo.', 'error');
     }
 }
 
 async function cancelScheduledPlan() {
-    if (!confirm('¿Cancelar el cambio de plan programado y seguir con tu plan actual?')) return;
+    if (!(await showConfirm('¿Cancelar el cambio de plan programado y seguir con tu plan actual?'))) return;
     try {
         const res = await apiFetch('/users/cancel-scheduled-plan', { method: 'POST' });
         if (!res) return;
         const data = await res.json();
         if (!res.ok) {
-            alert(data.error || 'No se pudo cancelar el cambio programado.');
+            showToast(data.error || 'No se pudo cancelar el cambio programado.', 'error');
         } else {
-            alert(data.message || 'Cambio de plan programado cancelado.');
+            showToast(data.message || 'Cambio de plan programado cancelado.', 'success');
             await loadAccount();
             renderPlan();
         }
     } catch (e) {
-        alert('Error de conexión. Intentá de nuevo.');
+        showToast('Error de conexión. Intentá de nuevo.', 'error');
     }
 }
 
@@ -1632,12 +1687,12 @@ async function initCheckout(planName) {
         });
         if (!res) return;
         if (res.status === 503) {
-            alert('El módulo de pagos estará disponible muy pronto. Por ahora podés contactar soporte para gestionar tu suscripción.');
+            showToast('El módulo de pagos estará disponible muy pronto. Por ahora podés contactar soporte para gestionar tu suscripción.', 'info');
             return;
         }
         if (!res.ok) {
             const d = await res.json();
-            alert(d.error || 'Error al iniciar el proceso de pago.');
+            showToast(d.error || 'Error al iniciar el proceso de pago.', 'error');
             return;
         }
         const data = await res.json();
@@ -1652,25 +1707,25 @@ async function initCheckout(planName) {
             window.location.href = data.init_point;
         }
     } catch (e) {
-        alert('Error de conexión. Intentá de nuevo más tarde.');
+        showToast('Error de conexión. Intentá de nuevo más tarde.', 'error');
     }
 }
 
 async function confirmCancelSubscription() {
-    if (!confirm('¿Cancelar tu suscripción? La cancelación será efectiva al finalizar el período actual y no se te cobrará más.')) return;
+    if (!(await showConfirm('¿Cancelar tu suscripción? La cancelación será efectiva al finalizar el período actual y no se te cobrará más.'))) return;
     try {
         const res = await apiFetch('/usuarios/api/checkout/cancel', { method: 'POST' });
         if (!res) return;
         const data = await res.json();
         if (!res.ok) {
-            alert(data.error || 'Error al cancelar la suscripción.');
+            showToast(data.error || 'Error al cancelar la suscripción.', 'error');
         } else {
-            alert('Suscripción cancelada. Seguirás teniendo acceso hasta el fin del período.');
+            showToast('Suscripción cancelada. Seguirás teniendo acceso hasta el fin del período.', 'success');
             await loadAccount();
             renderFact();
         }
     } catch (e) {
-        alert('Error de conexión. Intentá de nuevo.');
+        showToast('Error de conexión. Intentá de nuevo.', 'error');
     }
 }
 
@@ -1678,20 +1733,21 @@ async function confirmCancelSubscription() {
 // puede reanudar (caso de borde), el backend responde action:'checkout' y se ofrece
 // re-suscribirse con un método de pago nuevo.
 async function confirmReactivateSubscription() {
-    if (!confirm('¿Reactivar tu suscripción? Se reanuda el cobro automático en la fecha de renovación habitual. No se genera un cobro nuevo ahora.')) return;
+    if (!(await showConfirm('¿Reactivar tu suscripción? Se reanuda el cobro automático en la fecha de renovación habitual. No se genera un cobro nuevo ahora.'))) return;
     try {
         const res = await apiFetch('/usuarios/api/checkout/reactivate', { method: 'POST' });
         if (!res) return;
         const data = await res.json();
         if (res.ok) {
-            alert('✅ Suscripción reactivada. No se generó ningún cobro nuevo; el próximo débito será en tu fecha de renovación habitual.');
+            showToast('✅ Suscripción reactivada. No se generó ningún cobro nuevo; el próximo débito será en tu fecha de renovación habitual.', 'success');
             await loadAccount();
             renderFact();
         } else if (data.action === 'checkout') {
             // No se pudo reanudar (cancelación terminal, ej. hecha desde MercadoPago) →
             // nueva suscripción con free_trial = días ya pagados (el primer cobro cae en
             // el vencimiento original, sin doble cobro).
-            if (confirm((data.error || 'No se pudo reanudar automáticamente.') + '\n\nVamos a generar un método de pago nuevo. MercadoPago mostrará unos "días gratis": corresponden a los días que ya tenías pagados de tu período actual. No se te cobrará ahora; el primer débito será recién en tu fecha de vencimiento actual. ¿Continuar?')) {
+            const proceed = await showConfirm((data.error || 'No se pudo reanudar automáticamente.') + '\n\nVamos a generar un método de pago nuevo. MercadoPago mostrará unos "días gratis": corresponden a los días que ya tenías pagados de tu período actual. No se te cobrará ahora; el primer débito será recién en tu fecha de vencimiento actual. ¿Continuar?');
+            if (proceed) {
                 try {
                     const r2 = await apiFetch('/usuarios/api/checkout/reactivate-init', { method: 'POST' });
                     const d2 = r2 ? await r2.json() : null;
@@ -1699,17 +1755,17 @@ async function confirmReactivateSubscription() {
                         localStorage.setItem('psc_checkout_pending', JSON.stringify({ initiated: Date.now() }));
                         window.location.href = d2.init_point;
                     } else {
-                        alert((d2 && d2.error) || 'No se pudo iniciar la reactivación.');
+                        showToast((d2 && d2.error) || 'No se pudo iniciar la reactivación.', 'error');
                     }
                 } catch (_) {
-                    alert('Error de conexión. Intentá de nuevo.');
+                    showToast('Error de conexión. Intentá de nuevo.', 'error');
                 }
             }
         } else {
-            alert(data.error || 'No se pudo reactivar la suscripción.');
+            showToast(data.error || 'No se pudo reactivar la suscripción.', 'error');
         }
     } catch (e) {
-        alert('Error de conexión. Intentá de nuevo.');
+        showToast('Error de conexión. Intentá de nuevo.', 'error');
     }
 }
 
