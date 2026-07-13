@@ -1,8 +1,18 @@
 # Plan de implementación integral — Procurador SCW
 
-> Documento de planificación · 2026-07-11 · Estado: **propuesta para aprobación**
+> Documento de planificación · 2026-07-11 · Estado: **en ejecución — Fases 1 y 2 completadas (2026-07-13)**
 > Regla de oro: **no romper el funcionamiento del sistema en producción con ninguna implementación.**
-> Fuentes: `docs/internal/informe-bugs-2026-07.md`, `docs/internal/informe-pendientes-2026-07-11.pdf`, `docs/internal/plan-seguridad-precomercializacion-2026-07.md`, `docs/internal/flujo-staging-rollback.md`, `docs/internal/runbook-comandos.md`.
+> Fuentes: `docs/internal/informe-bugs-2026-07.md`, `docs/internal/informe-pendientes-2026-07-11.pdf` (ver también `informe-pendientes-2026-07-13.pdf`, versión actualizada), `docs/internal/plan-seguridad-precomercializacion-2026-07.md`, `docs/internal/flujo-staging-rollback.md`, `docs/internal/runbook-comandos.md`.
+
+> ## ✅ Estado de ejecución (actualizado 2026-07-13)
+> **Fase 1 — Infraestructura: COMPLETA.** D5 (limpieza) ✅ · D1 (ya estaba resuelto, verificado) ✅ · D3 backend (`npm audit fix`: 19→1 vulnerabilidades; se detectó y corrigió en el camino un drift real de `multer` faltante en `package.json`) ✅. D4 queda diferido a antes de B3 (por diseño del plan).
+> **Fase 2 — Bugs + QA: COMPLETA.**
+> - **Lote 2A** (cobranza: C1, C2, A1, M4, A4, A2, A3) ✅ deployado a prod. C1/C2/A1/M4 verificados **E2E con un pago sandbox real** — el E2E cazó un bug adicional (conflicto de tipos `timestamp` vs `timestamptz` en `applyTrialBonus`) que solo se manifestaba al aplicar un pago real.
+> - **Lote 2B** (cuotas: M1, M2/SEC-4, M3, B2, B4, B5, B8) ✅ deployado a prod. M2/SEC-4 y M3 verificados E2E en staging. **SEC-4 queda resuelto** (era el mismo bug que M2).
+> - **Lote 2C** (Electron: A5, A6, M5, M6, M10, B1, B6; M8 mitigado) ✅ **release v2.7.37 publicado** en GitHub Releases y confirmado en vivo — llega a los usuarios vía auto-updater.
+> - **Lote 2D** (U9.3) ✅ investigado y **resuelto: no era un bug de producto**, sino un artefacto de automatización (`confirm()` nativo + navegación externa a MP bloqueaban las herramientas de testing, no a un usuario real). Confirmado con test API en staging (200 + `init_point` en 373ms).
+> - **Extra:** mejora de UX del checkout (alert/confirm → toast/modal no bloqueante) implementada y deployada, cierra la recomendación secundaria del Hallazgo #2.
+> **Próximo:** Fase 3 — Seguridad (solo quedan SEC-1 auditoría y SEC-2 CI; SEC-4 ya cerrado).
 
 ---
 
