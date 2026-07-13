@@ -732,7 +732,7 @@ class AuthManager {
                     }
                 });
 
-                child.on('close', async (code) => {
+                child.on('close', async (code, signal) => {
                     // Limpiar referencia al child activo
                     this.activeChild = null;
 
@@ -874,10 +874,13 @@ class AuthManager {
 
                         resolve({ success: true, output, executionTime: totalTime });
                     } else {
-                        console.error(`❌ Proceso terminó con código ${code}`);
+                        console.error(`❌ Proceso terminó con código ${code}${signal ? ` (señal ${signal})` : ''}`);
                         reject({
                             success: false,
-                            error: `Código ${code}`,
+                            // M10: si terminó por señal (ej. SIGTERM de una detención voluntaria),
+                            // el mensaje la refleja para que isSigtermError la reconozca como
+                            // "detenido" y no como fallo.
+                            error: signal ? `Proceso terminado por señal ${signal}` : `Código ${code}`,
                             output: errorOutput
                         });
                     }

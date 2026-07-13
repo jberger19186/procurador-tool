@@ -19,7 +19,12 @@ const AuthManager = require('./src/auth/authManager');
 let mainWindow;
 let loginWindow;
 let onboardingWindow = null;
-let currentProcess = null;
+// A5: guard de concurrencia. Antes existía `currentProcess` que NUNCA se asignaba (la
+// ejecución migró a authManager.activeChild), así que los guards `if (currentProcess)`
+// eran siempre falsos → dos ejecuciones podían arrancar a la vez y pelearse el perfil
+// Chrome. `isExecuting` se setea sincrónicamente al entrar a cada handler de ejecución
+// (antes de los awaits) y se limpia en su finally.
+let isExecuting = false;
 let stopRequested  = false;  // flag para cortar loops batch
 let authManager;
 let executionLockTimer = null; // Heartbeat interval para lock multi-dispositivo
@@ -237,23 +242,41 @@ function createMainWindow() {
 
     mainWindow.on('closed', () => {
         mainWindow = null;
-        if (currentProcess) {
-            currentProcess.kill();
-        }
-
-        // Logout y limpiar caché al cerrar
+        // A6: matar el script hijo en curso (antes se usaba currentProcess.kill(), que
+        // era código muerto → el fork y Chrome quedaban huérfanos ejecutando sin UI).
         if (authManager) {
+            authManager.stopCurrentProcess();
             authManager.logout();
         }
     });
 }
 
 // ============ APP READY ============
+// B1: una corrida "por fecha" (run-process-custom-date) modifica config_proceso.json y lo
+// restaura en su finally. Si la app murió a mitad (crash/apagón/update de electron-updater),
+// el config quedaba con la fecha custom para siempre → todas las procuraciones "de hoy"
+// futuras procuraban desde esa fecha vieja sin aviso. Al arrancar, si hay un .backup, se
+// restaura y se elimina.
+function restoreConfigBackupIfAny() {
+    try {
+        const configPath = getConfigPath();
+        const backupPath = configPath + '.backup';
+        if (fs.existsSync(backupPath)) {
+            fs.writeFileSync(configPath, fs.readFileSync(backupPath, 'utf8'));
+            fs.unlinkSync(backupPath);
+            console.log('🔧 B1: config_proceso.json restaurado desde .backup de una corrida por fecha abortada');
+        }
+    } catch (e) {
+        console.warn('⚠️ B1: no se pudo restaurar el backup del config:', e.message);
+    }
+}
+
 app.whenReady().then(() => {
     // Eliminar el menú nativo de Electron (File/Edit/View/Window/Help)
     // El menú propio se abre con el botón hamburger vía menu.popup()
     Menu.setApplicationMenu(null);
 
+    restoreConfigBackupIfAny();
     initAuthManager();
     if (!isOnboardingComplete()) {
         createOnboardingWindow();
@@ -276,7 +299,12 @@ app.on('activate', () => {
 
 // Limpiar al cerrar la app
 app.on('before-quit', () => {
+    // A6: matar el script hijo en curso y ejecutar el shutdown completo (limpieza de
+    // carpetas temporales seguras con los .enc/wrappers). Antes solo se llamaba logout()
+    // → activeChild + Chrome quedaban vivos y shutdown() no se invocaba nunca.
     if (authManager) {
+        authManager.stopCurrentProcess();
+        authManager.shutdown();
         authManager.logout();
     }
 });
@@ -614,7 +642,23 @@ ipcMain.handle('open-chrome-extensions', () => {
 
 // Abrir URL directamente en Chrome (perfil personal del usuario, sin perfil dedicado)
 // Usado para instalar la extensión PJN desde la Chrome Web Store
+// B6: solo permitir URLs http(s). Evita que un renderer comprometido pase un string tipo
+// "--load-extension=..." (Chrome lo tomaría como flag, no como URL) o esquemas peligrosos
+// (file://, ms-settings:, etc.) a spawn/openExternal.
+function isSafeHttpUrl(url) {
+    if (typeof url !== 'string' || url.startsWith('-')) return false;
+    try {
+        const u = new URL(url);
+        return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
 ipcMain.handle('open-url-in-chrome', (_event, url) => {
+    if (!isSafeHttpUrl(url)) {
+        return { success: false, error: 'URL inválida' };
+    }
     const rutas = [
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
         'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -636,6 +680,9 @@ ipcMain.handle('open-url-in-chrome', (_event, url) => {
 
 // Abrir URL en el navegador del sistema
 ipcMain.handle('open-external-url', async (_event, url) => {
+    if (!isSafeHttpUrl(url)) {
+        return { success: false, error: 'URL inválida' };
+    }
     try {
         await shell.openExternal(url);
         return { success: true };
@@ -924,6 +971,12 @@ ipcMain.handle('logout', async () => {
     try {
         const result = await authManager.logout();
 
+        // M5: limpiar el cache de CUIT al cerrar sesión. Si no, un usuario B que inicia
+        // sesión en la misma PC y tiene un blip de red en el primer verifySession pasivo
+        // caería al _lastKnownCuit del usuario A → "abrir descargas"/"limpiar carpeta"
+        // operarían sobre la carpeta de A (rompe el aislamiento por CUIT de D6).
+        _lastKnownCuit = null;
+
         // Cerrar ventana principal y mostrar login
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.close();
@@ -1141,9 +1194,10 @@ async function checkSubsystemLimit(subsystem, planName) {
 
 // Handler: run-process
 ipcMain.handle('run-process', async (event, options = {}) => {
-    if (currentProcess) {
+    if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
+    isExecuting = true;
 
     try {
         if (!authManager.isAuthenticated()) {
@@ -1223,14 +1277,17 @@ ipcMain.handle('run-process', async (event, options = {}) => {
         if (!stopped) updateRunStats('procuracion', false);
         mainWindow.webContents.send('process-finished', { code: 1, success: false, stopped });
         return { success: false, error: error.message || error.error };
+    } finally {
+        isExecuting = false;
     }
 });
 
 // Handler: run-process-custom-date
 ipcMain.handle('run-process-custom-date', async (event, fecha) => {
-    if (currentProcess) {
+    if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
+    isExecuting = true;
 
     try {
         if (!authManager.isAuthenticated()) {
@@ -1314,6 +1371,8 @@ ipcMain.handle('run-process-custom-date', async (event, fecha) => {
         if (!stopped) updateRunStats('procuracion', false);
         mainWindow.webContents.send('process-finished', { code: 1, success: false, stopped });
         return { success: false, error: error.message || error.error };
+    } finally {
+        isExecuting = false;
     }
 });
 
@@ -1324,9 +1383,10 @@ ipcMain.handle('run-process-custom-date', async (event, fecha) => {
 // TODO: reemplazar 'procesarCustomExpedientes.js' con el nombre real del script
 //       cuando esté disponible en el backend.
 ipcMain.handle('run-process-custom', async (event, { lines, fechaLimite }) => {
-    if (authManager.activeChild) {
+    if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
+    isExecuting = true;
 
     try {
         if (!authManager.isAuthenticated()) {
@@ -1393,17 +1453,24 @@ ipcMain.handle('run-process-custom', async (event, { lines, fechaLimite }) => {
         if (!stopped) updateRunStats('batch', false);
         mainWindow.webContents.send('process-finished', { code: 1, success: false, isInformeBatch: false, stopped });
         return { success: false, error: error.message || error.error };
+    } finally {
+        isExecuting = false;
     }
 });
 
+// M10: reconocer también la detención voluntaria por SIGTERM. stopCurrentProcess() manda
+// SIGTERM → el child cierra con code=null → authManager rechaza con "Código null", que no
+// contenía ninguna de las palabras de abajo → se contaba como fallo y se mostraba flujo de
+// error por una detención pedida por el usuario. Se agrega 'código null' y 'null'.
 function isSigtermError(error) {
     const msg = (error?.message || error?.error || String(error) || '').toLowerCase();
-    return msg.includes('killed') || msg.includes('sigterm') || msg.includes('terminado') || msg.includes('signal');
+    return msg.includes('killed') || msg.includes('sigterm') || msg.includes('terminado')
+        || msg.includes('signal') || msg.includes('código null') || msg.includes('codigo null');
 }
 
 ipcMain.handle('stop-process', async () => {
-    // El proceso hijo vive dentro de authManager.executeRemoteScriptAsLocal.
-    // currentProcess (variable local) nunca se asigna; usamos authManager.activeChild.
+    // El proceso hijo vive dentro de authManager.executeRemoteScriptAsLocal → se detiene
+    // vía authManager.activeChild (el guard de concurrencia global es isExecuting).
     if (!authManager || !authManager.activeChild) {
         return { success: false, error: 'No hay ningún proceso en ejecución' };
     }
@@ -1421,18 +1488,43 @@ ipcMain.handle('stop-process', async () => {
 
 // Handler: list-expedientes
 ipcMain.handle('list-expedientes', async (event, fechaLimite) => {
-    if (currentProcess) {
+    if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
+    isExecuting = true;
 
     try {
         if (!authManager.isAuthenticated()) {
             return { success: false, error: 'No autenticado' };
         }
 
+        // M6: obtener el CUIT para aislar las descargas por usuario (buildRunEnv). Antes este
+        // handler corría sin PROCURADOR_DATA_DIR (escribía en la carpeta raíz compartida),
+        // sin lock multi-dispositivo y sin el aislamiento del resto de los flujos.
+        const sessionInfo = await authManager.verifySession();
+        const cuit = sessionInfo?.user?.cuit;
+        if (!cuit) {
+            return {
+                success: false,
+                error: 'No tenés un CUIT registrado en el sistema. Contactá al administrador.',
+                action: 'contact_support'
+            };
+        }
+
         const scriptName = 'listarSCWPJN.js';
+
+        const lockResult = await acquireExecutionLock(scriptName);
+        if (!lockResult.success) {
+            return { success: false, error: lockResult.error, code: lockResult.code };
+        }
+
         await closeChromeProfile();
-        const result = await authManager.executeRemoteScriptAsLocal(scriptName, [fechaLimite], { processLabel: 'Listado de expedientes' });
+        let result;
+        try {
+            result = await authManager.executeRemoteScriptAsLocal(scriptName, [fechaLimite], { cuitOverride: cuit, extraEnv: buildRunEnv(cuit), processLabel: 'Listado de expedientes' });
+        } finally {
+            await releaseExecutionLock();
+        }
 
         mainWindow.webContents.send('process-finished', {
             code: result.success ? 0 : 1,
@@ -1443,11 +1535,14 @@ ipcMain.handle('list-expedientes', async (event, fechaLimite) => {
 
     } catch (error) {
         console.error('Error:', error);
+        await releaseExecutionLock();
         mainWindow.webContents.send('process-finished', {
             code: 1,
             success: false
         });
         return { success: false, error: error.message || error.error };
+    } finally {
+        isExecuting = false;
     }
 });
 
@@ -1849,9 +1944,10 @@ ipcMain.handle('select-batch-file', async () => {
 });
 
 ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInforme }) => {
-    if (authManager.activeChild) {
+    if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
+    isExecuting = true;
     // Declarar antes del try para que el catch también pueda usarla
     const isBatch = !!(batchLines && Array.isArray(batchLines) && batchLines.length > 0);
     try {
@@ -2060,6 +2156,8 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
         if (!stopped) updateRunStats('informes', false);
         mainWindow.webContents.send('process-finished', { code: 1, success: false, isInformeBatch: isBatch, isInforme: true, stopped });
         return { success: false, error: error.message || error.error };
+    } finally {
+        isExecuting = false;
     }
 });
 
@@ -2310,9 +2408,10 @@ function generarVisorMonitoreo(modo, resultados) {
 }
 
 ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
-    if (authManager.activeChild) {
+    if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
+    isExecuting = true;
     try {
         if (!authManager.isAuthenticated()) {
             return { success: false, error: 'No autenticado' };
@@ -2405,6 +2504,8 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
         if (!stopped) updateRunStats('monitoreo', false);
         mainWindow.webContents.send('process-finished', { code: 1, success: false, isInformeBatch: false, stopped });
         return { success: false, error: error.message || error.error };
+    } finally {
+        isExecuting = false;
     }
 });
 
