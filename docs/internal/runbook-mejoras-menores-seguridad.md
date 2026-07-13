@@ -15,9 +15,10 @@
 
 ---
 
-## DEP-2 — Actualizar nodemailer (6.10.1 → 9.x) · **el único "ahora" recomendado**
+## DEP-2 — Actualizar nodemailer (6.10.1 → 9.x) · ✅ HECHO (2026-07-13)
 
-> **Modelo/esfuerzo: Sonnet · medio.** Es un bump de dependencia + verificación operativa; no hay razonamiento fino. Lo único que Sonnet no puede cerrar solo es confirmar que el email **llega a una bandeja** → ese paso lo valida el operador.
+> **Modelo/esfuerzo: Sonnet · medio.** Confirmado — fue exactamente eso, sin razonamiento fino.
+> **Resultado:** 6.9.14 → 9.0.3, `npm audit` backend en 0 vulnerabilidades. Desplegado con backup pre-deploy + `npm ci` en prod + boot limpio + smoke API 8/8. **Envío de email real verificado** (id de mensaje devuelto por el SMTP de Brevo). Staging (symlink de `node_modules`) actualizado junto con prod.
 
 **Contexto:** `npm audit` marca `nodemailer <=9.0.0` como 1 high. Explotabilidad real baja (los CVEs requieren control de parámetros que se setean server-side), pero cierra el último high del backend. La API que usa el proyecto es mínima y estable entre versiones: `nodemailer.createTransport({host,port,secure,auth})` + `transporter.sendMail({from,to,subject,text,html})` (`backend-server/utils/mailer.js:14` y `:134`).
 
@@ -113,5 +114,5 @@
 ## Orden sugerido
 
 1. ~~**SEC-2 · B.1** (CI)~~ — ✅ hecho 2026-07-13.
-2. **DEP-2** (nodemailer) — **Sonnet medio**, backend, cierra el último `high`. **Próximo paso.**
-3. **DEP-1 + AUTH-1(B) + SEC-2 · B.2** — **juntos en una sesión dedicada con release de Electron** (Sonnet alto + Opus puntual). Es lo más pesado y lo único que necesita release de la app.
+2. ~~**DEP-2** (nodemailer)~~ — ✅ hecho 2026-07-13.
+3. **DEP-1 + AUTH-1(B) + SEC-2 · B.2** — **juntos en una sesión dedicada con release de Electron** (Sonnet alto + Opus puntual). Es lo único que queda, y es lo único que necesita release de la app. Sin apuro (Baja/Info + defensa en profundidad).
