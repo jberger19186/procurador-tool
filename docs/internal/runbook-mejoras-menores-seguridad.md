@@ -5,15 +5,19 @@
 
 ## Evaluación de esfuerzo/riesgo (resumen honesto)
 
-| Ítem | ¿Ejecutable "ahora", esfuerzo medio (Sonnet)? | Requiere release Electron | Riesgo |
+| Ítem | Modelo + esfuerzo recomendado | ¿Release Electron? | Riesgo |
 |---|---|---|---|
-| **DEP-2** nodemailer 6→9 | **Sí** | No (solo backend) | Medio (email es crítico → hay que confirmar envío real) |
-| **DEP-1** Electron 28→actual | **No** — proyecto dedicado | **Sí** | Alto (breaking en main/empaquetado/auto-updater) |
-| **AUTH-1** JWT device-binding | Solo la variante "limpiar código muerto"; el fix real necesita release | Sí (variante real) | Bajo (Info) |
+| **DEP-2** nodemailer 6→9 | **Sonnet · medio** | No (solo backend) | Medio (email es crítico → confirmar envío real) |
+| **DEP-1** Electron 28→actual | **Sonnet · alto** para bump/build/regresión; **Opus** puntual si aparece un breaking sutil (módulo nativo/empaquetado/auto-updater) | **Sí** | Alto |
+| **AUTH-1** JWT device-binding | Variante A (limpiar código muerto): **Sonnet · bajo**. Variante B (binding real): **Opus · medio** (correctitud de auth, sensible) | Sí (variante B) | Bajo (Info) |
+
+> **Criterio general de esta sesión:** trabajo mecánico y bien especificado (bumps, YAML de CI, endpoints CRUD, UI) → **Sonnet**. Trabajo con razonamiento fino o correctitud sensible (análisis de seguridad, lógica de cobro, breaking changes ambiguos, device-binding de auth) → **Opus alto**. Es el mismo patrón que funcionó acá: los bugs de cobro y la auditoría se hicieron con Opus; los deploys y docs con Sonnet.
 
 ---
 
 ## DEP-2 — Actualizar nodemailer (6.10.1 → 9.x) · **el único "ahora" recomendado**
+
+> **Modelo/esfuerzo: Sonnet · medio.** Es un bump de dependencia + verificación operativa; no hay razonamiento fino. Lo único que Sonnet no puede cerrar solo es confirmar que el email **llega a una bandeja** → ese paso lo valida el operador.
 
 **Contexto:** `npm audit` marca `nodemailer <=9.0.0` como 1 high. Explotabilidad real baja (los CVEs requieren control de parámetros que se setean server-side), pero cierra el último high del backend. La API que usa el proyecto es mínima y estable entre versiones: `nodemailer.createTransport({host,port,secure,auth})` + `transporter.sendMail({from,to,subject,text,html})` (`backend-server/utils/mailer.js:14` y `:134`).
 
@@ -41,6 +45,8 @@
 
 ## DEP-1 — Actualizar Electron (28 → versión soportada) · **proyecto dedicado, NO "ahora"**
 
+> **Modelo/esfuerzo: Sonnet · alto** para el grueso (bump, ajustar `main.js`/`preload.js`, build, correr los flujos), con **Opus** a mano para diagnosticar un breaking sutil (incompatibilidad de módulo nativo, empaquetado NSIS, o auto-updater que deja de detectar). Requiere **sesión dedicada + release** — no mezclar con otras tareas.
+
 **Contexto:** Electron 28 está EOL (Chromium viejo con CVEs). Mitigado (la app no carga contenido web no confiable), pero conviene actualizar antes del público. **Es un upgrade de major con riesgo alto** — planificarlo como una sesión propia con regresión completa.
 
 **Pasos (guía, requiere sesión dedicada + release):**
@@ -63,6 +69,8 @@
 
 ## AUTH-1 — JWT no atado a dispositivo · **Info, bundlear con un release futuro**
 
+> **Modelo/esfuerzo:** camino A (limpieza) → **Sonnet · bajo** (borrar código muerto, sin release). Camino B (binding real) → **Opus · medio** — toca la lógica de autenticación, donde un error abre o cierra acceso de más; conviene el razonamiento fino de Opus, como se usó para los fixes de auth/cobro de esta sesión.
+
 **Contexto:** el token (`{id, role}`, 1h) es bearer estándar sin binding a `machineId`. Al login se emite un `sessionKey` con `machineId` que **nunca se verifica** (`SESSION_KEY_SECRET` solo firma). El anti-sharing real es el lock de ejecución. Severidad Info/Baja.
 
 **Dos caminos:**
@@ -80,7 +88,29 @@
 
 ---
 
+---
+
+## Fase 3 — SEC-2: modelo y esfuerzo recomendado
+
+> Plan completo: `plan-seguridad-precomercializacion-2026-07.md` (Parte B). Son **dos capas** con perfiles distintos.
+
+### SEC-2 · B.1 — Smoke tests en CI (GitHub Actions)
+> **Modelo/esfuerzo: Sonnet · medio.**
+- Es trabajo mecánico y bien especificado: escribir `.github/workflows/smoke.yml`, cablear los scripts que ya existen (`smoke-test-pjn.js` API + `dev-tools/smoke-payments.js` + `npm audit`), y configurar los GitHub Actions Secrets (`STAGING_ADMIN_TOKEN`, URL).
+- Sin razonamiento fino ni riesgo sobre prod (corre contra staging, informativo). Ideal para Sonnet.
+- **No requiere release.** Rápido (una sesión corta).
+
+### SEC-2 · B.2 — Verificación diaria real (procuración + informe reales)
+> **Modelo/esfuerzo: Sonnet · alto** para el grueso de implementación, con **Opus** puntual para 2 decisiones de diseño (ver abajo). **Requiere release de Electron.**
+- Es la pieza más grande: módulo de verificación en la app (reusa los flujos existentes con expedientes fijos), lectura de credenciales desde Windows Credential Manager, panel de configuración, disparador al encender (Task Scheduler / arranque de la app), botón manual, endpoint `POST /admin/diagnostics/verification` y tarjeta en Diagnóstico con semáforo + alerta >7 días.
+- **Grueso (Sonnet · alto):** el endpoint + la tarjeta del dashboard (backend, sin release) y el módulo/panel de la app (Electron, con release) son implementación bien acotada.
+- **Puntual con Opus:** (1) el diseño del disparador "una vez al día al primer encendido pasada la hora X" sin correr en cada reinicio (lógica de estado con edge cases), y (2) el manejo seguro de credenciales (leer de Credential Manager sin loguearlas ni mandarlas al backend) — ambos se benefician del razonamiento fino.
+- **Conviene bundlear el release con DEP-1** (Electron) para no gastar dos releases.
+
+---
+
 ## Orden sugerido
 
-1. **DEP-2** (nodemailer) — ahora o en la próxima ventana de backend; cierra el último `high` del backend.
-2. **DEP-1 + AUTH-1(B)** — juntos, en una sesión dedicada con release de Electron (misma que podría llevar SEC-2 B.2, la verificación diaria, que también requiere release).
+1. **SEC-2 · B.1** (CI) — **Sonnet medio**, rápido, sin release, cierra la capa de regresiones nuestras.
+2. **DEP-2** (nodemailer) — **Sonnet medio**, backend, cierra el último `high`.
+3. **DEP-1 + AUTH-1(B) + SEC-2 · B.2** — **juntos en una sesión dedicada con release de Electron** (Sonnet alto + Opus puntual). Es lo más pesado y lo único que necesita release de la app.
