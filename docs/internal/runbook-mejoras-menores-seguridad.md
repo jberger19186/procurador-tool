@@ -5,11 +5,11 @@
 
 ## Evaluación de esfuerzo/riesgo (resumen honesto)
 
-| Ítem | Modelo + esfuerzo recomendado | ¿Release Electron? | Riesgo |
-|---|---|---|---|
-| **DEP-2** nodemailer 6→9 | **Sonnet · medio** | No (solo backend) | Medio (email es crítico → confirmar envío real) |
-| **DEP-1** Electron 28→actual | **Sonnet · alto** para bump/build/regresión; **Opus** puntual si aparece un breaking sutil (módulo nativo/empaquetado/auto-updater) | **Sí** | Alto |
-| **AUTH-1** JWT device-binding | Variante A (limpiar código muerto): **Sonnet · bajo**. Variante B (binding real): **Opus · medio** (correctitud de auth, sensible) | Sí (variante B) | Bajo (Info) |
+| Ítem | Modelo + esfuerzo recomendado | ¿Release Electron? | Riesgo | Estado |
+|---|---|---|---|---|
+| **DEP-2** nodemailer 6→9 | **Sonnet · medio** | No (solo backend) | Medio (email es crítico → confirmar envío real) | ✅ Hecho |
+| **DEP-1** Electron 28→43.1.0 | **Sonnet · alto**. En la práctica no hizo falta Opus (código ya moderno, cero cambios); el único obstáculo fue de entorno (Node local) | **Sí** | Alto en el papel, bajo en la práctica | ✅ Hecho |
+| **AUTH-1** JWT device-binding | Variante A (limpiar código muerto): **Sonnet · bajo**. Variante B (binding real): **Opus · medio** (correctitud de auth, sensible) | Sí (variante B) | Bajo (Info) | Pendiente |
 
 > **Criterio general de esta sesión:** trabajo mecánico y bien especificado (bumps, YAML de CI, endpoints CRUD, UI) → **Sonnet**. Trabajo con razonamiento fino o correctitud sensible (análisis de seguridad, lógica de cobro, breaking changes ambiguos, device-binding de auth) → **Opus alto**. Es el mismo patrón que funcionó acá: los bugs de cobro y la auditoría se hicieron con Opus; los deploys y docs con Sonnet.
 
@@ -44,11 +44,13 @@
 
 ---
 
-## DEP-1 — Actualizar Electron (28 → versión soportada) · **proyecto dedicado, NO "ahora"**
+## DEP-1 — Actualizar Electron (28 → 43.1.0) · ✅ HECHO (2026-07-13)
 
-> **Modelo/esfuerzo: Sonnet · alto** para el grueso (bump, ajustar `main.js`/`preload.js`, build, correr los flujos), con **Opus** a mano para diagnosticar un breaking sutil (incompatibilidad de módulo nativo, empaquetado NSIS, o auto-updater que deja de detectar). Requiere **sesión dedicada + release** — no mezclar con otras tareas.
+> **Modelo/esfuerzo: Sonnet · alto.** No hizo falta Opus — el salto real (28→43, 14+ majors) resultó de bajo riesgo de código porque la app ya seguía los patrones modernos de Electron (contextIsolation/sandbox explícitos, contextBridge con wrappers, setWindowOpenHandler, sin APIs deprecadas, sin módulos nativos). **Cero cambios de código.**
+> **Único bloqueante real:** `@electron/get` (interno de `electron`) exige Node ≥22.12.0 para el download lazy del binario (Electron v42 movió la descarga del `postinstall` al primer uso) — la máquina tenía 22.11.0. Se resolvió actualizando Node local a 22.23.1 LTS vía winget, **con confirmación del usuario** antes de tocar el entorno (es un cambio fuera del repo).
+> Verificado: `npm start` + `npm run build:dir` (`.exe` empaquetado real, `isPackaged:true`) + `afterPack`/rcedit intacto + los 3 módulos de seguridad (ScriptVerifier RSA, encriptación AES-256-GCM, AuthManager) arrancando limpios. `npm audit` de electron-app 26→3 vulnerabilidades (quedan moderadas, exceljs, diferidas).
 
-**Contexto:** Electron 28 está EOL (Chromium viejo con CVEs). Mitigado (la app no carga contenido web no confiable), pero conviene actualizar antes del público. **Es un upgrade de major con riesgo alto** — planificarlo como una sesión propia con regresión completa.
+**Contexto (histórico):** Electron 28 estaba EOL (Chromium viejo con CVEs). Mitigado en la práctica (la app no carga contenido web no confiable), pero convenía actualizar antes del público.
 
 **Pasos (guía, requiere sesión dedicada + release):**
 1. Tag `pre-electron-upgrade` + backup `.7z`.
@@ -115,4 +117,4 @@
 
 1. ~~**SEC-2 · B.1** (CI)~~ — ✅ hecho 2026-07-13.
 2. ~~**DEP-2** (nodemailer)~~ — ✅ hecho 2026-07-13.
-3. **DEP-1 + AUTH-1(B) + SEC-2 · B.2** — **juntos en una sesión dedicada con release de Electron** (Sonnet alto + Opus puntual). Es lo único que queda, y es lo único que necesita release de la app. Sin apuro (Baja/Info + defensa en profundidad).
+3. ~~**DEP-1** (Electron)~~ — ✅ hecho 2026-07-13. Sigue **AUTH-1(B) + SEC-2 · B.2** en la misma sesión (comparten el próximo release de Electron). Sonnet alto para SEC-2·B.2; Opus para diseñar el device-binding de AUTH-1(B).
