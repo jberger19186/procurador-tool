@@ -94,11 +94,12 @@
 
 > Plan completo: `plan-seguridad-precomercializacion-2026-07.md` (Parte B). Son **dos capas** con perfiles distintos.
 
-### SEC-2 · B.1 — Smoke tests en CI (GitHub Actions)
-> **Modelo/esfuerzo: Sonnet · medio.**
-- Es trabajo mecánico y bien especificado: escribir `.github/workflows/smoke.yml`, cablear los scripts que ya existen (`smoke-test-pjn.js` API + `dev-tools/smoke-payments.js` + `npm audit`), y configurar los GitHub Actions Secrets (`STAGING_ADMIN_TOKEN`, URL).
-- Sin razonamiento fino ni riesgo sobre prod (corre contra staging, informativo). Ideal para Sonnet.
-- **No requiere release.** Rápido (una sesión corta).
+### SEC-2 · B.1 — Smoke tests en CI (GitHub Actions) · ✅ HECHO (2026-07-13)
+> **Modelo/esfuerzo: Sonnet · medio.** Confirmado en la práctica — fue trabajo mecánico y bien especificado, sin razonamiento fino.
+- Implementado: `.github/workflows/smoke.yml` (npm audit backend+electron + smoke API/pagos contra staging).
+- **Cambio de diseño respecto del plan original:** no se usó `STAGING_ADMIN_TOKEN` como secret directo contra la URL pública — el `Authorization: Basic` de Nginx y el `Authorization: Bearer` de la app compiten por el mismo header, así que el enfoque HTTP directo no funciona. Se resolvió con una **clave SSH nueva y restringida** (forced-command, sin shell/PTY/port-forwarding) que corre un script en el servidor (`ci-smoke.sh`) contra `localhost:3444`, evitando Nginx por completo.
+- Verificado en vivo: 8/8 (API) + 19/19 (pagos), exit 0.
+- Detalle completo (mecanismo, mantenimiento, rotación): `docs/internal/sec2-b1-ci-setup.md`.
 
 ### SEC-2 · B.2 — Verificación diaria real (procuración + informe reales)
 > **Modelo/esfuerzo: Sonnet · alto** para el grueso de implementación, con **Opus** puntual para 2 decisiones de diseño (ver abajo). **Requiere release de Electron.**
@@ -111,6 +112,6 @@
 
 ## Orden sugerido
 
-1. **SEC-2 · B.1** (CI) — **Sonnet medio**, rápido, sin release, cierra la capa de regresiones nuestras.
-2. **DEP-2** (nodemailer) — **Sonnet medio**, backend, cierra el último `high`.
+1. ~~**SEC-2 · B.1** (CI)~~ — ✅ hecho 2026-07-13.
+2. **DEP-2** (nodemailer) — **Sonnet medio**, backend, cierra el último `high`. **Próximo paso.**
 3. **DEP-1 + AUTH-1(B) + SEC-2 · B.2** — **juntos en una sesión dedicada con release de Electron** (Sonnet alto + Opus puntual). Es lo más pesado y lo único que necesita release de la app.

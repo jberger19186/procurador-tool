@@ -1,0 +1,61 @@
+name: Smoke tests
+
+# SEC-2 · B.1 — corre en cada push/PR a main. Caza regresiones NUESTRAS
+# (que un cambio de código rompa un endpoint o el flujo de pagos), no
+# problemas del PJN externo (eso lo cubre B.2, la verificación diaria real
+# desde la PC del operador). Informativo: no bloquea el merge en v1.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  audit-backend:
+    name: npm audit — backend-server
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install deps
+        working-directory: backend-server
+        run: npm ci --no-audit --no-fund
+      - name: npm audit
+        working-directory: backend-server
+        run: npm audit --audit-level=high
+
+  audit-electron:
+    name: npm audit — electron-app
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install deps
+        working-directory: electron-app
+        run: npm ci --no-audit --no-fund
+      - name: npm audit (solo runtime, ignora deps de build/dev)
+        working-directory: electron-app
+        run: npm audit --audit-level=high --omit=dev
+
+  api-and-payments-smoke:
+    name: Smoke API + Pagos (contra staging)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ejecutar smoke remoto (SSH con clave restringida — solo puede correr ci-smoke.sh)
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SMOKE_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/ci_smoke_key
+          chmod 600 ~/.ssh/ci_smoke_key
+          ssh -i ~/.ssh/ci_smoke_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=15 \
+              root@142.93.64.94 "ignored-by-forced-command"
