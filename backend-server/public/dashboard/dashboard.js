@@ -340,7 +340,7 @@ async function renderUsers() {
                     </tr></thead>
                     <tbody>${users.map(u => `
                     <tr class="clickable-row" data-id="${u.id}">
-                        <td>${u.email}</td>
+                        <td>${escHtml(u.email)}</td>
                         <td>${roleBadge(u.role)}</td>
                         <td>${u.plan ? `<span class="badge badge-blue">${u.plan}</span>` : '—'}</td>
                         <td>${statusBadge(u.status)}</td>
@@ -475,7 +475,7 @@ async function renderUserDetail(userId) {
         document.getElementById('content').innerHTML = `
         <a class="back-btn" onclick="navigate(prevPage || 'users')">← Volver a ${prevPage === 'pending-users' ? 'Pendientes' : 'Usuarios'}</a>
         <div class="page-header">
-            <div><h2>${u.email}</h2><p>ID: ${u.id} · Registrado: ${fmtDate(u.created_at)}</p></div>
+            <div><h2>${escHtml(u.email)}</h2><p>ID: ${u.id} · Registrado: ${fmtDate(u.created_at)}</p></div>
         </div>
         <div id="ud-alert"></div>
 
@@ -485,7 +485,7 @@ async function renderUserDetail(userId) {
                 <div class="card-header"><h3>👤 Información</h3></div>
                 <div class="card-body">
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Email</label><span>${u.email}</span></div>
+                        <div class="detail-item"><label>Email</label><span>${escHtml(u.email)}</span></div>
                         <div class="detail-item"><label>Rol</label><span>${roleBadge(u.role)}</span></div>
                         <div class="detail-item"><label>CUIT</label><span>${u.cuit || '—'}</span></div>
                         <div class="detail-item"><label>Hardware vinculado</label><span>${u.machine_id ? '✅ Sí' : '❌ No'}</span></div>
@@ -660,7 +660,7 @@ async function renderUserDetail(userId) {
                     <tbody>${tickets.map(t => `<tr>
                         <td>#${t.id}</td>
                         <td>${catBadge(t.category)}</td>
-                        <td>${t.title}</td>
+                        <td>${escHtml(t.title)}</td>
                         <td>${ticketStatusBadge(t.status)}</td>
                         <td>${priorityBadge(t.priority, t.priority_source, t.priority_notes)}</td>
                         <td>${fmtDate(t.created_at)}</td>
@@ -788,13 +788,13 @@ async function renderUserDetail(userId) {
                             <th></th>
                         </tr></thead>
                         <tbody>${partes.map(p => `<tr>
-                            <td>${p.nombre_parte}</td>
-                            <td><span class="badge badge-blue">${p.jurisdiccion_sigla || p.jurisdiccion_codigo || '—'}</span></td>
+                            <td>${escHtml(p.nombre_parte)}</td>
+                            <td><span class="badge badge-blue">${escHtml(p.jurisdiccion_sigla || p.jurisdiccion_codigo || '—')}</span></td>
                             <td>${p.tiene_linea_base ? '<span class="badge badge-green">Con base</span>' : '<span class="badge badge-gray">Sin base</span>'}</td>
                             <td style="text-align:center">${p.exp_confirmados ?? 0}</td>
                             <td style="text-align:center">${p.novedades_pendientes > 0 ? `<span class="badge badge-orange">${p.novedades_pendientes}</span>` : '0'}</td>
                             <td>${fmtDate(p.fecha_creacion)}</td>
-                            <td><button class="btn btn-sm btn-danger" onclick="deleteMonitorParte(${p.id},'${p.nombre_parte.replace(/'/g, "\\'")}',${userId})">✕</button></td>
+                            <td><button class="btn btn-sm btn-danger" data-parte-id="${p.id}" data-parte-nombre="${escAttr(p.nombre_parte)}" data-user-id="${userId}" onclick="deleteMonitorParteBtn(this)">✕</button></td>
                         </tr>`).join('')}
                         </tbody></table>
                     </div>`
@@ -1280,6 +1280,11 @@ async function loadInvoiceHistory(userId) {
     }
 }
 
+// XSS-1: el botón pasa los datos por data-* (leídos del DOM) en vez de interpolar el
+// nombre de la parte (controlado por el usuario) dentro del string del onclick.
+window.deleteMonitorParteBtn = function(btn) {
+    deleteMonitorParte(Number(btn.dataset.parteId), btn.dataset.parteNombre, Number(btn.dataset.userId));
+};
 window.deleteMonitorParte = async function(parteId, nombre, userId) {
     if (!confirm(`¿Eliminar la parte "${nombre}" y todos sus expedientes asociados? Esta acción no se puede deshacer.`)) return;
     try {
@@ -1340,11 +1345,11 @@ async function renderTickets() {
                     tickets.map(t => `<tr class="ticket-row" style="cursor:pointer"
                         onclick="navigate('ticket-detail','${t.id}')"
                         data-status="${t.status}" data-cat="${t.category}" data-pri="${t.priority}"
-                        data-text="${(t.title + t.user_email).toLowerCase()}">
+                        data-text="${escAttr((t.title + t.user_email).toLowerCase())}">
                         <td>#${t.id}</td>
-                        <td style="font-size:12px"><a href="#user-detail/${t.user_id}" onclick="event.stopPropagation();navigate('user-detail','${t.user_id}');return false" style="color:var(--primary);text-decoration:underline">${t.user_email}</a></td>
+                        <td style="font-size:12px"><a href="#user-detail/${t.user_id}" onclick="event.stopPropagation();navigate('user-detail','${t.user_id}');return false" style="color:var(--primary);text-decoration:underline">${escHtml(t.user_email)}</a></td>
                         <td>${catBadge(t.category)}</td>
-                        <td>${t.title}</td>
+                        <td>${escHtml(t.title)}</td>
                         <td>${ticketStatusBadge(t.status)}</td>
                         <td>${priorityBadge(t.priority, t.priority_source, t.priority_notes)}</td>
                         <td>${t.benefit_applied ? '<span class="badge badge-green">✓</span>' : '—'}</td>
@@ -1391,9 +1396,9 @@ async function renderTicketDetail(ticketId) {
         <a class="back-btn" onclick="navigate('tickets')">← Volver a Tickets</a>
         <div class="page-header">
             <div>
-                <h2>Ticket #${t.id} — ${t.title}</h2>
+                <h2>Ticket #${t.id} — ${escHtml(t.title)}</h2>
                 <p>
-                    <a href="#user-detail/${t.user_id}" onclick="navigate('user-detail','${t.user_id}');return false" style="color:var(--primary);text-decoration:underline">${t.user_email}</a>
+                    <a href="#user-detail/${t.user_id}" onclick="navigate('user-detail','${t.user_id}');return false" style="color:var(--primary);text-decoration:underline">${escHtml(t.user_email)}</a>
                     · ${catLabel(t.category)} · ${fmtDate(t.created_at)}
                 </p>
             </div>
@@ -1991,6 +1996,12 @@ function fmtDate(d) {
 }
 function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+// escAttr — para valores dentro de atributos HTML (comillas dobles o simples). escHtml no
+// escapa comillas, así que un valor de usuario con " o ' podría romper el atributo. Se usa
+// para data-* y value="". (XSS-1)
+function escAttr(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 // Etiquetas legibles para los eventos de la cuenta (user_events)
 function eventLabel(type) {
