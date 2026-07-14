@@ -1,6 +1,7 @@
 # Plan de Seguridad Pre-Comercialización — SEC-1, SEC-2, SEC-4
 
-> Documento de planificación · 2026-07-06 · Estado: **planes aprobados para ejecutar** (SEC-1 ejecutable de forma autónoma; SEC-2 y SEC-4 son planes de implementación).
+> Documento de planificación · 2026-07-06 · **✅ Los 3 pendientes (SEC-1, SEC-2, SEC-4) cerrados al 2026-07-13.** Ver estado final y detalle real de implementación en `runbook-mejoras-menores-seguridad.md` y `informe-seguridad-sec1-2026-07-13.md`. Este documento queda como la especificación original de diseño (algunos detalles, como el uso de Windows Credential Manager en B.2, no se necesitaron finalmente — ver runbook para lo que realmente se implementó).
+> Estado original: **planes aprobados para ejecutar** (SEC-1 ejecutable de forma autónoma; SEC-2 y SEC-4 son planes de implementación).
 > Cubre los tres pendientes abiertos del bloque 🔵 Seguridad pre-comercialización del CLAUDE.md.
 > Regla transversal: **todo se prueba/implementa primero en `staging`** (`staging-api.procuradortool.com`, DB `procurador_db_staging`), con backup previo, antes de tocar producción. Ningún test destructivo contra prod.
 

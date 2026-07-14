@@ -98,12 +98,28 @@
 - Verificado en vivo: 8/8 (API) + 19/19 (pagos), exit 0.
 - Detalle completo (mecanismo, mantenimiento, rotación): `docs/internal/sec2-b1-ci-setup.md`.
 
-### SEC-2 · B.2 — Verificación diaria real (procuración + informe reales)
-> **Modelo/esfuerzo: Sonnet · alto** para el grueso de implementación, con **Opus** puntual para 2 decisiones de diseño (ver abajo). **Requiere release de Electron.**
-- Es la pieza más grande: módulo de verificación en la app (reusa los flujos existentes con expedientes fijos), lectura de credenciales desde Windows Credential Manager, panel de configuración, disparador al encender (Task Scheduler / arranque de la app), botón manual, endpoint `POST /admin/diagnostics/verification` y tarjeta en Diagnóstico con semáforo + alerta >7 días.
-- **Grueso (Sonnet · alto):** el endpoint + la tarjeta del dashboard (backend, sin release) y el módulo/panel de la app (Electron, con release) son implementación bien acotada.
-- **Puntual con Opus:** (1) el diseño del disparador "una vez al día al primer encendido pasada la hora X" sin correr en cada reinicio (lógica de estado con edge cases), y (2) el manejo seguro de credenciales (leer de Credential Manager sin loguearlas ni mandarlas al backend) — ambos se benefician del razonamiento fino.
-- **Conviene bundlear el release con DEP-1** (Electron) para no gastar dos releases.
+### SEC-2 · B.2 — Verificación diaria real (procuración + informe reales) · ✅ HECHO (2026-07-13, release v2.7.38)
+
+> **Modelo/esfuerzo usado: Sonnet · alto**, ejecutado íntegramente sin necesitar Opus (ver por qué abajo).
+
+**Decisión de alcance previa a implementar (resuelta con el usuario):** el panel "Verificación automática" del plan original viviría en la app que instalan TODOS los usuarios, pero la feature usa una cuenta de prueba fija (CUIT 27320694359) — no tiene sentido para clientes reales. Se optó por **"oculto, solo config manual"**: sin panel, sin botón visible, se activa a mano editando `verificacion_config.json` en userData (`habilitado:false` por defecto). Esto redujo el alcance real bastante respecto del plan original y explica por qué terminó sin necesitar Opus:
+
+- **No hizo falta Windows Credential Manager.** El plan original asumía leer credenciales de ahí para loguear una cuenta de prueba "headless". Pero al vivir el módulo DENTRO de la app ya logueada (por el operador, con la cuenta de prueba), simplemente reusa la sesión ya autenticada (`authManager.isAuthenticated()`) — igual que cualquier ejecución manual. Cero manejo nuevo de credenciales.
+- **El disparador "una vez al día"** se resolvió con una condición simple y bien acotada (`ultimaEjecucion.fecha !== hoy` + `now >= horaUmbral`), sin edge cases que ameritaran razonamiento extra — el plan ya había especificado los 3 modos con suficiente detalle.
+- **Reuso, no reimplementación:** `run-process`/`run-informe` de `main.js` se extrajeron a funciones nombradas (`runProcessLogic`/`runInformeLogic`) — refactor mecánico, cero lógica nueva — para que el módulo de verificación las invoque directo desde el proceso principal (el trigger nace en `main.js`, no en un click de renderer).
+
+**Entregables:**
+1. `electron-app/src/verification/dailyVerification.js` — config, `isDueNow()`, `runVerification()`, reporte al backend.
+2. `main.js`: refactor de `run-process`/`run-informe` a funciones nombradas + wire del módulo (`initAuthManager()`, hook post-login, watcher horario cada 10 min) + IPC oculto `run-verification-now`.
+3. `preload.js`: `window.electronAPI.runVerificationNow()` — disparo manual sin botón, invocable desde DevTools en la PC del operador.
+4. Backend: `POST /client/verification-report` (`authenticateToken` normal — NO admin, ya que la cuenta de prueba no es admin — restringido por `users.cuit === VERIFICATION_TEST_CUIT`) + `GET /admin/diagnostics/verification/latest`. Persistencia a `data/verification-results.json`, mismo patrón que `smoke-test-results.json`.
+5. Dashboard: tarjeta "🔎 Verificación funcional (PJN real)" en Diagnóstico — semáforo (verde ok reciente / amarillo parcial o +7 días / rojo error) + historial de últimas 10.
+
+**Verificado:**
+- Staging: `POST` con CUIT no autorizado → 403; con CUIT correcto → 200 y persiste; `GET` admin refleja el reporte.
+- Prod: endpoint de lectura responde, resto de la API sin afectar tras el deploy.
+- Refactor de `main.js`: `npm start` local (arranque limpio, módulo inicializa sin error, config se crea con defaults) + `npm run build:dir` (`.exe` empaquetado real, `isPackaged:true`, mismo resultado).
+- Release **v2.7.38** publicado (tag `electron-v2.7.38`), versión visible actualizada en portal + landing (5 lugares).
 
 ---
 
@@ -112,4 +128,7 @@
 1. ~~**SEC-2 · B.1** (CI)~~ — ✅ hecho 2026-07-13.
 2. ~~**DEP-2** (nodemailer)~~ — ✅ hecho 2026-07-13.
 3. ~~**DEP-1** (Electron)~~ — ✅ hecho 2026-07-13.
-4. ~~**AUTH-1(B)** device-binding~~ — ✅ hecho 2026-07-13 (Opus alto; resultó **sin release** — el cliente ya mandaba `machineId`, el binding es server-side). Queda **SEC-2 · B.2** (verificación diaria real), que **sí requiere release de Electron** — Sonnet alto para el grueso, Opus puntual para el disparador diario y el manejo de credenciales.
+4. ~~**AUTH-1(B)** device-binding~~ — ✅ hecho 2026-07-13 (Opus alto; resultó **sin release** — el cliente ya mandaba `machineId`, el binding es server-side).
+5. ~~**SEC-2 · B.2** verificación diaria real~~ — ✅ hecho 2026-07-13 (Sonnet alto, sin necesitar Opus — el alcance se acotó a "oculto, config manual" antes de implementar, lo que eliminó la necesidad de Credential Manager). Release **v2.7.38**.
+
+**Con esto, los 3 pendientes del plan de seguridad pre-comercialización (SEC-4, SEC-1, SEC-2) quedan cerrados.**
