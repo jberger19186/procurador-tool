@@ -62,9 +62,13 @@ Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes
 
 ---
 
-## Instrucciones para el EJECUTOR (sesión nueva, modelo Sonnet 5)
+## Instrucciones para el EJECUTOR (sesión nueva)
 
 > Este plan está pensado para ejecutarse **íntegramente por Claude** en una sesión nueva, sin contexto previo. Leé esta sección completa antes de arrancar.
+>
+> **Modelo/esfuerzo:** patrón confirmado en las sesiones de julio — **Opus** (medio/alto) para los tramos de **cobro, suscripciones y lógica de negocio** (checkout MP, cambios de plan, gracia/suspensión, contingencias A6) donde un razonamiento fino evita conclusiones erróneas; **Sonnet** (medio) para lo mecánico (crear usuarios, verificar por SQL/API, completar la matriz de resultados, commits). El operador cambia el modelo a pedido — avisar cuándo conviene subir a Opus.
+>
+> **⚠️ Requisito de presupuesto:** una corrida completa de este plan es **grande** (las de julio tomaron ~2 días con múltiples cortes). NO arrancarla con poco cupo restante — se corta a mitad de un caso. Idealmente empezar con cupo fresco, o acotar el alcance a bloques concretos (ver "Orden de ejecución" + la nota de estado del tope del doc).
 
 ### Reglas innegociables
 1. **NO modificar código** (ni backend, ni dashboard, ni app, ni scripts). Si encontrás un bug: documentalo en la sección "Hallazgos" con severidad y propuesta, y seguí. Solo se permite editar ESTE documento (resultados) y datos de DB para acelerar estados.
@@ -72,10 +76,17 @@ Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes
 3. Acciones destructivas fuera del alcance del plan → preguntar al operador.
 
 ### Herramientas y accesos
+
+> **Conducción como usuario real — computer-use (control del escritorio) es el método PRINCIPAL para lo que se prueba visualmente.** En las corridas de julio, apoyar el testing del navegador en **Chrome MCP** (`claude-in-chrome`) causó **freezes/desconexiones persistentes** (documentado en el Registro de ejecución: timeouts repetidos, tabs que no navegaban, la causa de que U9.3/A6.2/U12 quedaran sin cerrar). Para el relanzamiento, la app Electron y los flujos de navegador que requieren "óptica de usuario real" se conducen con **computer-use** (tools `mcp__computer-use__*`: `screenshot`, `left_click`, `type`, `key`, etc.), manejando la ventana real como lo haría una persona.
+>
+> **Arranque de computer-use:** cargar las tools con ToolSearch (`{query:"computer-use", max_results:30}` trae todo el set de una) → `request_access` con las apps necesarias (la app **Procurador SCW** / Electron, y el navegador si se va a usar) → el operador aprueba cada una en su diálogo. **Nota de tiers:** los navegadores se otorgan en tier "read" (solo lectura: se ve pero no se clickea/tipea desde computer-use → para *conducir* el navegador usar la app Electron directo, o Chrome MCP solo si está estable, o `apiFetch`/curl para la parte no-visual). La app Electron y apps de escritorio normales van en tier "full" (control completo). Confirmar el tier real en la respuesta de `request_access`.
+>
+> **Regla:** verificar el RESULTADO por el canal más confiable (SQL/API) y usar computer-use para la parte que sí requiere ver/clickear como usuario (la app Electron, un render del portal, un banner, un toast). No depender de un solo canal.
+
 - **Servidor/DB:** `ssh -i "C:/Users/JONATHAN/.ssh/do_procurador" root@142.93.64.94` · DB prod `procurador_db` vía `sudo -u postgres psql`. (El warning `could not change directory to "/root"` es inofensivo.)
-- **Dashboard admin:** `https://api.procuradortool.com/dashboard/` vía **Chrome MCP** (extensión Claude in Chrome). Las credenciales del admin están **recordadas** en el form (solo click en "Ingresar").
-- **Portal usuario:** `https://api.procuradortool.com/usuarios/` (login con los usuarios de prueba) o por API: `POST /auth/portal-login {email,password}` → token → `Authorization: Bearer`.
-- **App Electron:** el operador la deja **abierta con credenciales recordadas**; se maneja con las herramientas de escritorio (computer-use). Pedir el permiso de la app cuando se llegue a U12.
+- **App Electron (conductor principal de U12 y de todo lo visual del cliente):** el operador la deja **abierta y logueada con la cuenta de prueba** (hoy: user 250, `procuradortool@gmail.com`, CUIT `27320694359`). Se maneja con **computer-use** (screenshot → localizar → click/type), como un usuario real. Pedir el `request_access` de la app al arrancar U12.
+- **Dashboard admin:** `https://api.procuradortool.com/dashboard/`. Preferir **API real** para las operaciones (el dashboard expone helpers globales por JS, ver "Aprendizajes"); usar el navegador (Chrome MCP si está estable, o computer-use para *ver* el render) solo cuando el caso pide confirmación visual del render. Credenciales de admin recordadas en el form.
+- **Portal usuario:** `https://api.procuradortool.com/usuarios/` (login con los usuarios de prueba) o por API: `POST /auth/portal-login {email,password}` → token → `Authorization: Bearer`. Para confirmaciones visuales (banners, toasts, tarjetas), abrir el render y mirarlo con computer-use/screenshot.
 - **MercadoPago API (verificaciones):** desde el server: `TOK=$(grep '^MP_ACCESS_TOKEN=' /var/www/procurador/backend-server/.env | cut -d= -f2)` y `curl https://api.mercadopago.com/preapproval/<id> -H "Authorization: Bearer $TOK"`. **No imprimir el token.**
 
 ### Aprendizajes operativos (evitan horas perdidas)
@@ -90,8 +101,8 @@ Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes
 ### Coordinación con el operador (humano)
 Pedirle SOLO esto, cuando corresponda:
 1. **Emails**: cuando un caso requiera "click en el link de verificación", avisarle QUÉ casilla y QUÉ email (los de hotmail llegan a `jberger_86@hotmail.com`; los del principal a `procuradortool@gmail.com`). Agrupá los pedidos para no interrumpirlo a cada rato.
-2. **Credenciales PJN**: antes de U12.3+ pedirle que las cargue en el Chrome de la app (Configuración → Seguridad → Agregar contraseña SCW) si no están.
-3. **App abierta**: antes de U12, pedirle que abra la app con las credenciales del usuario principal recordadas.
+2. **Credenciales PJN**: antes de U12.3+ pedirle que las cargue en el Chrome de la app (Configuración → Seguridad → Agregar contraseña SCW) si no están. (Ya cargadas y verificadas el 2026-07-14 para el CUIT 27320694359 en la prueba de SEC-2·B.2 — confirmar que siguen.)
+3. **App abierta + acceso computer-use**: antes de U12, pedirle que abra la app **logueada con la cuenta de prueba** (user 250, `procuradortool@gmail.com`) y aprobar el `request_access` de computer-use para la ventana de **Procurador SCW**. La app se conduce con screenshot+click+type como un usuario real.
 
 ### Orden de ejecución recomendado
 1. **Preparación:** backup DB → verificar estado inicial (solo admins 6/7, MP 0 preapprovals vivos, prod health 200).
