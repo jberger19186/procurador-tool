@@ -7,6 +7,22 @@
 
 ---
 
+## ⚠️ ESTADO ACTUAL AL 2026-07-14 — LEER ANTES DE RETOMAR
+
+Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes de continuar este plan:
+
+- **App Electron: v2.7.39** (no v2.7.35/36/37 como en las corridas de abajo). AUTH-1 (device-binding) y SEC-2·B.2 (verificación diaria oculta) son features nuevas desde entonces — ver `docs/internal/plan-pruebas-post-v2.7.38.md` para su verificación específica, ya cerrada por separado.
+- **Los 4 hallazgos de este doc están CORREGIDOS y deployados** (ver tabla "Hallazgos" abajo, cada uno con su commit). No hace falta re-verificarlos salvo sospecha de regresión.
+- **U9.3 (Plan vencido → reactivación) está RESUELTO** (ver fila U9.3 en el bloque U9): no era un bug de producto, era el `confirm()`/`alert()` nativo bloqueando las herramientas de automatización — ya reemplazados por toast/modal no bloqueante (commit `440e21d`). El backend fue confirmado funcionando por API (200 + `init_point`). **No es necesario reintentarlo.**
+- **Los usuarios fixture de este doc (239, 240, 241, 242, 243...) casi seguro YA NO EXISTEN** — prod se reseteó varias veces desde entonces (quedan solo los 2 admins salvo que se haya creado algo nuevo). **Verificar el estado real de la DB antes de asumir que un fixture viejo sigue vivo.**
+- **Hay una cuenta de prueba nueva y permanente:** user id 250, `procuradortool@gmail.com`, CUIT `27320694359`, plan COMBO_PROMO, `active` — creada el 2026-07-14 para SEC-2·B.2, pero reutilizable como fixture principal para retomar este plan (evita crear uno nuevo desde cero).
+- **Lo único genuinamente pendiente de este plan son confirmaciones visuales** (ya probadas por API/SQL, falta solo el render en browser/app — ninguna es un bug conocido): **A1.14** (ciclo completo de reset de contraseña), **A7.5** (rate limit del bot IA — no ejecutado por costo, requiere 21 llamadas reales), **A2.6/A2.8**, **A4.4/A4.5**, **A3.10/A3.11**, **U5.3**, **U11.7**. Ver CLAUDE.md sección "Flecos del plan de pruebas integral" para el detalle más actualizado.
+- **Infraestructura y seguridad, fuera del alcance de este doc, están 100% cerradas** (D1-D6, SEC-1, SEC-2, SEC-4, AUTH-1) — no es necesario que este plan las re-cubra.
+
+**Recomendación para retomar:** no hace falta re-ejecutar el plan completo desde el principio. Con lo de arriba ya resuelto, lo que realmente aporta valor es: (1) las 7 confirmaciones visuales pendientes (rápidas, bajo riesgo) y (2) cualquier bloque que nunca se llegó a ejecutar en las corridas de julio (revisar la sección "Registro de ejecución" al final para ver la cobertura real alcanzada por bloque). Empezar generando primero un snapshot del estado real de la DB (usuarios, planes, suscripciones vivas) antes de asumir nada de los fixtures viejos.
+
+---
+
 ## Convenciones
 
 - **Usuarios de prueba:** `jberger_86+uN@hotmail.com` (alias de Outlook — todos llegan a la misma casilla). Contraseñas de prueba tipo `Prueba1234`.
