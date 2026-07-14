@@ -421,6 +421,65 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
     }
 });
 
+// ==================== SEC-2·B.2: verificación diaria real (PJN) ====================
+// Reportado por la app Electron logueada con la cuenta de prueba dedicada (CUIT
+// configurado en VERIFICATION_TEST_CUIT). No lleva credenciales ni contenido de
+// expedientes reales, solo resultado (ok/error + tiempos). Restringido por CUIT para
+// que solo esa cuenta pueda escribir el reporte que ve el dashboard admin.
+const _vfs   = require('fs');
+const _vpath = require('path');
+const VERIFICATION_FILE = _vpath.join(__dirname, '..', 'data', 'verification-results.json');
+const VERIFICATION_TEST_CUIT = process.env.VERIFICATION_TEST_CUIT || '27320694359';
+const VERIFICATION_HISTORY_MAX = 30;
+
+function _loadVerification() {
+    try { if (_vfs.existsSync(VERIFICATION_FILE)) return JSON.parse(_vfs.readFileSync(VERIFICATION_FILE, 'utf8')); } catch (_) {}
+    return { latest: null, history: [] };
+}
+
+function _saveVerification(data) {
+    const dir = _vpath.dirname(VERIFICATION_FILE);
+    if (!_vfs.existsSync(dir)) _vfs.mkdirSync(dir, { recursive: true });
+    _vfs.writeFileSync(VERIFICATION_FILE, JSON.stringify(data, null, 2));
+}
+
+router.post('/verification-report', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+    const { timestamp, estado, tiempoTotalMs, procuracion, informe } = req.body;
+
+    if (!estado || !['ok', 'parcial', 'error'].includes(estado)) {
+        return res.status(400).json({ success: false, error: 'estado inválido' });
+    }
+
+    try {
+        const u = await db.query('SELECT cuit FROM users WHERE id = $1', [userId]);
+        const cuit = u.rows[0]?.cuit;
+        if (cuit !== VERIFICATION_TEST_CUIT) {
+            return res.status(403).json({ success: false, error: 'Cuenta no autorizada a reportar verificaciones' });
+        }
+
+        const entry = {
+            timestamp: timestamp || new Date().toISOString(),
+            estado,
+            tiempoTotalMs: tiempoTotalMs || null,
+            procuracion: procuracion || null,
+            informe: informe || null
+        };
+
+        const saved = _loadVerification();
+        saved.latest = entry;
+        saved.history = [entry, ...(saved.history || [])].slice(0, VERIFICATION_HISTORY_MAX);
+        _saveVerification(saved);
+
+        console.log(`[verification] Reporte recibido: ${estado} (${timestamp})`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error guardando reporte de verificación:', error);
+        res.status(500).json({ success: false, error: 'Error del servidor' });
+    }
+});
+
 // Obtener información de cuenta del usuario
 router.get('/account', authenticateToken, async (req, res) => {
     const db = req.app.get('db');

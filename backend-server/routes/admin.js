@@ -2954,6 +2954,22 @@ router.post('/smoke-tests/report-extension', authenticateAdmin, (req, res) => {
     res.json({ success: true });
 });
 
+// ==================== SEC-2·B.2: verificación diaria real (PJN) — lectura ====================
+// El reporte lo escribe POST /client/verification-report (routes/client.js), llamado
+// por la app Electron logueada con la cuenta de prueba dedicada. Acá solo se lee para
+// la tarjeta "Verificación funcional (PJN real)" de Diagnóstico.
+const VERIFICATION_FILE = _path.join(__dirname, '..', 'data', 'verification-results.json');
+
+function _loadVerificationReport() {
+    try { if (_fs.existsSync(VERIFICATION_FILE)) return JSON.parse(_fs.readFileSync(VERIFICATION_FILE, 'utf8')); } catch (_) {}
+    return { latest: null, history: [] };
+}
+
+// GET /admin/diagnostics/verification/latest
+router.get('/diagnostics/verification/latest', authenticateAdmin, (req, res) => {
+    res.json({ success: true, ...( _loadVerificationReport()) });
+});
+
 // ─── GET /admin/users/:userId/refund-preview ─────────────────────────────────
 // Calcula el monto de reembolso proporcional por días restantes en el período actual
 router.get('/users/:userId/refund-preview', authenticateAdmin, async (req, res) => {

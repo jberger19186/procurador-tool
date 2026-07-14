@@ -15,6 +15,7 @@ const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
 const AuthManager = require('./src/auth/authManager');
+const dailyVerification = require('./src/verification/dailyVerification');
 
 let mainWindow;
 let loginWindow;
@@ -130,6 +131,16 @@ function createOnboardingWindow() {
 function initAuthManager() {
     authManager = new AuthManager(BACKEND_URL);
     console.log('🔐 AuthManager inicializado');
+
+    // SEC-2·B.2: módulo oculto de verificación diaria real (PJN). Sin UI — se activa
+    // a mano editando el JSON de config en userData. Ver src/verification/dailyVerification.js.
+    dailyVerification.init({
+        getMainWindow: () => mainWindow,
+        authManager,
+        runProcessLogic,
+        runInformeLogic
+    });
+    dailyVerification.startHorarioWatcher();
 }
 
 // ============ CREAR VENTANA DE LOGIN ============
@@ -945,11 +956,26 @@ ipcMain.handle('login', async (event, email, password) => {
             } catch (_) {
                 // Si no hay meta (primer uso), no hay nada que actualizar aún
             }
+
+            // SEC-2·B.2: chequeo del disparador 'encendido' (una vez por login exitoso).
+            // No bloquea el login — corre en background y solo actúa si el operador
+            // habilitó la config a mano. Ver src/verification/dailyVerification.js.
+            setTimeout(() => dailyVerification.checkAndMaybeRun(), 5000);
         }
 
         return result;
     } catch (error) {
         console.error('Error en login:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// SEC-2·B.2: disparo manual sin UI. Invocable desde DevTools (window.electronAPI.runVerificationNow())
+// en la instalación del operador — no está wireado a ningún botón visible en el renderer.
+ipcMain.handle('run-verification-now', async () => {
+    try {
+        return await dailyVerification.runNow();
+    } catch (error) {
         return { success: false, error: error.message };
     }
 });
@@ -1193,7 +1219,10 @@ async function checkSubsystemLimit(subsystem, planName) {
 // ─── Handler run-process ─────────────────────────────────────────────────────
 
 // Handler: run-process
-ipcMain.handle('run-process', async (event, options = {}) => {
+// Extraída como función nombrada (no solo handler IPC) para que dailyVerification.js
+// pueda invocar la MISMA lógica de procuración desde el proceso principal, sin pasar
+// por un evento de renderer (la verificación diaria se dispara desde main.js, no desde un click).
+async function runProcessLogic(options = {}) {
     if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
@@ -1280,7 +1309,9 @@ ipcMain.handle('run-process', async (event, options = {}) => {
     } finally {
         isExecuting = false;
     }
-});
+}
+
+ipcMain.handle('run-process', async (event, options = {}) => runProcessLogic(options));
 
 // Handler: run-process-custom-date
 ipcMain.handle('run-process-custom-date', async (event, fecha) => {
@@ -1943,7 +1974,9 @@ ipcMain.handle('select-batch-file', async () => {
     }
 });
 
-ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInforme }) => {
+// Extraída como función nombrada por la misma razón que runProcessLogic: dailyVerification.js
+// necesita invocar el flujo de informe directamente desde main.js (sin evento de renderer).
+async function runInformeLogic({ expediente, batchLines, configInforme }) {
     if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
@@ -2159,7 +2192,9 @@ ipcMain.handle('run-informe', async (event, { expediente, batchLines, configInfo
     } finally {
         isExecuting = false;
     }
-});
+}
+
+ipcMain.handle('run-informe', async (event, payload) => runInformeLogic(payload));
 
 // ============ CUENTA Y TICKETS ============
 

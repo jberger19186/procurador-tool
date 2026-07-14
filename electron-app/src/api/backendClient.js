@@ -155,6 +155,21 @@ class BackendClient {
     }
 
     /**
+     * SEC-2·B.2: reportar el resultado de la verificación diaria real (PJN real).
+     * Solo la cuenta de prueba dedicada puede reportar (el server valida por CUIT).
+     * No lleva credenciales ni datos de expedientes reales, solo estado/tiempos.
+     */
+    async reportVerification(payload) {
+        try {
+            const response = await this.client.post('/client/verification-report', payload);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error reportando verificación diaria:', error.message);
+            return { success: false, error: error.response?.data?.error || error.message };
+        }
+    }
+
+    /**
      * Renovar token JWT
      */
     async refreshToken() {

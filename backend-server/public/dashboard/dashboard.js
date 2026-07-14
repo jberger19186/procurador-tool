@@ -3369,6 +3369,10 @@ async function renderDiagnostico() {
         .diag-badge.ok { background:#d1fae5; color:#065f46; }
         .diag-badge.fail { background:#fee2e2; color:#991b1b; }
         .diag-badge.none { background:#f3f4f6; color:#6b7280; }
+        .diag-badge.warn { background:#fef3c7; color:#92400e; }
+        .diag-stale-warning { margin:0 18px 14px; padding:10px 12px; background:#fef3c7; color:#92400e; border-radius:8px; font-size:12.5px; }
+        .diag-verif-row { display:flex; justify-content:space-between; padding:6px 0; font-size:13px; border-bottom:1px solid #f3f4f6; }
+        .diag-verif-row:last-child { border-bottom:none; }
         .diag-log { font-family:'Cascadia Code',Consolas,monospace; font-size:12px; padding:14px 18px; background:#1a1a1a; color:#d1d5db; min-height:160px; max-height:340px; overflow-y:auto; line-height:1.7; white-space:pre; }
         .diag-log .ok  { color:#34d399; }
         .diag-log .err { color:#f87171; }
@@ -3434,6 +3438,19 @@ async function renderDiagnostico() {
             </div>
         </div>
 
+        <!-- ── VERIFICACIÓN FUNCIONAL (PJN REAL) — SEC-2·B.2 ── -->
+        <div class="diag-card">
+            <div class="diag-card-header">
+                <div>
+                    <div class="diag-card-title">🔎 Verificación funcional (PJN real)</div>
+                    <div class="diag-last" id="diag-verif-last">Cargando...</div>
+                </div>
+                <span class="diag-badge none" id="diag-verif-badge">—</span>
+            </div>
+            <div id="diag-verif-stale"></div>
+            <div class="diag-log" id="diag-verif-log" style="min-height:auto;">Esperando ejecución...</div>
+        </div>
+
     </div>`;
 
     // Cargar últimos resultados
@@ -3446,6 +3463,13 @@ async function renderDiagnostico() {
         }
     } catch (e) {
         document.getElementById('diag-api-last').textContent = 'Error cargando resultados';
+    }
+
+    try {
+        const vdata = await apiFetch('/admin/diagnostics/verification/latest');
+        diagRenderVerification(vdata.latest, vdata.history || []);
+    } catch (e) {
+        document.getElementById('diag-verif-last').textContent = 'Error cargando resultados';
     }
 }
 
@@ -3554,6 +3578,57 @@ window.diagCopyExtCmd = function() {
         setTimeout(() => { btn.textContent = '📋'; }, 1500);
     });
 };
+
+// SEC-2·B.2 — reportado por la app Electron de la cuenta de prueba dedicada (oculto,
+// sin botón acá: no corre desde el dashboard, corre en la PC del operador).
+function diagRenderVerification(latest, history) {
+    const logEl    = document.getElementById('diag-verif-log');
+    const badgeEl  = document.getElementById('diag-verif-badge');
+    const lastEl   = document.getElementById('diag-verif-last');
+    const staleEl  = document.getElementById('diag-verif-stale');
+
+    if (!latest) {
+        logEl.innerHTML  = 'Sin verificaciones reportadas todavía.\n\nSe reportan automáticamente desde la app Electron del operador (módulo oculto, ver docs/internal).';
+        badgeEl.textContent = '—';
+        badgeEl.className   = 'diag-badge none';
+        lastEl.textContent  = 'Nunca reportado';
+        staleEl.innerHTML   = '';
+        return;
+    }
+
+    const daysSince = (Date.now() - new Date(latest.timestamp).getTime()) / 86400000;
+    let badgeClass = 'ok', badgeText = '✅ OK';
+    if (latest.estado === 'error') {
+        badgeClass = 'fail'; badgeText = '❌ Error';
+    } else if (latest.estado === 'parcial') {
+        badgeClass = 'warn'; badgeText = '⚠️ Parcial';
+    } else if (daysSince > 7) {
+        badgeClass = 'warn'; badgeText = '⚠️ Desactualizado';
+    }
+    badgeEl.textContent = badgeText;
+    badgeEl.className   = `diag-badge ${badgeClass}`;
+    lastEl.textContent  = `Última verificación: ${diagRelativeTime(latest.timestamp)}`;
+
+    staleEl.innerHTML = (daysSince > 7)
+        ? `<div class="diag-stale-warning">⚠️ Hace más de 7 días que no se verifica el funcionamiento contra el PJN real — te recomendamos correr una verificación.</div>`
+        : '';
+
+    const rowsHtml = ['procuracion', 'informe'].map(k => {
+        const d = latest[k];
+        if (!d) return `<div class="diag-verif-row"><span>${k === 'procuracion' ? 'Procuración' : 'Informe'}</span><span style="color:#9ca3af;">no corrió</span></div>`;
+        const tiempo = d.tiempoMs ? `${(d.tiempoMs / 1000).toFixed(1)}s` : '';
+        const errTxt = escHtml(d.error || 'error');
+        return `<div class="diag-verif-row"><span>${k === 'procuracion' ? 'Procuración' : 'Informe'}</span><span>${d.ok ? '✅ OK' : '❌ ' + errTxt} ${tiempo ? '· ' + tiempo : ''}</span></div>`;
+    }).join('');
+
+    const historyHtml = (history || []).slice(0, 10).map(h =>
+        `${diagRelativeTime(h.timestamp)} — ${h.estado === 'ok' ? '✅' : h.estado === 'parcial' ? '⚠️' : '❌'} ${h.estado}`
+    ).join('\n');
+
+    logEl.innerHTML = rowsHtml + (historyHtml
+        ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid #f3f4f6; font-size:11.5px; color:#6b7280; white-space:pre-line;">Historial reciente:\n${historyHtml}</div>`
+        : '');
+}
 
 function diagRelativeTime(iso) {
     if (!iso) return '—';

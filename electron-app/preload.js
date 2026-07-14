@@ -26,6 +26,10 @@ try {
         stopProcess: () => ipcRenderer.invoke('stop-process'),
         listExpedientes: (fechaLimite) => ipcRenderer.invoke('list-expedientes', fechaLimite),
 
+        // SEC-2·B.2: verificación diaria real (oculta, sin botón en la UI). Disparo
+        // manual desde DevTools: window.electronAPI.runVerificationNow()
+        runVerificationNow: () => ipcRenderer.invoke('run-verification-now'),
+
         // ============ ARCHIVOS ============
         openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
         openDownloadsFolder: () => ipcRenderer.invoke('open-downloads-folder'),
