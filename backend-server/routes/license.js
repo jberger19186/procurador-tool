@@ -48,6 +48,12 @@ router.post('/execution/start', authenticateToken, async (req, res) => {
             if (!sub.machine_id) {
                 await db.query('UPDATE users SET machine_id = $1 WHERE id = $2', [machineId, userId]);
             } else if (sub.machine_id !== machineId) {
+                // T1 (plan-pruebas-post-v2.7.38.md): sin este log, un DEVICE_MISMATCH
+                // real no deja rastro (no hay logger de acceso HTTP en server.js) —
+                // imposible auditar reportes de usuarios bloqueados sin él.
+                require('../utils/logger').warn(
+                    `[AUTH-1] DEVICE_MISMATCH user=${userId} bound=${sub.machine_id} request=${machineId}`
+                );
                 return res.status(403).json({
                     success: false,
                     code:    'DEVICE_MISMATCH',
