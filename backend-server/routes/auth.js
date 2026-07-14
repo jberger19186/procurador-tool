@@ -601,12 +601,18 @@ router.post('/login', loginLimiter, async (req, res) => {
 
         const subscription = subResult.rows[0];
 
-        // Registrar último login
+        // Registrar último login + AUTH-1: vincular el dispositivo (soft binding).
+        // Cada login (de la app Electron, que manda machineId) re-vincula la cuenta al
+        // machineId actual. El binding se guarda SERVER-SIDE (no en el token) → un token
+        // robado no revela el machineId, así que no se puede replicar desde otro equipo
+        // (execution/start verifica que el machineId del request coincida). Cambiar de
+        // dispositivo es transparente: al volver a loguearse, se re-vincula solo.
         await db.query(`
-            UPDATE users 
-            SET last_login = NOW() 
+            UPDATE users
+            SET last_login = NOW(),
+                machine_id = $2
             WHERE id = $1
-        `, [user.id]);
+        `, [user.id, machineId]);
 
         // Generar JWT (válido por 1 hora, se renueva con /refresh)
         const token = jwt.sign(

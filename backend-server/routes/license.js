@@ -23,8 +23,9 @@ router.post('/execution/start', authenticateToken, async (req, res) => {
         // confiable (un cliente adulterado podría saltearlo) y log-execution corre DESPUÉS
         // de la ejecución. Este gate —por el que pasa TODA ejecución— frena antes de correr.
         const subRes = await db.query(
-            `SELECT s.payment_provider, s.usage_count, s.usage_limit
-             FROM subscriptions s WHERE s.user_id = $1`,
+            `SELECT s.payment_provider, s.usage_count, s.usage_limit, u.machine_id
+             FROM subscriptions s JOIN users u ON u.id = s.user_id
+             WHERE s.user_id = $1`,
             [userId]
         );
         const sub = subRes.rows[0];
@@ -34,6 +35,25 @@ router.post('/execution/start', authenticateToken, async (req, res) => {
                 code:    'TRIAL_EXHAUSTED',
                 error:   'Agotaste tus usos de prueba. Contactá al administrador para activar tu cuenta.'
             });
+        }
+
+        // AUTH-1: verificar el binding de dispositivo. El login guarda users.machine_id
+        // (server-side, no en el token) al iniciar sesión. Acá se exige que el machineId
+        // del request coincida → un token robado no sirve desde otro equipo (el atacante
+        // no conoce el machineId vinculado, que no viaja en el token). Si machine_id es
+        // NULL (sesión legada previa a este cambio, o desvinculado por el admin), se
+        // vincula al primer uso. Si difiere → 403. El cliente legítimo siempre manda el
+        // machineId de su hardware, que coincide con el vinculado en su login.
+        if (sub) {
+            if (!sub.machine_id) {
+                await db.query('UPDATE users SET machine_id = $1 WHERE id = $2', [machineId, userId]);
+            } else if (sub.machine_id !== machineId) {
+                return res.status(403).json({
+                    success: false,
+                    code:    'DEVICE_MISMATCH',
+                    error:   'Esta sesión no corresponde a tu dispositivo registrado. Iniciá sesión de nuevo desde este equipo.'
+                });
+            }
         }
 
         // 1. Limpiar locks expirados de todos los usuarios

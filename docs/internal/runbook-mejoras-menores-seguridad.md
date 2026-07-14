@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | **DEP-2** nodemailer 6→9 | **Sonnet · medio** | No (solo backend) | Medio (email es crítico → confirmar envío real) | ✅ Hecho |
 | **DEP-1** Electron 28→43.1.0 | **Sonnet · alto**. En la práctica no hizo falta Opus (código ya moderno, cero cambios); el único obstáculo fue de entorno (Node local) | **Sí** | Alto en el papel, bajo en la práctica | ✅ Hecho |
-| **AUTH-1** JWT device-binding | Variante A (limpiar código muerto): **Sonnet · bajo**. Variante B (binding real): **Opus · medio** (correctitud de auth, sensible) | Sí (variante B) | Bajo (Info) | Pendiente |
+| **AUTH-1** JWT device-binding | **Opus · alto** (binding real, correctitud de auth) | **No** (el cliente ya manda `machineId`) | Bajo (Info) | ✅ Hecho |
 
 > **Criterio general de esta sesión:** trabajo mecánico y bien especificado (bumps, YAML de CI, endpoints CRUD, UI) → **Sonnet**. Trabajo con razonamiento fino o correctitud sensible (análisis de seguridad, lógica de cobro, breaking changes ambiguos, device-binding de auth) → **Opus alto**. Es el mismo patrón que funcionó acá: los bugs de cobro y la auditoría se hicieron con Opus; los deploys y docs con Sonnet.
 
@@ -70,24 +70,18 @@
 
 ---
 
-## AUTH-1 — JWT no atado a dispositivo · **Info, bundlear con un release futuro**
+## AUTH-1 — JWT no atado a dispositivo · ✅ HECHO (2026-07-13)
 
-> **Modelo/esfuerzo:** camino A (limpieza) → **Sonnet · bajo** (borrar código muerto, sin release). Camino B (binding real) → **Opus · medio** — toca la lógica de autenticación, donde un error abre o cierra acceso de más; conviene el razonamiento fino de Opus, como se usó para los fixes de auth/cobro de esta sesión.
+> **Modelo/esfuerzo usado: Opus · alto** (binding real, política *soft*). Toca la lógica de autenticación; se usó el razonamiento fino de Opus como en los fixes de auth/cobro de esta sesión.
 
-**Contexto:** el token (`{id, role}`, 1h) es bearer estándar sin binding a `machineId`. Al login se emite un `sessionKey` con `machineId` que **nunca se verifica** (`SESSION_KEY_SECRET` solo firma). El anti-sharing real es el lock de ejecución. Severidad Info/Baja.
+**Contexto original:** el token (`{id, role}`, 1h) era bearer estándar sin binding a `machineId`. Existía andamiaje parcial: `users.machine_id` se **leía** (verify-session, `machineBound`) pero **nunca se escribía**, y un `sessionKey` con `machineId` que **nunca se verificaba**. El anti-sharing real era solo el lock de ejecución. Severidad Info/Baja.
 
-**Dos caminos:**
-
-**A) Limpieza (bajo esfuerzo, sin release, sin cambio de seguridad):** eliminar el `sessionKey` no usado para no dar falsa sensación de binding.
-- Quitar la generación del `sessionKey` en `routes/auth.js` (~622) y `routes/client.js` (~190), y `SESSION_KEY_SECRET` del `.env` si no se usa en otro lado. Verificar que el cliente Electron no lo consuma (grep en `electron-app/`). Solo backend.
-
-**B) Enforcement real (medio-alto, requiere release Electron):** atar el token al dispositivo.
-- Server: incluir `machineId` en el `token` (no solo en el `sessionKey`), y en `authenticateToken` (o en los endpoints sensibles: `execution/start`, `scripts/download`) verificar que el `machineId` del body/header coincida con el del token.
-- Cliente Electron: enviar el `machineId` en cada request sensible (ya lo tiene, `machineId.js`).
-- Probar en staging: token de machine A + machineId B → rechazo.
-- **Requiere release** (el cliente cambia). Conviene hacerlo **junto con DEP-1** (que ya requiere release) para no gastar un release solo en esto.
-
-**Recomendación:** hacer (A) o (B) recién cuando haya un release de Electron en agenda (DEP-1). No amerita un release propio.
+**Solución implementada — binding *soft*, server-side, SIN release de Electron:**
+- **Clave del enfoque:** el `machineId` se guarda **server-side** en `users.machine_id` (no viaja en el token). Así, un token robado **no revela** a qué dispositivo está atado → no se puede replicar desde otro equipo. El cliente Electron **ya enviaba** `machineId` a `/auth/login` y a `/license/execution/start` (`backendClient.js`), por eso **no hizo falta release**.
+- **`routes/auth.js` (`/login`, ~610):** el `UPDATE last_login` ahora también hace `SET machine_id = $2` → cada login re-vincula la cuenta al dispositivo actual (política *soft*: cambiar de equipo es transparente, al re-loguear se re-vincula solo). Solo el `/login` de Electron vincula (el admin-login, extension-login y portal-login no).
+- **`routes/license.js` (`/license/execution/start`):** tras el gate del trial, verifica el binding — si `users.machine_id` es NULL (sesión legada previa al cambio, o desvinculado por el admin) lo **vincula al primer uso** (bind-on-null); si coincide → permite; si difiere → **403 `DEVICE_MISMATCH`**.
+- **Compatibilidad:** la mayoría de las cuentas tenían `machine_id` NULL → en el primer `execution/start` se vinculan solas, sin fricción. El admin ya tenía la acción "desvincular dispositivo" (`admin.js`, `machine_id = NULL`), que ahora sirve para migrar de equipo.
+- **Verificado E2E en staging (user 215) y prod (admin id 6):** machineId coincidente → 200; distinto → 403 `DEVICE_MISMATCH`; NULL → bind + 200. En prod la verificación fue **no disruptiva** (se usó el mismo machineId real del admin; el binding real quedó intacto). Solo backend, desplegado a prod (`pm2 restart procurador-api`), backup previo de los archivos en `/tmp/*.bak-*`.
 
 ---
 
@@ -117,4 +111,5 @@
 
 1. ~~**SEC-2 · B.1** (CI)~~ — ✅ hecho 2026-07-13.
 2. ~~**DEP-2** (nodemailer)~~ — ✅ hecho 2026-07-13.
-3. ~~**DEP-1** (Electron)~~ — ✅ hecho 2026-07-13. Sigue **AUTH-1(B) + SEC-2 · B.2** en la misma sesión (comparten el próximo release de Electron). Sonnet alto para SEC-2·B.2; Opus para diseñar el device-binding de AUTH-1(B).
+3. ~~**DEP-1** (Electron)~~ — ✅ hecho 2026-07-13.
+4. ~~**AUTH-1(B)** device-binding~~ — ✅ hecho 2026-07-13 (Opus alto; resultó **sin release** — el cliente ya mandaba `machineId`, el binding es server-side). Queda **SEC-2 · B.2** (verificación diaria real), que **sí requiere release de Electron** — Sonnet alto para el grueso, Opus puntual para el disparador diario y el manejo de credenciales.
