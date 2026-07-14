@@ -76,6 +76,11 @@ ver diagnóstico rápido en CLAUDE.md ("Diagnóstico rápido: credenciales guard
 **Pass:** `machine_id` no-NULL tras el login, ninguna acción da 403 `DEVICE_MISMATCH`.
 **Fail:** `machine_id` sigue NULL, o cualquier acción legítima da `DEVICE_MISMATCH`.
 
+**✅ RESULTADO: PASS (2026-07-14).** Login real de la cuenta 250 vinculó `machine_id`
+(coincide con el del operador, mismo equipo que admin id 6 — esperable, es la misma PC física).
+Confirmado no-disruptivamente por API: `execution/start` con ese `machineId` → 200 (no
+`DEVICE_MISMATCH`). Lock liberado después de la verificación.
+
 ## T3 — Prueba reina: disparo manual del módulo de verificación (pendiente)
 
 La prueba de mayor valor: una sola corrida real ejercita **a la vez** el refactor de
@@ -100,6 +105,34 @@ tarjeta del dashboard.
 **Fail:** cualquier error en procuración/informe que antes no ocurría, o el reporte no llega
 al dashboard (revisar `authManager.backendClient.reportVerification` / logs de prod).
 
+**✅ RESULTADO: PASS (2026-07-14), con un hallazgo intermedio ya corregido.**
+
+Primer intento: falló con `Fecha límite inválida: . Formato: DD/MM/YYYY`. Causa raíz —
+**no fue una regresión de esta sesión ni un bug del producto**: `runProcessLogic` viene del
+handler `run-process` PLANO, que hoy **ningún botón de la UI actual dispara** (quedó
+inalcanzable desde la unificación "Procurar hoy" de v2.4.16 — confirmado por grep en
+`renderer.js`/`index.html`, cero referencias a `data-action="run-process"`). El botón real
+("Procurar hoy" en la sidebar) llama a una acción distinta (`run-process-custom-date`) que
+**sí** autocompleta la fecha de hoy si el campo está vacío, antes de invocar el script — el
+propio operador lo confirmó ("si el campo está vacío, presiono Procurar y lo autocompleta").
+El módulo de verificación, al invocar `runProcessLogic` directo (sin pasar por la UI), no
+heredaba esa protección y quedó expuesto a un `config_proceso.json` con `fechaLimite` vacía
+persistida en el equipo (de una prueba anterior).
+
+**Fix (acotado exclusivamente al módulo de verificación, sin tocar el flujo real de usuarios):**
+`ensureFechaLimite()` en `dailyVerification.js` — replica el mismo guard de la sidebar
+(si `general.fechaLimite` está vacía, la completa con la fecha de hoy) justo antes de invocar
+`runProcessLogic`, dentro del mismo call stack (evita la carrera con el estado en memoria del
+renderer que se observó al intentar reparar el archivo por fuera, vía script, mientras la app
+estaba corriendo). Verificado en código fuente (`node -c` limpio); pendiente de release para
+llegar al build instalado — no bloqueante, el `run-process` plano no lo usa ningún usuario real.
+
+Segundo intento (tras reparar el archivo a mano + confirmar el fix en fuente): **procuración
+real OK (41.2s) + informe real OK (71.3s)**, `estado: "ok"` en `verificacion_config.json`
+(userData) y en `GET /admin/diagnostics/verification/latest` (prod) — el reporte llegó
+correctamente vía `POST /client/verification-report` con la cuenta 250 (no-admin, restringida
+por CUIT).
+
 ## T4 — Procuración/informe por la UI normal (refuerzo, opcional)
 
 Mismo código que T3 (ambos llaman a `runProcessLogic`/`runInformeLogic`), así que es refuerzo,
@@ -119,6 +152,14 @@ probó exhaustivamente por API directa.
 **T3 en verde retira ~80% del riesgo real** (refactor + módulo nuevo + reporte + tarjeta, todo
 en una sola corrida real). T1+T2 cubren el riesgo específico de AUTH-1. Cualquier fail en T2/T3
 debe investigarse antes de considerar el release v2.7.38 completamente verificado.
+
+## ✅ Resultado final — v2.7.38 verificado (2026-07-14)
+
+**T0 ✅ · T1 ✅ · T2 ✅ · T3 ✅** (T4/T5 no hicieron falta, cubiertos por T3 y por las pruebas
+previas de `curl`). AUTH-1 y SEC-2·B.2 confirmados con una ejecución real de punta a punta
+contra el PJN, sin regresiones en `run-process`/`run-informe`. Único hallazgo (fecha límite
+vacía en `runProcessLogic`) acotado al módulo de verificación, corregido en código fuente,
+no bloqueante para usuarios reales.
 
 ## Limpieza post-prueba
 

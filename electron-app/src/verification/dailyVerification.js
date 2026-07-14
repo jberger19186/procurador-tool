@@ -66,6 +66,33 @@ function todayStr() {
     return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+function hoyDDMMYYYY() {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+// El botón real "Procurar hoy" de la sidebar autocompleta la fecha límite con la de
+// hoy si el campo está vacío (renderer.js, acción 'procurar-hoy') antes de invocar
+// run-process-custom-date. runProcessLogic (de donde viene este módulo) es el handler
+// 'run-process' PLANO — hoy inalcanzable desde ningún botón real de la UI actual — que
+// NO tiene ese guard: confía ciegamente en lo que haya persistido en config_proceso.json.
+// Como este módulo invoca runProcessLogic directo (sin pasar por la UI), replica acá el
+// mismo guard para no heredar un config_proceso.json con fechaLimite vacía/stale.
+function ensureFechaLimite() {
+    const configPath = path.join(app.getPath('userData'), 'config_proceso.json');
+    try {
+        const raw = fs.readFileSync(configPath, 'utf8');
+        const config = JSON.parse(raw);
+        if (!config.general) config.general = {};
+        if (!config.general.fechaLimite || !String(config.general.fechaLimite).trim()) {
+            config.general.fechaLimite = hoyDDMMYYYY();
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        }
+    } catch (e) {
+        console.error('[verification] No se pudo verificar/reparar fechaLimite:', e.message);
+    }
+}
+
 function isDueNow(config) {
     if (!config.habilitado) return false;
     if (config.modo === 'manual') return false;
@@ -131,6 +158,7 @@ async function runVerification(config, { manual = false } = {}) {
     if (config.correrProcuracion) {
         const t0 = Date.now();
         try {
+            ensureFechaLimite();
             const r = await runProcessLogic({});
             detalle.procuracion = { ok: !!r.success, tiempoMs: Date.now() - t0, error: r.success ? null : (r.error || 'error desconocido') };
         } catch (e) {
