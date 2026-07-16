@@ -19,7 +19,9 @@ Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes
 - **Lo único genuinamente pendiente de este plan son confirmaciones visuales** (ya probadas por API/SQL, falta solo el render en browser/app — ninguna es un bug conocido): **A1.14** (ciclo completo de reset de contraseña), **A7.5** (rate limit del bot IA — no ejecutado por costo, requiere 21 llamadas reales), **A2.6/A2.8**, **A4.4/A4.5**, **A3.10/A3.11**, **U5.3**, **U11.7**. Ver CLAUDE.md sección "Flecos del plan de pruebas integral" para el detalle más actualizado.
 - **Infraestructura y seguridad, fuera del alcance de este doc, están 100% cerradas** (D1-D6, SEC-1, SEC-2, SEC-4, AUTH-1) — no es necesario que este plan las re-cubra.
 
-**✅ Actualización 2026-07-16: las 9 confirmaciones visuales listadas abajo quedaron todas cerradas** (A1.14, A2.6, A2.8, A3.10, A3.11, A4.4, A4.5, U5.3, U11.7 — ver detalle en cada fila y en el Registro de ejecución al final). Solo queda A7.5 en SKIP (rate limit del bot IA, no ejecutado por costo — documentado por lectura de código). **El plan de pruebas integral queda, en la práctica, completo.**
+**✅ Actualización 2026-07-16: las 9 confirmaciones visuales listadas abajo quedaron todas cerradas** (A1.14, A2.6, A2.8, A3.10, A3.11, A4.4, A4.5, U5.3, U11.7 — ver detalle en cada fila y en el Registro de ejecución al final). Solo queda A7.5 en SKIP (rate limit del bot IA, no ejecutado por costo — documentado por lectura de código). **El plan original queda, en la práctica, completo.**
+
+**📋 Nuevo alcance pendiente (agregado 2026-07-16): BLOQUE R — REFUERZO** (buscar "BLOQUE R" abajo, después de U13): ~35 casos nuevos que cubren los gaps que el plan original no tocó — auto-updater/release (R1), instalación NSIS desde cero + onboarding (R2), candado de concurrencia (R3), resiliencia de red/sesión (R4), ciclo de novedades del monitor (R5), entradas inválidas contra el PJN (R6), multi-cuenta/CUIT (R7), contenido de emails (R8), extensión visual (R9), negativos de seguridad adicionales (R10), drills operativos (R11) y bordes del portal (R12). **Para ejecutar: Sonnet esfuerzo medio**, prioridad R1–R4 primero, mismas reglas del plan (sin tocar código, backup previo, fixture user 250 con contraseña `TestPass2026!`). Ver "Notas para la corrida de R" al final del bloque.
 
 **Recomendación para retomar:** no hace falta re-ejecutar el plan completo desde el principio. Con lo de arriba ya resuelto, lo que realmente aporta valor es: (1) las 7 confirmaciones visuales pendientes (rápidas, bajo riesgo) y (2) cualquier bloque que nunca se llegó a ejecutar en las corridas de julio (revisar la sección "Registro de ejecución" al final para ver la cobertura real alcanzada por bloque). Empezar generando primero un snapshot del estado real de la DB (usuarios, planes, suscripciones vivas) antes de asumir nada de los fixtures viejos.
 
@@ -362,6 +364,123 @@ Cuando SÍ hay un horario límite indicado:
 |---|---|---|---|
 | U13.1 | extension-login según estado (trial/activo/suspendido) | Permite/bloquea correcto | ✅ Usuario 239 activo → `POST /auth/extension-login` → 200 con token; luego `suspended_admin` (SQL) → mismo endpoint → 403 "Tu cuenta fue suspendida por el administrador." Usuario restaurado a `active` |
 | U13.2 | Flujos según plan (extension_flows) | Lista correcta | ✅ Respuesta de `extension-login` incluye `enabledFlows:['consulta','escritos1','escritos2','notificaciones','deox']` — coincide con `extension_flows` configurado en el plan COMBO_PROMO |
+
+---
+
+## BLOQUE R — REFUERZO (agregado 2026-07-16, pendiente de ejecutar)
+
+> **Origen:** análisis de gaps tras cerrar el plan original al 100% (salvo A7.5). Son aspectos que el plan de julio **no cubrió** — robustez, instalación, concurrencia, resiliencia y edge cases operativos. **Modelo/esfuerzo sugerido: Sonnet, medio** (son verificaciones mecánicas; ninguno involucra lógica de negocio ambigua de cobro — si al ejecutar R algo de MP se comporta raro, ahí sí subir a Opus).
+> **Mismas reglas del plan:** NO modificar código, backup DB previo, fixture principal = user 250 (`procuradortool@gmail.com` / `TestPass2026!`), documentar hallazgos sin corregirlos.
+> **Prioridad:** R1–R4 primero (riesgo real más alto según el historial del proyecto); R5–R8 después; R9–R12 si sobra cupo.
+
+### R1. Release y auto-updater (prioridad ALTA — 2 releases seguidos salieron rotos)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R1.1 | Checklist post-release de assets | `releases/latest` tiene los 3 assets (`.exe`, `.blockmap`, `latest.yml`) y `latest.yml` apunta a la versión correcta con SHA512 válido (recalcular con Node y comparar) | Nada (API GitHub) | |
+| R1.2 | Auto-updater E2E | Instalar una versión ANTERIOR desde GitHub Releases en el equipo → abrir la app → detecta, descarga e instala la última versión sola → reabre en la nueva | Operador (instalación real, ~15 min) | |
+| R1.3 | `/client/download/electron` post-release | 302 al `.exe` de la última versión (ya validado antes; repetir tras CADA release nuevo) | Nada | |
+
+### R2. Instalación desde cero y onboarding (prioridad ALTA — nunca probado el instalador real)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R2.1 | Instalación NSIS limpia | Reset completo de datos de app (Opción B/C del CLAUDE.md) + instalar el `.exe` → primera apertura limpia: login → onboarding wizard completo → tour | Operador o computer-use | |
+| R2.2 | Onboarding: paso de extensión | El paso de instalación de extensión apunta a la Chrome Web Store (no al flujo CRX muerto) y el aviso de "Procede con cuidado" está explicado | computer-use | |
+| R2.3 | Toast de Windows con app instalada | Título "Procurador SCW" (no `electron.app.Electron`) — el fix v2.7.34 solo es verificable en la app INSTALADA, nunca se confirmó | Operador/computer-use, app instalada | |
+| R2.4 | Config inicial por defecto | `config_proceso.json` nace con `modoHeadless:true` y `fechaLimite` = hoy dinámico | SQL/archivo local | |
+
+### R3. Concurrencia y candado de ejecución (prioridad ALTA — `active_executions` jamás ejercitado)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R3.1 | Doble ejecución simultánea (mismo user, mismo equipo) | La 2ª ejecución es rechazada con mensaje claro ("proceso activo") antes de abrir Chrome | App + computer-use | |
+| R3.2 | Lock desde otro dispositivo | `POST /license/execution/start` con el lock ya tomado desde otro `machineId` → 403/409 con mensaje "proceso activo en otro dispositivo" | API (simular 2º machineId) | |
+| R3.3 | Lock huérfano tras crash | Matar el proceso de la app a mitad de una ejecución → el lock expira solo (por heartbeat vencido) y una ejecución nueva es posible dentro de un tiempo razonable — medir cuánto | App + SQL | |
+| R3.4 | AUTH-1 desde cliente real | `POST /license/execution/start` con `machineId` distinto al vinculado → 403 `DEVICE_MISMATCH` + verificar que el `logger.warn` queda en logs de prod + qué mensaje ve el usuario en la app | API + logs server | |
+
+### R4. Resiliencia de red y sesión (prioridad ALTA)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R4.1 | App sin internet al abrir | Mensaje claro de conexión (no crash ni pantalla en blanco); al volver la red, recupera sola o con reintento manual obvio | App + cortar red local | |
+| R4.2 | Pérdida de conexión a mitad de ejecución | El script maneja el corte (ya se vio auto-recovery en U12.6 con el PJN); verificar qué pasa si el que se cae es NUESTRO backend (heartbeat del lock falla) — la ejecución local termina y el estado queda consistente | App + `pm2 stop` en staging o firewall local | |
+| R4.3 | JWT vencido (2h) en sesión larga | El refresh automático renueva sin que el usuario vea "No autenticado"; forzar con un token corto o esperar — validar la auto-recuperación del heartbeat (fix v2.7.24) | App + SQL/tiempo | |
+| R4.4 | Portal con token de 8h vencido | Al operar con sesión vencida → redirige a login limpio, no errores crudos | Browser pane | |
+
+### R5. Monitor — ciclo de novedades completo (U12.7 solo cubrió la consulta inicial)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R5.1 | Consulta de novedades (PJN real) | Corre contra el PJN; `monitor_novedades_usage` +1 **aunque no haya novedades** (modelo Opción A) | App + computer-use + credenciales PJN | |
+| R5.2 | Visor de novedades | Con novedades pendientes → visor se genera; sin novedades → aviso "Sin novedades" (comportamiento documentado, no bug) | App | |
+| R5.3 | Confirmación de novedades | Marcar novedades como vistas → no reaparecen en la próxima consulta | App | |
+| R5.4 | Límite de partes (21ª) | Con 20 partes activas, agregar la 21ª → bloqueo con mensaje (suelto pendiente histórico del plan de vida) | API/SQL para poblar + app | |
+| R5.5 | Regla anti-borrado 24h–30d | Borrar una parte entre las 24h y los 30 días → rechazado con fecha de habilitación en el mensaje | API | |
+
+### R6. Entradas inválidas contra el PJN (edge cases del ejecutor)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R6.1 | Expediente inexistente (procuración individual) | Error controlado y legible en el visor/console; no cuelga, no consume el uso (verificar por DB) | App + PJN | |
+| R6.2 | TXT batch mal formado | Líneas inválidas rechazadas con aviso claro ANTES de ejecutar (validación de `parseExpedienteStr`) | App | |
+| R6.3 | Batch con más de 10 expedientes | Rechazado o truncado con aviso (límite `batch_expedientes_limit=10` por ejecución) | App | |
+| R6.4 | Informe de expediente sin movimientos | PDF/registro generado igual sin crash, contenido coherente | App + PJN | |
+| R6.5 | Fecha límite futura/inválida en procuración | Validación del campo (formato DD/MM/YYYY, fecha futura) con mensaje claro | App | |
+
+### R7. Multi-cuenta en la misma PC (D6 se validó con 1 solo CUIT)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R7.1 | Cambio de cuenta en la app | Logout user 250 → login con una 2ª cuenta de prueba → datos/estado correctos de la 2ª cuenta (contadores, plan) | App + 2ª cuenta con CUIT distinto | |
+| R7.2 | Aislamiento de descargas por CUIT | Las descargas de la 2ª cuenta van a `usuarios\<CUIT2>\descargas\` sin mezclarse con las del CUIT 27320694359 | App + ejecución con 2ª cuenta (requiere credenciales PJN de otro CUIT, o al menos verificar la creación de la carpeta) | |
+| R7.3 | Candado cruzado entre cuentas | Con una ejecución activa de la cuenta A, la cuenta B en el mismo equipo (mismo machineId) → comportamiento definido y claro (documentar cuál es) | App/API | |
+
+### R8. Emails transaccionales — contenido y links (llegan, pero nunca se auditó el contenido)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R8.1 | Auditoría de contenido de los emails clave | Para cada tipo (bienvenida/credenciales, verificación, reset, activación, suspensión con motivo, gracia de pago, respuesta de ticket, discontinuación de plan): remitente `soporte@procuradortool.com`, sin placeholders rotos, links apuntan al dominio correcto y funcionan, UTF-8 correcto | Operador (revisar casilla; agrupar el pedido en UNA pasada) | |
+| R8.2 | Link del email de respuesta de ticket | Lleva al login del portal con `?goto=soporte` y post-login abre la sección correcta (`pending_goto`) | Browser pane | |
+
+### R9. Extensión Chrome — UX real (solo se probó por API; smoke tests cubren selectores PJN, no el popup)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R9.1 | Login en el popup real | Login OK con cuenta activa; con trial agotado/suspendida → mensaje + link "Ir al portal de usuarios →" | Operador o Chrome MCP (extensión instalada de la store) | |
+| R9.2 | Flujo completo real (1 de los 5) | Ej. Consulta SCW: la extensión completa jurisdicción/número/año en el form real del PJN | Operador + PJN (los smoke tests ya cubren los selectores — esto valida la cadena auth→flujo) | |
+
+### R10. Seguridad — negativos adicionales (post SEC-1)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R10.1 | Upload no-PDF en facturación | `POST /admin/invoices/manual` con un `.exe`/`.html` renombrado → rechazado (o documentar que se acepta = hallazgo UPL-1 confirmado) | API | |
+| R10.2 | Upload PDF gigante | Archivo de ~50MB → rechazado por límite de tamaño con error claro (no 502/timeout) | API | |
+| R10.3 | XSS en campos de usuario (2ª pasada) | Nombre/apellido/domicilio con `<script>`/`"onmouseover=` → renderizado escapado en portal Y dashboard (XSS-1 se corrigió en campos de tickets; verificar el resto) | API + Browser pane | |
+| R10.4 | Token de usuario en endpoints de OTRO usuario | `GET /tickets/:id` de un ticket ajeno, `GET /usuarios/api/invoices` etc. → 403/404, sin fuga (IDOR ya auditado en SEC-1; smoke de regresión) | API | |
+| R10.5 | Blacklist de token de usuario | Logout del portal → mismo token → 403 inmediato (M-1 se validó para admin; verificar el lado usuario) | API | |
+
+### R11. Operación y datos (drills de bajo costo)
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R11.1 | Drill de restore reciente | `ops/drill-rollback.sh` en staging → restore OK (último drill documentado: 2026-06-01; repetir para confirmar que sigue sano) | SSH | |
+| R11.2 | Backup diario vivo | El cron de 03:00 corrió hoy/ayer: archivo en `/var/backups/procurador/` con fecha reciente + subida a DO Spaces | SSH | |
+| R11.3 | Verificación diaria (SEC-2·B.2) | `GET /admin/diagnostics/verification/latest` refleja una corrida reciente; si >7 días, el semáforo del dashboard está en amarillo | API | |
+| R11.4 | Logs sin secretos | `grep` rápido en logs de prod: no aparecen tokens/passwords/CUIT en texto plano fuera de lo esperado | SSH | |
+
+### R12. Portal — bordes visuales menores
+
+| ID | Caso | Esperado | Requiere | Resultado |
+|---|---|---|---|---|
+| R12.1 | Responsive móvil (viewport 375px) | Login + Mi Plan + Soporte usables (sin overflow roto ni botones inaccesibles) — nunca se probó | Browser pane (`resize_window` mobile) | |
+| R12.2 | Sesión simultánea portal + app (SSO) | SSO desde la app con sesión de portal ya abierta en otra pestaña → sin estados corruptos | App + Browser pane | |
+
+### Notas para la corrida de R
+- **Orden sugerido:** R1 (rápido, todo por API) → R3/R4 (backend + app) → R2 (requiere instalación real, coordinar con el operador) → R5/R6 (PJN real, mismo setup que U12) → R7 → R8 (agrupar TODO el pedido de emails al operador en una sola pasada) → R10/R11 (API/SSH puro) → R9/R12 (si hay cupo).
+- **R2 y R1.2 requieren instalar la app de verdad** (hoy corre desde el código) — coordinar con el operador antes: la instalación convive con los datos existentes de `%LOCALAPPDATA%`; decidir si se hace en este equipo o en uno limpio.
+- **R4.2 hacerlo contra STAGING**, no matar el backend de prod.
+- Para R7 hace falta crear una 2ª cuenta de prueba con CUIT distinto (usar los CUITs pre-generados de la tabla de datos).
 
 ---
 
