@@ -136,7 +136,10 @@ router.post('/mercadopago', verifyMPSignature, async (req, res) => {
       );
 
     } catch (err) {
-      logger.error('[Webhooks] Error procesando evento MP', { externalId, err: err.message });
+      // "Payment/Preapproval not found" no es una falla nuestra: MP reenvía webhooks de
+      // pagos que ya no existen de su lado (datos de sandbox reseteados, ids sin detalle).
+      const esBenigno = /not found/i.test(err.message || '');
+      logger[esBenigno ? 'warn' : 'error']('[Webhooks] Error procesando evento MP', { externalId, err: err.message });
     }
   });
 });

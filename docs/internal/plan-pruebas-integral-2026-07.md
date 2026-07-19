@@ -34,6 +34,7 @@ Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes
 - **Evidencia:** cada caso registra Esperado vs Obtenido. Estados: ✅ PASS · ❌ FAIL · ⚠️ PASS con observación · ⏭️ SKIP (con motivo).
 - **PJN real:** autorizado por el operador, con expedientes provistos por él (procuración ind/batch, informe ind/batch, monitor).
 - **Cierre:** informe de bugs/mejoras priorizado → reset de datos + limpieza MP + backup `.7z` + entrada en CLAUDE.md.
+- **⚠️ Limpieza MP — barrer los 3 estados vivos:** al cancelar preapprovals residuales, buscar por `status=authorized`, `pending` **y `paused`** (`GET /preapproval/search?status=...`). Los barridos históricos solo miraban authorized/pending y un preapproval `paused` huérfano del 25/06 sobrevivió hasta el 2026-07-19 (detectado y cancelado en la revisión de esa fecha). Un `paused` no cobra, pero es basura que confunde auditorías futuras.
 
 ---
 

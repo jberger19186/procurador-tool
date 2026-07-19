@@ -24,7 +24,7 @@
     "@aws-sdk/client-s3": "^3.600.0",
     "@logtail/node": "^0.4.21",
     "@logtail/winston": "^0.4.21",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "axios": "^1.13.4",
     "bcrypt": "^6.0.0",
     "cheerio": "^1.0.0",
