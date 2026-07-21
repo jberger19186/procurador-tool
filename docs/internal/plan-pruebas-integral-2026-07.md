@@ -485,6 +485,70 @@ Cuando SÍ hay un horario límite indicado:
 
 ---
 
+## BLOQUE R — Especificación de automatización (agregado 2026-07-19)
+
+> **Objetivo:** que TODO lo que se pueda testear de forma autónoma (API/SSH/SQL, Browser pane, computer-use sobre la app) se ejecute **sin intervención del operador**, y que cualquier bug o aspecto a considerar quede **documentado en la tabla de Hallazgos** durante la corrida. Solo lo que físicamente exige a un humano (revisar su casilla de email, instalar el `.exe`, cargar credenciales del PJN de otro CUIT, mirar el popup de la extensión) queda como **bloqueado-operador**.
+> **Modelo/esfuerzo de la corrida R:** **Sonnet, esfuerzo medio** (mecánico; subir a Opus solo si algo de MP/cobro se comporta raro). Mismas reglas: sin tocar código, backup DB previo, fixture user 250 (`TestPass2026!`), documentar hallazgos sin corregirlos.
+
+### Clasificación de los 37 casos por modo de ejecución
+
+**Leyenda:** 🟢 **AUTO** = ejecutable de forma autónoma con las herramientas de la sesión · 🟡 **SEMI** = automatizable la verificación, pero un paso puntual necesita al operador · 🔴 **OP** = requiere al operador (físico/externo).
+
+| Sub-bloque | 🟢 AUTO | 🟡 SEMI | 🔴 OP | Herramienta autónoma principal |
+|---|---|---|---|---|
+| R1 Release/updater | R1.1, R1.3 | — | R1.2 (instalar versión vieja) | API GitHub + `curl` (SSH) |
+| R2 Instalación/onboarding | — | R2.2, R2.3, R2.4 | R2.1 (instalar NSIS) | computer-use (una vez instalada) |
+| R3 Concurrencia | R3.1, R3.2, R3.3, R3.4 | — | — | API (`execution/start` con 2 machineId) + computer-use + SQL |
+| R4 Resiliencia | R4.3, R4.4 | R4.1, R4.2 | — | Browser pane + SQL (token) + `pm2 stop` en STAGING |
+| R5 Monitor novedades | R5.4, R5.5 | R5.1, R5.2, R5.3 | — | API/SQL (límites/regla) + computer-use+PJN para el ciclo real |
+| R6 Entradas inválidas PJN | R6.2, R6.3, R6.5 | R6.1, R6.4 | — | computer-use (validaciones de la app) + PJN para las 2 que corren contra el portal |
+| R7 Multi-cuenta | R7.3 | R7.1, R7.2 | — | API (candado) + computer-use; falta 2ª cuenta con CUIT |
+| R8 Emails | R8.2 | — | R8.1 (revisar casilla) | Browser pane (link de ticket) |
+| R9 Extensión visual | — | — | R9.1, R9.2 | (extensión instalada + PJN → operador) |
+| R10 Seguridad negativos | R10.1, R10.2, R10.3, R10.4, R10.5 | — | — | API/`curl` + Browser pane |
+| R11 Drills operativos | R11.1, R11.2, R11.3, R11.4 | — | — | SSH puro |
+| R12 Portal responsive | R12.1, R12.2 | — | — | Browser pane (`resize_window` mobile) + SSO |
+
+**Totales:** 🟢 **22 AUTO** · 🟡 **9 SEMI** · 🔴 **6 OP**. → **Se puede automatizar de punta a punta el ~60%**, y con el paso semi-asistido cubierto llega al ~84%. Solo 6 casos son irreductiblemente del operador.
+
+### Corrida autónoma sugerida (sin depender del operador) — en 4 tandas
+
+> Todo lo 🟢 AUTO agrupado para correr de un tirón, minimizando lo que espera al humano. Cada tanda commitea sus resultados (`test: resultados bloque RX`) y documenta hallazgos en la tabla al detectarlos.
+
+**Tanda 1 — Backend puro (API/SSH/SQL), sin app ni browser** — la más rápida y de menor fricción:
+- **R1.1** assets del último release (comparar SHA512 del `.exe` recalculado con Node vs `latest.yml`) · **R1.3** `/client/download/electron` → 302.
+- **R3.2** `execution/start` con lock tomado desde un `machineId` distinto → 409 `DEVICE_LOCKED` · **R3.4** `machineId` distinto al vinculado → 403 `DEVICE_MISMATCH` + confirmar el `logger.warn` en `/var/log/procurador/combined.log`.
+- **R5.4** poblar 20 partes por SQL y agregar la 21ª por API → bloqueo · **R5.5** intentar borrar una parte en la ventana 24h–30d → rechazo con fecha.
+- **R10.1** `POST /admin/invoices/manual` con un `.txt` renombrado a `.pdf` → observar código y mensaje (ver hallazgo **RI-1** de `revision-integral-2026-07-19.md`: hoy da 500, no 400) · **R10.2** PDF de >5MB → rechazo · **R10.4** token de user A contra recursos de user B (ticket/invoice ajenos) → 403/404 · **R10.5** logout de portal → mismo token → 403.
+- **R11.1** `ops/drill-rollback.sh` en staging · **R11.2** backup diario reciente en `/var/backups/procurador/` · **R11.3** `GET /admin/diagnostics/verification/latest` reciente · **R11.4** `grep` de secretos en logs.
+
+**Tanda 2 — Browser pane (portal/dashboard), sin app** :
+- **R4.4** portal con token de 8h vencido (forzar por SQL o token corto) → redirige a login limpio.
+- **R8.2** link del email de respuesta de ticket → `?goto=soporte` + `pending_goto` abre la sección.
+- **R10.3** XSS 2ª pasada: nombre/apellido/domicilio con `<script>`/`onmouseover=` vía API → confirmar render escapado en portal Y dashboard.
+- **R12.1** responsive 375px (login + Mi Plan + Soporte) · **R12.2** SSO app→portal con sesión ya abierta.
+
+**Tanda 3 — computer-use sobre la app Electron** (pedir `request_access` una vez, reutilizar):
+- **R3.1** doble ejecución simultánea → 2ª rechazada antes de abrir Chrome · **R3.3** matar el proceso a mitad de ejecución → medir cuánto tarda el lock en liberarse (TTL 5 min, ver `license.js`).
+- **R2.4** config inicial por defecto (`modoHeadless:true`, `fechaLimite`=hoy) — leer el archivo local.
+- **R6.2** TXT batch mal formado → rechazo antes de ejecutar · **R6.3** batch >10 expedientes → aviso/truncado · **R6.5** fecha límite inválida/futura → validación.
+- **R7.3** candado cruzado entre cuentas (documentar el comportamiento definido).
+- *(R4.1 app sin internet: SEMI — requiere cortar la red local; si se puede hacer por software autónomo, subirlo a AUTO.)*
+
+**Tanda 4 — SEMI, requieren un empujón del operador** (agrupar los pedidos):
+- **R5.1/R5.2/R5.3** ciclo de novedades del monitor (necesita credenciales PJN cargadas — ya estaban para el CUIT 27320694359; confirmar) · **R6.1/R6.4** los 2 casos que corren contra el PJN real · **R7.1/R7.2** multi-cuenta (crear 2ª cuenta con CUIT distinto; el aislamiento de descargas se puede ver aunque no haya credenciales PJN del 2º CUIT — solo verificar la creación de la carpeta) · **R4.2** `pm2 stop` en STAGING a mitad de ejecución.
+
+**Irreductiblemente del operador (🔴):** R1.2 (instalar versión vieja para el updater E2E), R2.1 (instalación NSIS limpia), R8.1 (auditar el contenido de los emails en la casilla), R9.1/R9.2 (popup real de la extensión + PJN). Estos se juntan en **un solo bloque coordinado** con el operador, no dispersos.
+
+### Reglas de documentación durante la corrida autónoma
+1. **Cada caso** completa su columna Resultado en este doc (✅/❌/⚠️/⏭️ + nota) apenas se ejecuta.
+2. **Todo bug o aspecto a considerar** → fila nueva en la tabla de **Hallazgos** con: severidad, caso, descripción reproducible (`archivo:línea` si aplica) y propuesta de fix **sin implementarla**.
+3. **Estados que se tocan por SQL** (partes del monitor, tokens, `proc_usage`) → **revertir** al valor original al cerrar cada caso; el fixture 250 debe quedar idéntico salvo lo documentado.
+4. **Nunca** correr contra prod lo que dice STAGING (R4.2) ni matar el backend de producción.
+5. **Commit por tanda** (`test: resultados bloque R — tanda N`), y al cierre un resumen al operador con lo cubierto, hallazgos y lo que quedó pendiente de los 🔴/🟡.
+
+---
+
 ## 🐛 Hallazgos — Bugs y Mejoras (se completa durante la ejecución)
 
 | # | Sev | Tipo | Caso | Descripción | Propuesta |

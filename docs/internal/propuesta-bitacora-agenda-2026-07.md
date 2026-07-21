@@ -7,7 +7,8 @@
 > Cambios v4: alta **manual** de expedientes explicitada; ficha = vista integral del caso (datos + bitácora + historial) vs. sección Bitácora = vista temporal (calendario); **personalización de la ficha** (orden de secciones, registros visibles, modal "ver todos"); deep-links con **pestaña única reutilizada** (`target` fijo), sesión en uso sin re-login y botón Volver coherente vía History API.
 > Cambios v5: sección de **autosuficiencia y fuentes**; **riesgo y complejidad explicados sin tecnicismos** (qué se toca en web y app, qué no se toca, reversibilidad); **estimación de costos** con números reales del servidor; alcance del historial precisado (**2+2 POR CASO**, alimentado por cada corrida); límite del querystring explicado y regla de recorte; **historial con selector última/anteúltima + modal**; botones "💾 Guardar procuración/informe" en visores (selección múltiple y modal del caso); **filtros y agrupación** en la vista global; **campos por tipo de entrada** orientados a la práctica jurídica (ref. Lex-Doctor + Google); vencimientos visibles en la ficha; edición global y por caso con acciones masivas; sección de **preguntas abiertas**.
 > Cambios v6: **se desacopla "guardar ficha básica" de "guardar snapshot de procuración/informe"** (dos acciones independientes en vez de una combinada); **se reemplaza el mecanismo de transporte** de GET-por-querystring a **POST por formulario oculto autoenviado** (misma pestaña con nombre fijo, sin CORS, pero sin el límite práctico de ~2.000 caracteres — elimina la restricción de "hasta 10 casos sin movimientos" del modo lote); **el botón de Bitácora se muda del sidebar al topbar** (una sola aparición, en la misma barra que los tabs Procurar/Informe/Monitor/Descargas y el botón de cerrar ventana); **se agrega el paso del tour de onboarding** que faltaba para explicar el botón nuevo.
-> Cambios v6.1: se agrega la **evaluación técnica del transporte POST** (§4.1.1) con la cadena de límites reales (Nginx 1MB / Express 100KB por defecto, ambos config nuestra → subir a 5MB), tamaños medidos en corridas reales (1 expediente ≈4,2KB, tope `maxMovimientos`=15), tabla de escenarios (individual/lote/corrida grande), la inflación por URL-encoding y su mitigación, y el patrón **Post/Redirect/Get** para que la SPA reciba el payload con URL limpia. Conclusión: tras subir el límite del body, no hay límite práctico para los tamaños reales (corrida de 100 exp. ≈400KB entra con >10× de margen).
+> Cambios v6.1: se agrega la **evaluación técnica del transporte POST** (§4.1.1) con la cadena de límites reales, tamaños medidos en corridas reales (1 expediente ≈4,2KB, tope `maxMovimientos`=15), tabla de escenarios (individual/lote/corrida grande), la inflación por URL-encoding y su mitigación, y el patrón **Post/Redirect/Get** para que la SPA reciba el payload con URL limpia. Conclusión: tras subir el límite del body, no hay límite práctico para los tamaños reales (corrida de 100 exp. ≈400KB entra con >10× de margen).
+> **Revisión 2026-07-19 (Fable/Sonnet):** validada contra el código real. **3 inconsistencias corregidas** — (1) §4.1.1: Nginx **ya está en 20M** (no 1MB); la instrucción de "subir a 5m" era un downgrade → corregida a "no tocar Nginx". (2) §4.1.1 + §11.2: el fix del body-limit de Express estaba mal planteado (los parsers son globales y la captura usa `urlencoded`, no `json`) → corregido con el matiz de orden de parsers. (3) §11 Fase 1.1: decía "2 columnas", el modelo §7 define **3** (`bitacora_enabled`, `home_section`, `bitacora_prefs`) → corregido. **Verificado correcto:** la claim del tour (§11 F2.7, `target:'.tab-nav'` paso 2) coincide con `onboarding/tour.js` real. **Agregado:** §11.1 con **modelo (Sonnet/Opus) y nivel de esfuerzo por sub-bloque**. Sigue siendo propuesta NO aprobada.
 
 ---
 
@@ -192,13 +193,17 @@ Como el POST reemplaza el tope de ~2.000 caracteres de la URL por el tope del bo
 
 **La cadena de límites (cada capa con su tope por defecto):**
 
-| Capa | Límite por defecto | ¿Quién lo controla? |
+| Capa | Límite actual (verificado 2026-07-19) | ¿Quién lo controla? |
 |---|---|---|
 | Navegador (form POST) | Sin límite práctico (a diferencia de una URL) | — |
-| **Nginx** (`client_max_body_size`) | **1 MB** | Nosotros (config del server) |
-| **Express** (`express.json`/`urlencoded`) | **100 KB** (hoy sin `limit:` explícito en `server.js`) | Nosotros (una línea) |
+| **Nginx** (`client_max_body_size`) | **20 MB** (ya configurado en prod Y staging — `sites-available/procurador` y `staging-procurador`) | Nosotros (config del server) |
+| **Express** (`express.urlencoded` GLOBAL) | **100 KB** (default; `server.js:87` sin `limit:` explícito) | Nosotros |
 
-El binding real hoy es Express con 100 KB. Ambos topes que importan son nuestros: se suben a `5mb` con una línea cada uno (`express.json({ limit: '5mb' })` en la ruta de captura + `client_max_body_size 5m;` en Nginx).
+> ⚠️ **Corrección técnica (2026-07-19).** La versión previa de esta tabla decía "Nginx = 1 MB → subir a 5m". **Es incorrecto:** Nginx ya está en **20 MB** en ambos entornos. Poner `client_max_body_size 5m;` sería un **downgrade** (de 20M a 5M) — **no tocar Nginx**, ya tiene margen de sobra para el peor caso (~400 KB).
+>
+> **El único tope real a subir es el de Express, y hay un matiz de orden que la versión previa omitía:** los parsers `express.json` (con hook `verify` para el rawBody del webhook de MP) y `express.urlencoded` están montados **globalmente** (`server.js:84` y `87`), **antes** de todos los routers. La captura llega como **form POST (`x-www-form-urlencoded`)**, así que el que la parsea es el **`express.urlencoded` global de la línea 87**, no un `express.json` de ruta. Por eso un `express.json({ limit: '5mb' })` colgado solo de la ruta de captura **no funcionaría** (parser equivocado + corre después del global, que ya habría rechazado con 413 a los 100 KB). Las dos formas correctas:
+>   - **(a) Recomendada:** montar un parser específico **antes** del router en `server.js` — `app.use('/usuarios/capture', express.urlencoded({ extended: false, limit: '5mb' }))` colocado **arriba** de la línea 87 (así gana la ruta de captura y el resto del sistema sigue en 100 KB). Preserva intacto el `express.json` global con su `verify` del webhook.
+>   - **(b) Alternativa:** subir el límite del `express.urlencoded` global a `5mb` — más simple pero afecta a todo el sistema (aceptable, pero cambia el comportamiento de otras rutas, por eso se prefiere (a) para no alterar nada más).
 
 **Tamaños reales medidos** (corridas del CUIT de prueba 27320694359):
 
@@ -217,7 +222,7 @@ El binding real hoy es Express con 100 KB. Ambos topes que importan son nuestros
 | Lote ~20–25 casos con snapshot | ~80–100 KB | ⚠️ Roza el default → subir el límite |
 | Corrida grande (50–100 exp. con snapshot) | ~200–400 KB | ❌ Excede 100 KB → **requiere subir el límite** (a 5 MB entra con >10× de margen) |
 
-**La inflación por URL-encoding (a tener en cuenta):** un `<form>` por defecto codifica en `application/x-www-form-urlencoded`, y como el JSON está lleno de `{ } " : ,` y acentos, el encoding **infla ~2–3×** (cada carácter especial → `%XX`). Un JSON de 40 KB puede viajar como ~100 KB. **Mitigación: subir el body limit a 5 MB** (holgadísimo, sin costo) y no micro-optimizar. Alternativa innecesaria: `enctype="text/plain"` para no inflar.
+**La inflación por URL-encoding (a tener en cuenta):** un `<form>` por defecto codifica en `application/x-www-form-urlencoded`, y como el JSON está lleno de `{ } " : ,` y acentos, el encoding **infla ~2–3×** (cada carácter especial → `%XX`). Un JSON de 40 KB puede viajar como ~100 KB. **Mitigación: subir el límite del `express.urlencoded` de la ruta de captura a 5 MB** (ver el recuadro de corrección arriba — se monta un parser específico antes del router, no se toca Nginx que ya está en 20M). Holgadísimo, sin costo. Alternativa innecesaria: `enctype="text/plain"` para no inflar.
 
 **Patrón de recepción — Post/Redirect/Get (PRG):** el POST aterriza en el portal (una SPA); para que la SPA reciba los datos de forma limpia:
 1. El visor hace POST a `/usuarios/capture` con el payload.
@@ -707,8 +712,8 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 ## 11. Plan de implementación por fases
 
 ### Fase 1 — Núcleo (backend + portal)
-1. Migraciones (4 tablas + 2 columnas) + seed de feriados AR 2026/2027.
-2. Endpoints CRUD + capture (POST-form con PRG, §4.1.1) + avisos + gate de plan. Incluye subir el límite del body a `5mb` en la ruta de captura (`express.json`/`urlencoded`) y `client_max_body_size 5m;` en Nginx.
+1. Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **3 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`) + seed de feriados AR 2026/2027. *(Corrección 2026-07-19: la versión previa decía "2 columnas"; el modelo de datos §7 define 3.)*
+2. Endpoints CRUD + capture (POST-form con PRG, §4.1.1) + avisos + gate de plan. Incluye subir el límite del body de la **ruta de captura** a `5mb` montando un `express.urlencoded({ limit:'5mb' })` específico **antes** del router en `server.js` (ver corrección técnica en §4.1.1). **NO tocar Nginx** — ya está en 20M en prod y staging (subirlo a 5m sería un downgrade).
 3. Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos) + sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas).
 4. Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal.
 5. Checkbox "Incluye Bitácora" en el form de planes del admin.
@@ -733,6 +738,26 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 4. Tipos de entrada personalizados, export .ics — **solo si hay demanda real**.
 
 **Dependencias con el roadmap vigente:** no pisa B3 (MP producción) ni los flecos del plan de pruebas (U9.3). La fase 1 es solo backend+portal (deploy estándar); la fase 2 requiere un release de app.
+
+### 11.1 Modelo y nivel de esfuerzo por sub-bloque (agregado 2026-07-19)
+
+> Guía para ejecutar cada tramo. Criterio: **Opus** para diseño de esquema, lógica de negocio del gating/cobro y decisiones que afectan datos del usuario (import/restauración destructiva); **Sonnet** para CRUD mecánico, UI y trabajo repetitivo con patrones ya establecidos. El esfuerzo es orientativo y asume las reglas del proyecto (staging → backup → prod; sin tocar scripts encriptados; migraciones additivas).
+
+| Sub-bloque | Modelo | Esfuerzo | Por qué |
+|---|---|---|---|
+| **F1.1** — Migraciones (4 tablas + 3 columnas) + seed feriados | **Opus, medio** | Chico | El esquema es la fundación: definirlo bien (claves de acumulación, `ON DELETE` correctos, tope 2+2 por diseño) evita retrabajos caros. Es additivo pero conviene razonarlo con cuidado una sola vez. |
+| **F1.2** — Endpoints CRUD + capture (PRG) + gate de plan + body-limit | **Opus, medio** | Mediano | El gate de plan es **el freno real** (403 server-side) y el body-limit tiene el matiz de orden de parsers (§4.1.1) — errores acá afectan seguridad/acceso. El PRG y el upsert idempotente también quieren razonamiento. |
+| **F1.3** — Portal: Bitácora (calendario mes+lista, banner de avisos, modal con calculadora de plazos) | **Sonnet, medio** | **Grande** (el mayor de todo) | UI nueva, laboriosa pero de patrón conocido. El calculador de plazos (feriados) y la vista mes son lo más denso; nada de lógica de negocio riesgosa. 4–6 sesiones. |
+| **F1.4** — Portal: Mis expedientes (listado, ficha, edición, borrado con elección sobre entradas) | **Sonnet, medio** | Mediano | CRUD visual + la decisión de "borrar entradas o dejarlas sueltas" (ya resuelta en el modelo con `ON DELETE SET NULL`). |
+| **F1.5** — Píldora "principal" (`home_section`) + checkbox "Incluye Bitácora" en admin | **Sonnet, bajo** | Chico | Dos toggles con patrón ya usado (visibility de planes, settings). |
+| **F1.6** — Exportación (Excel + JSON) | **Sonnet, bajo-medio** | Chico-mediano | Serialización directa; el Excel reusa `exceljs` (ya en el stack). |
+| **F1.7** — Importación/restauración (dry-run + respaldo previo + transaccional) | **Opus, alto** | Mediano | **El único tramo que destruye datos del usuario.** La validación de pertenencia/estructura, el dry-run obligatorio, el respaldo automático previo y la transacción "todo o nada" exigen el máximo cuidado — un error acá borra la bitácora real de alguien. |
+| **F2.1–F2.6** — Visores: botonera, selección múltiple, marcado de seguidos, mini-visor informe, `bitacoraEnabled`, deep-links SSO | **Sonnet, medio** | Mediano | Edita **plantillas** de visores (`generador_visor.js` + templates HTML) — ⛔ **nunca los scripts encriptados**. El mini-visor del informe se genera desde `main.js`. Patrón conocido; el riesgo es el de cualquier release de Electron. |
+| **F2.7** — Botón topbar + actualización del tour (`onboarding/tour.js`) | **Sonnet, bajo** | Chico | El tour ya tiene el patrón multi-elemento (`targets:[]`); el paso 2 (`target:'.tab-nav'`) existe y se extiende. *(Verificado 2026-07-19: la estructura que la propuesta asume es correcta.)* |
+| **F2 — Release Electron** | **Sonnet, medio** | — | Sigue el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
+| **F3** — Pulido y palancas (badge, captura del monitor, sugerencias por novedades) | **Opus para las sugerencias automáticas · Sonnet para lo demás** | Variable | Las "sugerencias a partir de novedades del monitor" son el diferencial con lógica no trivial (matching novedad→entrada) → Opus. El resto (badge, captura del monitor) es mecánico → Sonnet. Solo si el uso real de F1/F2 lo valida. |
+
+> **Regla transversal (crítica para no romper nada):** cada sub-bloque se valida en **staging** antes de prod, y el flag `bitacora_enabled` nace en `false` en **todos** los planes → aunque algo salga mal, ningún usuario ve la Bitácora hasta encender el flag en un plan de prueba. La Fase 1 completa se prueba y publica **sin emitir ningún release de Electron**.
 
 ---
 
