@@ -407,7 +407,7 @@ Cuando SÍ hay un horario límite indicado:
 | R4.1 | App sin internet al abrir | Mensaje claro de conexión (no crash ni pantalla en blanco); al volver la red, recupera sola o con reintento manual obvio | App + cortar red local | |
 | R4.2 | Pérdida de conexión a mitad de ejecución | El script maneja el corte (ya se vio auto-recovery en U12.6 con el PJN); verificar qué pasa si el que se cae es NUESTRO backend (heartbeat del lock falla) — la ejecución local termina y el estado queda consistente | App + `pm2 stop` en staging o firewall local | |
 | R4.3 | JWT vencido (2h) en sesión larga | El refresh automático renueva sin que el usuario vea "No autenticado"; forzar con un token corto o esperar — validar la auto-recuperación del heartbeat (fix v2.7.24) | App + SQL/tiempo | |
-| R4.4 | Portal con token de 8h vencido | Al operar con sesión vencida → redirige a login limpio, no errores crudos | Browser pane | |
+| R4.4 | Portal con token de 8h vencido | Al operar con sesión vencida → redirige a login limpio, no errores crudos. **Método corregido 2026-07-19:** los JWT son stateless — NO se pueden vencer "por SQL". Generar un token de usuario con vencimiento corto (ej. `expiresIn:'5s'`) firmándolo en el server con el `JWT_SECRET` real (mismo patrón `node -r dotenv/config -e "...jwt.sign(...)"` ya usado en las corridas), inyectarlo en `localStorage` del portal (Browser pane), esperar que venza y operar | Browser pane + token corto server-side | |
 
 ### R5. Monitor — ciclo de novedades completo (U12.7 solo cubrió la consulta inicial)
 
@@ -459,7 +459,7 @@ Cuando SÍ hay un horario límite indicado:
 | R10.2 | Upload PDF gigante | Archivo de ~50MB → rechazado por límite de tamaño con error claro (no 502/timeout) | API | |
 | R10.3 | XSS en campos de usuario (2ª pasada) | Nombre/apellido/domicilio con `<script>`/`"onmouseover=` → renderizado escapado en portal Y dashboard (XSS-1 se corrigió en campos de tickets; verificar el resto) | API + Browser pane | |
 | R10.4 | Token de usuario en endpoints de OTRO usuario | `GET /tickets/:id` de un ticket ajeno, `GET /usuarios/api/invoices` etc. → 403/404, sin fuga (IDOR ya auditado en SEC-1; smoke de regresión) | API | |
-| R10.5 | Blacklist de token de usuario | Logout del portal → mismo token → 403 inmediato (M-1 se validó para admin; verificar el lado usuario) | API | |
+| R10.5 | Blacklist de token de usuario | **Caso reescrito 2026-07-19 tras verificar el código:** son 2 sub-chequeos. (a) `POST /auth/logout` con token de usuario (endpoint existe, `auth.js:838`, con `authenticateToken`) → reusar el mismo token → 403 (la blacklist funciona para usuarios). (b) **Hallazgo pre-identificado a confirmar y documentar:** el frontend del portal NO llama a ese endpoint — `doLogout()` (`public/usuarios/app.js:248`) solo hace `clearToken()` local → un token de portal "deslogueado" sigue siendo válido server-side hasta su vencimiento natural (8h). No es crítico (el token no queda expuesto), pero es una brecha menor de higiene: registrar como hallazgo con propuesta (que `doLogout()` dispare `POST /auth/logout` fire-and-forget antes de limpiar) | API + lectura de código | |
 
 ### R11. Operación y datos (drills de bajo costo)
 
@@ -539,6 +539,23 @@ Cuando SÍ hay un horario límite indicado:
 - **R5.1/R5.2/R5.3** ciclo de novedades del monitor (necesita credenciales PJN cargadas — ya estaban para el CUIT 27320694359; confirmar) · **R6.1/R6.4** los 2 casos que corren contra el PJN real · **R7.1/R7.2** multi-cuenta (crear 2ª cuenta con CUIT distinto; el aislamiento de descargas se puede ver aunque no haya credenciales PJN del 2º CUIT — solo verificar la creación de la carpeta) · **R4.2** `pm2 stop` en STAGING a mitad de ejecución.
 
 **Irreductiblemente del operador (🔴):** R1.2 (instalar versión vieja para el updater E2E), R2.1 (instalación NSIS limpia), R8.1 (auditar el contenido de los emails en la casilla), R9.1/R9.2 (popup real de la extensión + PJN). Estos se juntan en **un solo bloque coordinado** con el operador, no dispersos.
+
+### Modelo y nivel de esfuerzo por etapa de ejecución (agregado 2026-07-19)
+
+> Guía operativa para el ejecutor. **Regla innegociable del operador: si el ejecutor considera que corresponde cambiar de modelo (ej. subir a Opus), DEBE informarlo y esperar la confirmación del operador ANTES de continuar** — nunca cambiar de modelo por decisión propia ni seguir ejecutando asumiendo la aprobación.
+
+| Etapa | Contenido | Modelo | Esfuerzo | Justificación |
+|---|---|---|---|---|
+| Preparación | Backup DB + snapshot real + verificación MP/health | Sonnet | Medio | Mecánico, con checklist ya probado |
+| Tanda 1 — Backend puro | R1.1, R1.3, R3.2, R3.4, R5.4, R5.5, R10.1, R10.2, R10.4, R10.5, R11.1–R11.4 | Sonnet | Medio | API/SSH/SQL contra comportamientos ya especificados; sin ambigüedad de negocio |
+| Tanda 2 — Browser pane | R4.4, R8.2, R10.3, R12.1, R12.2 | Sonnet | Medio | Verificaciones de render con resultado esperado claro |
+| Tanda 3 — computer-use (app) | R3.1, R3.3, R2.4, R6.2, R6.3, R6.5, R7.3 (+R4.1 si se logra por software) | Sonnet | Medio | Conducción visual de la app con criterios binarios (bloquea/no bloquea, valida/no valida) |
+| Tanda 4 — SEMI (con empujón del operador) | R5.1–R5.3, R6.1, R6.4, R7.1, R7.2, R4.2 | Sonnet | Medio | PJN real + staging; mismo perfil que U12 (que Sonnet medio ya ejecutó bien el 16/07) |
+| Bloque 🔴 OP coordinado | R1.2, R2.1–R2.3, R8.1, R9.1, R9.2 | Sonnet | Medio | El operador hace la acción física; el ejecutor guía, verifica y documenta |
+| **Escalada condicional** | Cualquier anomalía en **MercadoPago/cobro/suscripciones** detectada durante R (comportamiento no documentado, monto/estado inesperado, webhook raro) | **Opus** | **Medio-Alto** | Lógica de negocio de dinero: un razonamiento fino evita conclusiones erróneas. **⚠️ Aplicar la regla de arriba: informar al operador y esperar confirmación antes de cambiar** |
+| Cierre | Completar matriz + hallazgos + reset/limpieza (barrer MP en los 3 estados) + backup `.7z` + entrada CLAUDE.md + commit/push | Sonnet | Medio | Checklist documentado |
+
+> Para referencia histórica: el plan original (bloques A/U) se ejecutó con este mismo esquema — Sonnet medio para lo mecánico y la pauta de escalar a Opus en cobro/contingencias (ver "Instrucciones para el EJECUTOR" al tope). Las 9 confirmaciones del 16/07 no requirieron escalada.
 
 ### Reglas de documentación durante la corrida autónoma
 1. **Cada caso** completa su columna Resultado en este doc (✅/❌/⚠️/⏭️ + nota) apenas se ejecuta.

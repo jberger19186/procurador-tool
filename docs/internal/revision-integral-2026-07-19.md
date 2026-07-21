@@ -1,6 +1,7 @@
 # Revisión integral del proyecto — 2026-07-19
 
 > **Alcance:** revisión en vivo de bugs y brechas de seguridad **posterior** a SEC-1 (auditoría del 13/07) y a los 4 lotes de bugs (2A–2D, todos cerrados). Análisis de solo lectura — **no se implementó nada**. Cada hallazgo trae una solución autosuficiente, autocontenida, que **no altera el funcionamiento de ningún otro componente**, con fases de ejecución, modelo (Sonnet/Opus) y nivel de esfuerzo.
+> **2ª pasada de verificación pre-ejecución (mismo día):** se re-verificó cada solución contra el código real antes de habilitar su ejecución. **2 correcciones a este propio documento** — RI-2 (los 2 endpoints IA tienen shapes distintos: `messages[]` en portal vs `message` string en Electron; el snippet único habría fallado en `client.js`) y RI-4 (la app actual **TODAVÍA llama** a `/api/extension` desde `main.js:508/528/575`; el plan pasó de "desmontar backend" a "primero release Electron que limpie los handlers, después desmontar" — 4 fases). **+1 hallazgo nuevo:** RI-5 (el logout del portal es solo client-side, nunca blacklistea — el endpoint existe pero `doLogout()` no lo llama). Total: **5 hallazgos, todos Baja severidad**.
 > **Contexto:** el código está maduro y ya endurecido. No se encontró ningún hallazgo **crítico ni alto** — la auditoría y los lotes previos hicieron su trabajo. Los 4 hallazgos de abajo son de severidad **Baja**, de tipo corrección/robustez/UX, ninguno es un hueco de seguridad explotable.
 
 ---
@@ -12,7 +13,8 @@
 | RI-1 | Baja | Correctness/UX | backend (`admin.js` + `server.js`) | Errores de subida de PDF (multer) devuelven HTTP 500 genérico en vez de 400 con el motivo |
 | RI-2 | Baja | Costo/abuso | backend (`usuarios.js`, `client.js`) | El bot IA no acota la longitud del `content` de cada mensaje (solo la cantidad) |
 | RI-3 | Baja (observación) | Robustez/abuso | backend (routers autenticados) | Sin rate-limit de red en `/license`, `/monitor`, `/tickets`, `/users`, `/usuarios/api` (solo limiters por-ruta puntuales) |
-| RI-4 | Baja | Superficie/deuda | backend (`routes/extension.js`) | Código muerto de la distribución CRX sigue montado — es lo que arrastraba la dependencia vulnerable `adm-zip` |
+| RI-4 | Baja | Superficie/deuda | backend (`routes/extension.js`) + **Electron (`main.js`)** | Código muerto de la distribución CRX sigue montado — y la app actual TODAVÍA lo llama (ver corrección en el detalle) |
+| RI-5 | Baja | Higiene de sesión | portal (`public/usuarios/app.js`) | El logout del portal es solo client-side: nunca llama a `POST /auth/logout` → el token sigue válido server-side hasta vencer (8h) |
 
 > **Lo verificado que está SANO (no genera hallazgo):** sin inyección SQL (la única interpolación, `${col}` en `admin.js:1989`, viene de un whitelist `colMap`); candado de ejecución atómico con TTL de 5 min y auto-limpieza (`license.js`); AUTH-1 device-binding server-side; CORS restringido por lista (rechaza sin lanzar 500); firma HMAC de webhooks con `timingSafeEqual`; `/api/extension/electron-download` protegido por token de un solo uso con expiración; `ufw` con solo 22/80/443.
 
@@ -58,16 +60,24 @@ function uploadPdfOr400(req, res, next) {
 
 **Impacto:** puramente de costo/abuso, acotado a usuarios autenticados. No es un hueco de seguridad ni afecta datos. Con el volumen actual (beta, pocos usuarios) el riesgo real es mínimo — es un endurecimiento preventivo antes de escalar.
 
-**Solución autosuficiente.** Agregar un tope de caracteres por `content` (ej. 4.000 caracteres, coherente con una consulta de soporte legítima) en **ambos** endpoints, rechazando con 400 antes de llamar a la API. No cambia el rate-limit, ni el system prompt, ni el modelo, ni el comportamiento normal (una consulta real nunca se acerca a 4.000 chars).
+**Solución autosuficiente.** Agregar un tope de caracteres (ej. 4.000, coherente con una consulta de soporte legítima) en **ambos** endpoints, rechazando con 400 antes de llamar a la API. No cambia el rate-limit, ni el system prompt, ni el modelo, ni el comportamiento normal (una consulta real nunca se acerca a 4.000 chars).
+
+> **⚠️ Corrección 2026-07-19 (2ª pasada, verificado contra el código): los dos endpoints tienen SHAPES DISTINTOS** — aplicar el mismo snippet en ambos haría fallar el fix. `usuarios.js` (portal) recibe `{ messages: [...] }` (array conversacional); `client.js:864` (Electron) recibe `{ message }` (**string único**, línea 865: `const { message } = req.body`). El cap se aplica distinto en cada uno:
 
 ```js
+// usuarios.js (array):
 const MAX_CONTENT = 4000;
 if (messages.some(m => typeof m.content !== 'string' || m.content.length > MAX_CONTENT)) {
   return res.status(400).json({ error: 'Cada mensaje debe ser texto de hasta 4.000 caracteres.' });
 }
+
+// client.js (string único — agregar al if de la línea 866 existente):
+if (message.length > 4000) {
+  return res.status(400).json({ success: false, error: 'El mensaje supera los 4.000 caracteres.' });
+}
 ```
 
-**Cómo ejecutarla (1 fase):** editar los 2 endpoints (`usuarios.js` y `client.js`) → probar en staging (mensaje normal → OK; mensaje de 5.000 chars → 400) → deploy. Sin release de Electron.
+**Cómo ejecutarla (1 fase):** editar los 2 endpoints **cada uno con su shape** → probar en staging (mensaje normal → OK; mensaje de 5.000 chars → 400 **en ambos**) → deploy. Sin release de Electron (el cliente ya maneja errores 400 del chat mostrándolos como respuesta).
 
 **Modelo/esfuerzo:** **Sonnet, esfuerzo bajo.**
 
@@ -106,27 +116,54 @@ app.use('/monitor', generalAuthLimiter, require('./routes/monitor'));
 
 **Descripción.** La distribución vía CRX/ZIP quedó deprecada cuando la extensión pasó a la Chrome Web Store (v1.3.2+), pero `routes/extension.js` sigue montado y sirviendo `/api/extension/version|hashes|download|electron-token|electron-download`. Es el **único** consumidor de `adm-zip` en el backend — la dependencia que el 2026-07-19 volvió a aparecer como vulnerabilidad `high` (ya mitigada con el bump a 0.6.0). Los endpoints están autenticados (salvo `electron-download`, que usa token de un solo uso), así que **no es un hueco explotable**, pero es superficie innecesaria y deuda que reintroduce riesgo de dependencias.
 
-**Solución autosuficiente.** Desmontar el router (comentar/quitar la línea `app.use('/api/extension', ...)` en `server.js`) y eliminar `routes/extension.js` + la dependencia `adm-zip` de `package.json`. **Antes de tocar nada**, verificar que ningún cliente vivo lo consume: el `main.js` de la app Electron histórica llamaba a `/api/extension/version` y `/api/extension/download` en el onboarding — hay que confirmar que la versión instalada actual (v2.7.39) **ya no** los invoca (el onboarding hoy apunta a la Chrome Web Store). Si algún build viejo instalado todavía los llama, desmontar rompería su onboarding.
+> **⚠️ Corrección 2026-07-19 (2ª pasada — la verificación de la fase A YA SE HIZO y cambió el plan):** el grep confirmó que **la app Electron ACTUAL (v2.7.39 incluida) TODAVÍA llama a `/api/extension/version` y `/api/extension/download`** — `electron-app/main.js` líneas **508, 528 y 575** (handlers `install-extension` / `check-extension-version`, invocables desde Configuración → Extensión). La versión previa de este documento asumía que "el cliente actual ya no los invoca" — **falso**. Desmontar el router hoy rompería esos botones en TODAS las apps instaladas. El plan correcto invierte el orden: primero se limpia el cliente (release Electron), recién después el backend.
 
-**Cómo ejecutarla (3 fases):**
-1. **Fase A (verificación de consumo):** `grep` en `electron-app/` de `api/extension` para confirmar que el cliente actual no lo usa + revisar logs de acceso de prod por hits recientes a esas rutas (si hay tráfico real, hay usuarios en builds viejos → no desmontar aún).
-2. **Fase B (desmontaje):** quitar el `app.use` de `server.js`, borrar `routes/extension.js`, quitar `adm-zip` de `package.json` + `npm install`. Probar en staging (arranque limpio, endpoints devuelven 404, resto intacto).
-3. **Fase C (deploy):** a prod, `pm2 restart`, `npm audit` → confirmar 0 vulnerabilidades **sin** el bump defensivo (la dep desaparece del árbol).
+**Solución autosuficiente (corregida).**
 
-**⚠️ No alterar otros componentes:** la extensión de la store y su auth (`/auth/extension-login`) son **independientes** de este router — no se tocan. Verificar que el desmontaje no afecte ninguna ruta compartida.
+**Cómo ejecutarla (4 fases):**
+1. **Fase A (cliente):** en `electron-app/main.js`, migrar/eliminar los handlers `install-extension` y `check-extension-version` (y sus botones en Configuración → Extensión del renderer) para que apunten a la Chrome Web Store (link estático, como ya hace el onboarding) en vez del flujo CRX. **Requiere un release de Electron** (vX.Y.Z, checklist del proyecto). Se puede bundlear con cualquier otro release pendiente — no amerita uno propio.
+2. **Fase B (ventana de adopción):** esperar la adopción del auto-updater (días/semanas) y verificar en los logs de acceso de prod que `/api/extension/version|download` ya no reciben hits reales.
+3. **Fase C (backend):** recién entonces, quitar `app.use('/api/extension', ...)` de `server.js`, borrar `routes/extension.js`, quitar `adm-zip` de `package.json` + `npm install`. Probar en staging (arranque limpio, endpoints 404, resto intacto).
+4. **Fase D (deploy):** a prod, `pm2 restart`, `npm audit` → confirmar 0 vulnerabilidades con la dependencia fuera del árbol.
 
-**Modelo/esfuerzo:** **Sonnet, esfuerzo bajo-medio.** El borrado es simple; la fase A (confirmar que ningún build vivo lo consume) es la que exige cuidado — es una decisión de compatibilidad, no de código.
+**⚠️ No alterar otros componentes:** la extensión de la store y su auth (`/auth/extension-login`) son **independientes** de este router — no se tocan. Mientras tanto, el bump de `adm-zip` a 0.6.0 (ya deployado el 19/07) mantiene el audit en 0 — no hay urgencia; este plan es la limpieza definitiva.
+
+**Modelo/esfuerzo:** **Sonnet, esfuerzo medio** (subió respecto de la estimación previa: ahora incluye tocar `main.js`/renderer y un release de Electron con su checklist — ya no es solo un borrado de backend). La fase B es tiempo calendario, no esfuerzo.
+
+---
+
+## RI-5 — El logout del portal no invalida el token server-side
+
+**Severidad:** Baja · **Tipo:** higiene de sesión · **Archivos:** `backend-server/public/usuarios/app.js` (`doLogout()`, línea 248), `backend-server/routes/auth.js` (`POST /logout`, línea 838 — el endpoint EXISTE y funciona).
+
+**Descripción (detectado en la 2ª pasada, 2026-07-19).** `doLogout()` del portal solo hace `clearToken()` + limpieza de estado local — **nunca llama** a `POST /auth/logout`, que existe, acepta tokens de usuario (usa `authenticateToken`) y los mete en la blacklist. Resultado: un token de portal "deslogueado" sigue siendo válido server-side hasta su vencimiento natural (8h). El impacto real es bajo (el token vive solo en el `localStorage` del navegador del usuario y no queda expuesto al desloguear), pero es inconsistente con M-1 (el logout de admin SÍ blacklistea desde 2026-06-01) y falla la expectativa razonable de "cerré sesión = el token murió". Es exactamente lo que el caso **R10.5(b)** del Bloque R va a confirmar y documentar como hallazgo.
+
+**Solución autosuficiente.** En `doLogout()`, disparar el `POST /auth/logout` **fire-and-forget antes de limpiar el token** (con el token aún disponible), sin bloquear la UX del logout (si la red falla, el logout local procede igual — el comportamiento visible no cambia en absoluto):
+
+```js
+function doLogout() {
+    const t = getToken();
+    if (t) fetch(API + '/auth/logout', { method:'POST', headers:{ Authorization:'Bearer '+t } }).catch(()=>{});
+    clearToken();
+    // ... resto idéntico
+}
+```
+
+**Cómo ejecutarla (1 fase):** editar `doLogout()` en `app.js` → probar en staging (logout → el mismo token da 403 en `/usuarios/api/*`; la UX del logout no cambia) → deploy del archivo estático (`scp` + sin `pm2 restart` para estáticos servidos por Express sí requiere restart — verificar: `public/usuarios` lo sirve Express, así que `pm2 restart`). Sin release de Electron, sin migración.
+
+**Modelo/esfuerzo:** **Sonnet, esfuerzo bajo.** Tres líneas en un solo archivo, comportamiento visible idéntico.
 
 ---
 
 ## Orden de ejecución sugerido (si se decide accionar)
 
-Todos son de severidad baja y **opcionales**; ninguno bloquea B3 ni el Bloque R. Si se accionan, el orden por costo/beneficio:
+Todos son de severidad baja y **opcionales**; ninguno bloquea B3 ni el Bloque R. Si se accionan, el orden por costo/beneficio (actualizado en la 2ª pasada):
 
 1. **RI-1** (Sonnet bajo) — mejora visible para el admin, 1 fase, cierra la observación de R10.1/R10.2.
-2. **RI-2** (Sonnet bajo) — endurecimiento preventivo de costo, 1 fase.
-3. **RI-4** (Sonnet bajo-medio) — elimina deuda + la dependencia vulnerable de raíz; requiere la verificación de compatibilidad de la fase A.
-4. **RI-3** (Sonnet medio) — el de mayor cuidado (calibrar umbral sin romper uso real); dejar para cuando haya datos de uso.
+2. **RI-5** (Sonnet bajo) — 3 líneas en `doLogout()`, cierra de antemano el hallazgo que R10.5(b) va a documentar.
+3. **RI-2** (Sonnet bajo) — endurecimiento preventivo de costo, 1 fase, **cada endpoint con su shape** (ver corrección).
+4. **RI-4** (Sonnet medio) — la limpieza definitiva del CRX; **ahora requiere release de Electron primero** (la app actual todavía llama a esas rutas — ver corrección) y ventana de adopción. Bundlear la fase A con el próximo release que exista. Sin urgencia: el bump de `adm-zip` ya dejó el audit en 0.
+5. **RI-3** (Sonnet medio) — el de mayor cuidado (calibrar umbral sin romper uso real); dejar para cuando haya datos de uso.
 
 **Regla transversal:** cada fix se prueba en **staging** con una corrida real antes de prod, y se verifica que el resto del sistema (login, cobro, automatización PJN, extensión) sigue intacto — coherente con la disciplina del proyecto (backup previo + tag de recupero).
 

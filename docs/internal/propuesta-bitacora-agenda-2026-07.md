@@ -9,6 +9,7 @@
 > Cambios v6: **se desacopla "guardar ficha básica" de "guardar snapshot de procuración/informe"** (dos acciones independientes en vez de una combinada); **se reemplaza el mecanismo de transporte** de GET-por-querystring a **POST por formulario oculto autoenviado** (misma pestaña con nombre fijo, sin CORS, pero sin el límite práctico de ~2.000 caracteres — elimina la restricción de "hasta 10 casos sin movimientos" del modo lote); **el botón de Bitácora se muda del sidebar al topbar** (una sola aparición, en la misma barra que los tabs Procurar/Informe/Monitor/Descargas y el botón de cerrar ventana); **se agrega el paso del tour de onboarding** que faltaba para explicar el botón nuevo.
 > Cambios v6.1: se agrega la **evaluación técnica del transporte POST** (§4.1.1) con la cadena de límites reales, tamaños medidos en corridas reales (1 expediente ≈4,2KB, tope `maxMovimientos`=15), tabla de escenarios (individual/lote/corrida grande), la inflación por URL-encoding y su mitigación, y el patrón **Post/Redirect/Get** para que la SPA reciba el payload con URL limpia. Conclusión: tras subir el límite del body, no hay límite práctico para los tamaños reales (corrida de 100 exp. ≈400KB entra con >10× de margen).
 > **Revisión 2026-07-19 (Fable/Sonnet):** validada contra el código real. **3 inconsistencias corregidas** — (1) §4.1.1: Nginx **ya está en 20M** (no 1MB); la instrucción de "subir a 5m" era un downgrade → corregida a "no tocar Nginx". (2) §4.1.1 + §11.2: el fix del body-limit de Express estaba mal planteado (los parsers son globales y la captura usa `urlencoded`, no `json`) → corregido con el matiz de orden de parsers. (3) §11 Fase 1.1: decía "2 columnas", el modelo §7 define **3** (`bitacora_enabled`, `home_section`, `bitacora_prefs`) → corregido. **Verificado correcto:** la claim del tour (§11 F2.7, `target:'.tab-nav'` paso 2) coincide con `onboarding/tour.js` real. **Agregado:** §11.1 con **modelo (Sonnet/Opus) y nivel de esfuerzo por sub-bloque**. Sigue siendo propuesta NO aprobada.
+> **Revisión 2ª pasada 2026-07-19 (pre-ejecución):** **2 correcciones adicionales que habrían hecho fallar la implementación** — (4) §7: el `UNIQUE(user_id, jurisdiccion, expediente)` con `jurisdiccion` nullable **no deduplica** (los NULL son distintos entre sí en Postgres → fichas duplicadas y el `ON CONFLICT` del upsert nunca matchearía); fix: `jurisdiccion NOT NULL DEFAULT ''` (o índice único con `COALESCE`). (5) §4.1.1: se explicita que `POST /usuarios/capture` llega **sin autenticación** (un form no puede mandar `Authorization`; el diseño "sin tokens en el payload" es correcto) → se especifican las 5 protecciones obligatorias del patrón borrador-anónimo→reclamo-autenticado (id no adivinable, TTL+uso único+tope, rate-limit dedicado, payload no confiable que no persiste hasta confirmar, punto de montaje antes del static con parser propio).
 
 ---
 
@@ -230,6 +231,13 @@ Como el POST reemplaza el tope de ~2.000 caracteres de la URL por el tope del bo
 3. La SPA carga, lee `draft=<id>`, pide el payload al backend y abre el modal pre-cargado.
 
 Ventajas del PRG: evita el "¿reenviar formulario?" al refrescar, deja la URL limpia (el payload no queda en el historial del navegador), y el límite es 100% server-side. Es exactamente cómo funcionan los SSO/SAML por POST binding (mandan tokens de varios KB así) — técnica estándar y de bajo riesgo.
+
+**⚠️ Precisión de seguridad agregada 2026-07-19 — el POST de captura llega SIN autenticación (diseñarlo así a propósito, con estas protecciones):** un `<form>` HTML no puede mandar el header `Authorization`, y la decisión de diseño (riesgo #3 de §12) es correcta: **sin tokens en el payload** (el visor es un archivo local que podría compartirse). Consecuencia que el implementador debe tener explícita: `POST /usuarios/capture` **no puede llevar `authenticateToken`** — es un endpoint público que recibe un borrador **anónimo**, y la autenticación ocurre recién en el paso 3 del PRG, cuando la SPA logueada **reclama** el draft (`GET /usuarios/api/capture-draft/:id`, ese SÍ con JWT). Para que eso no sea un agujero, el endpoint público necesita, como mínimo:
+1. **Id de draft no adivinable** (`crypto.randomBytes(32)` — mismo patrón que los tokens de verificación de email ya usados en `auth.js`), devuelto SOLO en el redirect.
+2. **TTL corto** (ej. 10 minutos) + borrado al reclamar (uso único) + límite de drafts simultáneos en memoria/tabla (ej. 100) para que no sea un sumidero de memoria.
+3. **Rate-limit** dedicado (patrón `rateLimiter.js`, ej. 30/5min por IP) — es el único endpoint anónimo nuevo que agrega la Bitácora.
+4. **Payload tratado como entrada NO confiable**: se valida estructura/tamaño al reclamar y **nada se persiste en tablas reales hasta que el usuario autenticado confirma** en el modal (el draft es un buffer, no un insert).
+5. **Punto de montaje:** la ruta se monta en `server.js` (ej. `app.post('/usuarios/capture', ...)`) **antes** del `express.static` de `/usuarios` (los estáticos solo atienden GET, pero el orden explícito evita sorpresas), y con su parser `urlencoded({ limit:'5mb' })` propio (ver corrección de límites arriba).
 
 **Veredicto:** complejidad baja (form oculto + `.submit()` en el visor; una línea de límite en Express y Nginx; PRG en el endpoint). Tras el ajuste de límite, **no hay límite práctico** para los tamaños de datos reales — una corrida de 100 expedientes (~400 KB) entra con margen enorme en 5 MB. El único límite que queda es de **usabilidad** (revisar decenas de filas antes de guardar), no técnico → por eso la pantalla de revisión del lote pagina/agrupa (§4.2), pero el transporte ya no impone tope.
 
@@ -559,6 +567,14 @@ CREATE TABLE expedientes_seguidos (
   updated_at       TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (user_id, jurisdiccion, expediente)  -- clave de acumulación (no duplica)
 );
+-- ⚠️ Corrección 2026-07-19 (bug de esquema que rompería la deduplicación): para que ese
+-- UNIQUE funcione, `jurisdiccion` debe ser NOT NULL DEFAULT '' (cambiar la definición de
+-- arriba al implementar). En Postgres los NULL son DISTINTOS entre sí dentro de un UNIQUE:
+-- con jurisdiccion nullable, dos fichas del mismo caso sin jurisdicción se DUPLICARÍAN y
+-- el ON CONFLICT del upsert de capture nunca matchearía. Alternativa equivalente si se
+-- prefiere conservar NULL: índice único por expresión
+--   CREATE UNIQUE INDEX ux_exp_seguidos ON expedientes_seguidos (user_id, COALESCE(jurisdiccion,''), expediente);
+-- (con esta variante el upsert debe usar ON CONFLICT sobre la expresión, no sobre la constraint).
 
 -- Historial acotado del caso: últimas 2 procuraciones + últimos 2 informes
 CREATE TABLE expediente_snapshots (
