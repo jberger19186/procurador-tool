@@ -246,6 +246,11 @@ async function doLogin(email, password) {
 }
 
 function doLogout() {
+    // RI-5 (revisión 2026-07-19): blacklistear el token server-side al desloguear.
+    // Fire-and-forget con el token capturado ANTES de limpiarlo — usa fetch directo
+    // (no apiFetch, que llamaría a doLogout() de nuevo ante un 401/403 y recursaría).
+    const _t = getToken();
+    if (_t) fetch(BASE_URL + '/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${_t}` } }).catch(() => {});
     clearToken();
     state.account = null;
     state.currentSection = 'perfil';

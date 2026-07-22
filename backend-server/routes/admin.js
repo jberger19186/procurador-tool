@@ -46,6 +46,20 @@ const uploadInvoice = multer({
     }
 });
 
+// RI-1 (revisión 2026-07-19): sin este wrapper, un rechazo de multer (no-PDF o >5MB)
+// caía al error handler global de server.js como 500 genérico en vez de un 400 claro.
+function uploadPdfOr400(req, res, next) {
+    uploadInvoice.single('pdf')(req, res, (err) => {
+        if (err) {
+            const msg = err.code === 'LIMIT_FILE_SIZE'
+                ? 'El archivo supera el máximo de 5 MB.'
+                : (err.message || 'Archivo inválido.');
+            return res.status(400).json({ error: msg });
+        }
+        next();
+    });
+}
+
 // Aplicar rate limiter a todas las rutas de admin
 router.use(adminLimiter);
 
@@ -3272,7 +3286,7 @@ router.get('/invoices', authenticateAdmin, async (req, res) => {
 
 // ── POST /admin/invoices/:invoiceId/upload ────────────────────────────────────
 // Subir PDF a una factura existente (invoiceId = id de la tabla invoices)
-router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadInvoice.single('pdf'), async (req, res) => {
+router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadPdfOr400, async (req, res) => {
     const db = req.app.get('db');
     const { invoiceId } = req.params;
     const { numero, invoice_type, cae } = req.body;
@@ -3300,7 +3314,7 @@ router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadInvoice.sing
 
 // ── POST /admin/invoices/manual ──────────────────────────────────────────────
 // Crea una factura manual no asociada a un pago del sistema
-router.post('/invoices/manual', authenticateAdmin, uploadInvoice.single('pdf'), async (req, res) => {
+router.post('/invoices/manual', authenticateAdmin, uploadPdfOr400, async (req, res) => {
     const db = req.app.get('db');
     const { user_id, amount, issued_at, numero, invoice_type, cae, plan, notes } = req.body;
 
@@ -3335,7 +3349,7 @@ router.post('/invoices/manual', authenticateAdmin, uploadInvoice.single('pdf'), 
 
 // ── POST /admin/invoices/from-payment/:paymentId ──────────────────────────────
 // Crear registro de factura + subir PDF para un pago que no tiene invoice aún
-router.post('/invoices/from-payment/:paymentId', authenticateAdmin, uploadInvoice.single('pdf'), async (req, res) => {
+router.post('/invoices/from-payment/:paymentId', authenticateAdmin, uploadPdfOr400, async (req, res) => {
     const db = req.app.get('db');
     const { paymentId } = req.params;
     const { numero } = req.body;

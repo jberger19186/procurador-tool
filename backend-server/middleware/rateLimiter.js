@@ -125,11 +125,31 @@ const adminLimiter = rateLimit({
     }
 });
 
+// RI-3 (revisión 2026-07-19): defensa en profundidad para routers autenticados que no
+// tenían ningún rate-limit de red (/license, /monitor, /tickets, /users, /usuarios/api).
+// Umbral fijado con datos reales: el pico medido en la sesión de testing más intensa
+// (14/07) fue 10 req/min desde una sola IP — 300/5min (60/min prom.) deja 6x de margen.
+const generalAuthLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutos
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        const identifier = req.user ? `Usuario ${req.user.id}` : `IP ${req.ip}`;
+        console.warn(`⚠️ Rate limit excedido - General autenticado: ${identifier} ${req.path}`);
+        res.status(429).json({
+            error: 'Demasiadas peticiones. Por favor esperá un momento.',
+            action: 'slow_down'
+        });
+    }
+});
+
 module.exports = {
     loginLimiter,
     registerLimiter,
     apiLimiter,
     scriptExecutionLimiter,
     scriptDownloadLimiter,
-    adminLimiter
+    adminLimiter,
+    generalAuthLimiter
 };

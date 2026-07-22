@@ -158,6 +158,12 @@ router.post('/ai-chat', authenticateToken, async (req, res) => {
     if (messages.length > 20) {
         return res.status(400).json({ error: 'Demasiados mensajes en el historial.' });
     }
+    // RI-2 (revisión 2026-07-19): tope de longitud por mensaje — antes solo se
+    // validaba la cantidad, no el tamaño de cada `content` (pico de tokens/costo).
+    const MAX_CONTENT = 4000;
+    if (messages.some(m => typeof m.content !== 'string' || m.content.length > MAX_CONTENT)) {
+        return res.status(400).json({ error: 'Cada mensaje debe ser texto de hasta 4.000 caracteres.' });
+    }
 
     // Rate limit por usuario: 20 mensajes/hora
     const userId = req.user.id;

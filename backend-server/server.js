@@ -8,7 +8,7 @@ const path = require('path');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { processScripts, getCacheStats, clearCache } = require('./utils/scriptEncryption');
-const { apiLimiter } = require('./middleware/rateLimiter');
+const { apiLimiter, generalAuthLimiter } = require('./middleware/rateLimiter');
 const tokenBlacklist = require('./middleware/tokenBlacklist');
 
 const helmet = require('helmet');
@@ -139,10 +139,14 @@ app.use('/api/extension', require('./routes/extension'));
 app.use('/scripts', require('./routes/scripts'));
 app.use('/admin', require('./routes/admin'));
 app.use('/client', require('./routes/client'));
-app.use('/tickets', require('./routes/tickets'));
-app.use('/monitor', require('./routes/monitor'));
-app.use('/license', require('./routes/license'));
-app.use('/users', require('./routes/users'));
+// RI-3 (revisión 2026-07-19): estos 5 routers no tenían ningún rate-limit de red
+// (a diferencia de /auth, /admin, /client que ya tienen el suyo). generalAuthLimiter
+// es holgado (300/5min, medido contra el pico real de uso) — no reemplaza limiters
+// más estrictos que ya existan en rutas puntuales de estos mismos archivos.
+app.use('/tickets', generalAuthLimiter, require('./routes/tickets'));
+app.use('/monitor', generalAuthLimiter, require('./routes/monitor'));
+app.use('/license', generalAuthLimiter, require('./routes/license'));
+app.use('/users', generalAuthLimiter, require('./routes/users'));
 app.use('/legal', require('./routes/legal'));
 
 // ── Fase 5: Cobranza — rutas detrás de feature flag ──────────────────────────
@@ -341,7 +345,7 @@ app.get('/descargar', (req, res) => {
 });
 
 // Portal de usuario
-app.use('/usuarios/api', require('./routes/usuarios'));
+app.use('/usuarios/api', generalAuthLimiter, require('./routes/usuarios'));
 app.use('/usuarios', express.static(path.join(__dirname, 'public', 'usuarios')));
 app.get('/usuarios', (req, res) => res.sendFile(path.join(__dirname, 'public', 'usuarios', 'index.html')));
 
