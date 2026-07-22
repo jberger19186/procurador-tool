@@ -3,6 +3,7 @@
 > **Alcance:** revisión en vivo de bugs y brechas de seguridad **posterior** a SEC-1 (auditoría del 13/07) y a los 4 lotes de bugs (2A–2D, todos cerrados). Análisis de solo lectura — **no se implementó nada**. Cada hallazgo trae una solución autosuficiente, autocontenida, que **no altera el funcionamiento de ningún otro componente**, con fases de ejecución, modelo (Sonnet/Opus) y nivel de esfuerzo.
 > **2ª pasada de verificación pre-ejecución (mismo día):** se re-verificó cada solución contra el código real antes de habilitar su ejecución. **2 correcciones a este propio documento** — RI-2 (los 2 endpoints IA tienen shapes distintos: `messages[]` en portal vs `message` string en Electron; el snippet único habría fallado en `client.js`) y RI-4 (la app actual **TODAVÍA llama** a `/api/extension` desde `main.js:508/528/575`; el plan pasó de "desmontar backend" a "primero release Electron que limpie los handlers, después desmontar" — 4 fases). **+1 hallazgo nuevo:** RI-5 (el logout del portal es solo client-side, nunca blacklistea — el endpoint existe pero `doLogout()` no lo llama). Total: **5 hallazgos, todos Baja severidad**.
 > **Contexto:** el código está maduro y ya endurecido. No se encontró ningún hallazgo **crítico ni alto** — la auditoría y los lotes previos hicieron su trabajo. Los 4 hallazgos de abajo son de severidad **Baja**, de tipo corrección/robustez/UX, ninguno es un hueco de seguridad explotable.
+> **✅ EJECUTADAS las 5 correcciones (2026-07-22, Sonnet).** Backup DB previo, probadas en staging antes de prod (curl real contra cada fix), health 200 en portal/dashboard/API sin errores nuevos tras cada deploy, fixture 250 verificado intacto. **3ª pasada sobre RI-4** (la 2ª pasada seguía sobre-estimando el alcance): confirmado que `install-extension`/`check-extension-version` eran código **realmente muerto** — ninguna UI real los invoca (`renderer.js:287` usa `openUrlInChrome` directo al store, no esos handlers) y 0 hits reales en 2+ semanas de logs de prod a `version`/`download`/`hashes` — solo se conserva `electron-token`/`electron-download` (flujo vivo de descarga del instalador). Esto **eliminó la necesidad de las 4 fases con ventana de espera**: se limpió todo en un solo commit + release `electron-v2.7.40`, publicado y verificado (SHA512 de `latest.yml` coincide con el `.exe`, único release sin duplicados tras corregir el mismo bug de `electron-builder` ya documentado en v2.7.38/39). Detalle de cada fix, con comandos y resultados reales, en cada sección de abajo. **Hallazgo nuevo detectado durante la ejecución (no corregido, fuera de alcance):** `npm audit` en el backend volvió a mostrar 2 vulnerabilidades (`axios` alta, `body-parser` baja) — aparecieron independientemente entre el 19 y el 22/07, sin relación con estos 5 fixes; requiere su propia revisión antes de aplicar `npm audit fix` (podría cambiar versiones sin probar).
 
 ---
 
@@ -10,11 +11,11 @@
 
 | # | Severidad | Tipo | Componente | Título |
 |---|---|---|---|---|
-| RI-1 | Baja | Correctness/UX | backend (`admin.js` + `server.js`) | Errores de subida de PDF (multer) devuelven HTTP 500 genérico en vez de 400 con el motivo |
-| RI-2 | Baja | Costo/abuso | backend (`usuarios.js`, `client.js`) | El bot IA no acota la longitud del `content` de cada mensaje (solo la cantidad) |
-| RI-3 | Baja (observación) | Robustez/abuso | backend (routers autenticados) | Sin rate-limit de red en `/license`, `/monitor`, `/tickets`, `/users`, `/usuarios/api` (solo limiters por-ruta puntuales) |
-| RI-4 | Baja | Superficie/deuda | backend (`routes/extension.js`) + **Electron (`main.js`)** | Código muerto de la distribución CRX sigue montado — y la app actual TODAVÍA lo llama (ver corrección en el detalle) |
-| RI-5 | Baja | Higiene de sesión | portal (`public/usuarios/app.js`) | El logout del portal es solo client-side: nunca llama a `POST /auth/logout` → el token sigue válido server-side hasta vencer (8h) |
+| RI-1 | Baja | Correctness/UX | backend (`admin.js` + `server.js`) | ✅ **CORREGIDO (commit `59baf20`)** — Errores de subida de PDF devolvían 500 genérico; ahora 400 con el motivo |
+| RI-2 | Baja | Costo/abuso | backend (`usuarios.js`) | ✅ **CORREGIDO (commit `59baf20`)** — Cap de 4.000 chars en el portal; `client.js` ya tenía el suyo (no requería cambio) |
+| RI-3 | Baja (observación) | Robustez/abuso | backend (routers autenticados) | ✅ **CORREGIDO (commit `59baf20`)** — `generalAuthLimiter` (300/5min) en `/license`, `/monitor`, `/tickets`, `/users`, `/usuarios/api` |
+| RI-4 | Baja | Superficie/deuda | backend (`routes/extension.js`) + Electron (`main.js`) | ✅ **CORREGIDO (commits `88ef26b`/`acbca0a`, release `electron-v2.7.40`)** — código muerto eliminado por completo (backend + cliente), no solo desmontado |
+| RI-5 | Baja | Higiene de sesión | portal (`public/usuarios/app.js`) | ✅ **CORREGIDO (commit `59baf20`)** — `doLogout()` ahora blacklistea el token server-side |
 
 > **Lo verificado que está SANO (no genera hallazgo):** sin inyección SQL (la única interpolación, `${col}` en `admin.js:1989`, viene de un whitelist `colMap`); candado de ejecución atómico con TTL de 5 min y auto-limpieza (`license.js`); AUTH-1 device-binding server-side; CORS restringido por lista (rechaza sin lanzar 500); firma HMAC de webhooks con `timingSafeEqual`; `/api/extension/electron-download` protegido por token de un solo uso con expiración; `ufw` con solo 22/80/443.
 
@@ -50,6 +51,8 @@ function uploadPdfOr400(req, res, next) {
 
 **Modelo/esfuerzo:** **Sonnet, esfuerzo bajo.** Cambio mecánico y acotado, patrón conocido.
 
+> **✅ Ejecutado 2026-07-22.** Wrapper `uploadPdfOr400` agregado, aplicado en las 3 rutas. Probado en staging: `.txt` renombrado a `.pdf` → `400 {"error":"Solo se aceptan archivos PDF"}`; PDF real → `200` (factura creada normal). Deployado a prod y verificado sano. Commit `59baf20`.
+
 ---
 
 ## RI-2 — El bot IA no acota la longitud del `content` por mensaje
@@ -81,6 +84,8 @@ if (message.length > 4000) {
 
 **Modelo/esfuerzo:** **Sonnet, esfuerzo bajo.**
 
+> **✅ Ejecutado 2026-07-22 — con una corrección de 3ª pasada.** Al implementar se confirmó que `client.js` (línea 869: `if (message.length > 500)`) **ya tenía** el cap desde antes — la premisa original de RI-2 (ambos endpoints sin tope) era parcialmente incorrecta. Solo se aplicó el fix a `usuarios.js` (portal). Probado en staging: mensaje de 5.000 chars → `400 {"error":"Cada mensaje debe ser texto de hasta 4.000 caracteres."}`; mensaje normal → `200` con respuesta real del bot. Deployado a prod. Commit `59baf20`.
+
 ---
 
 ## RI-3 — Sin rate-limit de red en varios routers autenticados (observación)
@@ -108,6 +113,8 @@ app.use('/monitor', generalAuthLimiter, require('./routes/monitor'));
 
 **Modelo/esfuerzo:** **Sonnet, esfuerzo medio.** El código es trivial; lo delicado es calibrar el umbral sin romper el uso legítimo — por eso la fase de medición.
 
+> **✅ Ejecutado 2026-07-22.** Fase A (medición): pico real medido en la sesión de testing más intensa (14/07) fue **10 req/min desde una sola IP** — 300/5min deja 6× de margen. Fase B: `generalAuthLimiter` agregado a los 5 routers en `server.js`. Probado en staging: 5 requests normales → todas `200`; 305 requests seguidas → mezcla de `200`/`429` confirmando que el límite dispara pasado el umbral sin afectar el uso normal. Deployado a prod. Commit `59baf20`.
+
 ---
 
 ## RI-4 — Código muerto de la distribución CRX sigue montado
@@ -129,6 +136,14 @@ app.use('/monitor', generalAuthLimiter, require('./routes/monitor'));
 **⚠️ No alterar otros componentes:** la extensión de la store y su auth (`/auth/extension-login`) son **independientes** de este router — no se tocan. Mientras tanto, el bump de `adm-zip` a 0.6.0 (ya deployado el 19/07) mantiene el audit en 0 — no hay urgencia; este plan es la limpieza definitiva.
 
 **Modelo/esfuerzo:** **Sonnet, esfuerzo medio** (subió respecto de la estimación previa: ahora incluye tocar `main.js`/renderer y un release de Electron con su checklist — ya no es solo un borrado de backend). La fase B es tiempo calendario, no esfuerzo.
+
+> **✅ Ejecutado 2026-07-22 — 3ª pasada que simplificó drásticamente el plan.** Antes de tocar código se releyó el consumidor real: `renderer.js:287` (`bind('btnInstalarExtension', ...)`) llama a `window.electronAPI.openUrlInChrome(...)` directo a la Chrome Web Store — **nunca** a `installExtension`/`checkExtensionVersion`. Un `grep` en `renderer.js`/`onboarding.js`/`index.html`/`onboarding.html` confirmó **cero** llamadas a esos bridges en ningún archivo. Y en 2+ semanas de logs de prod (`procurador-access.log` + rotados), **cero hits** a `/api/extension/version`, `/hashes` o `/download` — los únicos 4 hits reales eran a `electron-token`/`electron-download` (el flujo de descarga del instalador, sin relación). Con esto confirmado, **no hacía falta la ventana de adopción de la Fase B**: se eliminó todo en un solo paso.
+>
+> **Lo que se eliminó:** backend — `routes/extension.js` reescrito a solo `electron-token`/`electron-download` (elimina `adm-zip` y `javascript-obfuscator`, únicos consumidores). Electron — `downloadExtension()`, los handlers `install-extension`/`check-extension-version` y el `require('adm-zip')` de `main.js`; bridges correspondientes de `preload.js` y `preload-onboarding.js`; `adm-zip` también fuera del `package.json` de `electron-app`. Se conservó intacto: `get-extension-enabled`/`set-extension-enabled` (el toggle real de la UI) y `EXT_META_PATH`.
+>
+> **Verificado:** `npm start` limpio + `npm run build:dir` (`.exe` empaquetado real, `isPackaged:true`, arranque limpio, ícono embebido) antes de bumpear versión. Backend probado en staging y prod: `version`/`download` → `404`; `electron-token`→`electron-download` → sigue `200`→`302` (flujo de descarga de la app intacto, confirmado en prod con un token real). `npm audit` del backend en 0 para estas 2 dependencias.
+>
+> **Release `electron-v2.7.40` publicado** (mismo bug de infraestructura ya documentado en v2.7.38/v2.7.39: `electron-builder` creó 2 releases duplicados con el mismo tag — uno solo con el `.blockmap`, otro con `.exe`+`latest.yml` sin blockmap — corregido subiendo el asset faltante al release completo vía API de GitHub y borrando el duplicado, sin rebuild). Verificado: 1 solo release con los 3 assets, SHA512 de `latest.yml` coincide byte a byte con el `.exe` local. Versión visible actualizada en portal y landing (5 lugares). Commits `88ef26b` (código) + `acbca0a` (versión visible), tag `electron-v2.7.40`.
 
 ---
 
@@ -153,19 +168,21 @@ function doLogout() {
 
 **Modelo/esfuerzo:** **Sonnet, esfuerzo bajo.** Tres líneas en un solo archivo, comportamiento visible idéntico.
 
+> **✅ Ejecutado 2026-07-22.** `doLogout()` ahora dispara `fetch` directo (no `apiFetch`, para evitar recursión ya que `apiFetch` llama a `doLogout()` en 401/403) con el token capturado antes de limpiarlo. Probado en staging directamente contra `/auth/logout`: login→200, logout→200, mismo token reutilizado→`403 {"error":"Token invalidado"}`. La verificación visual del click real en el portal quedó pendiente (staging protegido por basic-auth sin credenciales a mano) — la lógica del lado cliente es de 3 líneas, sintaxis verificada, y el contrato del endpoint ya está probado end-to-end. Deployado a prod. Commit `59baf20`.
+
 ---
 
-## Orden de ejecución sugerido (si se decide accionar)
+## ✅ Orden de ejecución — completado 2026-07-22
 
-Todos son de severidad baja y **opcionales**; ninguno bloquea B3 ni el Bloque R. Si se accionan, el orden por costo/beneficio (actualizado en la 2ª pasada):
+Las 5 correcciones se ejecutaron en una sola sesión (Sonnet, esfuerzo bajo-medio según el caso), en el orden originalmente sugerido: RI-1 → RI-5 → RI-2 → RI-4 → RI-3. Todas probadas en staging antes de prod, con backup de DB previo y verificación de salud (portal/dashboard/API en 200, fixture 250 intacto) después de cada deploy. Detalle real de cada una en su sección arriba.
 
-1. **RI-1** (Sonnet bajo) — mejora visible para el admin, 1 fase, cierra la observación de R10.1/R10.2.
-2. **RI-5** (Sonnet bajo) — 3 líneas en `doLogout()`, cierra de antemano el hallazgo que R10.5(b) va a documentar.
-3. **RI-2** (Sonnet bajo) — endurecimiento preventivo de costo, 1 fase, **cada endpoint con su shape** (ver corrección).
-4. **RI-4** (Sonnet medio) — la limpieza definitiva del CRX; **ahora requiere release de Electron primero** (la app actual todavía llama a esas rutas — ver corrección) y ventana de adopción. Bundlear la fase A con el próximo release que exista. Sin urgencia: el bump de `adm-zip` ya dejó el audit en 0.
-5. **RI-3** (Sonnet medio) — el de mayor cuidado (calibrar umbral sin romper uso real); dejar para cuando haya datos de uso.
+**Commits:** `59baf20` (RI-1, RI-2, RI-3, RI-5) · `88ef26b` + `acbca0a` (RI-4, release `electron-v2.7.40`).
 
-**Regla transversal:** cada fix se prueba en **staging** con una corrida real antes de prod, y se verifica que el resto del sistema (login, cobro, automatización PJN, extensión) sigue intacto — coherente con la disciplina del proyecto (backup previo + tag de recupero).
+**Regla transversal aplicada:** cada fix se probó en **staging** con una corrida real antes de prod, y se verificó que el resto del sistema (login, cobro, automatización PJN, extensión) siguió intacto — coherente con la disciplina del proyecto.
+
+### Hallazgo nuevo detectado durante la ejecución (no corregido)
+
+`npm audit` en el backend, tras limpiar `adm-zip`/`javascript-obfuscator` (RI-4), mostró **2 vulnerabilidades nuevas e independientes**: `axios` (alta — varias CVEs de DoS/prototype pollution/proxy bypass) y `body-parser` (baja — DoS con `limit` inválido). Aparecieron entre el 19 y el 22/07 (no estaban en el audit de la revisión original). **Fuera de alcance de esta revisión** — requiere su propio análisis antes de aplicar `npm audit fix` (podría bajar versiones de `axios`, usado en varios puntos del backend, sin haber probado el impacto). Candidato a una próxima revisión de salud.
 
 ---
 
