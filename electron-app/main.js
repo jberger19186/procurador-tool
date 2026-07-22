@@ -856,24 +856,12 @@ ipcMain.handle('login', async (event, email, password) => {
             // Crear ventana principal
             createMainWindow();
 
-            // Auto-update silencioso de la extensión (solo si está habilitada)
-            try {
-                const extMeta = JSON.parse(fs.readFileSync(EXT_META_PATH, 'utf8'));
-                if (extMeta.habilitada === false) {
-                    console.log('[ext] Auto-update omitido: extensión deshabilitada');
-                } else {
-                    const token = authManager.backendClient.token;
-                    if (token) {
-                        downloadExtension(token).then(r => {
-                            if (r.isNew) console.log(`[ext] Auto-update: extensión actualizada a v${r.version}`);
-                        }).catch(e => {
-                            console.warn('[ext] Auto-update silencioso falló:', e.message);
-                        });
-                    }
-                }
-            } catch (_) {
-                // Si no hay meta (primer uso), no hay nada que actualizar aún
-            }
+            // RI-4 (2026-07-22): se eliminó el bloque de "auto-update silencioso de la
+            // extensión" que corría acá en cada login — llamaba a downloadExtension()
+            // (la distribución CRX/ZIP deprecada, ya removida). La extensión hoy vive en
+            // la Chrome Web Store y se auto-actualiza por Google; no hay nada que bajar
+            // desde nuestro backend. El toggle habilitar/deshabilitar (get/set-extension-enabled)
+            // se conserva intacto — no dependía de este bloque.
 
             // SEC-2·B.2: chequeo del disparador 'encendido' (una vez por login exitoso).
             // No bloquea el login — corre en background y solo actúa si el operador
