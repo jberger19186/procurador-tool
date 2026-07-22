@@ -144,8 +144,8 @@ try {
         monitorGenerarVisorGuardado: (tipo) => ipcRenderer.invoke('monitor-generar-visor-guardado', tipo),
 
         // ============ EXTENSIÓN CHROME ============
-        installExtension:       () => ipcRenderer.invoke('install-extension'),
-        checkExtensionVersion:  () => ipcRenderer.invoke('check-extension-version'),
+        // RI-4 (2026-07-19/22): installExtension/checkExtensionVersion eliminados —
+        // bridges de IPC handlers muertos (ver nota en main.js).
         generateExtensionPdf:   (data) => ipcRenderer.invoke('generate-extension-pdf', data),
         getExtensionEnabled:    () => ipcRenderer.invoke('get-extension-enabled'),
         setExtensionEnabled:    (v) => ipcRenderer.invoke('set-extension-enabled', v),

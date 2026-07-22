@@ -489,99 +489,17 @@ ipcMain.handle('onboarding-agregar-password', async () => {
 
 // ============ IPC HANDLERS - EXTENSIÓN CHROME ============
 
-const AdmZip       = require('adm-zip');
-const crypto       = require('crypto');
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 
 const EXT_META_PATH = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'ProcuradorSCW', 'extension_meta.json');
 
-/**
- * Descarga la extensión del backend si hay una versión nueva.
- * La extrae en %LOCALAPPDATA%\ProcuradorSCW\ext-vX-Y-Z (nombre fijo por versión).
- * Retorna { path, version, isNew }
- */
-async function downloadExtension(token) {
-    const extBaseDir = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'ProcuradorSCW');
-    fs.mkdirSync(extBaseDir, { recursive: true });
-
-    // 1. Versión del servidor
-    const verRes = await authManager.backendClient.client.get('/api/extension/version', {
-        headers: { Authorization: `Bearer ${token}` }
-    });
-    const serverVersion = verRes.data?.version;
-    if (!serverVersion) throw new Error('No se pudo obtener la versión de la extensión');
-
-    // 2. Comparar con versión local
-    let meta = {};
-    try { meta = JSON.parse(fs.readFileSync(EXT_META_PATH, 'utf8')); } catch (_) {}
-
-    // Carpeta FIJA — Chrome siempre apunta al mismo path; las actualizaciones sobreescriben los archivos
-    const extPath = path.join(extBaseDir, 'extension');
-
-    if (meta.version === serverVersion && fs.existsSync(extPath)) {
-        console.log(`[ext] Extensión v${serverVersion} ya actualizada en ${extPath}`);
-        return { path: extPath, version: serverVersion, isNew: false };
-    }
-
-    // 3. Descargar ZIP
-    console.log(`[ext] Descargando extensión v${serverVersion}…`);
-    const dlRes = await authManager.backendClient.client.get('/api/extension/download', {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'arraybuffer'
-    });
-    const zipBuffer = Buffer.from(dlRes.data);
-
-    // 4. Extraer en carpeta fija (sobreescribe archivos existentes)
-    fs.mkdirSync(extPath, { recursive: true });
-    new AdmZip(zipBuffer).extractAllTo(extPath, true);
-
-    // 5. Guardar metadatos locales
-    fs.writeFileSync(EXT_META_PATH, JSON.stringify({
-        version: serverVersion,
-        path: extPath,
-        downloadedAt: new Date().toISOString()
-    }));
-    console.log(`[ext] Extensión v${serverVersion} extraída en ${extPath}`);
-    return { path: extPath, version: serverVersion, isNew: true };
-}
-
-// Descargar extensión (onboarding y configuración)
-ipcMain.handle('install-extension', async () => {
-    try {
-        const token = authManager.backendClient.token;
-        if (!token) return { success: false, error: 'No hay sesión activa' };
-        const result = await downloadExtension(token);
-        return { success: true, ...result };
-    } catch (err) {
-        console.error('[ext] Error en install-extension:', err.message);
-        return { success: false, error: err.message };
-    }
-});
-
-// Comparar versión local vs servidor
-ipcMain.handle('check-extension-version', async () => {
-    try {
-        let localVersion = null;
-        let localPath    = null;
-        try {
-            const meta = JSON.parse(fs.readFileSync(EXT_META_PATH, 'utf8'));
-            localVersion = meta.version || null;
-            localPath    = meta.path    || null;
-        } catch (_) {}
-
-        const token = authManager.backendClient.token;
-        if (!token) return { localVersion, localPath, serverVersion: null, needsUpdate: false };
-
-        const verRes = await authManager.backendClient.client.get('/api/extension/version', {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        const serverVersion = verRes.data?.version || null;
-        const needsUpdate   = !!serverVersion && serverVersion !== localVersion;
-        return { localVersion, localPath, serverVersion, needsUpdate };
-    } catch (err) {
-        return { localVersion: null, localPath: null, serverVersion: null, needsUpdate: false, error: err.message };
-    }
-});
+// RI-4 (revisión 2026-07-19, ejecutado 2026-07-22): se eliminaron `downloadExtension()`
+// y los handlers `install-extension`/`check-extension-version` — código muerto de la
+// distribución CRX/ZIP, nunca invocado desde la UI real (el botón real de Configuración
+// → Extensión usa `openUrlInChrome` directo a la Chrome Web Store, ver renderer.js). Los
+// endpoints backend que consumían (`/api/extension/version|download`) también se
+// eliminaron en la misma revisión (routes/extension.js). EXT_META_PATH se conserva: lo
+// siguen usando get/set-extension-enabled (el toggle real) más abajo.
 
 // Leer preferencia: extensión habilitada/deshabilitada
 ipcMain.handle('get-extension-enabled', () => {

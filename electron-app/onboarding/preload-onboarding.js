@@ -10,8 +10,8 @@ contextBridge.exposeInMainWorld('onboardingAPI', {
     recreateProfile:    () => ipcRenderer.invoke('onboarding-recreate-profile'),
     abrirNavegadorPJN:  () => ipcRenderer.invoke('onboarding-abrir-pjn'),
     agregarPassword:    () => ipcRenderer.invoke('onboarding-agregar-password'),
-    installExtension:      () => ipcRenderer.invoke('install-extension'),
-    checkExtensionVersion: () => ipcRenderer.invoke('check-extension-version'),
+    // RI-4 (2026-07-19/22): installExtension/checkExtensionVersion eliminados — bridges
+    // de IPC handlers muertos, nunca invocados desde onboarding.js (ver nota en main.js).
     generateExtensionPdf:  (data) => ipcRenderer.invoke('generate-extension-pdf', data),
     getExtensionEnabled:   () => ipcRenderer.invoke('get-extension-enabled'),
     setExtensionEnabled:   (v) => ipcRenderer.invoke('set-extension-enabled', v),
