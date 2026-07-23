@@ -27,6 +27,28 @@ Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes
 
 ---
 
+## 🔚 CIERRE 2026-07-23 — BLOQUE R en pausa, leer antes de retomar
+
+**Estado: 33/37 casos del Bloque R cerrados (Tandas 1-4, todas autónomas/con empujón puntual).** Solo queda el bloque 🔴 OP, que el operador decidió explícitamente dejar para otra sesión (requiere sus acciones físicas: instalar, revisar email, usar la extensión real). **No hay nada roto ni a medio terminar** — cierre limpio, DB del fixture 250 verificada consistente.
+
+**Pendiente para la próxima corrida (bloque 🔴 OP coordinado, agrupar en una sola pasada con el operador):**
+- **R2.1** — Reset completo de la app (Opción B/C del CLAUDE.md) + instalar el `.exe` real desde cero → login → onboarding wizard → tour.
+- **R2.2** — Confirmar que el paso de extensión del onboarding apunta a la Chrome Web Store (no al flujo CRX muerto).
+- **R2.3** — Confirmar que el toast de Windows dice "Procurador SCW" (no `electron.app.Electron`) — solo verificable en instalación real.
+- **R8.1** — Auditoría de contenido de emails transaccionales (remitente, links, placeholders, UTF-8) — requiere que el operador revise su casilla.
+- **R9.1/R9.2** — Popup real de la extensión Chrome (login + 1 flujo completo, ej. Consulta SCW) contra el PJN real.
+
+**También quedaron abiertos, sin bloquear el cierre:**
+- **R6.4** (informe de expediente sin movimientos) — no verificable esta corrida por falta de un candidato conocido. Si en el futuro se identifica un expediente real sin movimientos, correrlo.
+- **Hallazgo #9** (🔴 OP, disparado solo en Tanda 3) — el instalador del auto-updater se traba esperando un click que `computer-use` no puede dar. Pendiente confirmar con un click humano real si reproduce (posible señal a favor de priorizar AZ/code signing).
+- **Hallazgo #10** (Bajo-Medio, no corregido) — un Informe contra un expediente inexistente consume `informe_usage` igual, pese a no encontrar nada. Bajo impacto, documentado, sin fix aplicado.
+
+**Fixture 250 al cierre:** `active`, `usage_count=10/20`, `proc_usage=5`, `informe_usage=2`, `monitor_novedades_usage=2`, 1 parte en Monitor ("FCR DON COCHO") — todo uso genuino de las tandas, no revertido (mismo criterio que corridas previas). Cuenta temporal de la prueba de multi-cuenta (id 252, CUIT `20300000029`) borrada de la DB, sin residuos.
+
+**Para retomar:** abrir sesión nueva, pedir "ejecutar el bloque OP del Bloque R" o similar — requiere tener a mano al operador para las 3 acciones físicas (instalar, revisar email, extensión). Detalle completo de la corrida en la sección "Registro de ejecución" (entradas del 2026-07-23, Tandas 1 a 4) y en CLAUDE.md.
+
+---
+
 ## Convenciones
 
 - **Usuarios de prueba:** `jberger_86+uN@hotmail.com` (alias de Outlook — todos llegan a la misma casilla). Contraseñas de prueba tipo `Prueba1234`.
