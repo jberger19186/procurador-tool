@@ -326,6 +326,16 @@ function hoyDDMMYYYY() {
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+// Valida formato DD/MM/YYYY y que sea una fecha de calendario real (rechaza 32/99/2026, 31/02/2026, etc.)
+function esFechaValidaDDMMYYYY(str) {
+    const m = String(str || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return false;
+    const dia = +m[1], mes = +m[2], anio = +m[3];
+    if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return false;
+    const d = new Date(anio, mes - 1, dia);
+    return d.getFullYear() === anio && d.getMonth() === mes - 1 && d.getDate() === dia;
+}
+
 function setupSidebar() {
     // Mapa data-action → función
     const actions = {
@@ -336,6 +346,9 @@ function setupSidebar() {
                 const f = document.getElementById('sidebarFechaLimite');
                 if (f) f.value = fecha;
                 addLog('info', `📅 Sin fecha límite cargada — se usa la fecha de hoy: ${fecha}`);
+            } else if (!esFechaValidaDDMMYYYY(fecha)) {
+                showNotification('Fecha límite inválida — usá el formato DD/MM/YYYY', 'error');
+                return;
             }
             runProcessFromSidebarFecha(fecha);
         },
@@ -421,6 +434,11 @@ function setupSidebar() {
     document.getElementById('sidebarFechaLimite')?.addEventListener('change', async function () {
         const fecha = this.value.trim();
         if (!currentConfig) return;
+        if (fecha && !esFechaValidaDDMMYYYY(fecha)) {
+            showNotification('Fecha límite inválida — usá el formato DD/MM/YYYY', 'error');
+            this.value = currentConfig.general.fechaLimite || '';
+            return;
+        }
         currentConfig.general.fechaLimite = fecha;
         // Sincronizar con el campo del modal de configuración
         const cfgField = document.getElementById('fechaLimite');
@@ -1048,9 +1066,8 @@ function showCustomDateModal() {
 async function runProcessCustomDate() {
     const fecha = document.getElementById('inputCustomDate').value.trim();
 
-    const regex = /^\d{2}\/\d{2}\/\d{4}$/;
-    if (!regex.test(fecha)) {
-        showNotification('Formato de fecha inválido (use DD/MM/YYYY)', 'error');
+    if (!esFechaValidaDDMMYYYY(fecha)) {
+        showNotification('Fecha límite inválida — usá el formato DD/MM/YYYY', 'error');
         return;
     }
 
@@ -1092,9 +1109,8 @@ async function runProcessCustomDate() {
 
 // Procurar desde fecha límite configurada en la sidebar (sin modal)
 async function runProcessFromSidebarFecha(fecha) {
-    const regex = /^\d{2}\/\d{2}\/\d{4}$/;
-    if (!regex.test(fecha)) {
-        showNotification('Formato de fecha inválido (use DD/MM/YYYY)', 'error');
+    if (!esFechaValidaDDMMYYYY(fecha)) {
+        showNotification('Fecha límite inválida — usá el formato DD/MM/YYYY', 'error');
         return;
     }
 
@@ -2767,11 +2783,13 @@ function setupInformeModal() {
     document.getElementById('btnSelectBatchFile').addEventListener('click', async () => {
         const result = await window.electronAPI.selectBatchFile();
         if (result.canceled || !result.success) return;
-        informeBatchLines = result.lines;
+        informeBatchLines = result.validLines || result.lines;
         document.getElementById('informe-batch-filename').textContent = result.path.split(/[\\/]/).pop();
         const preview = document.getElementById('informe-batch-preview');
         preview.style.display = '';
-        preview.textContent = `${result.lines.length} expediente(s) encontrado(s)`;
+        const validCount = result.validCount ?? informeBatchLines.length;
+        const invalidCount = result.invalidCount || 0;
+        preview.textContent = `${validCount} expediente(s) válido(s)` + (invalidCount > 0 ? ` — ${invalidCount} omitido(s) por formato inválido` : '');
     });
 
     // Botones del modal
@@ -2865,14 +2883,25 @@ function setupProcurarCustomModal() {
     document.getElementById('btnSeleccionarTxtCustom').addEventListener('click', async () => {
         const res = await window.electronAPI.selectBatchFile();
         if (res.success && res.lines && res.lines.length > 0) {
-            _procurarCustomLines = res.lines;
+            const validLines = res.validLines || res.lines;
+            const invalidCount = res.invalidCount || 0;
             document.getElementById('lblArchivoCustom').textContent = res.path.split(/[\\/]/).pop();
             const resumenEl = document.getElementById('resumenCustom');
-            resumenEl.textContent = `${res.lines.length} expediente${res.lines.length !== 1 ? 's' : ''} cargado${res.lines.length !== 1 ? 's' : ''}`;
             resumenEl.style.display = 'block';
+
+            if (validLines.length === 0) {
+                _procurarCustomLines = null;
+                resumenEl.textContent = 'Ningún expediente válido en el archivo (formato esperado: "JUR NUMERO/ANIO").';
+                document.getElementById('btnConfirmProcurarCustom').disabled = true;
+                return;
+            }
+
+            _procurarCustomLines = validLines;
+            resumenEl.textContent = `${validLines.length} expediente${validLines.length !== 1 ? 's' : ''} válido${validLines.length !== 1 ? 's' : ''}` +
+                (invalidCount > 0 ? ` — ${invalidCount} omitido${invalidCount !== 1 ? 's' : ''} por formato inválido` : '');
             document.getElementById('btnConfirmProcurarCustom').disabled = false;
             // Verificar límites de batch al cargar el archivo
-            await _actualizarAvisoBatchLimits(res.lines.length);
+            await _actualizarAvisoBatchLimits(validLines.length);
         }
     });
 
@@ -2881,8 +2910,8 @@ function setupProcurarCustomModal() {
     document.getElementById('btnConfirmProcurarCustom').addEventListener('click', async () => {
         if (!_procurarCustomLines) return;
         const fecha = document.getElementById('inputFechaCustomProcurar').value.trim();
-        if (fecha && !/^\d{2}\/\d{2}\/\d{4}$/.test(fecha)) {
-            showNotification('Formato de fecha inválido (use DD/MM/YYYY)', 'error');
+        if (fecha && !esFechaValidaDDMMYYYY(fecha)) {
+            showNotification('Fecha límite inválida — usá el formato DD/MM/YYYY', 'error');
             return;
         }
         // Si hay truncación, el botón ya muestra "Confirmar de todas formas" — ejecutar con líneas truncadas

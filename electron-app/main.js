@@ -1874,7 +1874,17 @@ ipcMain.handle('select-batch-file', async () => {
     try {
         const content = fs.readFileSync(result.filePaths[0], 'utf8');
         const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        return { success: true, path: result.filePaths[0], lines };
+        const validLines = lines.filter(l => parseExpedienteStr(l) !== null);
+        const invalidLines = lines.filter(l => parseExpedienteStr(l) === null);
+        return {
+            success: true,
+            path: result.filePaths[0],
+            lines,                          // se conserva por retrocompatibilidad
+            validLines,
+            invalidLines,
+            validCount: validLines.length,
+            invalidCount: invalidLines.length
+        };
     } catch (err) {
         return { success: false, error: err.message };
     }
