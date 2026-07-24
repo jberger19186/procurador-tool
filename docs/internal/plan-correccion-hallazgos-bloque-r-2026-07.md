@@ -20,6 +20,19 @@
 
 ---
 
+## ✅ Ejecución 2026-07-23 (Sonnet, esfuerzo medio) — CERRADO
+
+- **#5:** consultado el operador vía pregunta directa → **eligió dejarlo como está** (con confirmación manual). Reclasificado como "no es bug" en el plan de pruebas, sin cambio de código.
+- **#6:** ✅ **CORREGIDO.** `select-batch-file` (`main.js`) clasifica cada línea con `parseExpedienteStr` y devuelve `validLines`/`invalidCount`. Los 2 modales (Procurar por Lote, Informe por Lote) muestran "N válidos — M omitidos por formato inválido". Verificado en vivo (`npm start`) con un `.txt` de 5 líneas (2 válidas + 3 basura) en ambos modales → resultado exacto esperado.
+- **#7:** ✅ **CORREGIDO.** Helper `esFechaValidaDDMMYYYY()` aplicado en los 5 puntos que leían el campo (más 2 de los que el plan original no había listado, encontrados durante la implementación: `runProcessCustomDate` y `runProcessFromSidebarFecha` tenían el mismo patrón de solo-formato). Verificado en vivo: `32/99/2026` → toast de error, campo revierte al valor válido anterior, no persiste.
+- **#10:** **Paso 0 no se pudo completar** — el caso crítico (expediente real sin movimientos) seguía sin candidato conocido, misma limitación que R6.4. Sin poder confirmar ese edge case, **se aplicó la alternativa segura del plan: aceptado como comportamiento intencional, sin cambio de código.** El diseño del fix (`usageSuccessPredicate`) queda documentado arriba para retomar si en el futuro aparece un candidato.
+
+**Release:** `v2.7.42` (tag `electron-v2.7.42`), commits `bdc5d6b` (fixes) + `ce149a1` (versión visible). Probado con `npm start` y `npm run build:dir` (`.exe` empaquetado real) antes de publicar. **Mismo bug de infraestructura de siempre en `npm run release`** (el proceso creó el release con solo el `.blockmap`) — corregido subiendo `.exe` + `latest.yml` manualmente vía API de GitHub (SHA512 verificado contra el `.exe` local antes de subir). Verificado: `releases/latest` resuelve a 2.7.42 con los 3 assets, landing y portal en vivo muestran la versión nueva.
+
+**Hallazgos del Bloque R tras este cierre:** #1-4 (sesiones previas) y #6/#7 corregidos y en producción. #5 y #10 cerrados sin cambio de código (decisión operativa / aceptado como intencional). #9 pendiente de prueba manual del operador (instalación real, fuera de este plan).
+
+---
+
 ## #5 — Verificación diaria no corre (NO es bug de código)
 
 ### Diagnóstico (confirmado contra el código)
