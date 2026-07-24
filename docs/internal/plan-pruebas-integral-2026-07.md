@@ -39,9 +39,10 @@ Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes
 - **R9.1/R9.2** — Popup real de la extensión Chrome (login + 1 flujo completo, ej. Consulta SCW) contra el PJN real.
 
 **También quedaron abiertos, sin bloquear el cierre:**
-- **R6.4** (informe de expediente sin movimientos) — no verificable esta corrida por falta de un candidato conocido. Si en el futuro se identifica un expediente real sin movimientos, correrlo.
+- **R6.4** (informe de expediente sin movimientos) — no verificable esta corrida por falta de un candidato conocido. Si en el futuro se identifica un expediente real sin movimientos, correrlo (destraba también el hallazgo #10, ver abajo).
 - **Hallazgo #9** (🔴 OP, disparado solo en Tanda 3) — el instalador del auto-updater se traba esperando un click que `computer-use` no puede dar. Pendiente confirmar con un click humano real si reproduce (posible señal a favor de priorizar AZ/code signing).
-- **Hallazgo #10** (Bajo-Medio, no corregido) — un Informe contra un expediente inexistente consume `informe_usage` igual, pese a no encontrar nada. Bajo impacto, documentado, sin fix aplicado.
+
+**✅ Actualización 2026-07-23 (cont. 2) — hallazgos #5, #6, #7, #10 cerrados** (`docs/internal/plan-correccion-hallazgos-bloque-r-2026-07.md`, ejecutado con Sonnet): **#6 y #7 corregidos y en producción** (release `v2.7.42`) — batch valida formato por línea, campo Fecha Límite valida rango real de calendario. **#5** reclasificado (no es bug, el operador eligió mantener la confirmación manual). **#10** cerrado sin cambio de código (aceptado como comportamiento intencional — no se pudo confirmar el edge case crítico por la misma falta de candidato de R6.4). **#9** sigue derivado a prueba manual del operador. Ver la tabla de Hallazgos más abajo para el detalle de cada uno.
 
 **Fixture 250 al cierre:** `active`, `usage_count=10/20`, `proc_usage=5`, `informe_usage=2`, `monitor_novedades_usage=2`, 1 parte en Monitor ("FCR DON COCHO") — todo uso genuino de las tandas, no revertido (mismo criterio que corridas previas). Cuenta temporal de la prueba de multi-cuenta (id 252, CUIT `20300000029`) borrada de la DB, sin residuos.
 
