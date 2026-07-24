@@ -476,7 +476,7 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
         await client.query('COMMIT');
 
         const mailer = require('../utils/mailer');
-        mailer.sendActivationEmail(u.email, u.email).catch(() => {});
+        mailer.sendActivationEmail(u.email, u.nombre).catch(() => {});
 
         console.log(`✅ Usuario ${userId} (${u.email}) activado por admin ${req.user.id}`);
         res.json({ success: true, message: `Usuario ${u.email} activado correctamente` });
@@ -982,7 +982,7 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
 
         if (activatedUser) {
             const mailer = require('../utils/mailer');
-            mailer.sendActivationEmail(activatedUser.email, activatedUser.email).catch(() => {});
+            mailer.sendActivationEmail(activatedUser.email, activatedUser.nombre).catch(() => {});
         }
         res.json({ success: true, activated: !!activatedUser });
     } catch (error) {

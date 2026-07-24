@@ -1013,22 +1013,7 @@ router.post('/admin/send-password-reset', authenticateToken, async (req, res) =>
         const baseUrl = process.env.BASE_URL || 'https://api.procuradortool.com';
         const link    = `${baseUrl}/auth/reset-password?token=${token}`;
 
-        await mailer.sendEmail(
-            u.email,
-            'Restablecer tu contraseña — Procurador SCW',
-            `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-              <h2 style="color:#1e40af">Procurador SCW</h2>
-              <p>Hola <strong>${u.nombre || u.email}</strong>,</p>
-              <p>El administrador ha solicitado el restablecimiento de tu contraseña. Hacé clic en el botón para crear una nueva:</p>
-              <div style="text-align:center;margin:30px 0">
-                <a href="${link}" style="background:#1e40af;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-size:16px">
-                  Restablecer contraseña
-                </a>
-              </div>
-              <p style="color:#6b7280;font-size:13px">Este enlace vence en 24 horas. Si no solicitaste este cambio, ignorá este mensaje.</p>
-              <p style="color:#6b7280;font-size:12px">Si el botón no funciona, copiá este enlace:<br><a href="${link}">${link}</a></p>
-            </div>`
-        );
+        await mailer.sendPasswordResetEmail(u.email, u.nombre, link, { byAdmin: true });
 
         logger.info(`🔑 Reset de contraseña enviado a ${u.email} por admin ${req.user.id}`);
         res.json({ success: true, message: `Email de reset enviado a ${u.email}` });
@@ -1101,14 +1086,7 @@ router.post('/forgot-password', loginLimiter, async (req, res) => {
             [token, expires, u.id]
         );
         const resetLink = `${process.env.BACKEND_URL || 'https://api.procuradortool.com'}/auth/reset-password?token=${token}`;
-        await mailer.sendEmail(
-            u.email,
-            'Restablecer tu contraseña — Procurador SCW',
-            `<p>Hola${u.nombre ? ` ${u.nombre}` : ''},</p>
-             <p>Recibimos una solicitud para restablecer tu contraseña.</p>
-             <p><a href="${resetLink}" style="background:#1e40af;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block">Restablecer contraseña</a></p>
-             <p style="color:#6b7280;font-size:12px">Este enlace vence en 24 horas. Si no solicitaste esto, ignorá este email.</p>`
-        );
+        await mailer.sendPasswordResetEmail(u.email, u.nombre, resetLink, { byAdmin: false });
         logger.info(`📧 Reset solicitado por usuario: ${u.email}`);
     } catch (error) {
         logger.error('Error en forgot-password:', error.message);

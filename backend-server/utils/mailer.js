@@ -476,6 +476,32 @@ async function sendAdminCreatedUserEmail(email, nombre, password, token) {
     );
 }
 
+// Email de reset de contraseña (usado tanto por el reset público como por el reset
+// disparado por un admin desde la ficha de usuario). Centralizado acá para usar los
+// mismos helpers de marca que el resto de los emails (antes cada call site armaba
+// su propio HTML a mano, con un <h2> redundante y un botón azul inconsistente).
+async function sendPasswordResetEmail(email, nombre, resetLink, { byAdmin = false } = {}) {
+    const intro = byAdmin
+        ? 'El administrador solicitó el restablecimiento de tu contraseña. Hacé clic en el botón para crear una nueva:'
+        : 'Recibimos una solicitud para restablecer tu contraseña. Hacé clic en el botón para crear una nueva:';
+    await sendEmail(
+        email,
+        'Restablecer tu contraseña — Procurador SCW',
+        emailLayout(`
+          ${p(`Hola <strong>${nombre || 'usuario'}</strong>,`)}
+          ${p(intro)}
+          ${btnPrimary(resetLink, 'Restablecer contraseña')}
+          <p style="font-size:12px;color:#6b7280;margin:0 0 8px">
+            Este enlace vence en 24 horas. Si no solicitaste este cambio, ignorá este mensaje.
+          </p>
+          <p style="font-size:12px;color:#9ca3af;margin:0">
+            Si el botón no funciona, copiá este enlace:<br>
+            <a href="${resetLink}" style="color:#d97706;word-break:break-all">${resetLink}</a>
+          </p>
+        `)
+    );
+}
+
 async function sendMail({ to, subject, text, html }) {
     return sendEmail(to, subject, html || `<p>${text}</p>`);
 }
@@ -498,6 +524,7 @@ module.exports = {
     sendBillingReminderEmail,
     sendAdminReactivationRequest,
     sendTicketReplyEmail,
+    sendPasswordResetEmail,
     // Fase 5
     sendInvoiceEmail,
     sendPaymentFailedEmail,
