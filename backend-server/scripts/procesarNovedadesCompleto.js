@@ -250,6 +250,7 @@ async function procesarNovedadesCompleto(config) {
 
             if (config.notificaciones.activadas && notifier) {
                 notifier.notify({
+                    appID: 'com.procurador.scw',
                     title: 'Procurar Expedientes',
                     message: '⚠️ No se encontraron expedientes para procesar',
                     sound: config.notificaciones.sonido
@@ -499,6 +500,7 @@ async function procesarNovedadesCompleto(config) {
         // ============ NOTIFICACIÓN ============
         if (config.notificaciones.activadas && notifier) {
             notifier.notify({
+                appID: 'com.procurador.scw',
                 title: 'Procurar Expedientes - Completado',
                 message: `✅ ${resultados.resumen.exitosos} exitosos | ❌ ${resultados.resumen.fallidos} fallidos`,
                 sound: config.notificaciones.sonido,
@@ -539,6 +541,7 @@ async function procesarNovedadesCompleto(config) {
 
         if (config.notificaciones.activadas && notifier) {
             notifier.notify({
+                appID: 'com.procurador.scw',
                 title: 'Procurar Expedientes - Error',
                 message: `❌ Error: ${error.message}`,
                 sound: config.notificaciones.sonido
@@ -958,6 +961,7 @@ if (require.main === module) {
                 if (notifier) {
                     try {
                         notifier.notify({
+                            appID: 'com.procurador.scw',
                             title: 'Procurar Expedientes - Error Fatal',
                             message: `❌ ${error.message}`,
                             sound: true
