@@ -32,7 +32,7 @@ Han pasado 10 días y varias sesiones desde la última corrida (03-04/07). Antes
 **Estado: 36/37 casos del Bloque R cerrados.** Solo queda R8.1 (revisar email real) y R9.1/R9.2 (extensión real con credenciales PJN reales), que siguen requiriendo la presencia física del operador. **No hay nada roto ni a medio terminar** — cierre limpio, DB del fixture 250 verificada consistente.
 
 **Pendiente para la próxima corrida (requiere al operador):**
-- **R8.1** — Auditoría de contenido de emails transaccionales (remitente, links, placeholders, UTF-8) — requiere que el operador revise su casilla.
+- **R8.1** — Auditoría de contenido de emails transaccionales. **3/16 tipos ya auditados** (verificación, bienvenida, alerta admin — PASS). **Hay un plan de disparo ejecutable** (ver "📧 Plan de disparo R8.1" bajo la tabla de R8): el ejecutor dispara los 13 tipos restantes (Bloque 1 por acción de admin sobre un fixture, Bloque 2 por llamada directa al mailer para los de cron/pago) hacia un alias `+` de la casilla del operador, y el operador revisa. Ejecutable con Sonnet esfuerzo medio.
 - **R9.1/R9.2** — Popup real de la extensión Chrome (login + 1 flujo completo, ej. Consulta SCW) contra el PJN real — requiere credenciales PJN reales de un usuario.
 
 **También quedó abierto, sin bloquear el cierre:**
@@ -462,8 +462,57 @@ Cuando SÍ hay un horario límite indicado:
 
 | ID | Caso | Esperado | Requiere | Resultado |
 |---|---|---|---|---|
-| R8.1 | Auditoría de contenido de los emails clave | Para cada tipo (bienvenida/credenciales, verificación, reset, activación, suspensión con motivo, gracia de pago, respuesta de ticket, discontinuación de plan): remitente `soporte@procuradortool.com`, sin placeholders rotos, links apuntan al dominio correcto y funcionan, UTF-8 correcto | Operador (revisar casilla; agrupar el pedido en UNA pasada) | |
+| R8.1 | Auditoría de contenido de los emails clave | Para cada tipo (bienvenida/credenciales, verificación, reset, activación, suspensión con motivo, gracia de pago, respuesta de ticket, discontinuación de plan): remitente `soporte@procuradortool.com`, sin placeholders rotos, links apuntan al dominio correcto y funcionan, UTF-8 correcto | Operador (revisar casilla; agrupar el pedido en UNA pasada) | 🟡 **Parcial — ver "Plan de disparo R8.1" abajo.** 3/16 tipos ya auditados 2026-07-24 (screenshots del operador): **verificación** (`sendEmailVerification`), **bienvenida al verificar** (`sendWelcomeEmail`) y **alerta admin de nuevo registro** (`sendAdminNewUserAlert`) → los 3 PASS (remitente `soporte@procuradortool.com`, marca "Procurador TOOL / Procurador SCW" correcta, link de verificación a `api.procuradortool.com/auth/verify-email?token=...`, UTF-8 OK, sin placeholders rotos; el "mediante gx.d.sender-sib.com" que Gmail muestra es el SMTP de Brevo, no un bug). Falta disparar y auditar los otros 13 tipos → plan de disparo abajo |
 | R8.2 | Link del email de respuesta de ticket | Lleva al login del portal con `?goto=soporte` y post-login abre la sección correcta (`pending_goto`) | Browser pane | ✅ Navegado directo a `?goto=soporte` sin sesión → mostró login (correcto); login real con el fixture 250 → post-login abrió directo la sección Soporte ("Mis tickets", "+ Nuevo ticket") — `pending_goto` funcionando |
+
+#### 📧 Plan de disparo R8.1 — generar cada email para auditar su contenido
+> Agregado 2026-07-24. **Objetivo:** disparar de forma controlada los 13 tipos de email que faltan para que el operador los revise en su casilla y cierre R8.1.
+> **Naturaleza del caso:** R8.1 audita **el contenido/render** de cada email (remitente, marca, links al dominio correcto, sin placeholders rotos, UTF-8) — **no** la lógica de disparo (esa ya se validó en los bloques A/U del plan original). Por eso, para los emails que en producción dependen de crons o webhooks (fechas/pagos), se acepta **dispararlos por llamada directa a la función del mailer** con argumentos que espejan el call site real: es fiel al template (que es lo que se audita) y evita forzar fechas/estados.
+> **Ejecutor:** Sonnet, esfuerzo medio. Backup DB previo (o al menos confirmar que no se toca estado transaccional). Ningún caso toca MercadoPago/cobro real. Si el ejecutor cree necesario cambiar de modelo, informa y espera confirmación del operador.
+
+**Casilla de destino:** usar un alias `+` de una casilla real del operador para que todo caiga junto y sea filtrable — ej. `procuradortool+r8@gmail.com` (Gmail respeta el `+alias`). Todos los tipos se distinguen por el asunto.
+
+**Checklist a aplicar a CADA email recibido** (el mismo de R8.1): (1) remitente `soporte@procuradortool.com`; (2) marca "Procurador TOOL / Procurador SCW" y logo de la balanza; (3) sin placeholders rotos (`{{...}}`, `undefined`, `null`); (4) links apuntan a `api.procuradortool.com` o `/usuarios/` y abren bien; (5) UTF-8 correcto (tildes, ñ) en asunto y cuerpo.
+
+**✅ Ya auditados (no re-disparar):** verificación · bienvenida al verificar · alerta admin de nuevo registro.
+
+---
+
+**Bloque 1 — disparar por ACCIÓN REAL (fiel; usa un fixture y admin API/dashboard).** Crear un usuario de prueba con email = el alias, y ejecutar las acciones de admin sobre él. Genera el email con los args exactos que pasa el código real.
+
+| Tipo de email | Función | Cómo dispararlo (acción real) |
+|---|---|---|
+| **Credenciales (alta por admin)** | `sendAdminCreatedUserEmail` | Dashboard → Usuarios → "＋ Agregar usuario" (o `POST /admin/users`) con email=alias + contraseña fijada por admin |
+| **Activación** | `sendActivationEmail` | Activar ese usuario (botón "Activar" / selector Estado=Activo, o `POST /admin/users/:id/activate`) |
+| **Rechazo (bloqueo)** | `sendRejectionEmail` (mode `block`) | Rechazar un usuario con motivo (`POST /admin/users/:id/reject` mode=block) |
+| **Suspensión con motivo** | `sendAdminSuspendedEmail` | Suspender con motivo (`POST /admin/users/:id/suspend`, reason) |
+| **Resultado de reactivación** | `sendReactivationResultEmail` | Aprobar/rechazar una solicitud de reactivación desde la ficha |
+| **Respuesta de ticket** | `sendTicketReplyEmail` | Crear un ticket con ese usuario → responderlo como admin (`POST /admin/tickets/:id/comment`, visibility external) |
+| **Reset de contraseña** | (inline en auth.js) | Público: `POST /auth/forgot-password` con el alias · o admin: `POST /auth/admin/send-password-reset` |
+
+---
+
+**Bloque 2 — disparar por LLAMADA DIRECTA al mailer (para los de cron/pago; fiel al template).** Vía SSH, `node -r dotenv/config -e "require('./utils/mailer').<fn>(...).then(()=>process.exit(0))"` desde `/var/www/procurador/backend-server`. Pasar args que espejen el call site real (firmas abajo). **No** escribe en la DB (solo envía) → cero riesgo a datos de prod.
+
+| Tipo de email | Función (firma) | Call site real / args representativos |
+|---|---|---|
+| **Discontinuación de plan (aviso 7 días)** | `sendPlanExpiryWarningEmail(email, nombre, planExpiryDate)` | cron `server.js:579` — pasar una fecha futura (ej. hoy+7) |
+| **Plan vencido → suspendido** | `sendPlanExpiredSuspendedEmail(email, nombre)` | cron `server.js:616/706` |
+| **Trial agotado** | `sendTrialExhaustedEmail(email, nombre, {notActivated, usageLimit})` | cron `server.js:552` — `{notActivated:true, usageLimit:20}` |
+| **Recordatorio de cobro** | `sendBillingReminderEmail(email, nombre, nextBillingDate)` | cron `server.js:651` — fecha próxima |
+| **Gracia de pago rechazado** | `sendPaymentFailedEmail(email, graceEndDate)` | webhook `webhooks.js:313` — fecha hoy+3 |
+| **Factura emitida** | `sendInvoiceEmail(email, pdfUrl, numero)` | `invoiceService.js:94` — un `pdfUrl` real de `/invoices/` + un número tipo `0001-00000123` |
+| **Promo por vencer** | `sendPromoExpirationWarning(email, nombre, planName, daysLeft, promoEndDate)` | pasar `planName`, `daysLeft`, `promoEndDate` representativos |
+
+> ⚠️ Alternativa **más fiel** (opcional, más esfuerzo) para los del Bloque 2: forzar la columna de fecha correspondiente por SQL + correr la query del cron (patrón documentado en CLAUDE.md, sección "Ciclo de test de vida"). Solo vale la pena si se sospecha que los args que arma el cron difieren de los representativos — para una auditoría de contenido, la llamada directa alcanza.
+
+---
+
+**Cierre del caso:**
+1. El operador revisa la casilla y aplica el checklist a cada email → marca PASS o anota el defecto (screenshot/texto).
+2. Cualquier defecto encontrado se verifica contra el código antes de tocar nada (¿bug real o cosmético?), y se registra como hallazgo nuevo si corresponde.
+3. **Limpieza:** borrar el usuario fixture creado en el Bloque 1 (y su suscripción/tickets) de la DB, igual que en las otras tandas. Las llamadas directas del Bloque 2 no dejan residuo (no escriben DB).
+4. Actualizar la fila R8.1 con el resultado y dar el caso por cerrado.
 
 ### R9. Extensión Chrome — UX real (solo se probó por API; smoke tests cubren selectores PJN, no el popup)
 
