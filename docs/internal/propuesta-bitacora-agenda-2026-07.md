@@ -10,6 +10,8 @@
 > Cambios v6.1: se agrega la **evaluación técnica del transporte POST** (§4.1.1) con la cadena de límites reales, tamaños medidos en corridas reales (1 expediente ≈4,2KB, tope `maxMovimientos`=15), tabla de escenarios (individual/lote/corrida grande), la inflación por URL-encoding y su mitigación, y el patrón **Post/Redirect/Get** para que la SPA reciba el payload con URL limpia. Conclusión: tras subir el límite del body, no hay límite práctico para los tamaños reales (corrida de 100 exp. ≈400KB entra con >10× de margen).
 > **Revisión 2026-07-19 (Fable/Sonnet):** validada contra el código real. **3 inconsistencias corregidas** — (1) §4.1.1: Nginx **ya está en 20M** (no 1MB); la instrucción de "subir a 5m" era un downgrade → corregida a "no tocar Nginx". (2) §4.1.1 + §11.2: el fix del body-limit de Express estaba mal planteado (los parsers son globales y la captura usa `urlencoded`, no `json`) → corregido con el matiz de orden de parsers. (3) §11 Fase 1.1: decía "2 columnas", el modelo §7 define **3** (`bitacora_enabled`, `home_section`, `bitacora_prefs`) → corregido. **Verificado correcto:** la claim del tour (§11 F2.7, `target:'.tab-nav'` paso 2) coincide con `onboarding/tour.js` real. **Agregado:** §11.1 con **modelo (Sonnet/Opus) y nivel de esfuerzo por sub-bloque**. Sigue siendo propuesta NO aprobada.
 > **Revisión 2ª pasada 2026-07-19 (pre-ejecución):** **2 correcciones adicionales que habrían hecho fallar la implementación** — (4) §7: el `UNIQUE(user_id, jurisdiccion, expediente)` con `jurisdiccion` nullable **no deduplica** (los NULL son distintos entre sí en Postgres → fichas duplicadas y el `ON CONFLICT` del upsert nunca matchearía); fix: `jurisdiccion NOT NULL DEFAULT ''` (o índice único con `COALESCE`). (5) §4.1.1: se explicita que `POST /usuarios/capture` llega **sin autenticación** (un form no puede mandar `Authorization`; el diseño "sin tokens en el payload" es correcto) → se especifican las 5 protecciones obligatorias del patrón borrador-anónimo→reclamo-autenticado (id no adivinable, TTL+uso único+tope, rate-limit dedicado, payload no confiable que no persiste hasta confirmar, punto de montaje antes del static con parser propio).
+> **Revisión 2026-07-25 (Opus, verificación de cohesión contra el código real y el plan de fases):** **6 hallazgos técnicos.** (6) **§2/§4.4 — la premisa "todos los visores inyectan `DATOS_BATCH` vía `generador_visor.js`" es FALSA**: solo el visor de **informe batch** usa ese mecanismo; los visores de **procuración** (individual, por fecha, lote) los generan los **scripts encriptados** (`procesarNovedadesCompleto.js`, `procesarCustomExpedientes.js`), que inyectan los datos con un placeholder distinto (`datosEmbebidos`/`<!-- DATOS_EMBEBIDOS -->`) — `main.js` no controla ese payload. Corregido: la botonera HTML se agrega igual (vía `visorModal_template.html`, que va como `extraResources`, sin tocar scripts), pero los datos por usuario (`bitacoraEnabled`, marcado de "casos ya seguidos") requieren que **`main.js` post-procese el HTML ya generado** antes de abrirlo (inyectando un `<script>` con la config), no una edición de los scripts encriptados. Sin riesgo de tocarlos, pero es un paso más en F2.1. (7) **Falta ABM de feriados**: Q11 dice "el admin los mantiene" pero ninguna fase lo construye — agregado F1.8. (8) **`capture-lote` sin tope de filas**: el rate-limit (30/5min) limita frecuencia, no volumen por request; agregado cap explícito de 200 casos/lote. (9) **Recorte 2+2 no atómico**: "DELETE del más viejo… lógica de aplicación" puede dejar 3+ snapshots con capturas simultáneas del mismo caso; debe ir en la misma transacción del insert. (10) **Contradicción de gating**: §8 dice "middleware en TODOS los endpoints… es el gate real" pero §5.3/Q6 prometen exportación disponible 90 días tras perder el plan — incompatibles sin un carve-out explícito en el middleware para `/bitacora/export`. (11) Referencias desactualizadas: `server.js:84/87` son hoy `110/113`; la opción (b) del body-limit (subir el `express.urlencoded` global) queda descartada, no como alternativa — reabriría el problema que motivó el cap de C5 (revisión de bugs 2026-07-25); y `/usuarios/capture` **no** debe agregarse a `PUBLIC_OPEN_CORS_PATHS` (array que no existía cuando se escribió esta propuesta, agregado luego para `/analytics/event`) — el capture es una navegación de formulario, no un `fetch`, no necesita esa entrada.
+> **6 hallazgos de cohesión del plan de fases** (mismo repaso): (12) §11 Fase 1 (7 puntos) y §11.1 (7 sub-bloques F1.1–F1.7) no mapean 1:1 — el punto 3 de §11 se parte en F1.3+F1.4, los puntos 4-5 se juntan en F1.5 → renumerados los puntos de §11 para que coincidan exactamente con §11.1. (13) El endpoint `capture` (con su parser de 5MB, rate-limit dedicado y PRG) se construía en Fase 1 pero su único consumidor (los visores) es Fase 2 — es además el único endpoint anónimo de todo el sistema: se **movió a Fase 2**, junto a quien lo usa. (14) El deliverable de Fase 2 decía "un release de Electron" pero el punto 3 (`GET /client/bitacora/seguidos`) es un endpoint de backend nuevo — aclarado: Fase 2 = deploy de backend + release de Electron. (15) La salvaguarda de importación (backup automático antes de aplicar, §5.3) depende de que la exportación ya funcione — F1.6 pasa a ser dependencia dura de F1.7, no solo orden sugerido. (16) §9.3 y §11.1 no cerraban entre sí (§11.1 le da a un solo sub-bloque, F1.3, el presupuesto que §9.3 había dado a Fase 1 portal completa) — reconciliado, total realista **~10-14 sesiones**, no 7-10. (17) Nota de producto agregada: la Fase 1 sola no tiene diferencial (la propuesta de valor —"un clic desde la procuración"— es Fase 2) → no anunciar/vender la Bitácora al cerrar Fase 1, esa fase es para validación interna con el flag encendido en un plan de prueba. Detalle en `docs/internal/revision-bugs-2026-07-25c.md`. Sigue siendo propuesta NO aprobada.
 
 ---
 
@@ -48,7 +50,7 @@ Puntos fijados en esta versión:
 
 | Pieza existente | Rol en la propuesta |
 |---|---|
-| Visores HTML (`generador_visor.js`, `visorModal_template.html`, visor de informes) | Punto de captura. Ya inyectan un JSON (`DATOS_BATCH`) con expediente, carátula, dependencia, situación y movimientos — todo lo necesario para pre-cargar la ficha del caso y la entrada. |
+| Visores HTML (`visorModal_template.html`, visor de informes) | Punto de captura. Ya inyectan un JSON con expediente, carátula, dependencia, situación y movimientos — todo lo necesario para pre-cargar la ficha del caso y la entrada. ⚠️ **Dos mecanismos distintos** (ver §4.4): el visor de **informe batch** lo genera `generador_visor.js` (Electron) con la variable `DATOS_BATCH`; los visores de **procuración** los generan los **scripts encriptados** con la variable `datosEmbebidos` — `main.js` no controla ese payload directamente. |
 | Portal `/usuarios/` (SPA vanilla, secciones por `goto=`, SSO desde Electron) | Casa del módulo: secciones **Bitácora** y **Mis expedientes**. |
 | Backend Express + PostgreSQL | 3 tablas nuevas + endpoints CRUD. Sin dependencias nuevas. |
 | Notificaciones in-app (`user_notifications`) | No se usan para los avisos de bitácora (los avisos viven en el banner de la propia Bitácora), pero quedan disponibles para hitos puntuales si hiciera falta. |
@@ -198,13 +200,14 @@ Como el POST reemplaza el tope de ~2.000 caracteres de la URL por el tope del bo
 |---|---|---|
 | Navegador (form POST) | Sin límite práctico (a diferencia de una URL) | — |
 | **Nginx** (`client_max_body_size`) | **20 MB** (ya configurado en prod Y staging — `sites-available/procurador` y `staging-procurador`) | Nosotros (config del server) |
-| **Express** (`express.urlencoded` GLOBAL) | **100 KB** (default; `server.js:87` sin `limit:` explícito) | Nosotros |
+| **Express** (`express.urlencoded` GLOBAL) | **100 KB** (default; sin `limit:` explícito — verificar el número de línea actual en `server.js` al implementar, ver nota 2026-07-25 abajo) | Nosotros |
 
 > ⚠️ **Corrección técnica (2026-07-19).** La versión previa de esta tabla decía "Nginx = 1 MB → subir a 5m". **Es incorrecto:** Nginx ya está en **20 MB** en ambos entornos. Poner `client_max_body_size 5m;` sería un **downgrade** (de 20M a 5M) — **no tocar Nginx**, ya tiene margen de sobra para el peor caso (~400 KB).
 >
-> **El único tope real a subir es el de Express, y hay un matiz de orden que la versión previa omitía:** los parsers `express.json` (con hook `verify` para el rawBody del webhook de MP) y `express.urlencoded` están montados **globalmente** (`server.js:84` y `87`), **antes** de todos los routers. La captura llega como **form POST (`x-www-form-urlencoded`)**, así que el que la parsea es el **`express.urlencoded` global de la línea 87**, no un `express.json` de ruta. Por eso un `express.json({ limit: '5mb' })` colgado solo de la ruta de captura **no funcionaría** (parser equivocado + corre después del global, que ya habría rechazado con 413 a los 100 KB). Las dos formas correctas:
->   - **(a) Recomendada:** montar un parser específico **antes** del router en `server.js` — `app.use('/usuarios/capture', express.urlencoded({ extended: false, limit: '5mb' }))` colocado **arriba** de la línea 87 (así gana la ruta de captura y el resto del sistema sigue en 100 KB). Preserva intacto el `express.json` global con su `verify` del webhook.
->   - **(b) Alternativa:** subir el límite del `express.urlencoded` global a `5mb` — más simple pero afecta a todo el sistema (aceptable, pero cambia el comportamiento de otras rutas, por eso se prefiere (a) para no alterar nada más).
+> **El único tope real a subir es el de Express, y hay un matiz de orden que la versión previa omitía:** los parsers `express.json` (con hook `verify` para el rawBody del webhook de MP) y `express.urlencoded` están montados **globalmente**, **antes** de todos los routers (⚠️ **verificado 2026-07-25: hoy son `server.js:110` y `113`** — las líneas se corrieron respecto de cuando se escribió esta sección; confirmar el número exacto al implementar, no asumir 84/87). La captura llega como **form POST (`x-www-form-urlencoded`)**, así que el que la parsea es el **`express.urlencoded` global**, no un `express.json` de ruta. Por eso un `express.json({ limit: '5mb' })` colgado solo de la ruta de captura **no funcionaría** (parser equivocado + corre después del global, que ya habría rechazado con 413 a los 100 KB). La forma correcta:
+>   - **Montar un parser específico ANTES del router en `server.js`** — `app.use('/usuarios/capture', express.urlencoded({ extended: false, limit: '5mb' }))` colocado **arriba** del `express.urlencoded` global (así gana la ruta de captura y el resto del sistema sigue en 100 KB). Preserva intacto el `express.json` global con su `verify` del webhook.
+>   - **⚠️ Descartada (no usar): subir el límite del `express.urlencoded` GLOBAL a `5mb`.** No es una alternativa válida — reabriría el mismo problema que motivó el cap de longitud agregado a `POST /tickets` el 2026-07-25 (hallazgo C5, `docs/internal/revision-bugs-2026-07-25.md`): un límite global generoso habilita abuso en cualquier endpoint que hoy depende de esos 100 KB por defecto como techo implícito. El parser de la ruta de captura debe ser **específico y acotado a esa sola ruta**.
+>   - **⚠️ No agregar `/usuarios/capture` a `PUBLIC_OPEN_CORS_PATHS`.** Ese array (en `server.js`, agregado el 2026-07-25 para `POST /analytics/event`, ver hallazgo D4 de `revision-bugs-2026-07-25b.md`) abre CORS sin credenciales para beacons cross-origin llamados por `fetch`. El capture **no lo necesita**: es una navegación de `<form>` (POST tradicional, no AJAX), que nunca dispara preflight/CORS sin importar el origen — agregarlo ahí no rompe nada pero es una entrada muerta que puede confundir a quien lea la lista después.
 
 **Tamaños reales medidos** (corridas del CUIT de prueba 27320694359):
 
@@ -276,6 +279,7 @@ Tres acciones independientes sobre la selección (**ficha básica** y **snapshot
 - **"💾 Guardar procuración de seleccionados"** (en visores de informe: **"💾 Guardar informe de seleccionados"**): crea/actualiza la ficha **y además** guarda el snapshot de esta corrida (con sus movimientos) en el historial de cada seleccionado. Es "Guardar casos" + adjuntar el snapshot en un solo paso, para el que ya sabe que quiere ambas cosas.
 - **"＋ Crear entradas…"**: elige un tipo (Vencimiento/Tarea/Nota) y abre en el portal una **pantalla de revisión del lote**: una fila editable por caso (título pre-cargado, fecha con la calculadora de plazos aplicable a todos o por fila) → "Guardar todo". Sirve al caso real de "estos 5 tienen traslado, les pongo vencimiento a todos".
 - **Sin límite artificial de selección**: al viajar por POST (§4.1) y no por querystring, ya no hace falta topear la selección a 10 casos ni recortar los movimientos del lote — el usuario puede tildar todos los expedientes de un batch grande. El único límite razonable es de **usabilidad**, no de transporte: la pantalla de revisión de "Crear entradas…" pagina o agrupa si el lote es muy largo (ej. >30 filas), para que siga siendo cómoda de revisar antes de guardar.
+- **⚠️ Cap técnico obligatorio en el backend (revisión 2026-07-25, hallazgo H3):** "sin límite" es correcto para la experiencia de usuario, pero `POST /usuarios/api/expedientes/capture-lote` necesita un **tope explícito de filas por request** independiente del límite de bytes (5 MB). El rate-limit propuesto en §4.1.1 (30/5min) limita *frecuencia*, no *volumen*: un solo POST bien armado dentro del límite de bytes podría intentar crear miles de fichas en una sola transacción. Tope sugerido: **200 casos por request**, con 400 claro si se excede ("Máximo 200 casos por lote; dividí la selección"). 200 filas de snapshot completo (~4,2 KB c/u) son ~840 KB — cómodo dentro de los 5 MB, y muy por encima de cualquier lote real de trabajo.
 
 #### b) Fila / modal del caso — captura individual (trabajo caso por caso)
 
@@ -321,7 +325,20 @@ El informe individual genera un PDF directamente (script encriptado `informequic
 
 ### 4.4 Gating por plan en los visores
 
-La app conoce el plan del usuario (`/client/account`). Al generar cada visor, `main.js` inyecta `bitacoraEnabled: true|false` en `DATOS_BATCH`:
+⚠️ **Corrección de arquitectura (revisión 2026-07-25, hallazgo H1) — leer antes de implementar F2.1.** Esta sección (y el resto del documento hasta esta revisión) asumía que **todos** los visores comparten el mismo mecanismo de inyección de datos (`DATOS_BATCH`, controlado por `main.js`). **Es falso.** Verificado contra el código real: hay **dos arquitecturas de visor distintas**:
+
+| Visor | Quién lo genera | Variable / placeholder |
+|---|---|---|
+| **Informe batch** | `generador_visor.js` (Electron), invocado desde `main.js` | `DATOS_BATCH` — `main.js` controla el payload directamente |
+| **Procuración** (individual, por fecha, lote) | **Scripts encriptados** (`procesarNovedadesCompleto.js`, `procesarCustomExpedientes.js`) | `datosEmbebidos`, inyectado con `template.replace('<!-- DATOS_EMBEBIDOS -->', ...)` dentro del propio script — `main.js` **no** controla este payload |
+
+**Consecuencia:** la botonera HTML/JS de la Bitácora (los botones `📔+`, el mini-menú, la barra de selección múltiple) se agrega igual en los cuatro visores, editando `visorModal_template.html` y el template del informe — ambos son archivos planos del repo Electron (`visorModal_template.html` va como `extraResources` del build, confirmado en `package.json`), **sin tocar ningún script encriptado**. Eso sigue siendo cierto y de riesgo bajo.
+
+Lo que **no** puede hacerse como estaba planteado es que `main.js` inyecte `bitacoraEnabled` (o cualquier dato dependiente del usuario, como el marcado de "casos ya seguidos" de §4.2c) **dentro** del payload de los visores de procuración, porque ese payload lo arma el script encriptado, no `main.js`.
+
+**Solución adoptada — post-procesado del HTML ya generado:** para los visores de procuración, en vez de inyectar datos *durante* la generación (que ocurre dentro del script encriptado), `main.js` **post-procesa el archivo HTML después de que el script lo generó y antes de abrirlo** — inserta un `<script>` adicional al final del `<body>` con `bitacoraEnabled` y la lista de casos ya seguidos (obtenida de `GET /client/bitacora/seguidos`, §4.2c), usando el mismo patrón de `fs.readFileSync` + `string.replace` + `fs.writeFileSync` que `main.js` ya usa hoy para otras tareas de post-proceso de archivos generados. El script del visor (JS estático de `visorModal_template.html`) lee esa variable igual que leería `DATOS_BATCH`. **Cero cambios en los scripts encriptados, cero re-encriptado, cero redeploy de scripts** — el costo es un paso adicional (post-procesado) en el flujo de `main.js` para los 3 visores de procuración, que sí es trabajo nuevo respecto de lo que decía la versión anterior de este documento (afecta la estimación de F2.1, ver §11.1).
+
+Con esa corrección, el resto de esta sección se mantiene:
 
 - **Habilitado** → botonera visible.
 - **Deshabilitado** → sin botones; opcionalmente un pie sutil "📔 Bitácora disponible en planes superiores" (palanca de upsell, a decidir comercialmente).
@@ -587,7 +604,20 @@ CREATE TABLE expediente_snapshots (
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 -- Al insertar: DELETE del más viejo si ya hay 2 del mismo kind para ese expediente
--- (lógica de aplicación en el endpoint; la base queda acotada por diseño: máx. 4 filas/caso)
+-- (la base queda acotada por diseño: máx. 4 filas/caso).
+-- ⚠️ Hallazgo H4 (revisión 2026-07-25): "lógica de aplicación en el endpoint" es
+-- AMBIGUO y riesgoso tal como estaba escrito — si el INSERT y el DELETE del más viejo
+-- son dos statements separados (SELECT para decidir, luego INSERT, luego DELETE),
+-- dos capturas simultáneas del mismo caso (doble clic, o un lote que incluye un caso
+-- que también se capturó individual en paralelo) pueden dejar 3+ snapshots, rompiendo
+-- la invariante "máx. 4 filas/caso" en la que se apoya el dimensionamiento de §10.
+-- CORRECTO: el recorte debe ir en la MISMA transacción del insert, con una sola
+-- sentencia atómica tipo:
+--   DELETE FROM expediente_snapshots WHERE expediente_id=$1 AND kind=$2
+--     AND id NOT IN (SELECT id FROM expediente_snapshots WHERE expediente_id=$1
+--                     AND kind=$2 ORDER BY created_at DESC LIMIT 1)
+--   -- (el INSERT nuevo ya corrió antes en la misma transacción; este DELETE dejando
+--   -- el más reciente + el nuevo = 2 filas, sin condición de carrera entre requests)
 
 -- Entradas de bitácora
 CREATE TABLE bitacora_entries (
@@ -616,6 +646,10 @@ CREATE TABLE feriados (
   fecha   DATE NOT NULL UNIQUE,
   motivo  VARCHAR(200)
 );
+-- ⚠️ Hallazgo H2 (revisión 2026-07-25): la tabla nace vacía y necesita seed inicial +
+-- mantenimiento anual (feriados cambian cada año); Q11 responde "el admin los mantiene"
+-- pero ninguna fase de §11 construía un ABM. Se agrega F1.8 (ABM de feriados en el
+-- dashboard admin) — ver endpoints abajo y §11/§11.1 corregidos.
 
 -- Gating por plan + preferencia de pantalla principal (columnas additivas)
 ALTER TABLE plans ADD COLUMN bitacora_enabled BOOLEAN DEFAULT false;
@@ -626,22 +660,32 @@ ALTER TABLE users ADD COLUMN bitacora_prefs JSONB;  -- personalización: orden d
 
 Migraciones 100% additivas. Dimensionamiento: con el tope 2+2 por caso, un usuario intensivo con 200 casos seguidos son ~800 snapshots compactos (JSONB de pocos KB) — despreciable para el VPS actual.
 
-### Endpoints (patrón existente del portal, todos con gate de plan)
+### Endpoints (patrón existente del portal, todos con gate de plan salvo aclaración)
+
+> ⚠️ **Reorganizado por fase (revisión 2026-07-25, hallazgo C2).** Los endpoints de
+> `capture` se movieron a **Fase 2** (marcados abajo): se construyen junto a su único
+> consumidor (los visores), en vez de desplegarse a producción sin uso durante toda la
+> Fase 1 — son además el único endpoint anónimo de todo el sistema (§4.1.1), así que
+> minimizar el tiempo que está en producción sin ejercitarse es preferible.
 
 ```
+── FASE 1 ──
 GET/POST/PUT/DELETE  /usuarios/api/bitacora              — CRUD de entradas (filtros: rango, kind, pendientes, expediente)
 POST                 /usuarios/api/bitacora/:id/done      — check / uncheck de realización
 GET                  /usuarios/api/bitacora/avisos        — banner: vencidos sin confirmar (ventana N días) + próximos (N días)
 GET/POST/PUT/DELETE  /usuarios/api/expedientes            — CRUD de fichas (DELETE con flag ?entries=keep|delete)
 GET                  /usuarios/api/expedientes/:id        — ficha + entradas + snapshots
-POST                 /usuarios/capture                    — recibe el POST-form del visor (body hasta 5MB): stashea el payload y hace 303 redirect al portal (PRG, §4.1.1). Upsert de ficha; snapshot solo si la acción lo incluye (§4.2)
-GET                  /usuarios/api/capture-draft/:id       — la SPA recupera el payload stasheado tras el redirect (Post/Redirect/Get)
-POST                 /usuarios/api/expedientes/capture-lote — lote: upsert de fichas (+ snapshots si aplica) sin tope de cantidad; creación de entradas revisadas
-GET                  /client/bitacora/seguidos            — (app Electron, JWT de app) claves de casos ya seguidos, para marcar el visor
 GET                  /usuarios/api/bitacora/export        — exportación (params: alcance=todo|entradas|expediente, formato=xlsx|json, rango)
 POST                 /usuarios/api/bitacora/import        — restauración desde backup JSON (params: modo=reemplazar|combinar, dry_run=1 para la vista previa; transaccional)
-GET                  /usuarios/api/feriados?year=         — para date-picker y calculadora
+GET                  /usuarios/api/feriados?year=         — lectura, para date-picker y calculadora (gate de plan)
+POST/PUT/DELETE      /admin/feriados                      — ABM de feriados (F1.8, hallazgo H2) — auth admin, NO gate de plan (es config global del sistema, no por usuario)
 PUT                  /usuarios/api/profile (extendido)    — home_section
+
+── FASE 2 (junto a los visores, ver hallazgo C2) ──
+POST                 /usuarios/capture                    — recibe el POST-form del visor (body hasta 5MB): stashea el payload y hace 303 redirect al portal (PRG, §4.1.1). Upsert de ficha; snapshot solo si la acción lo incluye (§4.2). SIN auth (§4.1.1) — rate-limit dedicado + TTL corto + id no adivinable.
+GET                  /usuarios/api/capture-draft/:id       — la SPA recupera el payload stasheado tras el redirect (Post/Redirect/Get). Con auth: recién acá se identifica al usuario.
+POST                 /usuarios/api/expedientes/capture-lote — lote: upsert de fichas (+ snapshots si aplica), tope 200 casos/request (hallazgo H3); creación de entradas revisadas
+GET                  /client/bitacora/seguidos            — (app Electron, JWT de app) claves de casos ya seguidos, para marcar el visor
 ```
 
 ---
@@ -651,7 +695,7 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 | Punto de control | Comportamiento |
 |---|---|
 | `plans.bitacora_enabled` | Flag por plan, editable desde el form de planes del dashboard admin (checkbox "Incluye Bitácora"). |
-| Backend (`routes/usuarios.js`) | Middleware en todos los endpoints de bitácora/expedientes: 403 con mensaje claro si el plan no la incluye. **Es el gate real.** |
+| Backend (`routes/usuarios.js`) | Middleware en todos los endpoints de bitácora/expedientes: 403 con mensaje claro si el plan no la incluye. **Es el gate real.** ⚠️ **Excepción explícita (revisión 2026-07-25, hallazgo H5):** la versión anterior de este documento decía "middleware en TODOS los endpoints… es el gate real" en esta fila, y en §5.3/Q6 prometía que `GET /usuarios/api/bitacora/export` siguiera disponible **90 días** después de perder el plan — **las dos afirmaciones son incompatibles** tal como estaban escritas (un middleware sin excepciones daría 403 inmediato, sin ventana). El middleware de gate debe tener un **carve-out explícito para `/bitacora/export`**: en vez de 403 duro, valida `bitacora_enabled` del plan actual **O** que hayan pasado menos de 90 días desde que el usuario perdió el flag (columna a agregar, ej. `users.bitacora_lost_access_at`, seteada por el mismo proceso que cambia de plan). Si no se quiere sostener esa ventana, la alternativa es **descartar** la promesa de los 90 días y aplicar el 403 duro también a export — pero hay que **elegir una de las dos**, no dejarlas contradictorias. |
 | Portal | Con flag off: ítem de menú con candado + pantalla explicativa (o oculto, a decidir); píldora "principal" no disponible; `home_section` forzado a `plan`. |
 | App Electron / visores | `main.js` lee el flag de `/client/account` al generar cada visor e inyecta `bitacoraEnabled` → botonera presente o ausente. Botón del topbar de la app: mismo criterio (oculto si el plan no la incluye, salvo que se decida mostrarlo con candado como upsell — mismo criterio que el ítem del menú del portal). |
 | Cambio de plan | Al bajar a un plan sin Bitácora los **datos no se borran** (fichas y entradas quedan en la base); solo se bloquea el acceso. Al volver a subir, todo reaparece. Evita destrucción de datos por decisiones comerciales. |
@@ -682,12 +726,22 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 
 ### 9.3 Complejidad y esfuerzo (orientativo)
 
+> ⚠️ **Reconciliado con §11.1 (revisión 2026-07-25, hallazgo C5).** La versión anterior de
+> esta tabla y la tabla de §11.1 (agregada el 2026-07-19) no cerraban entre sí: §11.1 le
+> asignaba a un solo sub-bloque (F1.3, el calendario) el mismo presupuesto "4–6 sesiones"
+> que esta tabla le había dado a **toda** la Fase 1 - portal (calendario + ficha + filtros +
+> export + import juntos). Sumando lo que §11.1 detalla sub-bloque por sub-bloque, el total
+> real es mayor. Tabla corregida:
+
 | Bloque | Tamaño | Nota |
 |---|---|---|
-| Fase 1 — backend + base | Chico-mediano | Patrones ya usados mil veces en el proyecto (CRUD + migraciones additivas). |
-| Fase 1 — portal (calendario, ficha, filtros, export/import) | **El bloque más grande** | Es UI nueva; el calendario y la pantalla de revisión de lote son lo más laborioso. Estimación: 4–6 sesiones de trabajo. |
-| Fase 2 — visores + mini-visor + release | Mediano | 2–3 sesiones + 1 release de Electron con su checklist. |
-| **Total orientativo** | | **~7–10 sesiones de trabajo** repartibles en semanas, sin bloquear otros pendientes (B3, flecos de QA). |
+| Fase 1 — backend + base (F1.1, F1.2, F1.5, F1.8) | Chico-mediano | Migraciones, CRUD de bitácora/expedientes, gate de plan, píldora+checkbox admin, ABM de feriados. Patrones ya usados en el proyecto. ~2–3 sesiones. |
+| Fase 1 — portal: Bitácora (F1.3) | **El sub-bloque más grande** | Calendario mes+lista, banner de avisos, modal con calculadora de plazos. UI nueva y densa. 4–6 sesiones (estimación de §11.1, sin cambios). |
+| Fase 1 — portal: Mis expedientes (F1.4) | Mediano | Listado, ficha, edición, borrado con elección sobre entradas. ~1–2 sesiones. |
+| Fase 1 — export + import (F1.6 + F1.7) | Mediano-grande | F1.6 (Sonnet, chico-mediano) es dependencia dura de F1.7 (Opus, alto — hallazgo C4): la salvaguarda de "respaldo automático antes de importar" no puede existir sin exportación funcionando. Import es el único tramo que puede destruir datos reales del usuario — el más lento de razonar bien, no de tipear. ~2–3 sesiones combinadas. |
+| **Subtotal Fase 1** | | **~9–14 sesiones** |
+| Fase 2 — visores + capture + mini-visor + release | Mediano-grande | Incluye ahora los endpoints de `capture` (movidos de Fase 1, hallazgo C2) + el post-procesado de `main.js` para los visores de procuración (hallazgo H1, trabajo nuevo no contemplado en la versión anterior) + el mini-visor de informe + el release. ~4–6 sesiones + 1 release de Electron con su checklist. |
+| **Total orientativo** | | **~13–20 sesiones de trabajo**, repartibles en semanas, sin bloquear otros pendientes (B3, flecos de QA). Rango más ancho que la estimación original porque incorpora el trabajo real de H1 (post-procesado) y C2 (capture en F2) que antes no estaba contado. |
 
 **En una frase:** es una mejora de riesgo técnico bajo (no toca dinero, credenciales ni automatización; nace apagada por flag) cuyo costo real es tiempo de desarrollo, concentrado en las pantallas nuevas del portal.
 
@@ -727,25 +781,36 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 
 ## 11. Plan de implementación por fases
 
-### Fase 1 — Núcleo (backend + portal)
-1. Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **3 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`) + seed de feriados AR 2026/2027. *(Corrección 2026-07-19: la versión previa decía "2 columnas"; el modelo de datos §7 define 3.)*
-2. Endpoints CRUD + capture (POST-form con PRG, §4.1.1) + avisos + gate de plan. Incluye subir el límite del body de la **ruta de captura** a `5mb` montando un `express.urlencoded({ limit:'5mb' })` específico **antes** del router en `server.js` (ver corrección técnica en §4.1.1). **NO tocar Nginx** — ya está en 20M en prod y staging (subirlo a 5m sería un downgrade).
-3. Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos) + sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas).
-4. Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal.
-5. Checkbox "Incluye Bitácora" en el form de planes del admin.
-6. **Exportación** (Excel + JSON, global y por ficha) — el backup del usuario desde el día uno.
-7. **Importación/restauración** desde backup JSON (modos reemplazar/combinar, vista previa dry-run, respaldo automático previo, transaccional).
-- **Entregable**: módulo completo operable a mano desde el portal, con backup y restauración, gateado por plan. Deployable a staging→prod sin release de Electron. (Si hiciera falta acortar la fase, la importación —punto 7— es el único candidato razonable a diferir: la exportación JSON del punto 6 garantiza que ningún dato quede cautivo mientras tanto.)
+> ⚠️ **Reescrita 2026-07-25 (hallazgos C1-C4, C6).** La numeración de esta sección ahora
+> mapea **1:1** con los sub-bloques F1.1–F1.8/F2.1–F2.7 de §11.1 (antes el punto 3 de Fase 1
+> se partía en dos sub-bloques y los puntos 4-5 se juntaban en uno solo, generando confusión
+> entre "el punto 3 del plan" y "F1.3 de la tabla de esfuerzo"). Los endpoints de `capture`
+> se movieron de Fase 1 a Fase 2 (hallazgo C2, ver también §7). El deliverable de Fase 2
+> ahora aclara que incluye deploy de backend, no solo el release de Electron (hallazgo C3).
 
-### Fase 2 — Captura desde los visores (release Electron)
-1. Botonera `📔+` (mini-menú) + pie de descubrimiento en: visor procuración individual, procuración batch, informe batch (templates + `generador_visor.js`).
-2. **Selección múltiple** en la tabla de los visores (checkboxes + barra de acciones "Guardar casos" / "Crear entradas…") + pantalla de revisión del lote en el portal (`capture-lote`).
-3. **Marcado de casos ya seguidos**: endpoint `GET /client/bitacora/seguidos` + link 📁 a la ficha desde fila y modal.
-4. **Mini-visor del informe individual** (nuevo, desde `main.js`, sin tocar scripts encriptados).
-5. Inyección de `bitacoraEnabled` por visor según plan.
-6. Deep-links con SSO cuando el visor se abre desde la app.
-7. Botón "📔 Bitácora" en el **topbar** de la app (una sola aparición, junto a los tabs — no en el sidebar) + actualización del **tour de onboarding** (`onboarding/tour.js`): el paso 2 existente (`target: '.tab-nav'`, "Navegación — tabs principales") se extiende para mencionar el botón nuevo, o se agrega un paso propio inmediatamente después si visualmente queda separado de los tabs — el mecanismo de spotlight multi-elemento (`targets: [...]`, usado hoy para agrupar "Ver tour" + "Asistente IA" en una sola card) permite resolverlo sin duplicar pasos.
-- **Entregable**: el circuito completo F1/F1b/F1c/F2/F3. Un release de Electron (vX.Y.Z) siguiendo el checklist del proyecto.
+### Fase 1 — Núcleo (backend + portal, sin release de Electron)
+1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **3 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`) + seed de feriados AR 2026/2027.
+2. **(F1.2)** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)*
+3. **(F1.3)** Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos).
+4. **(F1.4)** Portal: sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas).
+5. **(F1.5)** Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal + checkbox "Incluye Bitácora" en el form de planes del admin.
+6. **(F1.6)** **Exportación** (Excel + JSON, global y por ficha) — el backup del usuario desde el día uno. **Dependencia dura de F1.7** (hallazgo C4): la salvaguarda de importación (§5.3, "respaldo automático antes de aplicar") descarga un export del estado actual, así que F1.6 debe estar terminada y probada **antes** de empezar F1.7, no solo "antes en la numeración".
+7. **(F1.7)** **Importación/restauración** desde backup JSON (modos reemplazar/combinar, vista previa dry-run, respaldo automático previo, transaccional). Requiere F1.6 completo (ver punto 6).
+8. **(F1.8)** ABM de feriados en el dashboard admin (hallazgo H2) — sin esto, la calculadora de plazos de F1.3 no tiene cómo mantenerse actualizada año a año.
+- **Entregable**: módulo completo operable a mano desde el portal (entrada manual, sin captura desde visores todavía), con backup y restauración, gateado por plan. Deployable a staging→prod sin release de Electron. (Si hiciera falta acortar la fase, F1.7 es el único candidato razonable a diferir — nunca F1.6, del que depende.)
+- **⚠️ Nota de producto (hallazgo C6):** al cerrar esta fase, la Bitácora **no tiene el diferencial** que motiva la propuesta (§1/§14: *"el dato nace de la automatización que ya corre todos los días"*) — sin Fase 2 es una agenda manual sin ventaja sobre papel o Google Calendar. **No anunciar ni vender la feature al cerrar la Fase 1**; usarla para validación interna con el flag `bitacora_enabled` encendido en un plan de prueba únicamente.
+
+### Fase 2 — Captura desde los visores (backend + release de Electron)
+> **Requiere DOS despliegues, no uno** (hallazgo C3): un deploy de backend (los endpoints de `capture` + `GET /client/bitacora/seguidos`) **y** un release de Electron. Planificar ambos.
+
+1. **(F2.1)** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan.
+2. **(F2.2)** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor.
+3. **(F2.3)** **Selección múltiple** en la tabla de los visores (checkboxes + barra de acciones "Guardar casos" / "Crear entradas…") + pantalla de revisión del lote en el portal, contra el endpoint de F2.2.
+4. **(F2.4)** **Marcado de casos ya seguidos**: endpoint `GET /client/bitacora/seguidos` (backend) + consumido por el post-procesado de F2.1 + link 📁 a la ficha desde fila y modal.
+5. **(F2.5)** **Mini-visor del informe individual** (nuevo, desde `main.js`, sin tocar scripts encriptados — el informe individual no genera visor hoy).
+6. **(F2.6)** Deep-links con SSO cuando el visor se abre desde la app.
+7. **(F2.7)** Botón "📔 Bitácora" en el **topbar** de la app (una sola aparición, junto a los tabs — no en el sidebar) + actualización del **tour de onboarding** (`onboarding/tour.js`): el paso 2 existente (`target: '.tab-nav'`, "Navegación — tabs principales") se extiende para mencionar el botón nuevo, o se agrega un paso propio inmediatamente después si visualmente queda separado de los tabs — el mecanismo de spotlight multi-elemento (`targets: [...]`, usado hoy para agrupar "Ver tour" + "Asistente IA" en una sola card) permite resolverlo sin duplicar pasos.
+- **Entregable**: el circuito completo F1/F1b/F1c/F2/F3 (§6). **Deploy de backend** (F2.2, F2.4) **+ un release de Electron** (vX.Y.Z) siguiendo el checklist del proyecto — en ese orden, para que el backend esté listo cuando el release empiece a usarlo.
 
 ### Fase 3 — Pulido y palancas
 1. Badge de pendientes en la app (conteo al abrir).
@@ -753,27 +818,32 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 3. Sugerencias automáticas a partir de novedades del monitor (bandeja de aceptar/descartar) — el diferencial mayor, pero recién cuando el hábito de uso exista.
 4. Tipos de entrada personalizados, export .ics — **solo si hay demanda real**.
 
-**Dependencias con el roadmap vigente:** no pisa B3 (MP producción) ni los flecos del plan de pruebas (U9.3). La fase 1 es solo backend+portal (deploy estándar); la fase 2 requiere un release de app.
+**Dependencias con el roadmap vigente:** no pisa B3 (MP producción) ni los flecos del plan de pruebas (U9.3). La fase 1 es solo backend+portal (deploy estándar, sin release de Electron); la fase 2 requiere deploy de backend **y** release de app (ver nota arriba).
 
-### 11.1 Modelo y nivel de esfuerzo por sub-bloque (agregado 2026-07-19)
+### 11.1 Modelo y nivel de esfuerzo por sub-bloque (agregado 2026-07-19, corregido 2026-07-25)
 
 > Guía para ejecutar cada tramo. Criterio: **Opus** para diseño de esquema, lógica de negocio del gating/cobro y decisiones que afectan datos del usuario (import/restauración destructiva); **Sonnet** para CRUD mecánico, UI y trabajo repetitivo con patrones ya establecidos. El esfuerzo es orientativo y asume las reglas del proyecto (staging → backup → prod; sin tocar scripts encriptados; migraciones additivas).
+>
+> ⚠️ **Correcciones 2026-07-25:** F1.2 ya no incluye `capture` (movido a F2.2, hallazgo C2) — su esfuerzo baja de Mediano a Chico-mediano. F2.1 se separa de "F2.1–F2.6" en una fila propia porque ahora incluye el post-procesado de `main.js` para los visores de procuración (hallazgo H1) — sube de esfuerzo. Se agrega F1.8 (hallazgo H2). La fila "F2.1–F2.6" se abre en F2.1 (propia) + F2.2–F2.6 (grupo restante).
 
 | Sub-bloque | Modelo | Esfuerzo | Por qué |
 |---|---|---|---|
-| **F1.1** — Migraciones (4 tablas + 3 columnas) + seed feriados | **Opus, medio** | Chico | El esquema es la fundación: definirlo bien (claves de acumulación, `ON DELETE` correctos, tope 2+2 por diseño) evita retrabajos caros. Es additivo pero conviene razonarlo con cuidado una sola vez. |
-| **F1.2** — Endpoints CRUD + capture (PRG) + gate de plan + body-limit | **Opus, medio** | Mediano | El gate de plan es **el freno real** (403 server-side) y el body-limit tiene el matiz de orden de parsers (§4.1.1) — errores acá afectan seguridad/acceso. El PRG y el upsert idempotente también quieren razonamiento. |
+| **F1.1** — Migraciones (4 tablas + 3 columnas) + seed feriados | **Opus, medio** | Chico | El esquema es la fundación: definirlo bien (claves de acumulación, `ON DELETE` correctos, tope 2+2 por diseño **atómico** — hallazgo H4) evita retrabajos caros. Es additivo pero conviene razonarlo con cuidado una sola vez. |
+| **F1.2** — Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con carve-out de export, H5) | **Opus, medio** | Chico-mediano *(bajó: sin `capture`, movido a F2.2)* | El gate de plan es **el freno real** (403 server-side); el carve-out de exportación (§8) necesita razonarse junto con él para no dejarlo inconsistente. |
 | **F1.3** — Portal: Bitácora (calendario mes+lista, banner de avisos, modal con calculadora de plazos) | **Sonnet, medio** | **Grande** (el mayor de todo) | UI nueva, laboriosa pero de patrón conocido. El calculador de plazos (feriados) y la vista mes son lo más denso; nada de lógica de negocio riesgosa. 4–6 sesiones. |
 | **F1.4** — Portal: Mis expedientes (listado, ficha, edición, borrado con elección sobre entradas) | **Sonnet, medio** | Mediano | CRUD visual + la decisión de "borrar entradas o dejarlas sueltas" (ya resuelta en el modelo con `ON DELETE SET NULL`). |
 | **F1.5** — Píldora "principal" (`home_section`) + checkbox "Incluye Bitácora" en admin | **Sonnet, bajo** | Chico | Dos toggles con patrón ya usado (visibility de planes, settings). |
-| **F1.6** — Exportación (Excel + JSON) | **Sonnet, bajo-medio** | Chico-mediano | Serialización directa; el Excel reusa `exceljs` (ya en el stack). |
-| **F1.7** — Importación/restauración (dry-run + respaldo previo + transaccional) | **Opus, alto** | Mediano | **El único tramo que destruye datos del usuario.** La validación de pertenencia/estructura, el dry-run obligatorio, el respaldo automático previo y la transacción "todo o nada" exigen el máximo cuidado — un error acá borra la bitácora real de alguien. |
-| **F2.1–F2.6** — Visores: botonera, selección múltiple, marcado de seguidos, mini-visor informe, `bitacoraEnabled`, deep-links SSO | **Sonnet, medio** | Mediano | Edita **plantillas** de visores (`generador_visor.js` + templates HTML) — ⛔ **nunca los scripts encriptados**. El mini-visor del informe se genera desde `main.js`. Patrón conocido; el riesgo es el de cualquier release de Electron. |
+| **F1.6** — Exportación (Excel + JSON) | **Sonnet, bajo-medio** | Chico-mediano | Serialización directa; el Excel reusa `exceljs` (ya en el stack). **Debe terminar y probarse antes de F1.7** (dependencia dura, hallazgo C4), no solo antes en la numeración. |
+| **F1.7** — Importación/restauración (dry-run + respaldo previo + transaccional) | **Opus, alto** | Mediano | **El único tramo que destruye datos del usuario.** La validación de pertenencia/estructura, el dry-run obligatorio, el respaldo automático previo (requiere F1.6 funcionando) y la transacción "todo o nada" exigen el máximo cuidado — un error acá borra la bitácora real de alguien. |
+| **F1.8** — ABM de feriados (dashboard admin) *(nuevo, hallazgo H2)* | **Sonnet, bajo** | Chico | CRUD simple (fecha + motivo) con patrón ya usado en el admin. Sin esto, F1.3 (calculadora de plazos) queda sin forma de mantenerse año a año. |
+| **F2.1** — Botonera en los 4 visores + post-procesado de `main.js` para procuración *(hallazgo H1, esfuerzo corregido)* | **Sonnet, medio** | Mediano *(subió: incluye el post-procesado, no solo templates)* | Dos mecanismos distintos por visor (§4.4): templates estáticos (bajo riesgo, patrón conocido) + un paso nuevo de post-procesado de HTML en `main.js` para los 3 visores de procuración, que no estaba contemplado en la estimación original. Sigue sin tocar scripts encriptados. |
+| **F2.2** — Backend: endpoints de `capture` (PRG, tope 200 filas H3, parser 5MB) *(movido desde F1.2, hallazgo C2)* | **Opus, medio** | Mediano | Es el único endpoint anónimo de todo el sistema (§4.1.1) — el PRG, el upsert idempotente y las 5 protecciones del borrador-anónimo quieren el mismo cuidado que ya tenían en la F1.2 original. |
+| **F2.3–F2.6** — Selección múltiple, marcado de seguidos, mini-visor informe, deep-links SSO | **Sonnet, medio** | Mediano | Edita **plantillas** de visores (`generador_visor.js` + templates HTML) — ⛔ **nunca los scripts encriptados**. El mini-visor del informe se genera desde `main.js`. Patrón conocido; el riesgo es el de cualquier release de Electron. |
 | **F2.7** — Botón topbar + actualización del tour (`onboarding/tour.js`) | **Sonnet, bajo** | Chico | El tour ya tiene el patrón multi-elemento (`targets:[]`); el paso 2 (`target:'.tab-nav'`) existe y se extiende. *(Verificado 2026-07-19: la estructura que la propuesta asume es correcta.)* |
-| **F2 — Release Electron** | **Sonnet, medio** | — | Sigue el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
+| **F2 — Deploy de backend + release Electron** *(aclarado, hallazgo C3)* | **Sonnet, medio** | — | Deploy de F2.2/F2.4 a staging→prod **primero**, después el release de Electron siguiendo el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
 | **F3** — Pulido y palancas (badge, captura del monitor, sugerencias por novedades) | **Opus para las sugerencias automáticas · Sonnet para lo demás** | Variable | Las "sugerencias a partir de novedades del monitor" son el diferencial con lógica no trivial (matching novedad→entrada) → Opus. El resto (badge, captura del monitor) es mecánico → Sonnet. Solo si el uso real de F1/F2 lo valida. |
 
-> **Regla transversal (crítica para no romper nada):** cada sub-bloque se valida en **staging** antes de prod, y el flag `bitacora_enabled` nace en `false` en **todos** los planes → aunque algo salga mal, ningún usuario ve la Bitácora hasta encender el flag en un plan de prueba. La Fase 1 completa se prueba y publica **sin emitir ningún release de Electron**.
+> **Regla transversal (crítica para no romper nada):** cada sub-bloque se valida en **staging** antes de prod, y el flag `bitacora_enabled` nace en `false` en **todos** los planes → aunque algo salga mal, ningún usuario ve la Bitácora hasta encender el flag en un plan de prueba. La Fase 1 completa se prueba y publica **sin emitir ningún release de Electron**. Ver también §11 "Nota de producto" (hallazgo C6): la Fase 1 sola no debe anunciarse ni venderse — es para validación interna.
 
 ---
 
@@ -816,7 +886,7 @@ PUT                  /usuarios/api/profile (extendido)    — home_section
 | Q8 | ¿Distinguir "hecho procesal" vs "extraprocesal" en el check (como Lex-Doctor), o alcanza el check simple + campo carácter opcional? | Check simple + carácter opcional en Vencimiento | — |
 | Q9 | Nombres finales de las secciones: ¿"Bitácora" y "Mis expedientes" quedan? | Quedan | — |
 | Q10 | ~~¿Subida del snapshot completo por la app (sin el recorte del querystring) como evolución?~~ | **Resuelta en v6**: el cambio a POST-formulario (§4.1) transporta el snapshot completo desde el primer momento, sin recorte ni evolución pendiente | — |
-| Q11 | Feriados: ¿los mantiene el admin desde el dashboard? ¿Se cargan ferias judiciales por jurisdicción o solo la nacional? | Admin los mantiene; v1 solo nacional + ferias de enero/julio | — |
+| Q11 | Feriados: ¿los mantiene el admin desde el dashboard? ¿Se cargan ferias judiciales por jurisdicción o solo la nacional? | Admin los mantiene; v1 solo nacional + ferias de enero/julio. **Implementado como F1.8** (ABM en el dashboard admin, agregado 2026-07-25 — antes esta respuesta no tenía sub-bloque que la construyera) | — |
 | Q12 | ¿La importación/restauración entra en Fase 1 o se difiere? (§11, nota de la Fase 1) | Entra en Fase 1 (la propuesta la incluye completa) | — |
 
 ## 14. Conclusión
