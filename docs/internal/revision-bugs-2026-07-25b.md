@@ -13,12 +13,12 @@
 >
 > **No se modificó código en esta pasada.**
 
-## ✅ Estado: LOS 6 HALLAZGOS CORREGIDOS (D1-D6) — D5 pendiente de publicación manual
+## ✅ Estado: LOS 6 HALLAZGOS CORREGIDOS (D1-D6)
 
 **D1, D2, D3, D4, D6 corregidos, verificados y en producción.** **D5 corregido en código**
-(commit `d208fe0`) pero **la publicación en la Chrome Web Store es un paso manual** (sin
-credenciales de API para automatizarlo) — el ZIP (`pjn-extension-1.3.6.zip`) está generado
-localmente, pendiente de subir al dashboard del developer y esperar la revisión de Google.
+(commit `d208fe0`) — el ZIP (`pjn-extension-1.3.6.zip`) fue subido por el operador al
+dashboard de Chrome Web Store el 2026-07-25 y está **⏳ en revisión de Google**; el store
+todavía sirve 1.3.5 hasta que se apruebe.
 
 **Decisiones del operador (2026-07-25):** la cortesía SÍ debe incluir la extensión (D1) ·
 la telemetría de la landing SÍ importa, se activa correctamente en vez de borrarse (D4).
@@ -29,7 +29,7 @@ la telemetría de la landing SÍ importa, se activa correctamente en vez de borr
 | **D2** | Payload malicioso real (`<img onerror>`, `<script>`, links falsos) contra las 3 plantillas más expuestas, interceptando `nodemailer.createTransport` (sin enviar emails reales): ninguna versión cruda llegó al HTML generado. De paso se encontró y corrigió un caso más grave que el reportado originalmente: `ticketTitle` en `sendTicketReplyEmail` nunca estuvo escapado (el `commentPreview` sí, con un escape ad-hoc). |
 | **D3** | Ciclo real en staging: token admin válido → `GET /legal/admin/documents` 200 → logout real vía `/auth/logout` → mismo token → **403 "Token invalidado"** (antes habría seguido dando 200). |
 | **D4** | End-to-end en staging: `POST /analytics/event` público inserta en DB → `GET /analytics/data` (admin) lo refleja en el funnel real → preflight CORS real desde `Origin: https://procuradortool.com` devuelve `Access-Control-Allow-Origin` correcto. En producción: smoke test del endpoint público (200, limpiado después). |
-| **D5** | Código corregido y sintaxis verificada. `getMinPlanForFlow`/`requiredPlan` eliminados (0 consumidores confirmados por grep — apuntaban a planes `inactive=true`). `flow_not_in_plan` ahora abre el popup igual que `no_session`/`token_expired`. **Sin verificación en vivo posible** — requiere la extensión real instalada desde la Chrome Web Store, que no se publicó en esta sesión. |
+| **D5** | Código corregido y sintaxis verificada. `getMinPlanForFlow`/`requiredPlan` eliminados (0 consumidores confirmados por grep — apuntaban a planes `inactive=true`). `flow_not_in_plan` ahora abre el popup igual que `no_session`/`token_expired`. ZIP subido al dashboard de Chrome Web Store — **verificación en vivo pendiente de que Google apruebe la revisión** (el store aún sirve 1.3.5). |
 | **D6** | Verificado con un PDF de prueba real en `storage/invoices/`: `git status --untracked-files=all` no lo lista. |
 
 **Hallazgo incidental (no corregido, fuera del alcance acordado):** `checkExtensionVersion()`
