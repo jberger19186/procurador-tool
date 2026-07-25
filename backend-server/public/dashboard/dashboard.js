@@ -1267,7 +1267,7 @@ async function loadInvoiceHistory(userId) {
             <td><strong>${inv.amount != null ? 'ARS ' + parseFloat(inv.amount).toLocaleString('es-AR', {minimumFractionDigits:2}) : '—'}</strong></td>
             <td style="font-size:11px">${escHtml(inv.numero || '—')}</td>
             <td style="font-size:11px;color:var(--text-muted)">${escHtml(inv.cae || '—')}</td>
-            <td>${inv.pdf_url ? `<a href="${escHtml(inv.pdf_url)}" target="_blank" class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px">PDF</a>` : '—'}</td>
+            <td>${inv.pdf_url ? `<button onclick="openInvoicePdf(${Number(inv.id)}, this)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px">PDF</button>` : '—'}</td>
             <td style="font-size:11px;color:#ef4444">${inv.status === 'error' ? escHtml(inv.error_message || '') : (inv.retry_count > 0 ? `${inv.retry_count} reintentos` : '')}</td>
         </tr>`).join('');
 
@@ -1989,6 +1989,40 @@ async function renderMonitor() {
 }
 
 // ───── HELPERS ─────
+// C1 (revisión 2026-07-25): el PDF de factura ya no es un link directo a /invoices/<archivo>
+// (que se servía sin autenticación). Se pide por la ruta autenticada de admin y se abre como
+// blob. La pestaña se abre ANTES del await: si se abriera después, el navegador la trata
+// como popup no originado en el click y la bloquea.
+async function openInvoicePdf(invoiceId, btn) {
+    const win = window.open('', '_blank');
+    const prevText = btn ? btn.innerHTML : null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Abriendo…'; }
+    try {
+        const res = await fetch(`${API}/admin/invoices/${invoiceId}/pdf`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+            if (win) win.close();
+            alert(res.status === 404 ? 'La factura no tiene PDF disponible.' : 'No se pudo abrir la factura.');
+            return;
+        }
+        const blobUrl = URL.createObjectURL(await res.blob());
+        if (win) {
+            win.location = blobUrl;
+        } else {
+            const a = document.createElement('a');
+            a.href = blobUrl; a.download = `factura-${invoiceId}.pdf`;
+            document.body.appendChild(a); a.click(); a.remove();
+        }
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (e) {
+        if (win) win.close();
+        alert('Error de conexión al abrir la factura.');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = prevText; }
+    }
+}
+
 function fmtDate(d) {
     if (!d) return '—';
     const dt = new Date(d);
@@ -4051,10 +4085,10 @@ async function loadIssuedInvoices() {
                         <td style="padding:10px 12px">${escHtml(inv.plan || '—')}</td>
                         <td style="padding:10px 12px;text-align:center">
                             ${inv.pdf_url
-                                ? `<a href="${escHtml(inv.pdf_url)}" target="_blank" rel="noopener"
-                                    style="display:inline-block;padding:4px 12px;background:#d97706;color:#fff;border-radius:5px;font-size:12px;font-weight:600;text-decoration:none">
+                                ? `<button onclick="openInvoicePdf(${Number(inv.id)}, this)"
+                                    style="display:inline-block;padding:4px 12px;background:#d97706;color:#fff;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer">
                                     📄 Ver PDF
-                                   </a>`
+                                   </button>`
                                 : '—'}
                         </td>
                         <td style="padding:10px 12px;text-align:center;white-space:nowrap">

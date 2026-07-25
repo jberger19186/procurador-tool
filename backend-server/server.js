@@ -134,8 +134,15 @@ pool.query('SELECT NOW()', (err, res) => {
 
 // Servir assets estáticos globales (íconos, imágenes de marca)
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
-// PDFs de facturas — acceso directo por URL opaca (nombre de archivo con timestamp)
-app.use('/invoices', express.static(path.join(__dirname, 'public', 'invoices')));
+
+// C1 (revisión 2026-07-25): acá había un `app.use('/invoices', express.static(...))` que
+// servía los PDF de facturas SIN autenticación, confiando en que el nombre de archivo
+// (`factura_<id>_<timestamp>.pdf`) fuera "opaco". No lo era: el id es secuencial y
+// cualquier usuario veía el formato en su propia factura del portal → la factura de otro
+// (nombre, CUIT, domicilio, importes) quedaba descargable desde internet. Verificado en
+// producción. Los PDF ahora viven en `storage/invoices/` (fuera de public/) y se sirven
+// por rutas autenticadas que validan propiedad:
+//   GET /usuarios/api/invoices/:id/pdf  (usuario dueño)  ·  GET /admin/invoices/:id/pdf (admin)
 
 // Servir dashboard web admin como archivos estáticos
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dashboard')));

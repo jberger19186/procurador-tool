@@ -26,8 +26,10 @@ function validarCuitAdmin(cuit) {
 }
 
 // ── Multer: almacenamiento de PDFs de facturas ────────────────────────────────
-const invoicesDir = path.join(__dirname, '../public/invoices');
-if (!fs.existsSync(invoicesDir)) fs.mkdirSync(invoicesDir, { recursive: true });
+// C1 (revisión 2026-07-25): el directorio se movió FUERA de public/ — antes se servía
+// con express.static sin autenticación (ver utils/invoiceStorage.js).
+const { ensureInvoicesDir, resolveInvoiceFile } = require('../utils/invoiceStorage');
+const invoicesDir = ensureInvoicesDir();
 
 const invoiceStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, invoicesDir),
@@ -3281,6 +3283,26 @@ router.get('/invoices', authenticateAdmin, async (req, res) => {
         res.json({ invoices: rows });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// ── GET /admin/invoices/:id/pdf ───────────────────────────────────────────────
+// C1: sirve el PDF de una factura con auth de admin. Antes los PDF colgaban de
+// express.static('/invoices') sin ninguna autenticación (ver utils/invoiceStorage.js).
+router.get('/invoices/:id/pdf', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido' });
+    try {
+        const { rows: [inv] } = await db.query('SELECT pdf_url FROM invoices WHERE id = $1', [id]);
+        if (!inv) return res.status(404).json({ error: 'Factura no encontrada' });
+        const file = resolveInvoiceFile(inv.pdf_url);
+        if (!file) return res.status(404).json({ error: 'La factura no tiene PDF disponible' });
+        res.type('application/pdf');
+        res.sendFile(file);
+    } catch (err) {
+        console.error('Error sirviendo PDF de factura (admin):', err);
+        res.status(500).json({ error: 'Error del servidor' });
     }
 });
 

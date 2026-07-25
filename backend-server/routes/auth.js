@@ -1129,7 +1129,13 @@ router.post('/reset-password', async (req, res) => {
         if (result.rows.length === 0) return res.send(renderResetPage('error', 'El enlace es inválido o ya expiró.'));
 
         const u    = result.rows[0];
-        const hash = await require('bcrypt').hash(password, 10);
+        // C3 (revisión 2026-07-25): antes usaba cost 10 — era el único camino de escritura
+        // de contraseña que se salteó el fix B-3 (registro, cambio de contraseña, portal y
+        // alta por admin ya usaban 12), porque hacía `require('bcrypt')` inline en vez del
+        // import de arriba. Un usuario que RECUPERA su contraseña quedaba con un hash más
+        // barato que el resto. Los hashes viejos siguen validando (bcrypt lleva el coste
+        // embebido en el propio hash).
+        const hash = await bcrypt.hash(password, 12);
 
         await db.query(
             'UPDATE users SET password_hash=$1, password_reset_token=NULL, password_reset_expires=NULL, updated_at=NOW() WHERE id=$2',

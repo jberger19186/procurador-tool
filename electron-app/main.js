@@ -1085,9 +1085,17 @@ async function releaseExecutionLock() {
 // Para cuentas pagas el límite real es por subsistema (proc/informe/monitor), no
 // el contador global (usage_limit=999999). El check global de remaining nunca frena
 // a un pago, así que acá consultamos el remaining específico vía /client/account.
-// Devuelve { blocked, error } — ante error de red NO bloquea (el backend igual
-// frena en log-execution). Equivale al pre-chequeo que ya existe para batch.
-async function checkSubsystemLimit(subsystem, planName) {
+// Devuelve { blocked, error, allowed } — ante error de red NO bloquea (el backend igual
+// frena en log-execution).
+//
+// C2 (revisión 2026-07-25): acepta `needed` (cuántos usos consumirá la operación). Los
+// modos por LOTE consumen N usos, no 1: el informe por lote llama al script una vez por
+// expediente y cada llamada cuenta como un informe. Antes el pre-chequeo solo validaba
+// "queda al menos 1", así que un usuario con 1 informe restante lanzaba un lote de 30 y
+// corría los 30 contra el PJN — el servidor contaba 1 y devolvía 403 en los otros 29
+// (403 que la app ignora). Ahora, si no alcanza para todos, devuelve `allowed` = cuántos
+// entran, para procesar solo esos avisando al usuario (decisión del operador, 2026-07-25).
+async function checkSubsystemLimit(subsystem, planName, needed = 1) {
     try {
         const acc = await authManager.backendClient.getAccount();
         if (!acc?.success) return { blocked: false };
@@ -1103,22 +1111,34 @@ async function checkSubsystemLimit(subsystem, planName) {
         // ilimitado real tiene el límite en -1 (unlimited) → se saltea abajo.
         const u = acc.account?.usage?.[subsystem];
         if (!u || u.unlimited || u.remaining === null || u.remaining === undefined) {
-            return { blocked: false };
+            return { blocked: false, allowed: needed };
         }
+        const nombre = {
+            proc: 'procuraciones',
+            batch: 'ejecuciones de Procurar por Lote',
+            informe: 'informes',
+            monitor_novedades: 'consultas de monitoreo'
+        }[subsystem] || 'ejecuciones';
+
         if (u.remaining <= 0) {
-            const nombre = {
-                proc: 'procuraciones',
-                informe: 'informes',
-                monitor_novedades: 'consultas de monitoreo'
-            }[subsystem] || 'ejecuciones';
             return {
                 blocked: true,
+                allowed: 0,
                 error: `Alcanzaste el límite de ${nombre} de tu plan${planName ? ` (${planName})` : ''}: ${u.used}/${u.limit} usados en este período. El acceso a la app sigue disponible; los usos se renuevan al inicio del próximo período o podés pedir un ajuste a soporte.`
             };
         }
-        return { blocked: false };
+        // Alcanza para parte del lote: no se bloquea, se recorta (el llamador avisa).
+        if (needed > 1 && u.remaining < needed) {
+            return {
+                blocked: false,
+                allowed: u.remaining,
+                partial: true,
+                error: `Tu plan permite ${u.remaining} ${nombre} más en este período (${u.used}/${u.limit} usados) y pediste ${needed}. Se procesarán los primeros ${u.remaining}; el resto queda para el próximo período o podés pedir un ajuste a soporte.`
+            };
+        }
+        return { blocked: false, allowed: needed };
     } catch (_) {
-        return { blocked: false };
+        return { blocked: false, allowed: needed };
     }
 }
 
@@ -1356,10 +1376,35 @@ ipcMain.handle('run-process-custom', async (event, { lines, fechaLimite }) => {
             };
         }
 
-        const configCustom = JSON.stringify({ expedientes: lines, fechaLimite: fechaLimite || null });
+        // C2 (revisión 2026-07-25): faltaba el pre-chequeo por subsistema para 'batch' —
+        // era la única de las 4 ramas sin él (proc, informe y monitor_novedades ya lo
+        // tenían desde el Hallazgo #3). Sin esto, una cuenta paga con el cupo de lote
+        // agotado abría Chrome y corría toda la automatización contra el PJN, y recién el
+        // servidor rechazaba el conteo (403 en log-execution) en silencio.
+        const batchLimitCheck = await checkSubsystemLimit('batch', sub?.plan);
+        if (batchLimitCheck.blocked) {
+            return { success: false, error: batchLimitCheck.error, action: 'upgrade' };
+        }
+
+        // C2: cap defensivo de expedientes por corrida. El recorte a batch_expedientes_limit
+        // vivía SOLO en el renderer (.slice() en renderer.js), así que un cliente adulterado
+        // —o cualquier camino que no pasara por ese modal— mandaba una lista sin tope. Se
+        // vuelve a aplicar acá, en el proceso principal, contra el límite real del plan.
+        let lineasFinales = lines;
+        try {
+            const accB = await authManager.backendClient.getAccount();
+            const maxExp = accB?.account?.usage?.batch?.expedientesPerRun;
+            if (Number.isInteger(maxExp) && maxExp > 0 && lines.length > maxExp) {
+                lineasFinales = lines.slice(0, maxExp);
+                const msg = `Tu plan permite hasta ${maxExp} expedientes por ejecución de lote. Se procesarán los primeros ${maxExp} de ${lines.length}.`;
+                mainWindow.webContents.send('process-log', { type: 'warning', text: `⚠️ ${msg}` });
+            }
+        } catch (_) { /* sin datos de cuenta → se respeta lo que mandó el renderer */ }
+
+        const configCustom = JSON.stringify({ expedientes: lineasFinales, fechaLimite: fechaLimite || null });
         const scriptName = 'procesarCustomExpedientes.js';
 
-        mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Procurando ${lines.length} expediente${lines.length !== 1 ? 's' : ''} custom...` });
+        mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Procurando ${lineasFinales.length} expediente${lineasFinales.length !== 1 ? 's' : ''} custom...` });
 
         const lockResult = await acquireExecutionLock(scriptName);
         if (!lockResult.success) {
@@ -1919,7 +1964,9 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
                 action: 'upgrade'
             };
         }
-        // Pre-chequeo por subsistema (cuentas pagas: el global no frena)
+        // Pre-chequeo por subsistema (cuentas pagas: el global no frena). Acá solo se
+        // verifica que quede al menos 1 uso; en modo lote el recorte por cantidad se
+        // aplica más abajo, cuando ya se sabe cuántos expedientes válidos hay (C2).
         const informeLimitCheck = await checkSubsystemLimit('informe', sessionInfo?.subscription?.plan);
         if (informeLimitCheck.blocked) {
             return { success: false, error: informeLimitCheck.error, action: 'upgrade' };
@@ -1971,6 +2018,19 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
 
         if (validLines.length === 0) {
             return { success: false, error: 'Ningún expediente válido en el archivo. Formato esperado: "JUR NUMERO/ANIO" (ej: FCR 018745/2017)' };
+        }
+
+        // C2 (revisión 2026-07-25): el lote consume UN informe por expediente. Si no
+        // alcanzan los usos para todos, se procesan los que entran y se avisa (decisión
+        // del operador) en vez de correr los N contra el PJN para que el servidor cuente
+        // solo los que caben y rechace el resto en silencio.
+        const informeBatchCheck = await checkSubsystemLimit('informe', sessionInfo?.subscription?.plan, validLines.length);
+        if (informeBatchCheck.blocked) {
+            return { success: false, error: informeBatchCheck.error, action: 'upgrade' };
+        }
+        if (informeBatchCheck.partial) {
+            validLines.length = informeBatchCheck.allowed;   // recorta in-place
+            mainWindow.webContents.send('process-log', { type: 'warning', text: `⚠️ ${informeBatchCheck.error}` });
         }
 
         const batchResults = [];

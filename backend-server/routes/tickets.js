@@ -25,6 +25,15 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'El título no puede superar 200 caracteres' });
     }
 
+    // C5 (revisión 2026-07-25): `description` no tenía tope propio — quedaba acotada solo
+    // por el límite por defecto de express.json (~100 KB). Si ese límite se sube de forma
+    // global (la propuesta de la Bitácora contempla 5 MB), este endpoint pasaría a aceptar
+    // descripciones enormes que después se renderizan en el dashboard y viajan por email.
+    // 5.000 es coherente con el tope de 4.000 del bot IA.
+    if (description.length > 5000) {
+        return res.status(400).json({ error: 'La descripción no puede superar 5.000 caracteres' });
+    }
+
     try {
         const result = await db.query(`
             INSERT INTO support_tickets (user_id, category, title, description)

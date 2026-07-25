@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const authenticateToken = require('../middleware/authenticateToken');
 const { validatePassword } = require('../utils/passwordPolicy');
+const { resolveInvoiceFile } = require('../utils/invoiceStorage');
 
 // ─── PUT /usuarios/api/profile ─────────────────────────────────────────────────
 // Actualizar datos personales del usuario autenticado
@@ -272,6 +273,36 @@ router.get('/invoices', authenticateToken, async (req, res) => {
         res.json({ invoices: rows });
     } catch (err) {
         console.error('[GET /invoices] Error:', err.message);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── GET /usuarios/api/invoices/:id/pdf — PDF de una factura PROPIA ─────────
+// C1 (revisión 2026-07-25): antes los PDF se servían con express.static('/invoices')
+// SIN autenticación — el nombre `factura_<id>_<ts>.pdf` era la única "protección" y el
+// id es secuencial, así que la factura de otro usuario (nombre, CUIT, domicilio,
+// importes) era descargable por cualquiera. Ahora se exige sesión Y propiedad.
+router.get('/invoices/:id/pdf', authenticateToken, async (req, res) => {
+    const db = req.app.get('db');
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido' });
+
+    try {
+        // El filtro por user_id ES el control de acceso: una factura ajena da 404
+        // (mismo mensaje que una inexistente → no revela si el id existe).
+        const { rows: [inv] } = await db.query(
+            'SELECT pdf_url FROM invoices WHERE id = $1 AND user_id = $2',
+            [id, req.user.id]
+        );
+        if (!inv) return res.status(404).json({ error: 'Factura no encontrada' });
+
+        const file = resolveInvoiceFile(inv.pdf_url);
+        if (!file) return res.status(404).json({ error: 'La factura no tiene PDF disponible' });
+
+        res.type('application/pdf');
+        res.sendFile(file);
+    } catch (err) {
+        console.error('[GET /invoices/:id/pdf] Error:', err.message);
         res.status(500).json({ error: 'Error del servidor' });
     }
 });

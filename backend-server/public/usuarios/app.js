@@ -1651,7 +1651,7 @@ async function renderFact() {
                 <td style="font-size:13px;padding:8px 6px">$${inv.amount ? Number(inv.amount).toLocaleString('es-AR') : '—'}</td>
                 <td style="font-size:11px;padding:8px 6px;color:var(--text-muted);font-family:monospace">${inv.cae ? escapeHtml(inv.cae) : '—'}</td>
                 <td style="padding:8px 20px 8px 6px">${inv.pdf_url
-                    ? `<a href="${escapeHtml(inv.pdf_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px">Ver PDF</a>`
+                    ? `<button onclick="openInvoicePdf(${Number(inv.id)}, this)" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px">Ver PDF</button>`
                     : `<span style="font-size:12px;color:var(--text-muted)">${inv.status==='pending'?'Emitiendo…':inv.status==='failed'?'Error':'—'}</span>`}</td>
             </tr>`;
         }).join('');
@@ -1675,6 +1675,42 @@ async function renderFact() {
         </div>`;
 
     container.innerHTML = paymentMethodCard + subscriptionCard + paymentsCard + invoicesCard;
+}
+
+// C1 (revisión 2026-07-25): el PDF ya no es un link directo a /invoices/<archivo> (que se
+// servía sin autenticación). Se pide por una ruta autenticada que valida propiedad y se
+// abre como blob. La pestaña se abre ANTES del await: si se abriera después, el navegador
+// la trata como popup no originado en el click y la bloquea.
+async function openInvoicePdf(invoiceId, btn) {
+    const win = window.open('', '_blank');
+    const prevText = btn ? btn.textContent : null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Abriendo…'; }
+    try {
+        const res = await fetch(`${BASE_URL}/usuarios/api/invoices/${invoiceId}/pdf`, {
+            headers: { Authorization: `Bearer ${getToken()}` }
+        });
+        if (!res.ok) {
+            if (win) win.close();
+            showToast(res.status === 404 ? 'La factura no tiene PDF disponible.' : 'No se pudo abrir la factura.', 'error');
+            return;
+        }
+        const blobUrl = URL.createObjectURL(await res.blob());
+        if (win) {
+            win.location = blobUrl;
+        } else {
+            // Popup bloqueado → descargar en vez de abrir
+            const a = document.createElement('a');
+            a.href = blobUrl; a.download = `factura-${invoiceId}.pdf`;
+            document.body.appendChild(a); a.click(); a.remove();
+        }
+        // El blob queda vivo hasta que la pestaña lo cargó; liberarlo después.
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (e) {
+        if (win) win.close();
+        showToast('Error de conexión al abrir la factura.', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = prevText; }
+    }
 }
 
 // Inicia el checkout MP para configurar tarjeta
