@@ -1281,7 +1281,7 @@
           <li class="plan-feat-item"><span class="dash">–</span> App de escritorio Electron</li>
         </ul>
         <div class="plan-cta">
-          <a href="https://api.procuradortool.com/register/" class="plan-btn outline">Empezar por $1.500 / mes</a>
+          <a href="https://api.procuradortool.com/register/" class="plan-btn outline" data-cta="plan_extension">Empezar por $1.500 / mes</a>
         </div>
       </div>
 
@@ -1307,7 +1307,7 @@
           <li class="plan-feat-item"><span class="chk">✓</span> Soporte por ticket integrado + chat</li>
         </ul>
         <div class="plan-cta">
-          <a href="https://api.procuradortool.com/register/" class="plan-btn primary">
+          <a href="https://api.procuradortool.com/register/" class="plan-btn primary" data-cta="plan_combo">
             Empezar por $15.000 / mes
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
           </a>
@@ -1470,6 +1470,58 @@
   }, { threshold: 0.1 });
   document.querySelectorAll('.step').forEach(el => stepObs.observe(el));
 
+  // D4 (revisión 2026-07-25): analytics de la landing — activa el router que existía
+  // pero nunca se conectó a nada. Beacon best-effort: si falla, no rompe la página
+  // (mismo criterio que el backend, que responde {ok:false} y sigue funcionando).
+  (function () {
+    const ANALYTICS_URL = 'https://api.procuradortool.com/analytics/event';
+    let sessionId = sessionStorage.getItem('psc_analytics_sid');
+    if (!sessionId) {
+      sessionId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+      sessionStorage.setItem('psc_analytics_sid', sessionId);
+    }
+
+    function track(event, label) {
+      try {
+        fetch(ANALYTICS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true, // sobrevive a la navegación si el click dispara un cambio de página
+          body: JSON.stringify({ event, label, session_id: sessionId, referrer: document.referrer || null })
+        }).catch(() => {});
+      } catch (_) {}
+    }
+
+    // section_view: una sola vez por sección con [data-track-section], cuando entra en viewport
+    const sectionObs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          track('section_view', e.target.dataset.trackSection);
+          sectionObs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.3 });
+    const planesSection = document.getElementById('planes');
+    if (planesSection) {
+      planesSection.dataset.trackSection = 'planes';
+      sectionObs.observe(planesSection);
+    }
+
+    // cta_click: botones de plan (no bloquea la navegación — fetch keepalive corre en paralelo)
+    document.querySelectorAll('[data-cta]').forEach(el => {
+      el.addEventListener('click', () => track('cta_click', el.dataset.cta));
+    });
+
+    // Propagar el session_id al registro (origen distinto: api.procuradortool.com) para
+    // poder correlacionar el funnel completo hasta register_success (ver register.js).
+    document.querySelectorAll('a[href*="/register/"]').forEach(a => {
+      try {
+        const u = new URL(a.href, location.href);
+        u.searchParams.set('sid', sessionId);
+        a.href = u.toString();
+      } catch (_) {}
+    });
+  })();
 </script>
 
 </body>

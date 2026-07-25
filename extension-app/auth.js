@@ -160,20 +160,15 @@ async function canUseFlow(flowName) {
   return {
     allowed,
     reason: allowed ? null : 'flow_not_in_plan',
-    requiredPlan: getMinPlanForFlow(flowName)
   };
 }
-
-function getMinPlanForFlow(flow) {
-  const flowPlans = {
-    consulta:       'BASIC',
-    escritos2:      'BASIC',
-    escritos1:      'PRO',
-    notificaciones: 'ENTERPRISE',
-    deox:           'ENTERPRISE',
-  };
-  return flowPlans[flow] ?? 'PRO';
-}
+// D5 (revisión 2026-07-25): se eliminó getMinPlanForFlow() y el campo `requiredPlan` que
+// devolvía — apuntaban a BASIC/PRO/ENTERPRISE, los 3 planes "Próximamente" (inactive=true
+// en producción, no se pueden comprar), y ningún archivo de la extensión leía el valor
+// (grep confirmó 0 consumidores). En vez de corregir un mensaje que nadie mostraba, se
+// quita: es la misma clase de bug que motivó esta revisión (código que envejece mal
+// porque nadie lo ejercita). Si en el futuro se quiere sugerir un plan, debe apuntar a
+// los planes reales (EXTENSION_PROMO/COMBO_PROMO) y mostrarse de verdad en el popup.
 
 // ── Refresh automático del token ─────────────────────────────────────────────
 async function refreshToken() {

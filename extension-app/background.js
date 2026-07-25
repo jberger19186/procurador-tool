@@ -162,15 +162,20 @@ chrome.runtime.onMessage.addListener(async (msg) => {
 
     if (!authCheck.allowed) {
       console.warn(`[PJN-ext] Flujo bloqueado: ${flow} — razón: ${authCheck.reason}`);
-      // Abrir popup para mostrar error / forzar login si sesión venció
-      if (authCheck.reason === 'no_session' || authCheck.reason === 'token_expired') {
-        chrome.windows.create({
-          url: chrome.runtime.getURL("popup.html"),
-          type: "popup",
-          width: 420,
-          height: 480,
-        });
-      }
+      // D5 (revisión 2026-07-25): antes solo se abría el popup para no_session/
+      // token_expired — una denegación por plan (flow_not_in_plan) retornaba en
+      // silencio, sin avisar nada al usuario. El popup normal solo llega a disparar
+      // START_FLOW con un botón habilitado (renderFlows lo deshabilita si el flujo no
+      // está en el plan), así que este caso solo ocurría con el popup en estado viejo
+      // (ej. el admin cambió el plan mientras el popup seguía abierto). Se abre el
+      // popup para cualquier motivo de denegación: al cargar, vuelve a consultar
+      // /client/extension-auth y muestra el estado real (botones con candado).
+      chrome.windows.create({
+        url: chrome.runtime.getURL("popup.html"),
+        type: "popup",
+        width: 420,
+        height: 480,
+      });
       return;
     }
 

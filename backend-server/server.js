@@ -76,11 +76,18 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
     : ['http://localhost:3000'];
 
 const PUBLIC_HTML_PATHS = ['/auth/reset-password', '/auth/forgot-password', '/auth/verify-email', '/register'];
+// D4 (revisión 2026-07-25): la landing (procuradortool.com) es un origen DISTINTO al de
+// esta API (api.procuradortool.com) — no está en ALLOWED_ORIGINS a propósito (no debe
+// poder llamar a la API con credenciales). El beacon de analytics es público, sin
+// credenciales y de solo-escritura, así que se le abre CORS igual que a las páginas HTML
+// públicas, sin tocar la lista de orígenes con credenciales.
+const PUBLIC_OPEN_CORS_PATHS = ['/analytics/event'];
 
 app.use((req, res, next) => {
-    const isPublicHtml = PUBLIC_HTML_PATHS.some(p => req.path === p || req.path.startsWith(p + '/'));
+    const isPublicHtml = PUBLIC_HTML_PATHS.some(p => req.path === p || req.path.startsWith(p + '/'))
+        || PUBLIC_OPEN_CORS_PATHS.includes(req.path);
     if (isPublicHtml) {
-        // Páginas de navegador: permitir cualquier origen sin credenciales
+        // Páginas de navegador / beacon público: permitir cualquier origen sin credenciales
         return cors({ origin: true, credentials: false })(req, res, next);
     }
     // API: solo orígenes permitidos
@@ -173,6 +180,9 @@ app.use('/tickets', generalAuthLimiter, require('./routes/tickets'));
 app.use('/monitor', generalAuthLimiter, require('./routes/monitor'));
 app.use('/license', generalAuthLimiter, require('./routes/license'));
 app.use('/users', generalAuthLimiter, require('./routes/users'));
+// D4 (revisión 2026-07-25): activado — antes nunca se montaba (código muerto). POST /event
+// (público) tiene su propio rate limit; GET /data y DELETE /events exigen admin.
+app.use('/analytics', require('./routes/analytics'));
 app.use('/legal', require('./routes/legal'));
 
 // ── Fase 5: Cobranza — rutas detrás de feature flag ──────────────────────────

@@ -2927,10 +2927,84 @@ async function renderMetrics() {
             <div class="card-body">
                 ${statusBars || '<p style="color:var(--text-muted);font-size:13px">Sin datos aún.</p>'}
             </div>
+        </div>
+
+        <div class="card section-gap" id="landingAnalyticsCard">
+            <div class="card-header">
+                <h3>Analytics de la landing (últimos 30 días)</h3>
+            </div>
+            <div class="card-body" id="landingAnalyticsBody">
+                <p style="color:var(--text-muted);font-size:13px">Cargando…</p>
+            </div>
         </div>`;
+
+        loadLandingAnalytics();
 
     } catch (e) {
         content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    }
+}
+
+// D4 (revisión 2026-07-25): consume el router de analytics recién activado
+// (routes/analytics.js, GET /admin/analytics/data) — antes nunca se montaba ni se
+// consumía desde ningún frontend. Carga aparte y con su propio catch: si falla, el resto
+// de Métricas (arriba, datos de usuarios) queda intacto.
+async function loadLandingAnalytics() {
+    const body = document.getElementById('landingAnalyticsBody');
+    if (!body) return;
+    try {
+        const data = await apiFetch('/analytics/data?days=30');
+        const sum = data.summary || {};
+        const fun = data.funnel || {};
+        const byLabel = data.byLabel || [];
+        const referrers = data.referrers || [];
+
+        const funnelRow = (label, val, pct) => `
+            <div style="display:flex;align-items:center;gap:12px;padding:5px 0;font-size:13px">
+                <div style="width:170px;color:var(--text)">${label}</div>
+                <div style="flex:1;background:#f3f4f6;border-radius:4px;height:10px;overflow:hidden">
+                    <div style="width:${Math.max(pct,1)}%;background:#d97706;height:100%;border-radius:4px"></div>
+                </div>
+                <div style="width:44px;text-align:right;font-weight:700">${val}</div>
+            </div>`;
+
+        const sessions = Number(fun.total_sessions) || 0;
+        const vioPlanes = Number(fun.vio_planes) || 0;
+        const clickPlan = Number(fun.click_plan) || 0;
+        const registros = Number(fun.registros) || 0;
+        const pct = (v) => sessions > 0 ? Math.round(v / sessions * 100) : 0;
+
+        const ctaRows = byLabel.length
+            ? byLabel.map(r => `<tr><td style="padding:5px 8px;font-size:13px">${escHtml(r.label)}</td><td style="padding:5px 8px;font-size:13px;text-align:right;font-weight:600">${r.total}</td></tr>`).join('')
+            : `<tr><td colspan="2" style="padding:8px;color:var(--text-muted);font-size:13px">Sin clicks registrados aún.</td></tr>`;
+
+        const refRows = referrers.length
+            ? referrers.map(r => `<tr><td style="padding:5px 8px;font-size:13px">${escHtml(r.fuente)}</td><td style="padding:5px 8px;font-size:13px;text-align:right;font-weight:600">${r.sessions}</td></tr>`).join('')
+            : `<tr><td colspan="2" style="padding:8px;color:var(--text-muted);font-size:13px">Sin datos aún.</td></tr>`;
+
+        body.innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">
+                <div><div style="font-size:22px;font-weight:700">${sum.sessions ?? 0}</div><div style="font-size:12px;color:var(--text-muted)">Sesiones</div></div>
+                <div><div style="font-size:22px;font-weight:700">${sum.events ?? 0}</div><div style="font-size:12px;color:var(--text-muted)">Eventos</div></div>
+                <div><div style="font-size:22px;font-weight:700;color:#d97706">${sum.total_cta_clicks ?? 0}</div><div style="font-size:12px;color:var(--text-muted)">Clicks en planes</div></div>
+                <div><div style="font-size:22px;font-weight:700;color:#16a34a">${sum.registros ?? 0}</div><div style="font-size:12px;color:var(--text-muted)">Registros completados</div></div>
+            </div>
+            <h4 style="font-size:13px;color:var(--text-muted);margin:12px 0 8px">Funnel de conversión</h4>
+            ${funnelRow('Vieron la sección Planes', vioPlanes, pct(vioPlanes))}
+            ${funnelRow('Click en un plan', clickPlan, pct(clickPlan))}
+            ${funnelRow('Registro completado', registros, pct(registros))}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px">
+                <div>
+                    <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 6px">Clicks por plan</h4>
+                    <table style="width:100%;border-collapse:collapse">${ctaRows}</table>
+                </div>
+                <div>
+                    <h4 style="font-size:13px;color:var(--text-muted);margin:0 0 6px">Fuentes de tráfico</h4>
+                    <table style="width:100%;border-collapse:collapse">${refRows}</table>
+                </div>
+            </div>`;
+    } catch (e) {
+        body.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No se pudo cargar el analytics de la landing (${escHtml(e.message)}).</p>`;
     }
 }
 

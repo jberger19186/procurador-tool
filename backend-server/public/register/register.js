@@ -5,6 +5,22 @@ let selectedPlan = null;
 let availablePlans = [];
 let isSubmitting = false;
 
+// D4 (revisión 2026-07-25): correlaciona el funnel de analytics con la sesión que empezó
+// en la landing (?sid=... propagado desde el click en el CTA de plan_extension/plan_combo
+// — ver landing/index.html). Sin sid (llegada directa a /register/) se registra igual,
+// solo que register_success queda sin sesión previa asociada al funnel.
+const _analyticsSid = new URLSearchParams(location.search).get('sid') || null;
+function trackAnalytics(event, label) {
+    try {
+        fetch('/analytics/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body: JSON.stringify({ event, label, session_id: _analyticsSid, referrer: document.referrer || null })
+        }).catch(() => {});
+    } catch (_) {}
+}
+
 // ─── Validación de CUIT/CUIL ──────────────────────────────────────────────────
 function validarCuit(cuit) {
     const clean = cuit.replace(/[-\s]/g, '');
@@ -273,6 +289,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
 
         if (res.ok && data.success) {
             clearDraft();   // registro exitoso: descartar borrador guardado
+            trackAnalytics('register_success', selectedPlan);
             document.getElementById('view-form').style.display = 'none';
             document.getElementById('view-success').style.display = 'block';
             document.getElementById('successMsg').textContent =

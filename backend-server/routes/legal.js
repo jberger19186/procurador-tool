@@ -1,31 +1,16 @@
 'use strict';
 const express = require('express');
 const router  = express.Router();
-const jwt     = require('jsonwebtoken');
 const crypto  = require('crypto');
 const logger  = require('../utils/logger');
 const { sendEmail } = require('../utils/mailer');
-
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-function authenticateAdmin(req, res, next) {
-    const token = (req.headers['authorization'] || '').split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Token no proporcionado' });
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ error: 'Token inválido o expirado' });
-        if (user.role !== 'admin') return res.status(403).json({ error: 'Se requiere rol administrador' });
-        req.user = user;
-        next();
-    });
-}
-function authenticateUser(req, res, next) {
-    const token = (req.headers['authorization'] || '').split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Token no proporcionado' });
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ error: 'Token inválido o expirado' });
-        req.user = user;
-        next();
-    });
-}
+// D3 (revisión 2026-07-25): este router definía sus propias copias de authenticateAdmin/
+// authenticateUser SIN el chequeo de blacklist (M-1) — un admin deslogueado seguía
+// pudiendo crear/editar/borrar/publicar los Términos y Condiciones y la Política de
+// Privacidad hasta el vencimiento natural del token. Ahora usa los middlewares
+// compartidos (que sí chequean isBlacklisted).
+const authenticateAdmin = require('../middleware/authenticateAdmin');
+const authenticateUser  = require('../middleware/authenticateToken');
 
 // ── PUBLIC — contenido actual para /terminos/ y /privacidad/ ─────────────────
 // GET /legal/page?type=tyc|pyp

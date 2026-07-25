@@ -60,6 +60,12 @@ electron-app/cache/
 
 # ─── Backend específico ─────────────────────────────────────
 backend-server/uploads/
+# D6 (revisión 2026-07-25): PDFs de facturas con datos fiscales reales (CUIT, domicilio,
+# importes) — nunca deben terminar en el repo. Incluye el directorio legado renombrado
+# al migrar fuera de public/ (ver C1, docs/internal/revision-bugs-2026-07-25.md).
+backend-server/storage/
+backend-server/public/invoices/
+backend-server/public/_invoices_legacy_*/
 
 # ─── Backups de base de datos — NUNCA commitear ─────────────
 database/backup_*.sql

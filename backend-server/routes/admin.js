@@ -1,12 +1,11 @@
 ﻿const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { getCacheStats, clearCache } = require('../utils/scriptEncryption');
 const { adminLimiter } = require('../middleware/rateLimiter');
-const { isBlacklisted } = require('../middleware/tokenBlacklist');
+const authenticateAdmin = require('../middleware/authenticateAdmin');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { sendTicketReplyEmail, sendAdminCreatedUserEmail } = require('../utils/mailer');
@@ -65,34 +64,9 @@ function uploadPdfOr400(req, res, next) {
 // Aplicar rate limiter a todas las rutas de admin
 router.use(adminLimiter);
 
-// Middleware para verificar rol de admin
-function authenticateAdmin(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json({ error: 'Token no proporcionado' });
-    }
-
-    // M-1: invalidar tokens en blacklist (logout). Antes el logout de admin
-    // no surtía efecto hasta el vencimiento natural del token.
-    if (isBlacklisted(token)) {
-        return res.status(403).json({ error: 'Token invalidado' });
-    }
-
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.status(403).json({ error: 'Token inválido o expirado' });
-        }
-
-        if (user.role !== 'admin') {
-            return res.status(403).json({ error: 'Se requiere rol de administrador' });
-        }
-
-        req.user = user;
-        next();
-    });
-}
+// D3 (revisión 2026-07-25): authenticateAdmin se extrajo a middleware/authenticateAdmin.js
+// (era una función local acá, y otros routers la duplicaban sin el chequeo de blacklist —
+// ver el comentario en el middleware compartido).
 
 // ==================== CACHÉ ====================
 

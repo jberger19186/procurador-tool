@@ -144,6 +144,20 @@ const generalAuthLimiter = rateLimit({
     }
 });
 
+// D4 (revisión 2026-07-25): POST /analytics/event es público y sin auth (beacon de la
+// landing) — sin este límite, cualquiera podía escribir filas ilimitadas y anónimas a
+// analytics_events. 60/min por IP alcanza de sobra para una sesión real de navegación
+// (section_view + cta_click son unos pocos eventos) y frena un abuso automatizado.
+const analyticsEventLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        res.status(429).json({ ok: false });
+    }
+});
+
 module.exports = {
     loginLimiter,
     registerLimiter,
@@ -151,5 +165,6 @@ module.exports = {
     scriptExecutionLimiter,
     scriptDownloadLimiter,
     adminLimiter,
-    generalAuthLimiter
+    generalAuthLimiter,
+    analyticsEventLimiter
 };

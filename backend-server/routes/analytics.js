@@ -1,23 +1,15 @@
 const express = require('express');
 const router  = express.Router();
-const jwt     = require('jsonwebtoken');
 const crypto  = require('crypto');
-const { adminLimiter } = require('../middleware/rateLimiter');
-
-// ── Auth admin (misma lógica que admin.js) ────────────────────────────────────
-function authenticateAdmin(req, res, next) {
-    const token = (req.headers['authorization'] || '').split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Token no proporcionado' });
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ error: 'Token inválido o expirado' });
-        if (user.role !== 'admin') return res.status(403).json({ error: 'Se requiere rol de administrador' });
-        req.user = user;
-        next();
-    });
-}
+const { adminLimiter, analyticsEventLimiter } = require('../middleware/rateLimiter');
+// D4 (revisión 2026-07-25): este router nunca se montaba en server.js (código muerto) y
+// su authenticateAdmin local no chequeaba la blacklist de logout (mismo gap que D3, ver
+// middleware/authenticateAdmin.js). Se activa: montado en server.js, con rate limit en el
+// endpoint público (POST /event, sin auth) y usando el middleware de admin compartido.
+const authenticateAdmin = require('../middleware/authenticateAdmin');
 
 // ── POST /analytics/event — público, recibe eventos de la landing ─────────────
-router.post('/event', async (req, res) => {
+router.post('/event', analyticsEventLimiter, async (req, res) => {
     try {
         const { event, label, session_id, referrer } = req.body;
         if (!event || typeof event !== 'string' || event.length > 100) {
@@ -47,7 +39,7 @@ router.post('/event', async (req, res) => {
     }
 });
 
-// ── GET /admin/analytics/data — protegido, devuelve datos para el dashboard ───
+// ── GET /analytics/data — protegido (admin), devuelve datos para el dashboard ─
 router.get('/data', adminLimiter, authenticateAdmin, async (req, res) => {
     try {
         const days = Math.min(Math.max(parseInt(req.query.days) || 30, 1), 365);
