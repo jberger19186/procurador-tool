@@ -82,10 +82,23 @@ router.post('/init', async (req, res) => {
     // preapproval custom con external_reference (cobro inmediato): el webhook lo atribuye,
     // hace single-active (cancela el viejo) y dispara la renovación.
     const subRow = await db.query(
-      'SELECT external_subscription_id, payment_provider FROM subscriptions WHERE user_id = $1',
+      'SELECT plan, external_subscription_id, payment_provider FROM subscriptions WHERE user_id = $1',
       [userId]
     );
     const yaTieneMetodo = !!(subRow.rows[0]?.payment_provider && subRow.rows[0]?.external_subscription_id);
+
+    // B3 (revisión 2026-07-24): fuera de la reactivación (que recién alineó la suscripción
+    // arriba al plan elegido), plan_name DEBE coincidir con el plan ya asignado a la
+    // suscripción. Sin este guard, un usuario podía pagar el plan barato (init con
+    // plan_name=EXTENSION_PROMO) mientras el webhook aplica los límites de sub.plan
+    // (ej. COMBO_PROMO, el que ya tenía asignado) — el cambio de plan tiene su propio
+    // endpoint (/users/change-plan) con su propio control de cambios por ciclo; el checkout
+    // solo cobra el plan que la cuenta ya tiene.
+    if (rs !== 'suspended_plan_expired' && rs !== 'cancelled' && subRow.rows[0]?.plan !== plan_name) {
+      return res.status(400).json({
+        error: 'El plan solicitado no coincide con el de tu suscripción. Para cambiar de plan, usá la opción "Cambiar plan" en Mi Plan.'
+      });
+    }
 
     let initPoint, preapprovalId = null;
     if (yaTieneMetodo) {
