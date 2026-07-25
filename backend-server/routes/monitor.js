@@ -176,6 +176,26 @@ router.post('/partes', async (req, res) => {
             return res.status(409).json({ error: 'Ya existe una parte activa con ese nombre en esa jurisdicción' });
         }
 
+        // B5 (revisión 2026-07-24): el límite del plan se chequea ACÁ, antes de decidir si
+        // se reactiva una parte inactiva o se crea una nueva. Antes la rama de reactivación
+        // (abajo) hacía return sin pasar por este chequeo — un usuario en el tope podía
+        // reactivar partes viejas desactivadas una por una y superar el límite del plan
+        // indefinidamente.
+        const limite = await getLimitesFromDB(db, userId);
+        const plan   = limite.plan;
+
+        const countResult = await db.query(
+            `SELECT COUNT(*) FROM monitor_partes WHERE user_id = $1 AND activo = true`,
+            [userId]
+        );
+        const usadas = parseInt(countResult.rows[0].count);
+
+        if (usadas >= limite.maxPartes) {
+            return res.status(403).json({
+                error: `Límite de ${limite.maxPartes} partes alcanzado para el plan ${plan}. Actualizá tu plan para agregar más.`
+            });
+        }
+
         // Verificar si existe una parte INACTIVA (eliminada previamente) — reactivarla
         const inactivaResult = await db.query(
             `SELECT id FROM monitor_partes
@@ -196,22 +216,6 @@ router.post('/partes', async (req, res) => {
             );
             console.log(`♻️ Monitor: parte reactivada — usuario ${userId}: ${siglaUpper} · ${nombreNorm}`);
             return res.status(201).json({ success: true, parte: reactivada.rows[0] });
-        }
-
-        // Verificar límite del plan (desde BD)
-        const limite = await getLimitesFromDB(db, userId);
-        const plan   = limite.plan;
-
-        const countResult = await db.query(
-            `SELECT COUNT(*) FROM monitor_partes WHERE user_id = $1 AND activo = true`,
-            [userId]
-        );
-        const usadas = parseInt(countResult.rows[0].count);
-
-        if (usadas >= limite.maxPartes) {
-            return res.status(403).json({
-                error: `Límite de ${limite.maxPartes} partes alcanzado para el plan ${plan}. Actualizá tu plan para agregar más.`
-            });
         }
 
         const result = await db.query(

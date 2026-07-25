@@ -302,8 +302,16 @@ async function linkPreapproval(userId, preapprovalId) {
  * @param {Date}   nextBillingDate
  */
 async function applyTrialBonus(subscriptionId, planName, nextBillingDate, client = db) {
-  const limits = PLAN_LIMITS[planName];
-  if (!limits) throw new Error(`Plan desconocido: ${planName}`);
+  // B2 (revisión 2026-07-24): un plan fuera del map hardcodeado (ej. un plan privado
+  // tarifado, habilitado por updatePreapprovalAmount vía price_ars de la tabla `plans`)
+  // ya NO aborta la transacción — solo se deja constancia. Los límites reales de uso los
+  // aplican log-execution y /client/account leyendo la tabla `plans`, no este map; el
+  // throw solo servía para frenar acá sin necesidad, y como esta función corre DENTRO de
+  // la transacción del webhook de pago, el throw hacía ROLLBACK y el pago se perdía
+  // (cada reintento de MP repetía la falla sin auto-recuperarse).
+  if (!PLAN_LIMITS[planName]) {
+    logger.warn('[SubscriptionService] Plan fuera de PLAN_LIMITS — se continúa igual (límites reales vienen de la tabla plans)', { subscriptionId, planName });
+  }
 
   // Modelo trial-hasta-pago: al configurar el pago el contador arranca limpio en 0 y
   // el enforcement pasa a ser POR SUBMÓDULO (proc/informe/batch/novedades, vía
@@ -331,6 +339,13 @@ async function applyTrialBonus(subscriptionId, planName, nextBillingDate, client
          -- next_billing_date es timestamp sin tz; reusar el mismo parámetro para
          -- ambos da "inconsistent types deduced for parameter $2".
          next_billing_date  = $4,
+         -- B1 (revisión 2026-07-24): expires_at NUNCA se actualizaba acá — quedaba en
+         -- lo que haya puesto la activación del admin (NOW()+30d por defecto). Un
+         -- usuario pagando al día quedaba bloqueado (login/scripts/extension-auth, que
+         -- filtran por expires_at > NOW()) a los ~30 días de la activación pese a tener
+         -- el pago al día. expires_at pasa a significar "fin del período pago actual",
+         -- igual que next_billing_date.
+         expires_at         = $4,
          last_payment_at    = NOW(),
          status             = 'active',
          updated_at         = NOW()
@@ -350,8 +365,11 @@ async function applyTrialBonus(subscriptionId, planName, nextBillingDate, client
  * @param {Date}   nextBillingDate
  */
 async function applyRenewal(subscriptionId, planName, nextBillingDate, client = db) {
-  const limits = PLAN_LIMITS[planName];
-  if (!limits) throw new Error(`Plan desconocido: ${planName}`);
+  // B2: ver nota equivalente en applyTrialBonus — no abortar la transacción del webhook
+  // por un plan fuera del map hardcodeado.
+  if (!PLAN_LIMITS[planName]) {
+    logger.warn('[SubscriptionService] Plan fuera de PLAN_LIMITS — se continúa igual (límites reales vienen de la tabla plans)', { subscriptionId, planName });
+  }
 
   // Igual que applyTrialBonus: el global queda desactivado (999999); rige el submódulo.
   const baseProcLimit = 999999;
@@ -365,6 +383,10 @@ async function applyRenewal(subscriptionId, planName, nextBillingDate, client = 
          batch_usage             = 0,
          monitor_novedades_usage = 0,
          next_billing_date       = $2,
+         -- B1: idem applyTrialBonus — expires_at debe avanzar con cada renovación
+         -- (mismo valor que next_billing_date), si no el cliente que sigue pagando
+         -- queda bloqueado por expires_at vencido pese a estar al día.
+         expires_at              = $2,
          last_payment_at         = NOW(),
          status                  = 'active',
          period_start            = NOW(),
@@ -781,10 +803,16 @@ async function reactivateSubscription(userId) {
  */
 async function cancelSubscription(userId) {
   const { rows: [sub] } = await db.query(
-    'SELECT id, next_billing_date, external_subscription_id FROM subscriptions WHERE user_id = $1',
+    'SELECT id, next_billing_date, expires_at, external_subscription_id FROM subscriptions WHERE user_id = $1',
     [userId]
   );
   if (!sub) throw new Error(`Suscripción no encontrada para usuario ${userId}`);
+
+  // B1 (defensivo): si next_billing_date viniera NULL (no debería, tras el fix de
+  // applyTrialBonus/applyRenewal, pero cubre cuentas con datos legados de antes del
+  // fix), cancel_at no debe quedar NULL — eso dejaría el acceso vivo indefinidamente
+  // sin cobro (el preapproval ya está pausado, pero el cron de corte nunca actuaría).
+  const effectiveCancelAt = sub.next_billing_date || sub.expires_at || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
   const preapprovalId = await resolveRealPreapprovalId(userId, sub.external_subscription_id);
   if (preapprovalId) {
@@ -803,26 +831,26 @@ async function cancelSubscription(userId) {
 
   await db.query(
     `UPDATE subscriptions
-     SET cancel_at    = next_billing_date,
+     SET cancel_at    = $2,
          auto_renewal = FALSE,
          updated_at   = NOW()
      WHERE id = $1`,
-    [sub.id]
+    [sub.id, effectiveCancelAt]
   );
 
   // Registrar en el historial de la cuenta (visible en la ficha del admin)
   try {
     await db.query(
       `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'subscription_cancel_scheduled', $2)`,
-      [userId, JSON.stringify({ cancel_at: sub.next_billing_date })]
+      [userId, JSON.stringify({ cancel_at: effectiveCancelAt })]
     );
   } catch (e) {
     logger.warn('[SubscriptionService] No se pudo registrar el evento subscription_cancel_scheduled', { userId, err: e.message });
   }
 
-  logger.info('[SubscriptionService] Cancelación programada', { userId, cancelAt: sub.next_billing_date });
+  logger.info('[SubscriptionService] Cancelación programada', { userId, cancelAt: effectiveCancelAt });
 
-  return { cancelAt: sub.next_billing_date };
+  return { cancelAt: effectiveCancelAt };
 }
 
 /**

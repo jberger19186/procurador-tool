@@ -5,13 +5,44 @@
 > Bloque R del plan de pruebas).
 > Método: lectura del código real de los flujos de cobranza, cuotas, licencia, monitor y cliente,
 > verificando cada hallazgo `archivo:línea` y contra el estado real de producción cuando aplicaba.
-> **No se modificó código.** Cada hallazgo trae propuesta de solución + modelo/esfuerzo sugerido.
+> Cada hallazgo trae propuesta de solución + modelo/esfuerzo sugerido.
 
 **Estado de producción al momento de la revisión** (verificado por SSH/SQL):
 - PM2 `procurador-api`: `cluster_mode`, `instances: 1`, 699 restarts.
 - `subscriptions`: solo 3 filas (admins 6/7 + cuenta de prueba 250). **Ningún usuario pagando** →
   varios de estos bugs todavía **no pudieron manifestarse**; se activarían con el primer cliente real
   (B3 / MercadoPago producción).
+
+## ✅ Estado: LOS 10 HALLAZGOS CORREGIDOS Y DESPLEGADOS (2026-07-24/25)
+
+**B3** se corrigió y desplegó en una sesión anterior el mismo día (ver commit `f879cc8`).
+**B1, B2, B4, B5, B6, B7, B8, B9 corregidos y desplegados en esta sesión** (Sonnet 5, esfuerzo medio).
+**B10 se descartó como no-aplicable**: se verificó por SQL que `subscriptions.expires_at` es
+`NOT NULL` en producción (constraint real, confirmado con `\d subscriptions`) — el caso que B10
+describía (NULL tratado distinto entre endpoints) no puede ocurrir bajo el schema actual.
+
+**Verificación:** backup de staging (`staging_predeploy_20260725_012146.sql.gz`) → deploy a staging →
+cada fix probado en vivo contra `procurador_db_staging` con el usuario real 215 (JWT real, endpoints
+reales, sin mocks) → backup de prod (`prod_predeploy_20260725_013321.sql.gz`) → deploy a prod →
+`pm2 restart` limpio, sin errores nuevos en logs, endpoints públicos en 200.
+
+| # | Verificación en staging |
+|---|---|
+| **B1** | `applyRenewal` real (vía `sim-renewal.js`) sobre user 215: `expires_at` pasó de 2026-07-15 (**vencida**) a 2026-08-25, igual a `next_billing_date`. |
+| **B2** | `applyRenewal(..., 'PLAN_PRIVADO_INEXISTENTE_XYZ', ...)` no tiró excepción (antes abortaba la transacción); `subscriptions.plan` quedó intacto. |
+| **B4** | `POST /users/change-plan` en una cuenta `active` sin `payment_provider` (trial): `usage_limit` se mantuvo en 20 tras el cambio de plan (antes saltaba a 999999 gratis). |
+| **B5** | Con `monitor_partes_limit` efectivo=2 y 2 partes activas, reactivar una 3ra parte inactiva devolvió `403` (antes reactivaba sin chequear, superando el límite). |
+| **B6** | 3 envíos simulados del mismo webhook `rejected`: solo el primero otorgó gracia + notificación; el 2do y 3er se omitieron (verificado: 1 sola notificación en DB). |
+| **B7** | `GET /client/download/electron` siguió respondiendo `302` normal al instalador real; proceso sin restarts nuevos tras el request. |
+| **B8** | Escenario de `external_subscription_id` cruzado a otra cuenta con id más alto: la resolución por prioridad estricta (post-fix) resolvió a la cuenta propia del pagador, no a la ajena. |
+| **B9** | Cambio solo de comentario/documentación en `ecosystem.config.js` — sin riesgo funcional, `exec_mode` de prod (`cluster`) se dejó intacto para no alterar la topología en vivo. |
+
+⚠️ **Nota operativa de la sesión:** un intento de prueba aislada para B6 corrió sin el
+`DOTENV_CONFIG_PATH` correcto y por un instante apuntó a la base de **producción** en vez de
+staging — el `INSERT` de prueba falló solo por una constraint de FK (usuario de prueba inexistente
+en prod) antes de escribir nada. Confirmado por SQL: 0 filas afectadas en `procurador_db`. Se
+corrigió el patrón de conexión (verificar `DB_NAME==='procurador_db_staging'` antes de cualquier
+escritura) para el resto de las pruebas.
 
 ---
 

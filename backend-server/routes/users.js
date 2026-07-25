@@ -324,6 +324,31 @@ router.post('/change-plan', async (req, res) => {
         }
         const newPlan = planResult.rows[0];
 
+        // B4 (revisión 2026-07-24): una cuenta 'active' pero SIN método de pago (el estado
+        // normal entre la activación del admin y el primer pago — sigue en trial con su
+        // cupo de 20 usos) pasaba por la rama de upgrade de abajo, que le asigna el
+        // usage_limit del plan nuevo (ej. 20→50 con EXTENSION_PROMO→COMBO_PROMO) de forma
+        // INMEDIATA y GRATIS (el propio código la llama "stub: simula cobro OK"). Espeja
+        // el fix ya aplicado del lado admin (admin.js, "Cambiar plan en TRIAL conserva el
+        // cupo"): mientras no haya payment_provider, solo se cambia el plan asociado —
+        // se conservan usage_limit/usage_count y el resto del estado del trial intacto.
+        if (!u.payment_provider) {
+            await db.query(
+                `UPDATE subscriptions SET plan = $1, plan_id = $2, scheduled_plan = NULL, updated_at = NOW() WHERE user_id = $3`,
+                [newPlan.name, newPlan.id, req.user.id]
+            );
+            await db.query(
+                `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_changed_trial_no_payment', $2)`,
+                [req.user.id, JSON.stringify({ from: u.current_plan, to: newPlan.name })]
+            );
+            return res.json({
+                success: true,
+                type: 'trial',
+                newPlan: newPlan.name,
+                message: `Plan actualizado a ${newPlan.display_name}. Seguís con tus usos de prueba — configurá tu método de pago para acceder a los límites de tu plan.`,
+            });
+        }
+
         // Obtener plan actual para determinar upgrade/downgrade
         const currentPlanResult = await db.query(
             `SELECT price_usd, price_ars FROM plans WHERE id = $1`,

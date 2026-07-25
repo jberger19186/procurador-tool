@@ -22,6 +22,25 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
     process.exit(1);
 }
 
+// B7 (revisión 2026-07-24): red de seguridad para excepciones no capturadas. Sin esto,
+// un throw asíncrono fuera de cualquier try/catch (ej. un JSON.parse dentro de un
+// callback de red, como el que tenía /client/download/electron) tumbaba el proceso
+// entero SIN dejar rastro en los logs de la app — solo aparecía como un restart más en
+// PM2. Ahora se loguea el error completo con Winston antes de salir; PM2 sigue
+// reiniciando el proceso igual (autorestart:true en ecosystem.config.js), pero queda
+// diagnosticable. No se intenta "seguir andando" tras un uncaughtException: el estado
+// del proceso quedó indefinido, así que se sale con código de error para que PM2 lo
+// reinicie limpio.
+process.on('uncaughtException', (err) => {
+    logger.error('❌ [FATAL] uncaughtException — el proceso se reinicia', { err: err.message, stack: err.stack });
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    logger.error('❌ [FATAL] unhandledRejection — el proceso se reinicia', { err: err.message, stack: err.stack });
+    process.exit(1);
+});
+
 const PORT = process.env.PORT || 3000;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 const SSL_KEY = process.env.SSL_KEY_PATH || path.join(__dirname, 'certs', 'key.pem');

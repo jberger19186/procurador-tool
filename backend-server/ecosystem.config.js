@@ -1,6 +1,16 @@
 module.exports = {
     apps: [
         {
+            // B9 (revisión 2026-07-24): la blacklist de tokens JWT (middleware/tokenBlacklist.js)
+            // solo consulta un Map EN MEMORIA del propio worker — la tabla token_blacklist en
+            // Postgres se lee una única vez al arrancar (init) y las escrituras posteriores son
+            // fire-and-forget. Con instances:1 esto es inocuo (un solo Map, siempre consistente;
+            // no importa si el exec_mode es fork o cluster). Si algún día se escala este proceso
+            // (pm2 scale / instances:'max' / instances > 1 en cualquier modo), un token
+            // invalidado en el worker A seguiría siendo válido en el worker B hasta su
+            // expiración natural — rompe el logout de admin (M-1) y del portal (RI-5) en
+            // silencio, sin ningún error visible. NO subir `instances` de este proceso sin
+            // antes resolver la blacklist compartida (read-through a la tabla, o mover a Redis).
             name: 'procurador-api',
             script: 'server.js',
             instances: 1,

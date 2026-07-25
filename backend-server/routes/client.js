@@ -938,6 +938,13 @@ router.post('/ai/chat', authenticateToken, async (req, res) => {
 router.get('/download/electron', authenticateToken, async (req, res) => {
     try {
         const https = require('https');
+        // B7 (revisión 2026-07-24): el JSON.parse corría dentro del callback del evento
+        // 'end', fuera del alcance de este try/catch — si GitHub devolvía algo que no era
+        // JSON (error 5xx, corte de respuesta), el throw era una excepción NO capturada
+        // que tumbaba el proceso entero (server.js no tiene handler de uncaughtException).
+        // Ahora el parse está envuelto en su propio try/catch que rechaza la promesa en
+        // vez de tirar. También se agrega timeout: sin él, si GitHub no respondía, la
+        // request del usuario quedaba colgada indefinidamente.
         const data = await new Promise((resolve, reject) => {
             const req2 = https.get(
                 'https://api.github.com/repos/jberger19186/procurador-tool/releases/latest',
@@ -945,9 +952,13 @@ router.get('/download/electron', authenticateToken, async (req, res) => {
                 (r) => {
                     let body = '';
                     r.on('data', c => body += c);
-                    r.on('end', () => resolve(JSON.parse(body)));
+                    r.on('end', () => {
+                        try { resolve(JSON.parse(body)); }
+                        catch (e) { reject(new Error('Respuesta inválida de GitHub Releases')); }
+                    });
                 }
             );
+            req2.setTimeout(8000, () => req2.destroy(new Error('Timeout consultando GitHub Releases')));
             req2.on('error', reject);
         });
 

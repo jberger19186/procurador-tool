@@ -161,33 +161,44 @@ async function handlePaymentEvent(paymentId) {
   // Extraer userId de external_reference "user_{id}" si está disponible
   const refUserId = externalRef.startsWith('user_') ? parseInt(externalRef.slice(5), 10) : null;
 
-  // Buscar suscripción por prioridad:
+  // Buscar suscripción por prioridad ESTRICTA (B8, revisión 2026-07-24):
   // 1. external_reference "user_{id}" — independiente del email de MP
   // 2. external_subscription_id (preapproval ya vinculado)
   // 3. email del pagador — fallback cuando los emails coinciden
+  //
+  // Antes cada nivel mezclaba dos criterios con OR + "ORDER BY s.id DESC LIMIT 1": si
+  // refUserId apuntaba a la suscripción propia del usuario (id bajo) pero el mismo
+  // preapproval_id quedaba —por una carrera o un dato cruzado— vinculado a OTRA
+  // suscripción con id más alto, el ORDER BY DESC elegía la ajena y el pago/renovación
+  // se acreditaba a la cuenta equivocada. Ahora cada prioridad es una consulta propia,
+  // por un solo criterio, que solo corre si la anterior no encontró nada.
+  const SELECT_SUB_COLS = `s.id AS sub_id, s.plan, s.trial_bonus_until, s.status AS sub_status,
+              u.id AS user_id, u.email, u.cuit, u.nombre, u.apellido`;
   let sub = null;
 
   if (refUserId) {
     const { rows } = await db.query(
-      `SELECT s.id AS sub_id, s.plan, s.trial_bonus_until, s.status AS sub_status,
-              u.id AS user_id, u.email, u.cuit, u.nombre, u.apellido
-       FROM subscriptions s JOIN users u ON u.id = s.user_id
-       WHERE u.id = $1 OR s.external_subscription_id = $2
-       ORDER BY s.id DESC LIMIT 1`,
-      [refUserId, preapprovalId || '']
+      `SELECT ${SELECT_SUB_COLS} FROM subscriptions s JOIN users u ON u.id = s.user_id
+       WHERE u.id = $1 LIMIT 1`,
+      [refUserId]
     );
     sub = rows[0] || null;
   }
 
-  if (!sub) {
+  if (!sub && preapprovalId) {
     const { rows } = await db.query(
-      `SELECT s.id AS sub_id, s.plan, s.trial_bonus_until, s.status AS sub_status,
-              u.id AS user_id, u.email, u.cuit, u.nombre, u.apellido
-       FROM subscriptions s JOIN users u ON u.id = s.user_id
-       WHERE s.external_subscription_id = $1
-          OR (u.email = $2 AND $2 <> '')
-       ORDER BY s.id DESC LIMIT 1`,
-      [preapprovalId || '', payer?.email || '']
+      `SELECT ${SELECT_SUB_COLS} FROM subscriptions s JOIN users u ON u.id = s.user_id
+       WHERE s.external_subscription_id = $1 LIMIT 1`,
+      [preapprovalId]
+    );
+    sub = rows[0] || null;
+  }
+
+  if (!sub && payer?.email) {
+    const { rows } = await db.query(
+      `SELECT ${SELECT_SUB_COLS} FROM subscriptions s JOIN users u ON u.id = s.user_id
+       WHERE u.email = $1 LIMIT 1`,
+      [payer.email]
     );
     sub = rows[0] || null;
   }
@@ -291,6 +302,15 @@ async function handlePaymentEvent(paymentId) {
     );
 
     if (status === 'rejected') {
+    // B6 (revisión 2026-07-24): por el fix C2 los pagos SIEMPRE se reprocesan (no se
+    // deduplican por webhook_events), y MP puede reenviar el mismo payment.id varias
+    // veces. Sin este guard, cada reenvío de un 'rejected' ya visto volvía a extender la
+    // gracia 3 días desde AHORA (podía dejar a un usuario "en gracia" indefinidamente) y
+    // reenviaba la notificación in-app + el email de pago rechazado (spam al cliente).
+    const alreadyRejected = prevPay && prevPay.status === 'rejected';
+    if (alreadyRejected) {
+      logger.info('[Webhooks] Pago rejected ya aplicado — idempotente, se omite', { paymentId });
+    } else {
     // Pago rechazado → gracia de 3 días
     const graceEnd = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
@@ -315,6 +335,7 @@ async function handlePaymentEvent(paymentId) {
     );
 
     logger.warn('[Webhooks] Pago rechazado — gracia otorgada', { userId: sub.user_id, graceEnd });
+    }
     }
   }
 }
@@ -346,35 +367,35 @@ async function handlePreapprovalEvent(preapprovalId) {
     keys:   Object.keys(mpPreapproval || {}).join(',')
   });
 
-  // Buscar suscripción por prioridad:
-  // 1. external_subscription_id ya vinculado exactamente (renovaciones)
-  // 2. external_reference "user_{id}" — funciona independientemente del email de MP
+  // Buscar suscripción por prioridad ESTRICTA (B8, revisión 2026-07-24):
+  // 1. user_id extraído de external_reference (el más confiable)
+  // 2. external_subscription_id ya vinculado (cubierto por el fallback final de abajo)
   // 3. email del pagador — fallback cuando portal email = MP email
+  //
+  // Antes los pasos 1 y 3 mezclaban dos criterios con OR + "ORDER BY s.id DESC LIMIT 1":
+  // si refUserId apuntaba a la suscripción propia pero este preapproval_id ya estaba
+  // (por una carrera o dato cruzado) vinculado a la suscripción de OTRO usuario con id
+  // más alto, el ORDER BY DESC podía elegir la ajena — el evento de la cuenta propia se
+  // aplicaba sobre la cuenta equivocada. Cada prioridad es ahora un solo criterio.
   let sub = null;
 
   if (refUserId) {
-    // Prioridad 1: user_id extraído de external_reference (el más confiable)
     const { rows } = await db.query(
       `SELECT s.id, s.status, s.external_subscription_id AS linked_id
        FROM subscriptions s
-       WHERE s.user_id = $1
-         OR s.external_subscription_id = $2
-       ORDER BY s.id DESC LIMIT 1`,
-      [refUserId, String(preapprovalId)]
+       WHERE s.user_id = $1 LIMIT 1`,
+      [refUserId]
     );
     sub = rows[0] || null;
   }
 
   if (!sub && payerEmail) {
-    // Fallback: email del pagador (útil cuando portal email = MP email)
     const { rows } = await db.query(
       `SELECT s.id, s.status, s.external_subscription_id AS linked_id
        FROM subscriptions s
        JOIN users u ON u.id = s.user_id
-       WHERE u.email = $1
-          OR s.external_subscription_id = $2
-       ORDER BY s.id DESC LIMIT 1`,
-      [payerEmail, String(preapprovalId)]
+       WHERE u.email = $1 LIMIT 1`,
+      [payerEmail]
     );
     sub = rows[0] || null;
   }
