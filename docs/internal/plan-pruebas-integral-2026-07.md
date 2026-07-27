@@ -1,5 +1,18 @@
 # Plan de Pruebas Integral — Julio 2026
 
+> ⭐ **NOTA 2026-07-27 — este plan está CERRADO (37/37 del Bloque R).** Lo único abierto es
+> **R9.1/R9.2** (extensión real contra el PJN), que requiere la presencia física del operador.
+> **El trabajo de revisión que sigue vivo está en otro documento:**
+> **`docs/internal/plan-revision-integral-2026-07-27.md`** — revisión de **código** sobre el
+> terreno que ni este plan ni las 3 pasadas de bugs de julio tocaron (motor Puppeteer, Electron
+> `main.js`/`src`, los 11 crons, visores, schema, frontends).
+>
+> **División de tareas entre los dos documentos, para no confundirlos:**
+> · **este** = pruebas **funcionales** de comportamiento (ejecutar flujos y verificar resultados).
+> · **el nuevo** = revisión de **código** buscando bugs latentes (leer y verificar `archivo:línea`).
+> Son complementarios: el Bloque R validó que el producto **hace lo que debe**; la revisión E1-E6
+> busca lo que puede romperse y todavía no se manifestó.
+
 > **Objetivo:** validar el producto completo desde la óptica del **usuario** (ciclo de vida entero, todas las variantes) y del **administrador** (operaciones y contingencias).
 > **Regla de oro:** durante la ejecución **NO se modifica código**. Todo bug o mejora se documenta en la sección final para reparar después, por separado.
 > **Entorno:** producción (MercadoPago en **sandbox** — sin dinero real; DB reseteada el 2026-07-02, solo admins 6 y 7; panel MP con 0 preapprovals vivos).

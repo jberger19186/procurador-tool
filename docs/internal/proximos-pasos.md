@@ -375,7 +375,25 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 
 ---
 
-## 🎯 ORDEN SUGERIDO (actualizado 2026-07-02)
+## 🎯 ORDEN SUGERIDO
+
+> ⚠️ **ACTUALIZACIÓN 2026-07-27 — leer esto antes que el bloque de abajo.** La lista siguiente
+> quedó del 2026-07-02 y **varios de sus ítems ya están hechos** (1 bot IA · 5 npm audit D3/D4 ·
+> 6 SEC-1 + SEC-2 CI · 7 temporales + CRX muerto · 3 imágenes del store). **CLAUDE.md es la fuente
+> de verdad**; se conserva el bloque de abajo como registro histórico.
+>
+> **Lo accionable hoy, en orden:**
+> 1. ⭐ **Revisión del terreno no cubierto** — `docs/internal/plan-revision-integral-2026-07-27.md`
+>    (6 bloques E1-E6). **E1 = motor de automatización Puppeteer**, ~370 KB nunca revisados, es lo
+>    que el cliente paga. Trae 2 hallazgos ya detectados (P-1 distribución de scripts, P-2 XSS en
+>    visores). Mayor retorno con menor gasto: **E1 + E4**.
+> 2. **B3** — MercadoPago a producción real (sigue en sandbox).
+> 3. **AZ** — Code Signing Azure del `.exe` (tiempos externos, se puede iniciar en paralelo).
+> 4. **Extensión Chrome** — los 3 pendientes agrupados para el próximo bump (ver CLAUDE.md).
+> 5. **Bitácora** — propuesta v6.1 lista pero **sin aprobar**; requiere ok del operador.
+> 6. Al lanzamiento público: activar BASIC/PRO/ENTERPRISE (L1) · KB del bot IA (L2).
+
+### Orden histórico (2026-07-02, parcialmente superado)
 
 ```
 ✅ HECHO: Bloque 1 (branding) · registro/activación · Bloque 6 (backups+hardening) ·
@@ -402,6 +420,9 @@ C-07  Anuncio in-app a usuarios existentes sobre cambio a cobro automático
 ## 🔗 DOCS RELACIONADOS
 
 - `CLAUDE.md` — guía maestra del proyecto (fuente de verdad, detalle sesión a sesión)
+- ⭐ `docs/internal/plan-revision-integral-2026-07-27.md` — **plan de revisión del terreno NO cubierto** (6 bloques E1-E6) + mapa de qué NO re-testear + 2 hallazgos ya detectados
+- `docs/internal/plan-pruebas-integral-2026-07.md` — plan de pruebas funcional (Bloque R, 37/37 cerrado)
+- `docs/internal/revision-bugs-2026-07-24.md` / `-25.md` / `-25b.md` — las 3 pasadas de bugs de julio (21 hallazgos, todos cerrados)
 - `docs/manual-de-usuario.md` — manual de usuario final (público)
 - `docs/internal/manual-administrador.md` — **manual de operación del dashboard admin** (usuarios, planes, cortesía, cobranza)
 - `docs/internal/guia-planes-vigencia-cortesia.md` — comportamiento de vigencia por fecha + público/privado + cortesía $0
