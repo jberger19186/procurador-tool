@@ -12,9 +12,12 @@
 > lugares; uno de la extensión necesita un ciclo de revisión de Google. Mezclarlos multiplica los
 > despliegues sin ganar nada.
 >
-> **Elaborado con:** Opus 5, 2026-07-27. **Estado:** en ejecución.
-> **✅ Bloques A, B, C (C.1+C.2) y E (código) ejecutados el 2026-07-28** — ver los recuadros en
-> §2, §3, §4 y §6. **Q1, Q2, Q3, Q4 y Q5 resueltas** (ver §7); quedan **Q6, Q7**.
+> **Elaborado con:** Opus 5, 2026-07-27. **Estado:** ✅ **plan completo en código y desplegado
+> (2026-07-28)** — los 5 bloques (A, B, C.1+C.2, D, E-código) ejecutados. Ver los recuadros en
+> §2, §3, §4, §5 y §6. **Q1, Q2, Q3, Q4 y Q5 resueltas** (ver §7); quedan **Q6, Q7** (no
+> bloquean nada). **Lo único que sigue pendiente es operativo, no de código:** verificación
+> funcional real contra el PJN (Bloque C + E2-8), la extensión en revisión de Google, y el
+> click del logo confirmado en Chrome real.
 
 ---
 
@@ -25,7 +28,7 @@
 | ✅ **A** | Backend + dashboard | `scp` + `pm2 restart` · sin release | E5-1(P-1), E3-1, E3-2, E6-1, E6-2 | Sonnet MEDIO (A.3 en **Opus**) | **HECHO 28/07** |
 | ✅ **B** | Base de datos | Migración additiva + regenerar snapshot | E5-2, E3-4 | Sonnet BAJO-MEDIO | **HECHO 28/07** |
 | ✅ **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet ALTO | **C.1 y C.2 HECHOS 28/07** · falta verificación real |
-| **D** | App Electron | Release completo (bump + tag + 5 lugares de versión) | E4-1(P-2), E2-1, E2-3…E2-9, E4-3 | Sonnet **MEDIO-ALTO** | 4º |
+| ✅ **D** | App Electron | Release completo (bump + tag + 5 lugares de versión) | E4-1(P-2), E2-1, E2-3…E2-9, E4-3 | Sonnet MEDIO-ALTO | **HECHO 28/07 · v2.7.44** |
 | ✅ **E** | Extensión Chrome | Bump manifest + ZIP + revisión de Google | Logo (2 estados, SSO decidido), `checkExtensionVersion()` — *(el ítem de `cs-notif.js` se descartó, ya no era un problema)* | Sonnet MEDIO-BAJO | **CÓDIGO 28/07** · falta subir ZIP |
 | **F** | Decisiones pendientes | — | E2-2, E3-3, E3-5, E1-7 | — | Tras §7 |
 
@@ -421,6 +424,67 @@ con estado, distribuida entre archivos, sin tests).
 
 ## 5. Bloque D — App Electron (release)
 
+> ## ✅ EJECUTADO Y PUBLICADO — 2026-07-28 (release `electron-v2.7.44`, commits `0783ea6`/`5625943`/`c456c6f`)
+>
+> Los 7 ítems (E4-1/P-2, E2-8, E2-1, E2-3, E2-4, E2-5, E2-6, E2-7 — 8 en total) están
+> implementados, verificados y publicados. **E4-3 revisado, sin acción**: el visor de informes
+> no interpola ningún campo de texto libre del PJN (solo expediente/estado/exitCode/link a PDF).
+>
+> - **E4-1 (P-2):** portados `esc()`/`escAttr()` a `visorModal_template.html`, aplicados a los 5
+>   campos señalados **más un 6º uso encontrado en el camino** (`modal-info`, fuera de la
+>   enumeración original). **Mejora deliberada sobre la recomendación literal:** el hallazgo decía
+>   "portar esc()" sin más, pero `esc()` no escapa comillas — insuficiente para los usos dentro de
+>   `title="..."` (misma lección que motivó el hallazgo H1 de la revisión de cohesión de
+>   Bitácora). Se usó `escAttr()` para esos casos. Verificado con un payload real
+>   (`<img src=x onerror=alert(1)>`) simulando las funciones extraídas del archivo: queda
+>   literal, no se ejecutaría. No-regresión verificada con una carátula real con comillas
+>   (`RUIZ c/ "LA CAJA" S.A. s/ DAÑOS`) — se ve bien en contenido y el atributo escapa la
+>   comilla correctamente (sin `escAttr()`, esa comilla habría roto el atributo). Sin
+>   despliegue de backend: el template viaja como `extraResource` del instalador.
+> - **E2-8:** implementado en ambos lados — `procesarMonitoreo.js` (Bloque C ya desplegado,
+>   tolera `process.env.MONITOR_TOKEN || config.token`) y `main.js` (ya no escribe `token` en
+>   `config_monitoreo.json`, lo pasa por `extraEnv.MONITOR_TOKEN`). Verificado por code review
+>   que `configMonitoreo` ya no incluye la clave `token`; la verificación funcional real (correr
+>   el Monitor e inspeccionar la carpeta temporal) queda para el operador, mismo patrón que el
+>   resto de la verificación funcional del Bloque C.
+> - **E2-1:** `path.basename(key)` en los 3 handlers `safe-storage-*`.
+> - **E2-3:** `open-file` valida que la ruta resuelva dentro de `userData` y rechaza extensiones
+>   ejecutables.
+> - **E2-4:** eliminado `scriptExecutor.js` completo + el método `executeScript()` de
+>   `AuthManager` + su instanciación + la referencia huérfana en `getStats()`.
+> - **E2-5:** eliminado el handler `generate-extension-pdf` (~95 líneas) + el bridge en ambos
+>   preloads + el import ahora huérfano de `pdf-lib` en `main.js`. *(Nota: `pdf-lib` queda sin
+>   uso en `package.json` — no se desinstaló la dependencia, cambio de bajo valor que requeriría
+>   su propio ciclo de `npm install`/prueba.)*
+> - **E2-6:** eliminado el lookup muerto de `procesos_automaticos/` — se deja el comportamiento
+>   que efectivamente corría (notificación sin detalles), `updateRunStats()` en `main.js` ya
+>   lleva las estadísticas reales.
+> - **E2-7:** optional chaining (`mainWindow?.webContents.send`) en los 6 puntos de
+>   `runProcessLogic`.
+> - **También eliminado:** `src/browser/windowManager.js` completo (E2-9, cero consumidores en
+>   todo el repo, ni siquiera un `require()`).
+>
+> **Verificación:** `node -c` en los 4 `.js` tocados + validación del JS embebido del template,
+> sin sintaxis rota. Grep de referencias huérfanas tras las 3 eliminaciones (ScriptExecutor,
+> windowManager, generate-extension-pdf) — limpio. `npm start` con arranque limpio (sin
+> `uncaughtException`) + `npm run build:dir` (`isDev:false isPackaged:true` confirmado).
+>
+> **⚠️ Mismo bug de infraestructura recurrente de `npm run release`** (documentado en v2.7.38-43,
+> ahora también en v2.7.44): electron-builder creó el release con tag `v2.7.44` pero un reintento
+> disparó un 422 ("Published releases must have a valid tag") — el release quedó con **solo el
+> `.exe`**, sin `.blockmap` ni `latest.yml`. Corregido sin rebuild: `.blockmap` local subido tal
+> cual + `latest.yml` regenerado a mano (SHA512 real del `.exe` calculado con `crypto` de Node,
+> `latest.yml` local del build había quedado *stale* apuntando a 2.7.42). Verificado:
+> `releases/latest` resuelve a 2.7.44 con los 3 assets, `GET /client/download/electron` → 302 al
+> `.exe` correcto. Versión visible actualizada en los 5 lugares, desplegada (scp + `pm2 restart`
+> para `app.js`; landing estática vía Nginx, sin restart) y confirmada en vivo: `curl` a
+> `procuradortool.com` y `.../usuarios/app.js` devuelven únicamente `v2.7.44`.
+>
+> **⏳ Pendiente real, requiere al operador:** verificar E2-8 con una corrida real del Monitor
+> (confirmar por inspección de la carpeta temporal que `config_monitoreo.json` ya no contiene el
+> token, y que el flujo sigue funcionando) — parte de la misma verificación funcional pendiente
+> del Bloque C.
+
 **Vector:** release completo siguiendo el checklist de CLAUDE.md — `npm start` de prueba → bump
 `2.7.43 → 2.7.44` → tag `electron-v2.7.44` → `npm run release` → **actualizar la versión visible en
 los 5 lugares** (portal `app.js` + landing ×4) → deploy → verificar en vivo.
@@ -653,9 +717,10 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 | Qué | Para qué bloque | Por qué |
 |---|---|---|
 | ~~Correr una Procuración real desde la app~~ | ~~A.1~~ | ✅ Confirmado por el operador (2026-07-28) — funcionó bien |
-| ⏳ **Correr los 3 flujos contra el PJN real** (Procuración, Informe, Monitor) | **C.1** (ya en prod) | El código de C.1 ya está desplegado en producción — falta la confirmación funcional real, que necesita credenciales PJN |
+| ⏳ **Correr los 3 flujos contra el PJN real** (Procuración, Informe, Monitor) | **C.1/C.2** (ya en prod) | El código ya está desplegado en producción — falta la confirmación funcional real, que necesita credenciales PJN |
 | ⏳ **Forzar un error de red a mitad de ejecución** | **C.1** | Verificar E1-1 (Chrome huérfano) requiere provocar el fallo a mano, con la app real |
-| ⏳ **Subir `pjn-extension-1.3.7.zip` al Chrome Web Store** | **E** | Solo el operador tiene acceso al dashboard de publicación. El ZIP ya está generado en la raíz del repo |
+| ⏳ **Verificar E2-8 con el Monitor real** | **D** (ya en prod) | Confirmar por inspección de la carpeta temporal que `config_monitoreo.json` ya no tiene el token — se solapa con el punto de arriba |
+| ~~Subir `pjn-extension-1.3.7.zip` al Chrome Web Store~~ | ~~E~~ | ✅ Subido por el operador (2026-07-28) — en revisión de Google |
 | ⏳ **Verificar el logo en Chrome real** (extensión desempaquetada) | **E** | El sandbox no puede abrir `chrome://extensions`; la lógica ya está verificada por simulación, falta el click real en los 2 estados |
 | Responder Q6, Q7 | —, — | Decisiones de diseño aún abiertas (Q1, Q2, Q3, Q4, Q5 ya resueltas) |
 
@@ -667,16 +732,17 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 
 1. ~~**Responder Q1 y Q5**~~ — ✅ hechas (2026-07-27), junto con Q2 y Q3.
 2. ~~**Bloque A**~~ — ✅ **ejecutado y en producción** (2026-07-28, commit `03e294d`). P-1 cerrado.
-3. ~~**Bloque E**~~ — ✅ **código listo** (2026-07-28, commit `1f9d1c4`), manifest en 1.3.7, ZIP
-   generado. ⏳ Falta que el operador lo suba al Chrome Web Store — el ciclo de revisión de
-   Google corre en paralelo mientras se sigue con el resto.
+3. ~~**Bloque E**~~ — ✅ **código listo** (2026-07-28, commit `1f9d1c4`), manifest en 1.3.7.
+   ✅ Subido por el operador al Chrome Web Store — ⏳ en revisión de Google.
 4. ~~**Bloque B**~~ — ✅ **ejecutado y en producción** (2026-07-28). Drift de schema cerrado +
    regeneración automatizada en el backup diario (Q5) + los 4 índices.
 5. ~~**Bloque C (C.1 + C.2)**~~ — ✅ **ejecutado y en producción** (2026-07-28). Los 13 fixes de
    código están hechos; solo queda la verificación funcional real contra el PJN, para cuando el
    operador tenga ventana (no bloquea seguir con el resto del plan).
-6. **Bloque D** — el release, al final, agrupando todo lo de Electron en una sola versión.
-   ⚠️ Recordar: **D antes de la Fase 2 de Bitácora** (ver `revision-bitacora-vs-correcciones-2026-07-27.md`).
+6. ~~**Bloque D**~~ — ✅ **publicado** (2026-07-28, release `electron-v2.7.44`). El plan de
+   correcciones E1-E6 completo **queda 100% en código y desplegado** — solo quedan las
+   verificaciones funcionales reales contra el PJN (Bloque C + E2-8 del D) pendientes del
+   operador, y Q6/Q7 sin responder (no bloquean nada).
 
 **Para ejecutar un bloque:** sesión nueva, contexto fresco, y el pedido:
 > «Ejecutá el **Bloque A** del plan `docs/internal/plan-correcciones-E1-E6-2026-07-27.md`.»
