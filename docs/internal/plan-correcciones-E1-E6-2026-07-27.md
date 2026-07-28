@@ -12,8 +12,9 @@
 > lugares; uno de la extensión necesita un ciclo de revisión de Google. Mezclarlos multiplica los
 > despliegues sin ganar nada.
 >
-> **Elaborado con:** Opus 5, 2026-07-27. **Estado:** en ejecución (2026-07-27) — **Q1, Q2 y Q5 ya
-> resueltas** (ver §7); quedan Q3, Q4, Q6, Q7 para los bloques que las necesitan.
+> **Elaborado con:** Opus 5, 2026-07-27. **Estado:** en ejecución.
+> **✅ Bloque A ejecutado y en producción el 2026-07-28** (commit `03e294d`) — ver el recuadro en §2.
+> **Q1, Q2, Q3 y Q5 resueltas** (ver §7); quedan **Q4, Q6, Q7** para los bloques que las necesitan.
 
 ---
 
@@ -21,7 +22,7 @@
 
 | # | Bloque | Vector de despliegue | Hallazgos | Modelo/esfuerzo | Orden sugerido |
 |---|---|---|---|---|---|
-| **A** | Backend + dashboard | `scp` + `pm2 restart` · sin release | E5-1(P-1), E3-1, E3-2, E6-1, E6-2 | Sonnet **MEDIO** | 1º |
+| ✅ **A** | Backend + dashboard | `scp` + `pm2 restart` · sin release | E5-1(P-1), E3-1, E3-2, E6-1, E6-2 | Sonnet MEDIO (A.3 en **Opus**) | **HECHO 28/07** |
 | **B** | Base de datos | Migración additiva + regenerar snapshot | E5-2, E3-4 | Sonnet **BAJO-MEDIO** | 2º |
 | **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet **ALTO** | 3º |
 | **D** | App Electron | Release completo (bump + tag + 5 lugares de versión) | E4-1(P-2), E2-1, E2-3…E2-9, E4-3 | Sonnet **MEDIO-ALTO** | 4º |
@@ -42,6 +43,40 @@ cambio de plan facturado) — ver la nota en el Bloque A.
 ---
 
 ## 2. Bloque A — Backend + dashboard (sin release)
+
+> ## ✅ EJECUTADO Y EN PRODUCCIÓN — 2026-07-28 (commit `03e294d`)
+>
+> Los 4 ítems (A.1, A.2, A.3, A.4) están desplegados y verificados. Resumen de lo que
+> **difirió del plan escrito**, para que quede registrado:
+>
+> - **A.3 tocó 6 puntos de suspensión, no 1.** El plan apuntaba a
+>   `services/subscriptionService.js`, pero al mapear los puntos reales de suspensión resultó
+>   que ese archivo **no suspende** (programa `cancel_at`). Las escrituras que sí suspenden
+>   están en `server.js` (crons 5c/5f/5h) y `routes/admin.js` (suspensión manual, reset a
+>   trial, `POST /subscriptions/:id/suspend`). Se aplicó en los 6 + al pasar a `cancelled`.
+> - **A.2 incluyó una mejora no planeada pero pedida por el propio hallazgo E3-1:** los logs
+>   de resumen pasaron de `${rowCount}` a `${procesados}/${total}`. La prueba lo dejó a la
+>   vista — con 1 fallo de 3, el log seguía diciendo "3 usuarios suspendidos". E3-1 señalaba
+>   textualmente que no había forma de saber "cuántos ni cuáles quedaron sin tocar".
+> - **A.1 filtró 6 scripts, no 5.** Además de los 5 de operación que P-1 identificaba, quedó
+>   fuera `validarCampoParteScwpjn.js` — verificado que es un script de prueba standalone
+>   (`node validarCampoParteScwpjn.js`, escribe un JSON local), con **cero referencias** desde
+>   el cliente Electron o desde otros scripts. La exclusión es correcta.
+> - **Q3 respondida por el operador:** opción 1 — el downgrade programado se **cancela** al
+>   suspender. Si se sigue queriendo, se re-programa.
+> - **Sin datos legados que limpiar:** 0 filas con `scheduled_plan` en producción al momento
+>   del fix.
+>
+> **Verificación ejecutada** (staging con 4 fixtures + fallo inyectado, luego prod):
+> A.1 → 19 scripts en la DB, 13 servidos, operación 404, legítimos 200 · A.2 → el usuario que
+> falla queda logueado por `user_id` y los siguientes **sí** se procesan · A.3 → `scheduled_plan`
+> NULL al suspender, y al reactivar la cuenta el downgrade **no revive**; regresión OK (un
+> downgrade en cuenta nunca suspendida se sigue aplicando) · A.4 → ficha real en el dashboard de
+> prod: CUIT renderiza y el input precarga sin cambios. Smoke oficial de prod **8/8**.
+> Fixtures borrados sin residuo; parche de prueba removido de staging.
+>
+> ⚠️ **Lo único que queda pendiente de A.1** es el paso 4 de su verificación (correr una
+> Procuración real desde la app Electron), que **requiere al operador** — ver §8.
 
 **Vector:** `scp` de los archivos + `pm2 restart procurador-api`. El dashboard es estático servido
 por Express, va en el mismo deploy. **Sin release de Electron, sin tocar la extensión.**
@@ -90,12 +125,14 @@ afectado y continúe con el siguiente, en vez de dejar que la excepción aborte 
 4. Restaurar staging al estado previo.
 
 ### A.3 — ⚠️ E3-2: limpiar `scheduled_plan` al suspender/reactivar
-**Severidad:** 🟡 Medio · **Archivo:** `backend-server/services/subscriptionService.js`
+**Severidad:** 🟡 Medio · **Archivo (según el plan):** `backend-server/services/subscriptionService.js`
+→ **archivos reales:** `server.js` (crons 5c/5f/5h) + `routes/admin.js` (3 caminos). Ver el recuadro
+de arriba: `subscriptionService.js` no suspende, sólo programa `cancel_at`.
 
 ⚠️ **Este ítem toca la lógica de cambio de plan facturado.** Según la regla del plan de revisión,
-**avisar al operador y considerar escalar a Opus para este ítem puntual.** Además, la decisión de
-*qué* hacer no es obvia — ver **Q3 en §7**: ¿limpiar el `scheduled_plan` al suspender (se pierde el
-downgrade programado), o recalcular su `apply_at` al reactivar (se respeta la intención original)?
+**avisar al operador y considerar escalar a Opus para este ítem puntual.** ✅ Hecho: el operador
+optó por escalar a Opus y se implementó en ese modelo. **Q3 respondida: opción 1** — se cancela el
+downgrade al suspender.
 
 **Verificación (una vez definida la semántica):**
 1. Staging: programar un downgrade con `apply_at` a futuro → suspender la cuenta → esperar a que
@@ -376,18 +413,23 @@ El operador confirmó que este problema **ya no existe** (probablemente un cambi
 un falso positivo de la observación original). **Se elimina el ítem E.2 del Bloque E** — ver la
 nota en §6.
 
-### Q3 — E3-2: semántica del `scheduled_plan` tras una suspensión (bloquea A.3)
-Cuando una cuenta con un downgrade programado se suspende y luego se reactiva, ¿qué debería pasar?
+### ~~Q3~~ — E3-2: semántica del `scheduled_plan` tras una suspensión — ✅ RESUELTA (2026-07-28)
 
-- **Opción 1 — Cancelar el downgrade** (`scheduled_plan = NULL` al suspender): el más simple y
-  predecible. El admin tendría que re-programarlo si sigue queriéndolo.
-- **Opción 2 — Recalcular `apply_at` al reactivar**: respeta la intención original (el usuario
-  igual va a bajar de plan) pero corre la fecha al nuevo fin de ciclo.
+**Decisión del operador: opción 1 — cancelar el downgrade al suspender** (`scheduled_plan = NULL`).
+Si se sigue queriendo, se re-programa (es un clic). Razón: un downgrade programado meses atrás,
+aplicado automáticamente tras una reactivación, es un cambio de plan que nadie pidió *en ese
+momento*.
+
+**Ya implementado y en producción** (ver el recuadro del Bloque A). Se aplicó en los **6 puntos de
+suspensión reales** — no solo en `subscriptionService.js` como asumía el plan — más el paso a
+`cancelled`.
+
+<details><summary>Opciones que se descartaron</summary>
+
+- **Opción 2 — Recalcular `apply_at` al reactivar**: respeta la intención original pero corre la
+  fecha al nuevo fin de ciclo.
 - **Opción 3 — Dejarlo como está** y solo agregar una notificación cuando se aplique tarde.
-
-**Mi recomendación: opción 1.** Es la que menos sorprende al usuario: un downgrade programado hace
-meses, aplicado automáticamente tras una reactivación, es un cambio de plan que nadie pidió *en ese
-momento*. Si el admin lo sigue queriendo, re-programarlo es un clic.
+</details>
 
 ### Q4 — E1-7: ¿vale la pena aislar los archivos de control por CUIT? (afecta C.2)
 Varios archivos de control (`execution.lock`, `pid_quickscw.txt`, `stop_quickscw.flag`, los backups
@@ -436,10 +478,11 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 
 | Qué | Para qué bloque | Por qué |
 |---|---|---|
+| ⏳ **Correr una Procuración real desde la app** | **A.1** (pendiente) | Único paso de verificación del Bloque A que quedó sin hacer: confirma que la whitelist no dejó afuera ningún script que el flujo real necesite. Los 3 checks de escritorio ya dieron OK en prod |
 | Correr los 3 flujos contra el PJN real | **C** (crítico) | La verificación funcional del motor necesita credenciales PJN reales |
 | Forzar un error de red a mitad de ejecución | **C** | Verificar E1-1 (Chrome huérfano) requiere provocar el fallo a mano |
 | Subir el ZIP al Chrome Web Store | **E** | Solo el operador tiene acceso al dashboard de publicación |
-| Responder Q3, Q4, Q6, Q7 | A.3, C.2, — | Decisiones de producto/diseño aún abiertas (Q1, Q2, Q5 ya resueltas) |
+| Responder Q4, Q6, Q7 | C.2, —, — | Decisiones de diseño aún abiertas (Q1, Q2, Q3, Q5 ya resueltas) |
 
 ---
 
@@ -447,13 +490,14 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 
 **Si querés máximo valor con mínimo riesgo, en este orden:**
 
-1. **Responder Q1 y Q5** (las dos que bloquean trabajo inmediato y tienen recomendación clara).
-2. **Bloque E** — arrancar ya, para que el ciclo de revisión de Google corra en paralelo.
-3. **Bloque A** — el más barato de desplegar, y cierra P-1.
-4. **Bloque B** — cierra el hallazgo más silencioso (el drift de schema).
+1. ~~**Responder Q1 y Q5**~~ — ✅ hechas (2026-07-27), junto con Q2 y Q3.
+2. ~~**Bloque A**~~ — ✅ **ejecutado y en producción** (2026-07-28, commit `03e294d`). P-1 cerrado.
+3. **Bloque E** — arrancar cuanto antes, para que el ciclo de revisión de Google corra en paralelo.
+4. **Bloque B** — cierra el hallazgo más silencioso (el drift de schema). Rápido.
 5. **Bloque C** — el de mayor valor real, cuando haya una ventana con el operador disponible para
    la verificación contra el PJN.
 6. **Bloque D** — el release, al final, agrupando todo lo de Electron en una sola versión.
+   ⚠️ Recordar: **D antes de la Fase 2 de Bitácora** (ver `revision-bitacora-vs-correcciones-2026-07-27.md`).
 
 **Para ejecutar un bloque:** sesión nueva, contexto fresco, y el pedido:
 > «Ejecutá el **Bloque A** del plan `docs/internal/plan-correcciones-E1-E6-2026-07-27.md`.»
