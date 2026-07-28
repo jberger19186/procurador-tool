@@ -1,9 +1,8 @@
-could not change directory to "/root": Permission denied
 --
 -- PostgreSQL database dump
 --
 
-\restrict G0eLQl8sSqoOkHg8vOo5h9EvdyezAzSDfEfOhWFLeS8umAgYPxpS9A6H6jFkbIh
+\restrict TFeUSAta59bb74XMGep4XFpqQw0vX3XhzX1exrOBiHB6PuvzYWAaH515qfMhBp3
 
 -- Dumped from database version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
 -- Dumped by pg_dump version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
@@ -228,6 +227,45 @@ CREATE TABLE public.app_settings (
 ALTER TABLE public.app_settings OWNER TO postgres;
 
 --
+-- Name: commercial_benefits; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.commercial_benefits (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    ticket_id integer,
+    benefit_type character varying(30) NOT NULL,
+    benefit_value character varying(100),
+    applied_by_admin_id integer,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.commercial_benefits OWNER TO postgres;
+
+--
+-- Name: commercial_benefits_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.commercial_benefits_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.commercial_benefits_id_seq OWNER TO postgres;
+
+--
+-- Name: commercial_benefits_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.commercial_benefits_id_seq OWNED BY public.commercial_benefits.id;
+
+
+--
 -- Name: encrypted_scripts; Type: TABLE; Schema: public; Owner: procurador_user
 --
 
@@ -287,6 +325,60 @@ ALTER TABLE public.encrypted_scripts_id_seq OWNER TO procurador_user;
 --
 
 ALTER SEQUENCE public.encrypted_scripts_id_seq OWNED BY public.encrypted_scripts.id;
+
+
+--
+-- Name: invoices; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.invoices (
+    id integer NOT NULL,
+    payment_id integer,
+    user_id integer NOT NULL,
+    facturante_id character varying(80),
+    invoice_type character varying(5) DEFAULT 'C'::character varying,
+    cae character varying(40),
+    numero character varying(20),
+    amount numeric(10,2),
+    pdf_url text,
+    status character varying(20) DEFAULT 'pending'::character varying,
+    retry_count integer DEFAULT 0,
+    last_error text,
+    issued_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.invoices OWNER TO postgres;
+
+--
+-- Name: TABLE invoices; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.invoices IS 'Facturas emitidas via Facturante (Factura C, monotributista)';
+
+
+--
+-- Name: invoices_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.invoices_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.invoices_id_seq OWNER TO postgres;
+
+--
+-- Name: invoices_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.invoices_id_seq OWNED BY public.invoices.id;
 
 
 --
@@ -499,6 +591,61 @@ ALTER SEQUENCE public.notifications_id_seq OWNED BY public.notifications.id;
 
 
 --
+-- Name: payments; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.payments (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    subscription_id integer,
+    external_payment_id character varying(120),
+    amount numeric(10,2) NOT NULL,
+    currency character varying(3) DEFAULT 'ARS'::character varying,
+    status character varying(30) NOT NULL,
+    payment_method character varying(30),
+    plan character varying(50),
+    period_start timestamp with time zone,
+    period_end timestamp with time zone,
+    refund_amount numeric(10,2),
+    refunded_at timestamp with time zone,
+    refund_reason text,
+    raw_response jsonb,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.payments OWNER TO postgres;
+
+--
+-- Name: TABLE payments; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.payments IS 'Historial de cobros (MercadoPago) por usuario';
+
+
+--
+-- Name: payments_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.payments_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.payments_id_seq OWNER TO postgres;
+
+--
+-- Name: payments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.payments_id_seq OWNED BY public.payments.id;
+
+
+--
 -- Name: plans; Type: TABLE; Schema: public; Owner: procurador_user
 --
 
@@ -528,8 +675,10 @@ CREATE TABLE public.plans (
     promo_used_count integer DEFAULT 0,
     promo_alert_days integer DEFAULT 15,
     plan_expiry_date timestamp without time zone,
+    visibility character varying(10) DEFAULT 'public'::character varying NOT NULL,
     CONSTRAINT plans_plan_type_check CHECK (((plan_type)::text = ANY ((ARRAY['electron'::character varying, 'extension'::character varying, 'combo'::character varying])::text[]))),
-    CONSTRAINT plans_promo_type_check CHECK (((promo_type)::text = ANY ((ARRAY['date'::character varying, 'quota'::character varying])::text[])))
+    CONSTRAINT plans_promo_type_check CHECK (((promo_type)::text = ANY ((ARRAY['date'::character varying, 'quota'::character varying])::text[]))),
+    CONSTRAINT plans_visibility_check CHECK (((visibility)::text = ANY ((ARRAY['public'::character varying, 'private'::character varying])::text[])))
 );
 
 
@@ -596,7 +745,12 @@ CREATE TABLE public.subscriptions (
     plan_change_history jsonb DEFAULT '[]'::jsonb,
     reactivation_request jsonb,
     payment_grace_ends_at timestamp without time zone,
-    CONSTRAINT check_plan_valid CHECK (((plan)::text = ANY ((ARRAY['BASIC'::character varying, 'PRO'::character varying, 'ENTERPRISE'::character varying, 'EXTENSION_PROMO'::character varying, 'COMBO_PROMO'::character varying])::text[]))),
+    external_subscription_id character varying(120),
+    payment_method_id character varying(120),
+    last_payment_at timestamp with time zone,
+    auto_renewal boolean DEFAULT true,
+    trial_bonus_until timestamp with time zone,
+    checkout_initiated_at timestamp with time zone,
     CONSTRAINT check_status_valid CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying, 'suspended_admin'::character varying, 'suspended_plan_expired'::character varying, 'cancelled'::character varying])::text[]))),
     CONSTRAINT check_usage_count_positive CHECK ((usage_count >= 0)),
     CONSTRAINT check_usage_limit_positive CHECK ((usage_limit > 0)),
@@ -625,6 +779,41 @@ COMMENT ON COLUMN public.subscriptions.usage_count IS 'Contador de ejecuciones e
 --
 
 COMMENT ON COLUMN public.subscriptions.usage_limit IS 'Límite de ejecuciones según el plan';
+
+
+--
+-- Name: COLUMN subscriptions.external_subscription_id; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.subscriptions.external_subscription_id IS 'ID preapproval de MercadoPago';
+
+
+--
+-- Name: COLUMN subscriptions.payment_method_id; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.subscriptions.payment_method_id IS 'Token de tarjeta en MercadoPago';
+
+
+--
+-- Name: COLUMN subscriptions.last_payment_at; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.subscriptions.last_payment_at IS 'Timestamp del último pago aprobado';
+
+
+--
+-- Name: COLUMN subscriptions.auto_renewal; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.subscriptions.auto_renewal IS 'Si false, no renovar al vencimiento';
+
+
+--
+-- Name: COLUMN subscriptions.trial_bonus_until; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.subscriptions.trial_bonus_until IS 'Los +20 usos trial vencen aquí (fin del primer período pago)';
 
 
 --
@@ -714,6 +903,7 @@ CREATE TABLE public.ticket_comments (
     message text NOT NULL,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     visibility character varying(20) DEFAULT 'external'::character varying NOT NULL,
+    edited_at timestamp without time zone,
     CONSTRAINT ticket_comments_author_role_check CHECK (((author_role)::text = ANY ((ARRAY['user'::character varying, 'admin'::character varying])::text[]))),
     CONSTRAINT ticket_comments_visibility_check CHECK (((visibility)::text = ANY ((ARRAY['external'::character varying, 'internal'::character varying])::text[])))
 );
@@ -795,6 +985,55 @@ ALTER TABLE public.usage_adjustments_id_seq OWNER TO procurador_user;
 --
 
 ALTER SEQUENCE public.usage_adjustments_id_seq OWNED BY public.usage_adjustments.id;
+
+
+--
+-- Name: usage_extras; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.usage_extras (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    subscription_id integer,
+    payment_id integer,
+    extra_uses integer NOT NULL,
+    remaining_uses integer NOT NULL,
+    reason text,
+    created_by_admin_id integer,
+    expires_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.usage_extras OWNER TO postgres;
+
+--
+-- Name: TABLE usage_extras; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.usage_extras IS 'Usos extra asignados por admin (cobrados o de cortesía)';
+
+
+--
+-- Name: usage_extras_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.usage_extras_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.usage_extras_id_seq OWNER TO postgres;
+
+--
+-- Name: usage_extras_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.usage_extras_id_seq OWNED BY public.usage_extras.id;
 
 
 --
@@ -991,6 +1230,10 @@ CREATE TABLE public.users (
     password_reset_expires timestamp without time zone,
     legal_pending_since timestamp with time zone,
     legal_suspended boolean DEFAULT false,
+    cuit_deleted_at timestamp with time zone,
+    telefono character varying(50),
+    email_change_prev_status character varying(30),
+    admin_created boolean DEFAULT false NOT NULL,
     CONSTRAINT check_role_valid CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'admin'::character varying])::text[]))),
     CONSTRAINT users_registration_status_check CHECK (((registration_status)::text = ANY (ARRAY[('pending_email'::character varying)::text, ('pending_activation'::character varying)::text, ('active'::character varying)::text, ('rejected'::character varying)::text, ('suspended'::character varying)::text, ('suspended_admin'::character varying)::text, ('suspended_plan_expired'::character varying)::text, ('cancelled'::character varying)::text])))
 );
@@ -1020,6 +1263,13 @@ COMMENT ON COLUMN public.users.last_login IS 'Timestamp del último login exitos
 
 
 --
+-- Name: COLUMN users.cuit_deleted_at; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.users.cuit_deleted_at IS 'CUIT anulado 90 días post-cancelación (retención legal)';
+
+
+--
 -- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: procurador_user
 --
 
@@ -1039,6 +1289,52 @@ ALTER TABLE public.users_id_seq OWNER TO procurador_user;
 --
 
 ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
+
+
+--
+-- Name: webhook_events; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.webhook_events (
+    id integer NOT NULL,
+    provider character varying(20) NOT NULL,
+    external_id character varying(120) NOT NULL,
+    event_type character varying(60),
+    payload jsonb,
+    processed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.webhook_events OWNER TO postgres;
+
+--
+-- Name: TABLE webhook_events; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.webhook_events IS 'Log de idempotencia para webhooks de MercadoPago';
+
+
+--
+-- Name: webhook_events_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.webhook_events_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.webhook_events_id_seq OWNER TO postgres;
+
+--
+-- Name: webhook_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.webhook_events_id_seq OWNED BY public.webhook_events.id;
 
 
 --
@@ -1070,10 +1366,24 @@ ALTER TABLE ONLY public.analytics_events ALTER COLUMN id SET DEFAULT nextval('pu
 
 
 --
+-- Name: commercial_benefits id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.commercial_benefits ALTER COLUMN id SET DEFAULT nextval('public.commercial_benefits_id_seq'::regclass);
+
+
+--
 -- Name: encrypted_scripts id; Type: DEFAULT; Schema: public; Owner: procurador_user
 --
 
 ALTER TABLE ONLY public.encrypted_scripts ALTER COLUMN id SET DEFAULT nextval('public.encrypted_scripts_id_seq'::regclass);
+
+
+--
+-- Name: invoices id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.invoices ALTER COLUMN id SET DEFAULT nextval('public.invoices_id_seq'::regclass);
 
 
 --
@@ -1112,6 +1422,13 @@ ALTER TABLE ONLY public.notifications ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
+-- Name: payments id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments ALTER COLUMN id SET DEFAULT nextval('public.payments_id_seq'::regclass);
+
+
+--
 -- Name: plans id; Type: DEFAULT; Schema: public; Owner: procurador_user
 --
 
@@ -1147,6 +1464,13 @@ ALTER TABLE ONLY public.usage_adjustments ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: usage_extras id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usage_extras ALTER COLUMN id SET DEFAULT nextval('public.usage_extras_id_seq'::regclass);
+
+
+--
 -- Name: usage_logs id; Type: DEFAULT; Schema: public; Owner: procurador_user
 --
 
@@ -1179,6 +1503,13 @@ ALTER TABLE ONLY public.user_notifications ALTER COLUMN id SET DEFAULT nextval('
 --
 
 ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
+
+
+--
+-- Name: webhook_events id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.webhook_events ALTER COLUMN id SET DEFAULT nextval('public.webhook_events_id_seq'::regclass);
 
 
 --
@@ -1222,6 +1553,14 @@ ALTER TABLE ONLY public.app_settings
 
 
 --
+-- Name: commercial_benefits commercial_benefits_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.commercial_benefits
+    ADD CONSTRAINT commercial_benefits_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: encrypted_scripts encrypted_scripts_name_key; Type: CONSTRAINT; Schema: public; Owner: procurador_user
 --
 
@@ -1243,6 +1582,22 @@ ALTER TABLE ONLY public.encrypted_scripts
 
 ALTER TABLE ONLY public.encrypted_scripts
     ADD CONSTRAINT encrypted_scripts_script_name_key UNIQUE (script_name);
+
+
+--
+-- Name: invoices invoices_payment_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_payment_id_key UNIQUE (payment_id);
+
+
+--
+-- Name: invoices invoices_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_pkey PRIMARY KEY (id);
 
 
 --
@@ -1302,6 +1657,22 @@ ALTER TABLE ONLY public.notifications
 
 
 --
+-- Name: payments payments_external_payment_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_external_payment_id_key UNIQUE (external_payment_id);
+
+
+--
+-- Name: payments payments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: plans plans_name_key; Type: CONSTRAINT; Schema: public; Owner: procurador_user
 --
 
@@ -1358,11 +1729,27 @@ ALTER TABLE ONLY public.token_blacklist
 
 
 --
+-- Name: webhook_events uq_webhook_provider_event; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.webhook_events
+    ADD CONSTRAINT uq_webhook_provider_event UNIQUE (provider, external_id);
+
+
+--
 -- Name: usage_adjustments usage_adjustments_pkey; Type: CONSTRAINT; Schema: public; Owner: procurador_user
 --
 
 ALTER TABLE ONLY public.usage_adjustments
     ADD CONSTRAINT usage_adjustments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: usage_extras usage_extras_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usage_extras
+    ADD CONSTRAINT usage_extras_pkey PRIMARY KEY (id);
 
 
 --
@@ -1419,6 +1806,14 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: webhook_events webhook_events_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.webhook_events
+    ADD CONSTRAINT webhook_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -1513,6 +1908,41 @@ CREATE INDEX idx_comments_visibility ON public.ticket_comments USING btree (tick
 
 
 --
+-- Name: idx_commercial_benefits_ticket; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_commercial_benefits_ticket ON public.commercial_benefits USING btree (ticket_id);
+
+
+--
+-- Name: idx_commercial_benefits_user; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_commercial_benefits_user ON public.commercial_benefits USING btree (user_id);
+
+
+--
+-- Name: idx_extras_user; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_extras_user ON public.usage_extras USING btree (user_id) WHERE (remaining_uses > 0);
+
+
+--
+-- Name: idx_invoices_retry; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_invoices_retry ON public.invoices USING btree (status, retry_count) WHERE ((status)::text = ANY ((ARRAY['pending'::character varying, 'failed'::character varying])::text[]));
+
+
+--
+-- Name: idx_invoices_user; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_invoices_user ON public.invoices USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: idx_legal_accept_doc; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -1590,6 +2020,20 @@ CREATE INDEX idx_notifications_user_id ON public.notifications USING btree (user
 
 
 --
+-- Name: idx_payments_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_status ON public.payments USING btree (status) WHERE ((status)::text = ANY ((ARRAY['pending'::character varying, 'rejected'::character varying])::text[]));
+
+
+--
+-- Name: idx_payments_user; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_user ON public.payments USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: idx_plans_active; Type: INDEX; Schema: public; Owner: procurador_user
 --
 
@@ -1622,6 +2066,41 @@ CREATE INDEX idx_script_active ON public.encrypted_scripts USING btree (active);
 --
 
 CREATE INDEX idx_script_name ON public.encrypted_scripts USING btree (script_name);
+
+
+--
+-- Name: idx_sub_cancel_at; Type: INDEX; Schema: public; Owner: procurador_user
+--
+
+CREATE INDEX idx_sub_cancel_at ON public.subscriptions USING btree (cancel_at) WHERE (cancel_at IS NOT NULL);
+
+
+--
+-- Name: idx_sub_next_billing_date; Type: INDEX; Schema: public; Owner: procurador_user
+--
+
+CREATE INDEX idx_sub_next_billing_date ON public.subscriptions USING btree (next_billing_date) WHERE (next_billing_date IS NOT NULL);
+
+
+--
+-- Name: idx_sub_payment_grace_ends_at; Type: INDEX; Schema: public; Owner: procurador_user
+--
+
+CREATE INDEX idx_sub_payment_grace_ends_at ON public.subscriptions USING btree (payment_grace_ends_at) WHERE (payment_grace_ends_at IS NOT NULL);
+
+
+--
+-- Name: idx_sub_plan_expiry; Type: INDEX; Schema: public; Owner: procurador_user
+--
+
+CREATE INDEX idx_sub_plan_expiry ON public.subscriptions USING btree (plan_expiry_date) WHERE (plan_expiry_date IS NOT NULL);
+
+
+--
+-- Name: idx_subs_external; Type: INDEX; Schema: public; Owner: procurador_user
+--
+
+CREATE UNIQUE INDEX idx_subs_external ON public.subscriptions USING btree (external_subscription_id) WHERE (external_subscription_id IS NOT NULL);
 
 
 --
@@ -1727,6 +2206,13 @@ CREATE INDEX idx_user_events_user_id ON public.user_events USING btree (user_id)
 --
 
 CREATE INDEX idx_user_machine_id ON public.users USING btree (machine_id);
+
+
+--
+-- Name: idx_webhooks_unprocessed; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_webhooks_unprocessed ON public.webhook_events USING btree (created_at) WHERE (processed_at IS NULL);
 
 
 --
@@ -1855,6 +2341,46 @@ ALTER TABLE ONLY public.analytics_events
 
 
 --
+-- Name: commercial_benefits commercial_benefits_applied_by_admin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.commercial_benefits
+    ADD CONSTRAINT commercial_benefits_applied_by_admin_id_fkey FOREIGN KEY (applied_by_admin_id) REFERENCES public.users(id);
+
+
+--
+-- Name: commercial_benefits commercial_benefits_ticket_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.commercial_benefits
+    ADD CONSTRAINT commercial_benefits_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.support_tickets(id) ON DELETE SET NULL;
+
+
+--
+-- Name: commercial_benefits commercial_benefits_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.commercial_benefits
+    ADD CONSTRAINT commercial_benefits_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: invoices invoices_payment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.payments(id);
+
+
+--
+-- Name: invoices invoices_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: legal_documents legal_documents_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1900,6 +2426,22 @@ ALTER TABLE ONLY public.monitor_partes
 
 ALTER TABLE ONLY public.notifications
     ADD CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: payments payments_subscription_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.subscriptions(id);
+
+
+--
+-- Name: payments payments_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -1964,6 +2506,38 @@ ALTER TABLE ONLY public.usage_adjustments
 
 ALTER TABLE ONLY public.usage_adjustments
     ADD CONSTRAINT usage_adjustments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: usage_extras usage_extras_created_by_admin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usage_extras
+    ADD CONSTRAINT usage_extras_created_by_admin_id_fkey FOREIGN KEY (created_by_admin_id) REFERENCES public.users(id);
+
+
+--
+-- Name: usage_extras usage_extras_payment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usage_extras
+    ADD CONSTRAINT usage_extras_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.payments(id);
+
+
+--
+-- Name: usage_extras usage_extras_subscription_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usage_extras
+    ADD CONSTRAINT usage_extras_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.subscriptions(id);
+
+
+--
+-- Name: usage_extras usage_extras_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usage_extras
+    ADD CONSTRAINT usage_extras_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -2033,42 +2607,84 @@ GRANT ALL ON TABLE public.admin_events TO procurador_user;
 -- Name: SEQUENCE admin_events_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.admin_events_id_seq TO procurador_user;
+GRANT ALL ON SEQUENCE public.admin_events_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE ai_assistance_logs; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.ai_assistance_logs TO procurador_user;
+
+
+--
+-- Name: SEQUENCE ai_assistance_logs_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.ai_assistance_logs_id_seq TO procurador_user;
 
 
 --
 -- Name: TABLE analytics_events; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,INSERT,DELETE ON TABLE public.analytics_events TO procurador_user;
+GRANT ALL ON TABLE public.analytics_events TO procurador_user;
 
 
 --
 -- Name: SEQUENCE analytics_events_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.analytics_events_id_seq TO procurador_user;
+GRANT ALL ON SEQUENCE public.analytics_events_id_seq TO procurador_user;
 
 
 --
 -- Name: TABLE app_settings; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,INSERT,UPDATE ON TABLE public.app_settings TO procurador_user;
+GRANT ALL ON TABLE public.app_settings TO procurador_user;
+
+
+--
+-- Name: TABLE commercial_benefits; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.commercial_benefits TO procurador_user;
+
+
+--
+-- Name: SEQUENCE commercial_benefits_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.commercial_benefits_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE invoices; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.invoices TO procurador_user;
+
+
+--
+-- Name: SEQUENCE invoices_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.invoices_id_seq TO procurador_user;
 
 
 --
 -- Name: TABLE legal_documents; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.legal_documents TO procurador_user;
+GRANT ALL ON TABLE public.legal_documents TO procurador_user;
 
 
 --
 -- Name: SEQUENCE legal_documents_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.legal_documents_id_seq TO procurador_user;
+GRANT ALL ON SEQUENCE public.legal_documents_id_seq TO procurador_user;
 
 
 --
@@ -2082,7 +2698,35 @@ GRANT ALL ON TABLE public.notifications TO procurador_user;
 -- Name: SEQUENCE notifications_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.notifications_id_seq TO procurador_user;
+GRANT ALL ON SEQUENCE public.notifications_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE payments; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.payments TO procurador_user;
+
+
+--
+-- Name: SEQUENCE payments_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.payments_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE usage_extras; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.usage_extras TO procurador_user;
+
+
+--
+-- Name: SEQUENCE usage_extras_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.usage_extras_id_seq TO procurador_user;
 
 
 --
@@ -2096,40 +2740,68 @@ GRANT ALL ON TABLE public.user_events TO procurador_user;
 -- Name: SEQUENCE user_events_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.user_events_id_seq TO procurador_user;
+GRANT ALL ON SEQUENCE public.user_events_id_seq TO procurador_user;
 
 
 --
 -- Name: TABLE user_legal_acceptances; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_legal_acceptances TO procurador_user;
+GRANT ALL ON TABLE public.user_legal_acceptances TO procurador_user;
 
 
 --
 -- Name: SEQUENCE user_legal_acceptances_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.user_legal_acceptances_id_seq TO procurador_user;
+GRANT ALL ON SEQUENCE public.user_legal_acceptances_id_seq TO procurador_user;
 
 
 --
 -- Name: TABLE user_notifications; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_notifications TO procurador_user;
+GRANT ALL ON TABLE public.user_notifications TO procurador_user;
 
 
 --
 -- Name: SEQUENCE user_notifications_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT SELECT,USAGE ON SEQUENCE public.user_notifications_id_seq TO procurador_user;
+GRANT ALL ON SEQUENCE public.user_notifications_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE webhook_events; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.webhook_events TO procurador_user;
+
+
+--
+-- Name: SEQUENCE webhook_events_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.webhook_events_id_seq TO procurador_user;
+
+
+--
+-- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: postgres
+--
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES  TO procurador_user;
+
+
+--
+-- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: postgres
+--
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES  TO procurador_user;
 
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict G0eLQl8sSqoOkHg8vOo5h9EvdyezAzSDfEfOhWFLeS8umAgYPxpS9A6H6jFkbIh
+\unrestrict TFeUSAta59bb74XMGep4XFpqQw0vX3XhzX1exrOBiHB6PuvzYWAaH515qfMhBp3
 

@@ -6,6 +6,14 @@
  *   2. Sube el archivo a DO Spaces (S3-compatible)
  *   3. Elimina backups en Spaces con más de 30 días
  *   4. Elimina archivos locales temporales
+ *   5. (Bloque B.1/Q5, 2026-07-28) Regenera database/schema.sql y sube una copia
+ *      "schema-latest" a Spaces — solo cuando corre contra procurador_db (prod).
+ *      Antes había que acordarse de correr `pg_dump --schema-only` a mano cada vez
+ *      que se auditaba o migraba la DB; el archivo llegó a tener ~2 meses de drift
+ *      (ver docs/internal/revision-E5-2026-07-27.md, hallazgo E5-2). Con esto el
+ *      snapshot se mantiene solo — igual hay que traerlo al repo con `scp` cuando
+ *      se lo necesite (el servidor no es un checkout git), pero ya no depende de
+ *      que alguien se acuerde de correr el pg_dump manualmente.
  *
  * Uso manual:   node backup-db.js
  * Cron diario:  0 3 * * * node /ruta/backup-db.js >> /var/log/procurador/backup.log 2>&1
@@ -117,6 +125,38 @@ async function runBackup() {
         if (toDelete.length === 0) log(`✅ Sin backups viejos para eliminar`);
     } catch (err) {
         log(`⚠️  Error limpiando backups viejos: ${err.message}`);
+    }
+
+    // 5. Regenerar el snapshot de schema (solo contra la DB de producción — no tiene
+    //    sentido que staging pise el snapshot con su propio schema, que es el mismo).
+    if (DB_NAME === 'procurador_db') {
+        const schemaLocalPath = path.join(TMP_DIR, 'schema-latest.sql');
+        try {
+            const schemaDumpCmd = `PGPASSWORD="${DB_PASSWORD}" pg_dump -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} --schema-only ${DB_NAME} > ${schemaLocalPath}`;
+            await execAsync(schemaDumpCmd);
+
+            // Repo local en el servidor (si existe la carpeta database/, se actualiza directo)
+            const repoSchemaPath = path.join(__dirname, '..', '..', 'database', 'schema.sql');
+            if (fs.existsSync(path.dirname(repoSchemaPath))) {
+                fs.copyFileSync(schemaLocalPath, repoSchemaPath);
+            }
+
+            // Copia off-server en Spaces, sobrescrita cada corrida (no acumula versiones)
+            const schemaStream = fs.createReadStream(schemaLocalPath);
+            await s3.send(new PutObjectCommand({
+                Bucket: SPACES_BUCKET,
+                Key: 'backups/schema-latest.sql',
+                Body: schemaStream,
+                ContentType: 'text/plain'
+            }));
+
+            fs.unlinkSync(schemaLocalPath);
+            log(`✅ schema.sql regenerado (repo local + Spaces:backups/schema-latest.sql)`);
+        } catch (err) {
+            // No bloqueante: un fallo acá no debe hacer fallar el backup real de datos.
+            log(`⚠️  Error regenerando schema.sql: ${err.message}`);
+            if (fs.existsSync(schemaLocalPath)) fs.unlinkSync(schemaLocalPath);
+        }
     }
 
     log(`✅ Backup completado exitosamente: ${filename}`);

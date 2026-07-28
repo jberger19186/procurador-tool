@@ -23,7 +23,7 @@
 | # | Bloque | Vector de despliegue | Hallazgos | Modelo/esfuerzo | Orden sugerido |
 |---|---|---|---|---|---|
 | ✅ **A** | Backend + dashboard | `scp` + `pm2 restart` · sin release | E5-1(P-1), E3-1, E3-2, E6-1, E6-2 | Sonnet MEDIO (A.3 en **Opus**) | **HECHO 28/07** |
-| **B** | Base de datos | Migración additiva + regenerar snapshot | E5-2, E3-4 | Sonnet **BAJO-MEDIO** | 2º |
+| ✅ **B** | Base de datos | Migración additiva + regenerar snapshot | E5-2, E3-4 | Sonnet BAJO-MEDIO | **HECHO 28/07** |
 | **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet **ALTO** | 3º |
 | **D** | App Electron | Release completo (bump + tag + 5 lugares de versión) | E4-1(P-2), E2-1, E2-3…E2-9, E4-3 | Sonnet **MEDIO-ALTO** | 4º |
 | ✅ **E** | Extensión Chrome | Bump manifest + ZIP + revisión de Google | Logo (2 estados, SSO decidido), `checkExtensionVersion()` — *(el ítem de `cs-notif.js` se descartó, ya no era un problema)* | Sonnet MEDIO-BAJO | **CÓDIGO 28/07** · falta subir ZIP |
@@ -159,6 +159,39 @@ profundidad — la verificación es de no-regresión visual, no de explotación)
 ---
 
 ## 3. Bloque B — Base de datos
+
+> ## ✅ EJECUTADO Y EN PRODUCCIÓN — 2026-07-28
+>
+> Los 2 ítems (B.1, B.2) están hechos y verificados, más la mejora de Q5.
+>
+> - **B.1:** `database/schema.sql` regenerado — **27** tablas (antes 21), **0** referencias a
+>   `check_plan_valid` (antes 1), **32** referencias a las columnas/tablas nuevas. Prueba real de
+>   reconstrucción: cargado en una DB descartable (`procurador_db_schematest`) y comparado
+>   **tabla por tabla y columna por columna** contra `procurador_db` real — **idénticos**. DB de
+>   prueba borrada al terminar. Agregado `database/migrations/README.md` documentando el drift de
+>   migraciones sin archivo versionado (mayo-julio 2026) y dejando `schema.sql` como fuente de
+>   verdad — no se recrearon esos `.sql` retroactivamente, sería fantasma.
+> - **Q5 implementada** (no solo documentada): `backend-server/scripts/backup-db.js` ahora
+>   regenera `schema.sql` en cada corrida del cron de las 03:00 — solo cuando corre contra
+>   `procurador_db` (prod), escribe la copia local en el servidor **y** sube
+>   `backups/schema-latest.sql` a DO Spaces (sobrescrito cada vez, no acumula versiones). Probado
+>   en producción real: el archivo generado por el script coincide con el regenerado a mano salvo
+>   el token aleatorio `\restrict`/`\unrestrict` que `pg_dump` cambia en cada corrida (contenido
+>   idéntico, verificado por diff). Confirmado subido a Spaces (`HeadObjectCommand`, tamaño 79.630
+>   bytes). **Aprendizaje del camino:** el primer intento de "probarlo en staging" en realidad
+>   corrió contra **prod** — la `.env` base de staging tiene `DB_NAME=procurador_db` (solo
+>   `.env.staging`, que `backup-db.js` no lee, lo sobreescribe); sin riesgo real (el paso nuevo
+>   solo lee y escribe archivos, no toca datos), pero corregido: el archivo de staging se
+>   restauró a su versión original (no hay cron que lo use ahí — el único cron de backup apunta al
+>   path de prod) y la prueba real se hizo directamente contra el path de producción.
+> - **B.2:** 4 índices parciales creados con `CONCURRENTLY` en staging y prod
+>   (`idx_sub_plan_expiry`, `idx_sub_cancel_at`, `idx_sub_payment_grace_ends_at`,
+>   `idx_sub_next_billing_date`). Verificado con `EXPLAIN`: sin forzar, el planificador elige
+>   `Seq Scan` (correcto con el volumen actual, ~3 filas); con `SET enable_seqscan = off`, las 4
+>   queries reales de los crons usan `Index Scan` sobre el índice correspondiente — confirma que
+>   existen y son usables para cuando el volumen crezca (B3).
+> - Backups previos en ambos entornos antes de cualquier cambio de DB. Smoke final en prod:
+>   health/API pública/landing en 200, 27 tablas.
 
 **Vector:** una migración additiva + regeneración de un archivo versionado. **Sin tocar código de
 aplicación.**
@@ -519,7 +552,8 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 3. ~~**Bloque E**~~ — ✅ **código listo** (2026-07-28, commit `1f9d1c4`), manifest en 1.3.7, ZIP
    generado. ⏳ Falta que el operador lo suba al Chrome Web Store — el ciclo de revisión de
    Google corre en paralelo mientras se sigue con el resto.
-4. **Bloque B** — cierra el hallazgo más silencioso (el drift de schema). Rápido.
+4. ~~**Bloque B**~~ — ✅ **ejecutado y en producción** (2026-07-28). Drift de schema cerrado +
+   regeneración automatizada en el backup diario (Q5) + los 4 índices.
 5. **Bloque C** — el de mayor valor real, cuando haya una ventana con el operador disponible para
    la verificación contra el PJN.
 6. **Bloque D** — el release, al final, agrupando todo lo de Electron en una sola versión.
