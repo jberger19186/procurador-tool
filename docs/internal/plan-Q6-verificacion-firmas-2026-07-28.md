@@ -166,13 +166,24 @@ ahora corta el servicio**. Por eso la verificación de abajo mide que hoy no fal
    todavía sin endurecer) para confirmar que el cambio no rompió el flujo vigente.
 
 > **⏸️ Punto de corte obligatorio.** La Fase 2 **no arranca** hasta que el punto 3 esté cumplido con
-> al menos 24 h de log limpio. Este plan está diseñado para ejecutarse en 2 sesiones con esa espera
-> en el medio; si se junta todo en una sola sesión se pierde la única señal que dice si es seguro
-> endurecer el cliente.
+> al menos 24 h de log limpio. Este plan está diseñado para ejecutarse en **3 sesiones separadas**
+> (§6) con esa espera en el medio; si se junta todo en una sola se pierde la única señal que dice si
+> es seguro endurecer el cliente.
 
 ---
 
 ### FASE 2 — Cliente Electron · requiere release (v2.7.45)
+
+> ⚠️ **Antes de escribir código, leer esto.** Por la decisión **Q6.c** (§7), los textos que aparecen
+> en los campos `error:` de los snippets de abajo son **placeholders descriptivos**, no el texto
+> final. Los 4 casos de rechazo (C2, C3, C4, C5) deben devolverle al usuario **el mismo mensaje**:
+>
+> > *"No se pudo verificar la integridad de los componentes de la aplicación. Cerrá y volvé a abrir;
+> > si el problema persiste, contactá a soporte."*
+>
+> **Definir una constante única** al tope de `authManager.js` (ej. `const ERROR_INTEGRIDAD = '…'`) y
+> usarla en los 4 sitios. El detalle técnico (script, etapa, excepción) va **solo** a
+> `console.error` y `securityAudit`, que es donde sirve para diagnosticar.
 
 #### C2. F1 — etapa 1: bloquear ante error genérico
 
@@ -266,7 +277,20 @@ Hoy el bloqueo funciona por efecto colateral (si la verificación falla, `loadSc
 del `scriptCache.set()`, la caché queda vacía y el `if (!code)` rechaza). Funciona, pero es frágil y
 el mensaje de error que ve el usuario pierde la causa real.
 
-#### C7. F6 — que la etapa 3 verifique el disco de verdad *(ver §7 antes de ejecutar)*
+> **Fin de la Fase 2.** Los 5 cambios de arriba (C2…C6) son todos el mismo tipo: un `warn` que pasa
+> a ser un rechazo. Se implementan, verifican y publican juntos como **v2.7.45**.
+
+---
+
+### FASE 3 — Cliente Electron · segundo release (v2.7.46)
+
+Fase separada por decisión del operador (Q6.a): **es el único ítem que agrega lógica nueva**, no
+solo endurece la existente. Va sola para que, si algo falla en su verificación, no haya duda de cuál
+cambio lo causó.
+
+**Prerrequisito:** v2.7.45 (Fase 2) publicada y corriendo bien unos días.
+
+#### C7. F6 — que la etapa 3 verifique el disco de verdad
 
 **Archivos:** `authManager.js` ~502 (escritura) y ~528 (verificación)
 
@@ -279,19 +303,25 @@ const encDiskHash = this.scriptVerifier.calculateChecksum(encryptedContent);
 // En etapa 3 (~528), reemplazando el bloque que lee de scriptCache:
 const encOnDisk = fs.readFileSync(encScriptPath, 'utf8');
 if (this.scriptVerifier.calculateChecksum(encOnDisk) !== encDiskHash) {
-    return reject({ success: false, error: 'El script fue modificado en disco antes de ejecutarse' });
+    return reject({ success: false, error: ERROR_INTEGRIDAD });   // ver Q6.c
 }
 ```
 
 Esto cierra la ventana real (manipulación entre escritura y `fork`) sin desencriptar nada y sin
-tocar `scriptVerifier.js`. **Es el único ítem del plan que agrega lógica nueva en vez de endurecer
-la existente** — por eso §7 propone tratarlo aparte.
+tocar `scriptVerifier.js`.
 
-> ⚠️ **Detalle verificado:** `authManager.js` **no importa `crypto`** hoy. C7 requiere agregar
-> `const crypto = require('crypto');` al tope del archivo. Alternativa sin import nuevo: usar
+> ⚠️ **Detalle verificado:** `authManager.js` **no importa `crypto`** hoy. Usar
 > `this.scriptVerifier.calculateChecksum(contenido)`, que es público (`scriptVerifier.js:95`), hace
-> exactamente el mismo SHA-256 y **no modifica la zona protegida** (solo la usa). **Preferir esta
-> segunda opción** — menos superficie y consistente con el resto del flujo.
+> exactamente el mismo SHA-256 y **no modifica la zona protegida** (solo la usa) — evita agregar un
+> import solo para esto. Es lo que muestra el snippet de arriba.
+
+**Verificación específica de la Fase 3** (además de la no-regresión de §5.1, que se repite igual):
+
+1. Los 3 flujos reales contra el PJN → **ninguno debe fallar**.
+2. Prueba de bloqueo: sobrescribir el `.enc` en `tempDir` entre la escritura y el `fork` (requiere
+   insertar un `sleep` temporal en el código para tener tiempo de hacerlo a mano) → debe rechazar.
+   **Revertir el `sleep` al terminar.**
+3. Confirmar en el log que la etapa 3 ahora reporta sobre el archivo en disco, no sobre la caché.
 
 ---
 
@@ -299,6 +329,9 @@ la existente** — por eso §7 propone tratarlo aparte.
 
 El objetivo es doble y hay que medir los dos lados: **que bloquee lo que debe** y —más importante—
 **que NO bloquee lo que no debe**.
+
+> **§5.1 (no-regresión) se repite tal cual en la Fase 3.** Lo específico de cada fase son las
+> pruebas de bloqueo: §5.2 para la Fase 2, y la lista propia de la Fase 3 en §4.
 
 ### 5.1 No-regresión (lo que más importa)
 
@@ -315,23 +348,37 @@ El objetivo es doble y hay que medir los dos lados: **que bloquee lo que debe** 
 
 Cada prueba se hace **en staging**, revirtiendo después:
 
-| Prueba | Cómo forzarla | Esperado |
+> **Ojo con qué se verifica acá.** Por la decisión Q6.c, **el usuario ve siempre el mismo mensaje**
+> en los 4 casos. Lo que distingue una prueba de otra es **el log** (`console.error` +
+> `securityAudit`), no la pantalla. La columna "Esperado" de abajo describe **la línea del log**.
+
+| Prueba | Cómo forzarla | Esperado (en el log) |
 |---|---|---|
-| **Firma inválida** (ya funcionaba) | Corromper 1 byte de `signature` en la respuesta del backend de staging | Rechazo con "Firma digital inválida" — no-regresión del camino que ya bloqueaba |
-| **C3 / F4** | Parche temporal en `client.js` de staging: `securityData = null` | Rechazo con "El servidor no envió la firma" |
-| **C4 / F7** | Renombrar `public.pem` en una copia del build empaquetado | Rechazo con "Verificador de integridad no disponible" |
-| **C2 / F1** | Parche temporal en el `verifyFull` del cliente que lance un `Error` genérico | Rechazo con "No se pudo verificar la integridad" |
-| **C7 / F6** (si se ejecuta) | Sobrescribir el `.enc` en `tempDir` entre escritura y `fork` (requiere un `sleep` temporal) | Rechazo con "modificado en disco" |
+| **Firma inválida** (ya funcionaba) | Corromper 1 byte de `signature` en la respuesta del backend de staging | `🚨 FIRMA INVÁLIDA` — no-regresión del camino que ya bloqueaba |
+| **C3 / F4** | Parche temporal en `client.js` de staging: `securityData = null` | `🚨 SCRIPT SIN FIRMA DIGITAL` |
+| **C4 / F7** | Renombrar `public.pem` en una copia del build empaquetado | `🚨 Verificador de integridad no inicializado` |
+| **C2 / F1** | Parche temporal en el `verifyFull` del cliente que lance un `Error` genérico | `🚨 VERIFICACIÓN FALLIDA` |
+
+En los 4 casos, además: **el flujo se detiene** (no se abre Chrome, no corre nada) y el usuario ve
+el mensaje único de Q6.c.
 
 **Revertir todos los parches de prueba al terminar** y confirmar por `grep` que no quedó ninguno —
 mismo checklist que ya se usó en la verificación del Bloque A.
 
+> La prueba de bloqueo de **C7/F6** no está en esta tabla: pertenece a la **Fase 3** y está
+> documentada en su propia sección (§4, FASE 3).
+
 ### 5.3 Release
 
-Checklist estándar de CLAUDE.md: bump `2.7.44 → 2.7.45` → tag → `npm run release` → versión visible
-en los 5 lugares. **Presupuestar el bug recurrente de `npm run release`** (7 releases seguidos:
-v2.7.38 a v2.7.44) — el release queda incompleto y hay que subir `.blockmap` + `latest.yml`
-regenerado a mano. No es una sorpresa, es el procedimiento.
+Checklist estándar de CLAUDE.md: bump de versión → tag → `npm run release` → versión visible en los
+5 lugares (portal `app.js` + landing ×4) → deploy → verificar en vivo.
+
+- **Fase 2:** `2.7.44 → 2.7.45`, tag `electron-v2.7.45`.
+- **Fase 3:** `2.7.45 → 2.7.46`, tag `electron-v2.7.46` (mismo checklist, se repite completo).
+
+**Presupuestar el bug recurrente de `npm run release`** (8 releases seguidos: v2.7.38 a v2.7.44) —
+el release queda incompleto y hay que subir `.blockmap` + `latest.yml` regenerado a mano vía la API
+de GitHub. No es una sorpresa, es el procedimiento; está documentado en CLAUDE.md.
 
 ---
 
