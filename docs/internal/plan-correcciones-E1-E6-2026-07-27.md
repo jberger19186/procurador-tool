@@ -1,8 +1,9 @@
 # Plan de implementación — correcciones de los hallazgos E1-E6 + extensión
 
 > **Qué es esto.** El plan de ejecución de los ~35 hallazgos documentados en los 6 informes de
-> revisión (`revision-E1-2026-07-27.md` … `revision-E6-2026-07-27.md`), más los 3 pendientes
-> acumulados de la extensión Chrome.
+> revisión (`revision-E1-2026-07-27.md` … `revision-E6-2026-07-27.md`), más 2 de los 3 pendientes
+> acumulados de la extensión Chrome (el tercero, jurisdicción en Notificaciones, se descartó el
+> 2026-07-27 — el operador confirmó que ya no era un problema).
 >
 > **Principio de organización: un bloque = un despliegue.** Los bloques NO están agrupados por
 > severidad sino por **vector de despliegue**, porque eso es lo que realmente determina el trabajo
@@ -11,8 +12,8 @@
 > lugares; uno de la extensión necesita un ciclo de revisión de Google. Mezclarlos multiplica los
 > despliegues sin ganar nada.
 >
-> **Elaborado con:** Opus 5, 2026-07-27. **Estado:** propuesta — **requiere las decisiones de §7
-> antes de ejecutar los bloques que las necesitan** (marcados con ⚠️).
+> **Elaborado con:** Opus 5, 2026-07-27. **Estado:** en ejecución (2026-07-27) — **Q1, Q2 y Q5 ya
+> resueltas** (ver §7); quedan Q3, Q4, Q6, Q7 para los bloques que las necesitan.
 
 ---
 
@@ -24,7 +25,7 @@
 | **B** | Base de datos | Migración additiva + regenerar snapshot | E5-2, E3-4 | Sonnet **BAJO-MEDIO** | 2º |
 | **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet **ALTO** | 3º |
 | **D** | App Electron | Release completo (bump + tag + 5 lugares de versión) | E4-1(P-2), E2-1, E2-3…E2-9, E4-3 | Sonnet **MEDIO-ALTO** | 4º |
-| **E** | Extensión Chrome | Bump manifest + ZIP + revisión de Google | Logo (2 estados), `cs-notif.js`, `checkExtensionVersion()` | Sonnet **MEDIO** | ⚡ **arrancar en paralelo** |
+| **E** | Extensión Chrome | Bump manifest + ZIP + revisión de Google | Logo (2 estados, SSO decidido), `checkExtensionVersion()` — *(el ítem de `cs-notif.js` se descartó, ya no era un problema)* | Sonnet **MEDIO-BAJO** | ⚡ **arrancar en paralelo** |
 | **F** | Decisiones pendientes | — | E2-2, E3-3, E3-5, E1-7 | — | Tras §7 |
 
 **Sobre el orden:** A→B→C→D es de menor a mayor costo de despliegue y de menor a mayor riesgo. **El
@@ -310,38 +311,23 @@ cargar la popup.
 `#ext-version`, que es un dato informativo, no parte del logo. Agregar `cursor:pointer` y un
 `title` que anticipe el destino ("Ir a procuradortool.com" / "Abrir mi panel").
 
-**⚠️ Decisión pendiente — ver Q1 en §7:** el dashboard con **SSO automático** (el usuario entra ya
-logueado) o con **login manual** (se abre el portal y el usuario ingresa sus credenciales). Ambas
-son viables; verifiqué que el SSO es técnicamente posible. La recomendación y sus implicancias
-están en §7.
+**✅ Decisión tomada (2026-07-27) — ver Q1 en §7:** SSO automático, cae en la home del panel.
 
 **Verificación:**
 1. Popup **sin sesión** → click en la imagen → abre `procuradortool.com` en pestaña nueva.
    Repetir clickeando el texto "Procurador TOOL" → mismo resultado.
-2. Login en la extensión → popup **con sesión** → click en el logo → abre el dashboard
-   (comportamiento según lo que se decida en Q1).
+2. Login en la extensión → popup **con sesión** → click en el logo → abre el dashboard **ya
+   logueado** (vía `#sso=<token>`), en la home del panel.
 3. Logout → click en el logo → vuelve a llevar a la landing (confirma que lee el estado en vivo,
    no un valor cacheado al abrir la popup).
 4. Confirmar que el click **no** rompe ni interfiere con el flujo normal de la popup (login,
    selección de flujo, ejecución).
 
-### E.2 — Jurisdicción en el flujo de Notificaciones
-**Archivo:** `extension-app/cs-notif.js` (función `fillFields`, líneas ~88-123)
+### ~~E.2~~ — Jurisdicción en Notificaciones — **eliminado (2026-07-27)**
 
-El operador marcó que el llenado del combobox de jurisdicción en este flujo necesita
-revisión/control. **No está especificado el síntoma exacto** (¿selecciona mal? ¿tarda? ¿falla en
-casos borde?) — ver **Q2 en §7**.
+El operador confirmó que el problema ya no existe — se descarta este ítem sin corrección.
 
-**Trabajo previo obligatorio:** investigar contra el DOM real de `notif.pjn.gov.ar/nueva` antes de
-tocar el código. Los flujos de Escritos 2 y DEOX comparten un patrón similar (`reactSet()` +
-búsqueda de opción por `innerText` o sigla + `Enter`) y **no** fueron señalados, así que la
-comparación entre los tres es el punto de partida natural para aislar la diferencia.
-
-**Verificación:** requiere el PJN real y credenciales → **presencia del operador**. Probar el flujo
-de Notificaciones con al menos 3 jurisdicciones distintas, incluyendo una cuyo nombre sea prefijo
-de otra (el caso borde más probable con una búsqueda por `includes`).
-
-### E.3 — `checkExtensionVersion()` huérfano
+### E.2 — `checkExtensionVersion()` huérfano *(renumerado, era E.3)*
 **Archivo:** `extension-app/background.js`
 
 Llama a `GET /api/extension/version`, endpoint **eliminado en RI-4** (2026-07-22). Falla en
@@ -350,9 +336,10 @@ silencio (`if (!res.ok) return`), no rompe nada. Eliminar la función y sus llam
 **Verificación:** cargar la extensión desempaquetada, abrir la consola del service worker, y
 confirmar que ya no aparece el request fallido a `/api/extension/version`.
 
-**Modelo/esfuerzo del bloque E:** Sonnet **MEDIO** (E.1 y E.3 son chicos; E.2 sube el esfuerzo por
-la investigación contra el DOM real). **Dependencia dura del operador** para subir el ZIP y para
-verificar E.1 y E.2 contra el PJN real.
+**Modelo/esfuerzo del bloque E:** Sonnet **MEDIO-BAJO** (bajó de MEDIO: ambos ítems son chicos y
+sin las incógnitas de la investigación contra el PJN que E.2 original tenía). **Dependencia del
+operador** para subir el ZIP; la verificación de E.1 puede hacerse contra staging sin PJN real
+(el SSO no depende del PJN).
 
 ---
 
@@ -363,6 +350,12 @@ default si preferís no decidir en detalle.**
 
 ### Q1 — Extensión: el logo con sesión, ¿SSO automático o login manual? (bloquea E.1)
 
+**✅ DECIDIDO (2026-07-27): opción A, SSO automático.** El logo con sesión activa lleva a la home
+del panel (sin `goto=`) vía `#sso=<token>`, mismo patrón que `openPortalSection` de la app Electron.
+
+<details>
+<summary>Contexto de la decisión (verificación técnica + opciones evaluadas)</summary>
+
 **Verificado como técnicamente viable:** la extensión guarda un JWT en `chrome.storage.local`
 (`pjn_ext_auth`), el portal ya soporta auto-login por `#sso=<token>` (`app.js:2528`), ambos tokens
 se firman con el mismo `JWT_SECRET`, y **ningún endpoint valida el claim `client`** (confirmado por
@@ -370,23 +363,18 @@ grep) — así que el token de la extensión funcionaría contra el portal sin c
 
 | Opción | A favor | En contra |
 |---|---|---|
-| **A. SSO automático** (recomendada) | El usuario entra directo a su panel, sin re-loguearse. Es el mismo patrón que ya usa la app Electron (`openPortalSection`), o sea que no inventa nada | El token de extensión dura **2 h** (vs 8 h del portal) → la sesión del portal hereda esa duración más corta. El token viaja en el hash de la URL (no se envía al servidor y el portal lo limpia del historial con `history.replaceState`, pero queda un instante en la barra de direcciones) |
+| **A. SSO automático** (elegida) | El usuario entra directo a su panel, sin re-loguearse. Es el mismo patrón que ya usa la app Electron (`openPortalSection`), o sea que no inventa nada | El token de extensión dura **2 h** (vs 8 h del portal) → la sesión del portal hereda esa duración más corta. El token viaja en el hash de la URL (no se envía al servidor y el portal lo limpia del historial con `history.replaceState`, pero queda un instante en la barra de direcciones) |
 | **B. Login manual** | Cero exposición del token; sesión del portal con su duración normal de 8 h | Peor UX: el usuario ya está logueado en la extensión y le pedimos las credenciales otra vez |
 
-**Mi recomendación: opción A (SSO).** El patrón ya existe y está probado en producción desde la app
-Electron, el hash no llega al servidor, y el portal ya limpia la URL. La duración de 2 h es
-aceptable para el caso de uso (mirar el panel), y si molesta se puede resolver después haciendo que
-el portal renueve el token con `/auth/refresh` al entrar por SSO.
+**Destino:** la home del panel (sin `goto=`), no una sección específica como "Mi Plan".
 
-**Sub-pregunta:** ¿a qué sección del portal debería llevar? El portal soporta `?goto=` (`plan`,
-`facturacion`, `soporte`, `ayuda`, etc.). **Default propuesto: la home del panel** (sin `goto`),
-que es lo que "dashboard del usuario" sugiere. Decime si preferís que caiga directo en "Mi Plan".
+</details>
 
-### Q2 — Extensión: ¿cuál es el síntoma exacto del problema de jurisdicción? (bloquea E.2)
-El pendiente registrado dice que "necesita control/revisión" sin especificar qué falla. Para
-poder arreglarlo hace falta saber: ¿selecciona una jurisdicción **incorrecta**? ¿**no** selecciona
-nada? ¿tarda demasiado y el formulario sigue sin llenarse? ¿falla solo con jurisdicciones
-específicas? Si tenés un caso concreto (jurisdicción + qué pasó), acelera mucho el diagnóstico.
+### ~~Q2~~ — Extensión: problema de jurisdicción en Notificaciones — **YA NO APLICA (2026-07-27)**
+
+El operador confirmó que este problema **ya no existe** (probablemente un cambio del propio SCW o
+un falso positivo de la observación original). **Se elimina el ítem E.2 del Bloque E** — ver la
+nota en §6.
 
 ### Q3 — E3-2: semántica del `scheduled_plan` tras una suspensión (bloquea A.3)
 Cuando una cuenta con un downgrade programado se suspende y luego se reactiva, ¿qué debería pasar?
@@ -412,15 +400,12 @@ misma máquina, el escenario problemático no puede darse y esto es cosmético.
 min). Si el lock ya lo previene → bajar el ítem a "cosmético, opcional". Si no → incluirlo en C.2.
 
 ### Q5 — E5-2: ¿cómo evitamos que el schema se vuelva a desactualizar? (afecta B.1)
-- **Opción 1 — Manual:** agregar "regenerar `schema.sql`" al checklist de sesiones con migración.
-  Barato, pero depende de que nadie se olvide (y ya se olvidó durante 2 meses).
-- **Opción 2 — Automático** (recomendada): que el script de backup diario que ya corre a las 03:00
-  también escriba el `--schema-only` a un archivo, y revisar/commitear ese archivo periódicamente.
-  Requiere un cambio chico en `backend-server/scripts/backup-db.js`.
 
-**Mi recomendación: opción 2**, porque el problema de fondo es justamente que el paso manual no se
-hizo. Pero implica tocar el script de backup (que hoy funciona bien), así que decime si preferís
-la opción 1 por prudencia.
+**✅ DECIDIDO (2026-07-27): opción 2, automatizar.** El script de backup diario
+(`backend-server/scripts/backup-db.js`, cron 03:00) se extiende para que además escriba un
+`pg_dump --schema-only` a un archivo — el commit/revisión periódica de ese archivo queda como
+paso manual liviano (ya no depende de acordarse de *generarlo*, solo de mirarlo de vez en cuando).
+Este cambio es parte del **Bloque B.1**, no de A.
 
 ### Q6 — E2-2: el fail-open de la verificación de firma, ¿es intencional? (bloquea el ítem)
 Las 3 etapas de verificación de integridad de scripts (`authManager.js`) solo bloquean ante
@@ -454,8 +439,7 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 | Correr los 3 flujos contra el PJN real | **C** (crítico) | La verificación funcional del motor necesita credenciales PJN reales |
 | Forzar un error de red a mitad de ejecución | **C** | Verificar E1-1 (Chrome huérfano) requiere provocar el fallo a mano |
 | Subir el ZIP al Chrome Web Store | **E** | Solo el operador tiene acceso al dashboard de publicación |
-| Probar el flujo de Notificaciones en el PJN | **E.2** | Requiere credenciales PJN reales |
-| Responder Q1-Q7 | varios | Decisiones de producto/diseño |
+| Responder Q3, Q4, Q6, Q7 | A.3, C.2, — | Decisiones de producto/diseño aún abiertas (Q1, Q2, Q5 ya resueltas) |
 
 ---
 
