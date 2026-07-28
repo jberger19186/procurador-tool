@@ -30,6 +30,11 @@ async function assignCuit() {
     }
 
     try {
+        // Hallazgo de la sesión 2026-07-28 (Bloque C): require('dotenv').config() sin path
+        // carga el .env de process.cwd() — invocado desde el directorio de staging, escribe
+        // en la DB de PROD sin que nada lo avise. Este script SÍ escribe (UPDATE), por eso
+        // la advertencia es más explícita que en los de solo lectura.
+        console.log(`⚠️  Base de datos objetivo: ${process.env.DB_NAME} @ ${process.env.DB_HOST} — verificar antes de escribir`);
         // Verificar que el usuario existe
         const check = await pool.query('SELECT id, email, cuit FROM users WHERE email = $1', [email]);
         if (check.rows.length === 0) {

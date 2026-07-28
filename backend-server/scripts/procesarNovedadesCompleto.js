@@ -699,9 +699,13 @@ async function generarExcel(resultados, timestamp, incluirMovimientos) {
             sheetExpedientes.addRow({
                 numero: index + 1,
                 expediente: exp.expediente,
-                caratula: exp.caratula,
-                dependencia: exp.dependencia,
-                situacion: exp.situacion,
+                // E4-2 (seguimiento, sesión 2026-07-28): mismo campo (caratula) que la hoja
+                // "Movimientos" ya sanea — quedó afuera del alcance original del hallazgo
+                // (limitado a esa hoja), pero es la misma clase de texto libre del PJN
+                // repetida en otra hoja. dependencia/situacion son del mismo origen.
+                caratula: sanitizeExcelCell(exp.caratula),
+                dependencia: sanitizeExcelCell(exp.dependencia),
+                situacion: sanitizeExcelCell(exp.situacion),
                 ultimaAct: exp.ultimaAct,
                 estado: exp.estado,
                 cantMovimientos: exp.movimientos ? exp.movimientos.length : 0,

@@ -71,6 +71,11 @@ async function runBackup() {
     const filename   = `backup_${DB_NAME}_${timestamp}.sql.gz`;
     const localPath  = path.join(TMP_DIR, filename);
 
+    // Hallazgo de la sesión 2026-07-28 (Bloque C): este script carga el .env fijo de
+    // __dirname/../.env (siempre la BASE del entorno, nunca .env.staging) — invocado a mano
+    // desde el directorio de staging, apunta a la DB de PROD. El cron real de prod no tiene
+    // este problema (usa su propia .env correcta); el riesgo es solo al correrlo manualmente.
+    log(`⚠️  Base de datos objetivo: ${DB_NAME} @ ${DB_HOST} (verificar que sea la correcta antes de continuar)`);
     log(`🚀 Iniciando backup de ${DB_NAME}...`);
 
     // 1. pg_dump + gzip

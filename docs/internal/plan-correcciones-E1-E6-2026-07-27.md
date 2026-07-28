@@ -276,9 +276,10 @@ obligatorio, staging antes que prod.
 >   `fs.appendFileSync` envuelto en try/catch silencioso.
 > - **E4-2:** helper `sanitizeExcelCell()` en `procesarNovedadesCompleto.js` — antepone `'` a
 >   los 4 campos de texto libre del PJN (`tipo`, `detalle`, `oficina`, `caratula`) en la hoja
->   "Movimientos" si empiezan con `=`, `+`, `-`, `@`. *(Nota: `exp.caratula` se repite sin
->   sanear en la hoja "Expedientes" — no estaba en el alcance original de E4-2, que se limitó a
->   la hoja Movimientos; queda como observación para un futuro hallazgo, no corregido acá.)*
+>   "Movimientos" si empiezan con `=`, `+`, `-`, `@`. **✅ Corregido también en la hoja
+>   "Expedientes" (2026-07-28, mismo día):** `caratula`/`dependencia`/`situacion` de esa hoja
+>   repetían la misma clase de texto libre del PJN sin sanear — quedaba fuera del alcance
+>   original de E4-2 (limitado a Movimientos), corregido con el mismo helper.
 > - **E1-9:** `testM2.iterarTablaActuacionesHistoricas` comparaba `resultado.movimientos`
 >   cuando la función subyacente devuelve `movimientosHistoricos` — corregido (código sin
 >   consumidores hoy, verificado por grep).
@@ -348,9 +349,18 @@ obligatorio, staging antes que prod.
 > desplegando el mismo contenido correctamente en ambos entornos (prod desde su propio directorio
 > con su propio `.env`, sin ambigüedad; staging con el preload de arriba) — backups previos en
 > ambos, ambos reiniciados y verificados sanos (health 200, whitelist de A.1 intacta: 13 scripts,
-> `backup-db.js` sigue en 404). **No se corrigió el bug de `reencrypt_scripts.js`/`backup-db.js`
-> en sí** (harían falta más pruebas de qué otros scripts operativos comparten el mismo patrón) —
-> queda como candidato de un futuro hallazgo/fix, no bloqueante para este plan.
+> `backup-db.js` sigue en 404).
+>
+> **✅ Corregido en una sesión posterior (2026-07-28, mismo día):** se relevaron los scripts de
+> mantenimiento que comparten el patrón (`reencrypt_scripts.js`, `scripts/backup-db.js`,
+> `list_users.js`, `assign_cuit.js`, `migrate_cuit.js`) y se les agregó un `console.log` bien
+> visible con la base de datos objetivo (`DB_NAME @ DB_HOST`) justo antes de cualquier
+> operación — **no se rediseñó la resolución del entorno** (el cron real de prod y el
+> `pm2 + -r dotenv/config` de staging ya funcionan bien; tocar eso es más riesgo del que vale
+> este hallazgo de severidad baja), solo se hizo imposible no notar contra qué base se está por
+> escribir cuando alguien corre uno de estos scripts a mano. Verificado en vivo: el reencrypt de
+> este mismo fix mostró `procurador_db_staging` en staging y `procurador_db` en prod,
+> correctamente. Ver la sesión de CLAUDE.md del 2026-07-28 (cont. 5).
 >
 > **⏳ Pendiente real, requiere al operador:** los puntos 2 y 3 de la verificación de abajo — correr
 > los 3 flujos reales contra el PJN (Procuración, Informe, Monitor) con la app apuntando a

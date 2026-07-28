@@ -11,6 +11,10 @@ const pool = new Pool({
 
 async function migrate() {
     try {
+        // Hallazgo de la sesión 2026-07-28 (Bloque C): require('dotenv').config() sin path
+        // carga el .env de process.cwd() — invocado desde el directorio de staging, altera
+        // la tabla de PROD. Este script hace ALTER TABLE (idempotente, pero sigue siendo DDL).
+        console.log(`⚠️  Base de datos objetivo: ${process.env.DB_NAME} @ ${process.env.DB_HOST} — verificar antes de continuar`);
         // Agregar columna cuit
         await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS cuit VARCHAR(20)');
         console.log('✅ Columna cuit agregada (o ya existía)');

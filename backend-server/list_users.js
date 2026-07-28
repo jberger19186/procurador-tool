@@ -15,6 +15,11 @@ const pool = new Pool({
 
 async function run() {
     try {
+        // Hallazgo de la sesión 2026-07-28 (Bloque C): require('dotenv').config() sin path
+        // carga el .env de process.cwd() — invocado desde el directorio de staging, apunta
+        // a la DB de PROD (solo lectura acá, pero visibilidad consistente con los demás
+        // scripts de mantenimiento que sí escriben).
+        console.log(`⚠️  Base de datos objetivo: ${process.env.DB_NAME} @ ${process.env.DB_HOST}`);
         const result = await pool.query(`
             SELECT u.id, u.email, u.role, u.cuit,
                    s.plan, s.status, s.expires_at
