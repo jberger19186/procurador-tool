@@ -508,8 +508,8 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 > 2. **`docs/internal/propuesta-bitacora-agenda-2026-07.md`** — propuesta Bitácora v6.1+ (revisada 2026-07-27 contra las correcciones E1-E6, ver `revision-bitacora-vs-correcciones-2026-07-27.md`: sigue siendo válida, con 2 prerrequisitos de secuencia agregados en §4.1/§7/§11). Plan de fases §11/§11.1 con modelo/esfuerzo por sub-bloque. **Sigue NO aprobada** — requiere ok del operador antes de implementar.
 > 3. **`docs/internal/plan-pruebas-integral-2026-07.md`** — BLOQUE R (37 casos). **✅ Ejecutado 37/37** — solo quedan R9.1/R9.2 (extensión real, requiere presencia del operador). Es **registro histórico**, no trabajo pendiente.
 > 4. **`docs/internal/plan-revision-integral-2026-07-27.md`** — plan de 6 bloques (E1-E6). **✅ Los 6 ejecutados** (informes `revision-E1-2026-07-27.md` a `revision-E6-2026-07-27.md`, ~35 hallazgos, sin cambios de código). Es **registro histórico**, no trabajo pendiente — el trabajo pendiente real está en el ítem 5.
+> 5. ⭐ **`docs/internal/plan-correcciones-E1-E6-2026-07-27.md`** — ✅ **PLAN COMPLETO EN CÓDIGO Y DESPLEGADO (2026-07-28).** Los ~35 hallazgos de E1-E6: ~~**Bloque A** backend+dashboard~~ ✅ P-1 cerrado, sin pendientes · ~~**Bloque B** base de datos~~ ✅ schema.sql + regeneración automatizada (Q5) + 4 índices · ~~**Bloque C (C.1+C.2)** motor Puppeteer~~ ✅ los 13 fixes en producción · ~~**Bloque D** release Electron~~ ✅ **v2.7.44 publicado** (incluye el fix de P-2/XSS) · ~~**Bloque E** extensión~~ ✅ código listo v1.3.7, subida al Chrome Web Store, ⏳ en revisión de Google. **Q1-Q5 resueltas**; quedan **Q6/Q7** (no bloquean nada, ver ítem 6 — Q6 ya tiene su propio plan). **Lo único que queda pendiente es operativo, no de código:** verificar los 3 flujos (Procuración/Informe/Monitor) contra el PJN real + forzar un error de red (Bloque C) + inspeccionar que `config_monitoreo.json` ya no tenga el token (E2-8) — todo requiere al operador con la app real. **Aprendizaje de la sesión:** `reencrypt_scripts.js`/`backup-db.js` tienen el mismo bug de `.env` sin path — cualquier corrida manual "en staging" de estos scripts debe forzar `node -r dotenv/config <script> dotenv_config_path=.env.staging`, si no termina tocando producción (ya corregido con un `console.log` visible en los 5 scripts que comparten el patrón). **Para retomar (si aparecen más hallazgos o hace falta la verificación funcional):** sesión nueva → leer este plan.
 > 6. ⭐ **`docs/internal/plan-Q6-verificacion-firmas-2026-07-28.md`** — **el trabajo listo para ejecutar más accionable que queda, sin decisiones pendientes.** Cierra los **9 fail-opens** del sistema de verificación de firmas de scripts (E2-2 documentaba 3; la investigación encontró 6 más, incluido que **la etapa 3 no verifica el disco sino la RAM**, o sea que esa capa de defensa hoy no defiende nada). **Las 4 decisiones del operador están tomadas:** fail-closed · C7 en release propio · **sin kill switch** (sería una puerta trasera que anula la protección) · mensaje único y amigable al usuario con el detalle técnico solo en el log. **Cero cambios en `src/security/`** (zona protegida) — F7/F8 se cierran desde el llamador vía `isReady()`. **⚠️ Secuencia obligatoria de 3 fases: Fase 1 (backend, Sonnet MEDIO) → esperar 24-48 h monitoreando `error.log` → Fase 2 (cliente + release v2.7.45, Sonnet ALTO) → Fase 3 (etapa 3 real + release v2.7.46, Sonnet ALTO).** Sin kill switch, esa espera es el único colchón del plan. **💡 Las verificaciones operativas pendientes del Bloque C se solapan con la ventana de espera** — correr los 3 flujos reales genera justo el tráfico de descarga que la Fase 1 necesita monitorear. **Para arrancar:** sesión nueva → «Ejecutá la Fase 1 del plan `docs/internal/plan-Q6-verificacion-firmas-2026-07-28.md`».
-> 5. ⭐ **`docs/internal/plan-correcciones-E1-E6-2026-07-27.md`** — ✅ **PLAN COMPLETO EN CÓDIGO Y DESPLEGADO (2026-07-28).** Los ~35 hallazgos de E1-E6: ~~**Bloque A** backend+dashboard~~ ✅ P-1 cerrado, sin pendientes · ~~**Bloque B** base de datos~~ ✅ schema.sql + regeneración automatizada (Q5) + 4 índices · ~~**Bloque C (C.1+C.2)** motor Puppeteer~~ ✅ los 13 fixes en producción · ~~**Bloque D** release Electron~~ ✅ **v2.7.44 publicado** (incluye el fix de P-2/XSS) · ~~**Bloque E** extensión~~ ✅ código listo v1.3.7, subida al Chrome Web Store, ⏳ en revisión de Google. **Q1-Q5 resueltas**; quedan **Q6/Q7** (no bloquean nada). **Lo único que queda pendiente es operativo, no de código:** verificar los 3 flujos (Procuración/Informe/Monitor) contra el PJN real + forzar un error de red (Bloque C) + inspeccionar que `config_monitoreo.json` ya no tenga el token (E2-8) — todo requiere al operador con la app real. **Aprendizaje de la sesión:** `reencrypt_scripts.js`/`backup-db.js` tienen el mismo bug de `.env` sin path — cualquier corrida manual "en staging" de estos scripts debe forzar `node -r dotenv/config <script> dotenv_config_path=.env.staging`, si no termina tocando producción (ya corregido con un `console.log` visible en los 5 scripts que comparten el patrón). **Para retomar (si aparecen más hallazgos o hace falta la verificación funcional):** sesión nueva → leer este plan.
 >
 > **🧩 PENDIENTES PARA LA PRÓXIMA ACTUALIZACIÓN DE LA EXTENSIÓN — 2 puntos, en ejecución (2026-07-27):**
 > 1. **Logo con acción de click, según estado de sesión** — diseño completo en `plan-correcciones-E1-E6-2026-07-27.md` §6 (Bloque E.1). **Decidido (2026-07-27): SSO automático** (Q1) — con sesión, el logo lleva a la home del panel del portal ya logueado (vía `#sso=<token>`, mismo `JWT_SECRET` que usa `openPortalSection` de la app Electron, verificado que ningún endpoint valida el claim `client`); sin sesión, lleva a `https://procuradortool.com`. En `extension-app/popup.html:412-419`, el bloque `.header` (logo + "Procurador TOOL") es **compartido** entre `#view-login` y `#view-main` → un solo listener alcanza, pero debe leer el estado **en el momento del click**. (Hallazgo original de R9.1/R9.2.)
@@ -1186,15 +1186,19 @@ Contenido del backup:
 
 > ⚠️ Guardar la carpeta en lugar seguro — contiene claves privadas. No subir a lugares públicos.
 
-### Variante: backup comprimido `.7z` → carpeta de automatización
+### Variante: backup comprimido `.7z` → carpeta de automatización (+ copia opcional en `repos`)
 > Mismo contenido que el backup completo (DB + env + keys + certs + código fuente), pero **comprimido en `.7z`** y **movido a OneDrive** en vez de quedar suelto en el Desktop. Usa 7-Zip (`C:\Program Files\7-Zip\7z.exe`).
-> **Destino:** `C:\Users\JONATHAN\OneDrive\Documentos\z-noc files\z-automatizacion\`
+> **Destino principal:** `C:\Users\JONATHAN\OneDrive\Documentos\z-noc files\z-automatizacion\`
+> **Destino secundario (opcional, mismo archivo):** `C:\Users\JONATHAN\source\repos\` — carpeta de trabajo local, **fuera del repo git** (no se sube, `source\repos` es el padre de `ProcuradorTool\`, no el repo en sí). Se usa cuando el operador pide explícitamente tener una copia a mano ahí además de en automatización.
 > **Correr desde Git Bash** (no PowerShell: el `>` de PowerShell escribe UTF-16 y corrompe el dump; Git Bash escribe bytes limpios).
+>
+> **Convención de pedido:** "backup en automatización" = solo el destino principal. "Backup en automatización y en repos" (o "copiá a repos el backup") = ambos destinos, mismo archivo, sin volver a explicar la ruta — ya queda documentada acá.
 
 ```bash
 SEVENZ="/c/Program Files/7-Zip/7z.exe"; KEY="C:/Users/JONATHAN/.ssh/do_procurador"
 FOLDER="/c/Users/JONATHAN/Desktop/$(date +%Y%m)_$(date +%d%m%Y)_ProcuradorTool"
 DEST="/c/Users/JONATHAN/OneDrive/Documentos/z-noc files/z-automatizacion"
+REPOS="/c/Users/JONATHAN/source/repos"
 mkdir -p "$FOLDER/keys" "$FOLDER/certs" "$DEST"
 # 1) DB
 ssh -i "$KEY" root@142.93.64.94 "sudo -u postgres pg_dump procurador_db" > "$FOLDER/procurador_db_backup.sql"
@@ -1204,11 +1208,16 @@ scp -i "$KEY" -r root@142.93.64.94:/var/www/procurador/backend-server/keys/.  "$
 scp -i "$KEY" -r root@142.93.64.94:/var/www/procurador/backend-server/certs/. "$FOLDER/certs/"
 # 3) código fuente → .7z (excluye node_modules/dist/.git/.claude)
 "$SEVENZ" a "$FOLDER/ProcuradorTool_source.7z" "C:/Users/JONATHAN/source/repos/ProcuradorTool/*" '-xr!node_modules' '-xr!dist' '-xr!.git' '-xr!.claude' -bso0 -bsp0
-# 4) comprimir la carpeta entera, borrarla y mover el .7z a automatización
+# 4) comprimir la carpeta entera, borrarla y distribuir el .7z
 "$SEVENZ" a "$FOLDER.7z" "$FOLDER" -bso0 -bsp0
-rm -rf "$FOLDER" && mv "$FOLDER.7z" "$DEST/"
+rm -rf "$FOLDER"
+mv "$FOLDER.7z" "$DEST/"
+# 5) SOLO si se pidió también "en repos": copiar (no mover) el mismo archivo
+cp "$DEST/$(basename "$FOLDER").7z" "$REPOS/"
 ```
-> Resultado: solo queda `<YYYYMM_DDMMYYYY>_ProcuradorTool.7z` en la carpeta de automatización (Desktop limpio).
+> Resultado con el paso 5: el mismo `.7z` (mismo hash) en `z-automatizacion` **y** en `source\repos`, Desktop limpio. Sin el paso 5, solo queda en `z-automatizacion` (comportamiento por defecto).
+>
+> ⚠️ El `.7z` contiene claves privadas y un dump completo de la base de datos — la copia en `source\repos` queda fuera del repo git, pero **no es una ubicación cifrada**; tratarla con el mismo cuidado que el resto de los backups.
 
 ### Backup de schema DB solamente
 ```bash
