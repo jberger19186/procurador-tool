@@ -8,8 +8,10 @@
 > implementa ese cambio.
 >
 > **Elaborado con:** Opus 5, 2026-07-28 (investigación del código real, sin cambios).
-> **Ejecutar con:** Sonnet **ALTO**, en **2 sesiones separadas** (ver §6 — el orden importa y no es
-> negociable).
+> **✅ Las 3 decisiones del operador están tomadas** (§7): C7 en release propio · sin kill switch ·
+> mensaje único y amigable al usuario.
+> **Ejecutar en 3 sesiones** (ver §6 — el orden importa y no es negociable):
+> **Fase 1 → Sonnet MEDIO** · **Fase 2 → Sonnet ALTO** · **Fase 3 → Sonnet ALTO**.
 >
 > ⚠️ **Este es el plan de mayor riesgo operativo de todos los ejecutados hasta ahora.** No por
 > complejidad técnica (el diff es chico) sino por consecuencia: el propósito del cambio es
@@ -333,60 +335,90 @@ regenerado a mano. No es una sorpresa, es el procedimiento.
 
 ---
 
-## 6. Orden de ejecución (no negociable)
+## 6. Orden de ejecución (no negociable) — 3 fases
 
 ```
-Sesión 1 (Sonnet ALTO)  ── Fase 1: backend (C1)
-                           └─ desplegar staging → prod → smoke
+Sesión 1 · Sonnet MEDIO ── FASE 1: backend (C1)  ~6 líneas, 1 archivo
+                           └─ staging → prod → smoke → 13/13 scripts firmados
                                       ↓
-                        ⏸️  ESPERA 24-48 h con monitoreo del error.log
-                           (si aparece "[SEGURIDAD] No se pudo firmar" → DETENER)
+                    ⏸️  ESPERA 24-48 h monitoreando error.log
+                       · grep "[SEGURIDAD] No se pudo firmar"
+                       · si aparece aunque sea 1 vez → DETENER el plan
+                       · 💡 aprovechar la ventana para las verificaciones
+                         operativas pendientes del Bloque C (ver nota abajo)
                                       ↓
-Sesión 2 (Sonnet ALTO)  ── Fase 2: cliente (C2…C6, y C7 si se aprueba)
-                           └─ verificación §5 → release v2.7.45
+Sesión 2 · Sonnet ALTO  ── FASE 2: cliente, endurecer (C2…C6)
+                           └─ verificación §5 completa → release v2.7.45
+                                      ↓
+                    ⏸️  Confirmar que v2.7.45 corre bien unos días
+                                      ↓
+Sesión 3 · Sonnet ALTO  ── FASE 3: cliente, etapa 3 real (C7)
+                           └─ verificación → release v2.7.46
 ```
 
-**Por qué la espera no es opcional:** es la única forma de saber si el firmador del servidor falla
-alguna vez en condiciones reales. Endurecer el cliente sin ese dato es apostar a que nunca falla —
-y si falla, el síntoma es *todos los usuarios sin poder ejecutar nada*, con el agravante de que el
-fix requiere un release nuevo (horas), no un `pm2 restart` (segundos).
+**Por qué la espera de la Fase 1 no es opcional:** es la única forma de saber si el firmador del
+servidor falla alguna vez en condiciones reales. Endurecer el cliente sin ese dato es apostar a que
+nunca falla — y si falla, el síntoma es *todos los usuarios sin poder ejecutar nada*, con el
+agravante de que el fix requiere un release nuevo (horas), no un `pm2 restart` (segundos).
+**Sin kill switch (Q6.b), esta espera es el único colchón real del plan.**
+
+> 💡 **Las verificaciones del Bloque C se solapan perfectamente con esta ventana.** Correr los 3
+> flujos reales contra el PJN (pendiente desde el Bloque C) **genera exactamente el tráfico de
+> descarga de scripts que la Fase 1 necesita monitorear**. En vez de dos esperas separadas, es una
+> sola: se corren los flujos, se cierra la verificación funcional del Bloque C, y de paso se
+> alimenta el log que decide si es seguro pasar a la Fase 2.
+
+### Modelo y esfuerzo por fase
+
+| Fase | Modelo/esfuerzo | Por qué |
+|---|---|---|
+| **1** — backend | Sonnet **MEDIO** | Un cambio de ~6 líneas en un archivo, deploy `scp` + restart, verificación mecánica (13 descargas + grep del log). No hay lógica distribuida ni estado async que razonar. Pedir ALTO acá sería inflar el costo sin ganancia |
+| **2** — cliente, endurecer | Sonnet **ALTO** | 5 sitios en `authManager.js` donde hay que **respetar el patrón de cada uno** (`return` vs `reject` — el plan lo advierte, es la clase de detalle que rompe en silencio), + 5 pruebas de bloqueo con parches temporales que hay que revertir sin dejar residuo, + release completo con el bug recurrente. La verificación pesa más que el diff |
+| **3** — etapa 3 real | Sonnet **ALTO** | El diff es chico pero **agrega lógica nueva en el camino crítico de toda ejecución**, y toca el flujo de escritura↔`fork`. Conceptualmente es el más delicado de los tres |
 
 ---
 
-## 7. Decisiones que necesitan al operador
+## 7. Decisiones del operador — ✅ LAS 3 RESUELTAS (2026-07-28)
 
-### Q6.a — ¿Se incluye C7 (F6, la etapa 3 real)?
+### ✅ Q6.a — C7 (F6, la etapa 3 real) va en **su propio release**, aparte de C2-C6
 
-**Recomiendo hacerlo, pero en una tercera sesión aparte**, no junto con C2-C6.
+**Decisión: separado.** C2-C6 son todos el mismo cambio conceptual (un `warn` que pasa a ser
+`return`/`reject`), verificables juntos. C7 **agrega lógica nueva** —hashear al escribir, releer y
+comparar antes de ejecutar— en el camino crítico de toda ejecución. Mezclarlo significaría que, si
+algo falla en la verificación de §5, habría que averiguar cuál de los dos tipos de cambio lo causó.
 
-Razón: C2-C6 son todos el mismo cambio conceptual (un `warn` que pasa a ser un `return`/`reject`),
-verificables juntos. C7 **agrega lógica nueva** —hashear al escribir, releer y comparar antes de
-ejecutar— en el camino crítico de toda ejecución. Mezclarlo significa que, si algo falla en la
-verificación de §5, hay que averiguar cuál de los dos tipos de cambio lo causó.
+**Consecuencia práctica:** el plan pasa a tener **3 fases** (backend → cliente/endurecer →
+cliente/etapa 3), con **2 releases de Electron** (v2.7.45 y v2.7.46).
 
-Separarlo cuesta un release más; mezclarlo cuesta claridad justo en el momento en que más se
-necesita. Si preferís un solo release, es viable — pero conviene saber que se está eligiendo eso.
+### ✅ Q6.b — Sin kill switch remoto
 
-### Q6.b — ¿Kill switch remoto?
+**Decisión: NO.** Un interruptor remoto para desactivar la verificación de firmas es, por
+definición, una puerta trasera que anula exactamente la protección que este plan agrega — quien lo
+controle (o logre suplantarlo) desactiva el sistema entero.
 
-**Recomiendo que NO**, y quiero ser explícito sobre el motivo: un interruptor remoto para desactivar
-la verificación de firmas es, por definición, una puerta trasera que anula exactamente la protección
-que este plan agrega. Quien controle ese interruptor (o quien logre suplantarlo) desactiva el
-sistema entero.
+**El escape ante un problema es el fix-forward** que el proyecto ya usa: publicar la versión
+siguiente con el comportamiento corregido. Es más lento que un flag, y esa lentitud es parte del
+costo de tener una verificación que verifica de verdad. **Esto refuerza por qué el orden de §6 no
+es negociable:** sin kill switch, el único colchón real es haber verificado el backend primero.
 
-El escape ante un problema es el **fix-forward** que el proyecto ya usa: publicar v2.7.46 con el
-comportamiento corregido. Es más lento que un flag, y esa lentitud es parte del costo de tener una
-verificación que realmente verifica.
+### ✅ Q6.c — Mensaje único y accionable para el usuario, detalle técnico solo en el log
 
-### Q6.c — Mensajes de error al usuario
+**Decisión: mensaje amigable.** Los 4 casos de rechazo (C2, C3, C4, C5) devuelven al usuario **el
+mismo texto**:
 
-Los mensajes propuestos son técnicos ("No se pudo verificar la integridad de testM2.js"). Un usuario
-que se tope con esto no va a saber qué hacer.
+> **"No se pudo verificar la integridad de los componentes de la aplicación. Cerrá y volvé a abrir;
+> si el problema persiste, contactá a soporte."**
 
-**Propongo:** que los 4 casos deriven a un mismo mensaje accionable — *"No se pudo verificar la
-integridad de los componentes de la aplicación. Cerrá y volvé a abrir; si el problema persiste,
-contactá a soporte."* — dejando el detalle técnico solo en el log y en `securityAudit`. Confirmar
-si preferís eso o el mensaje técnico visible.
+El detalle técnico (qué script, qué etapa, qué excepción) va **solo** a `console.error` y a
+`securityAudit` — que es donde sirve para diagnosticar.
+
+**Implicancia para C2-C5:** los `error:` de los snippets de §4 son **placeholders**. Al implementar,
+los 4 usan el texto de arriba. Sugerencia: definir una constante única al tope del archivo
+(ej. `const ERROR_INTEGRIDAD = '…'`) y referenciarla en los 4 sitios, para que no se desincronicen.
+
+**Nota honesta sobre el trade-off:** un mensaje único es mejor para el usuario, pero le quita a
+soporte la pista inmediata de qué falló. Por eso el detalle en `securityAudit` no es opcional — es
+lo que hace que esta decisión no cueste capacidad de diagnóstico.
 
 ---
 
@@ -404,11 +436,14 @@ si preferís eso o el mensaje técnico visible.
 
 ## 9. Cómo arrancar
 
-**Sesión 1:**
+**Sesión 1** — Sonnet MEDIO:
 > «Ejecutá la **Fase 1** del plan `docs/internal/plan-Q6-verificacion-firmas-2026-07-28.md`.»
 
-**Sesión 2** (tras la espera de 24-48 h con log limpio):
+**Sesión 2** — Sonnet ALTO (tras 24-48 h con log limpio):
 > «Ejecutá la **Fase 2** del plan `docs/internal/plan-Q6-verificacion-firmas-2026-07-28.md`.»
+
+**Sesión 3** — Sonnet ALTO (tras confirmar que v2.7.45 corre bien unos días):
+> «Ejecutá la **Fase 3** del plan `docs/internal/plan-Q6-verificacion-firmas-2026-07-28.md`.»
 
 **Reglas de ejecución:** backup de DB antes de cualquier cambio · staging antes que prod · verificar
 `DB_NAME` antes de cualquier escritura · **nunca** `git add -A` · `node -r dotenv/config <script>
