@@ -26,7 +26,7 @@
 | **B** | Base de datos | Migración additiva + regenerar snapshot | E5-2, E3-4 | Sonnet **BAJO-MEDIO** | 2º |
 | **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet **ALTO** | 3º |
 | **D** | App Electron | Release completo (bump + tag + 5 lugares de versión) | E4-1(P-2), E2-1, E2-3…E2-9, E4-3 | Sonnet **MEDIO-ALTO** | 4º |
-| **E** | Extensión Chrome | Bump manifest + ZIP + revisión de Google | Logo (2 estados, SSO decidido), `checkExtensionVersion()` — *(el ítem de `cs-notif.js` se descartó, ya no era un problema)* | Sonnet **MEDIO-BAJO** | ⚡ **arrancar en paralelo** |
+| ✅ **E** | Extensión Chrome | Bump manifest + ZIP + revisión de Google | Logo (2 estados, SSO decidido), `checkExtensionVersion()` — *(el ítem de `cs-notif.js` se descartó, ya no era un problema)* | Sonnet MEDIO-BAJO | **CÓDIGO 28/07** · falta subir ZIP |
 | **F** | Decisiones pendientes | — | E2-2, E3-3, E3-5, E1-7 | — | Tras §7 |
 
 **Sobre el orden:** A→B→C→D es de menor a mayor costo de despliegue y de menor a mayor riesgo. **El
@@ -75,8 +75,9 @@ cambio de plan facturado) — ver la nota en el Bloque A.
 > prod: CUIT renderiza y el input precarga sin cambios. Smoke oficial de prod **8/8**.
 > Fixtures borrados sin residuo; parche de prueba removido de staging.
 >
-> ⚠️ **Lo único que queda pendiente de A.1** es el paso 4 de su verificación (correr una
-> Procuración real desde la app Electron), que **requiere al operador** — ver §8.
+> ✅ **Paso 4 de A.1 confirmado por el operador (2026-07-28):** corrió una Procuración real desde
+> la app Electron contra la whitelist ya desplegada — funcionó bien. **El Bloque A queda 100%
+> cerrado, sin pendientes.**
 
 **Vector:** `scp` de los archivos + `pm2 restart procurador-api`. El dashboard es estático servido
 por Express, va en el mismo deploy. **Sin release de Electron, sin tocar la extensión.**
@@ -322,6 +323,28 @@ documentado; lo que sube el esfuerzo es la cantidad de archivos tocados + el gre
 
 ## 6. Bloque E — Extensión Chrome ⚡ (arrancar en paralelo)
 
+> ## ✅ CÓDIGO EJECUTADO — 2026-07-28 (commit `1f9d1c4`) — ⏳ falta el paso del operador
+>
+> Los 2 ítems (E.1, E.2) están implementados, verificados y el manifest en **1.3.7**. El ZIP
+> (`pjn-extension-1.3.7.zip`, generado junto al repo, excluye `imagenes/`) está listo. **Falta
+> el único paso que un agente no puede hacer:** subirlo al dashboard de Chrome Web Store y
+> esperar la aprobación de Google — ver §8.
+>
+> **Verificación de E.1 (sin Chrome real disponible en el entorno):** no se pudo cargar la
+> extensión desempaquetada (el sandbox no permite `chrome://extensions`). Se verificó en su
+> lugar simulando `handleHeaderLogoClick()` con stubs de `chrome`/`document`/`PJNAuth` para los
+> 3 escenarios del plan — los 3 dieron la URL exacta esperada:
+> - Sin sesión → `https://procuradortool.com`
+> - Con sesión + token → `https://api.procuradortool.com/usuarios/#sso=<token>`
+> - Con sesión sin token (borde) → `https://api.procuradortool.com/usuarios/` (sin romper)
+>
+> **E.2:** grep confirma cero referencias residuales a `checkExtensionVersion`,
+> `/api/extension/version` o el alarm `pjn-version-check`.
+>
+> ⚠️ **Pendiente real de verificación (requiere Chrome real, ya sea el operador o una sesión con
+> computer-use):** cargar la extensión desempaquetada y confirmar visualmente el click del logo
+> en los 2 estados, y que la consola del service worker ya no muestra el request fallido.
+
 **Vector:** editar → bump `manifest.json` `1.3.6 → 1.3.7` → generar ZIP (excluyendo `imagenes/`)
 → el **operador** lo sube al dashboard de Chrome Web Store → esperar aprobación de Google.
 
@@ -478,10 +501,11 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 
 | Qué | Para qué bloque | Por qué |
 |---|---|---|
-| ⏳ **Correr una Procuración real desde la app** | **A.1** (pendiente) | Único paso de verificación del Bloque A que quedó sin hacer: confirma que la whitelist no dejó afuera ningún script que el flujo real necesite. Los 3 checks de escritorio ya dieron OK en prod |
+| ~~Correr una Procuración real desde la app~~ | ~~A.1~~ | ✅ Confirmado por el operador (2026-07-28) — funcionó bien |
 | Correr los 3 flujos contra el PJN real | **C** (crítico) | La verificación funcional del motor necesita credenciales PJN reales |
 | Forzar un error de red a mitad de ejecución | **C** | Verificar E1-1 (Chrome huérfano) requiere provocar el fallo a mano |
-| Subir el ZIP al Chrome Web Store | **E** | Solo el operador tiene acceso al dashboard de publicación |
+| ⏳ **Subir `pjn-extension-1.3.7.zip` al Chrome Web Store** | **E** | Solo el operador tiene acceso al dashboard de publicación. El ZIP ya está generado en la raíz del repo |
+| ⏳ **Verificar el logo en Chrome real** (extensión desempaquetada) | **E** | El sandbox no puede abrir `chrome://extensions`; la lógica ya está verificada por simulación, falta el click real en los 2 estados |
 | Responder Q4, Q6, Q7 | C.2, —, — | Decisiones de diseño aún abiertas (Q1, Q2, Q3, Q5 ya resueltas) |
 
 ---
@@ -492,7 +516,9 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 
 1. ~~**Responder Q1 y Q5**~~ — ✅ hechas (2026-07-27), junto con Q2 y Q3.
 2. ~~**Bloque A**~~ — ✅ **ejecutado y en producción** (2026-07-28, commit `03e294d`). P-1 cerrado.
-3. **Bloque E** — arrancar cuanto antes, para que el ciclo de revisión de Google corra en paralelo.
+3. ~~**Bloque E**~~ — ✅ **código listo** (2026-07-28, commit `1f9d1c4`), manifest en 1.3.7, ZIP
+   generado. ⏳ Falta que el operador lo suba al Chrome Web Store — el ciclo de revisión de
+   Google corre en paralelo mientras se sigue con el resto.
 4. **Bloque B** — cierra el hallazgo más silencioso (el drift de schema). Rápido.
 5. **Bloque C** — el de mayor valor real, cuando haya una ventana con el operador disponible para
    la verificación contra el PJN.
