@@ -59,7 +59,14 @@ try {
     process.exit(1);
 }
 
-const { modo, partes, token, apiBase } = config;
+const { modo, partes, apiBase } = config;
+// E2-8 (revisión E2, Bloque D): el JWT ya no debe escribirse en texto plano en
+// config_monitoreo.json (queda en la carpeta temporal del proceso hijo, legible por
+// cualquier proceso con acceso al disco). main.js lo pasa ahora por process.env
+// (MONITOR_TOKEN, igual que ya hace con DECRYPT_KEY/DECRYPT_IV). Se tolera también
+// config.token durante la transición: una app instalada que todavía no se actualizó
+// al release que deja de escribirlo seguirá funcionando hasta que se actualice sola.
+const token = process.env.MONITOR_TOKEN || config.token;
 
 if (!modo || !['inicial', 'novedades'].includes(modo)) {
     process.stderr.write(`❌ ERROR: "modo" debe ser "inicial" o "novedades".\n`);

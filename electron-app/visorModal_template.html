@@ -289,6 +289,16 @@
     let expedientesFiltrados = [];
     let expedienteActualIndex = 0;
 
+    // E4-1 (P-2, revisión E4, Bloque D): caratula/dependencia/situacion/mov.tipo/mov.detalle
+    // vienen del scraping directo del SCW sin ningún regex restrictivo — se interpolaban vía
+    // innerHTML sin escapar. Mismo patrón que generarVisorMonitoreo() en main.js (que ya usa
+    // esc() en producción), portado acá. A diferencia de ese caso, acá esc() se complementa
+    // con escAttr() para los usos dentro de atributos (title="..."): esc() no escapa comillas,
+    // así que una carátula legítima con comillas (ej. RUIZ c/ "LA CAJA" S.A. s/ DAÑOS) rompería
+    // el atributo igual si se usara esc() ahí — ver docs/internal/revision-bitacora-vs-correcciones-2026-07-27.md.
+    function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function escAttr(s) { return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
     function cargarDatosEmbebidos(datos) {
       datosCompletos = datos;
       expedientesFiltrados = datos.expedientes;
@@ -400,9 +410,9 @@
         const depCorta      = dependencia.length > 28 ? dependencia.substring(0,28) + '…' : dependencia;
         html += `<tr>
           <td class="mono">${expediente}</td>
-          <td title="${caratula}" style="color:var(--text-1);font-weight:500">${caratulaCorta}</td>
-          <td title="${dependencia}">${depCorta}</td>
-          <td>${situacion}</td>
+          <td title="${escAttr(caratula)}" style="color:var(--text-1);font-weight:500">${esc(caratulaCorta)}</td>
+          <td title="${escAttr(dependencia)}">${esc(depCorta)}</td>
+          <td>${esc(situacion)}</td>
           <td style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);white-space:nowrap">${ultimaAct}</td>
           <td><span class="status-badge ${ok ? 'badge-ok' : 'badge-err'}"><span class="badge-dot"></span>${ok ? 'Exitoso' : 'Error'}</span></td>
           <td><span class="${movCount > 0 ? 'movs-count' : 'movs-count zero'}">${movCount}</span></td>
@@ -423,8 +433,12 @@
       const ultimaAct   = exp.ultimaAct   || '—';
       document.getElementById('modal-exp-badge').textContent  = exp.expediente || '';
       document.getElementById('modal-expediente').textContent = caratula;
+      // E4-1 (seguimiento, sesión 2026-07-28): mismos campos (dependencia/situacion) que
+      // mostrarTabla() ya escapa, repetidos acá sin sanear — no estaba en la enumeración
+      // original del hallazgo (limitada a mostrarTabla/abrirModal→tabla de movimientos),
+      // pero es la misma clase de texto libre del PJN vía innerHTML.
       document.getElementById('modal-info').innerHTML =
-        dependencia + ' &nbsp;·&nbsp; ' + situacion + ' &nbsp;·&nbsp; Últ. act.: ' + ultimaAct;
+        esc(dependencia) + ' &nbsp;·&nbsp; ' + esc(situacion) + ' &nbsp;·&nbsp; Últ. act.: ' + esc(ultimaAct);
 
       let bodyHTML = '';
       if (exp.estado === 'exitoso' && exp.movimientos && exp.movimientos.length > 0) {
@@ -434,9 +448,9 @@
             <tbody>`;
         exp.movimientos.forEach(mov => {
           bodyHTML += `<tr>
-            <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3);white-space:nowrap">${mov.fecha}</td>
-            <td><span class="tipo-badge">${mov.tipo}</span></td>
-            <td>${mov.detalle}</td>
+            <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3);white-space:nowrap">${esc(mov.fecha)}</td>
+            <td><span class="tipo-badge">${esc(mov.tipo)}</span></td>
+            <td>${esc(mov.detalle)}</td>
             <td>${mov.viewHref ? `<a href="${mov.viewHref}" target="_blank" class="link-scw">Ver en SCW →</a>` : '—'}</td>
           </tr>`;
         });

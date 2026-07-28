@@ -489,8 +489,6 @@ ipcMain.handle('onboarding-agregar-password', async () => {
 
 // ============ IPC HANDLERS - EXTENSIÓN CHROME ============
 
-const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
-
 const EXT_META_PATH = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'ProcuradorSCW', 'extension_meta.json');
 
 // RI-4 (revisión 2026-07-19, ejecutado 2026-07-22): se eliminaron `downloadExtension()`
@@ -625,102 +623,11 @@ ipcMain.handle('get-auth-token', () => {
     return authManager?.backendClient?.token || null;
 });
 
-// Generar PDF de instrucciones
-ipcMain.handle('generate-extension-pdf', async (_event, { path: extPath, version }) => {
-    try {
-        const { shell, dialog } = require('electron');
-        const pdfName = `instrucciones-extension-v${version || '1-0-0'}.pdf`;
-
-        // Preguntar al usuario dónde guardar el PDF
-        const { canceled, filePath: pdfPath } = await dialog.showSaveDialog(mainWindow, {
-            title: 'Guardar instrucciones de instalación',
-            defaultPath: path.join(app.getPath('downloads'), pdfName),
-            filters: [{ name: 'PDF', extensions: ['pdf'] }]
-        });
-        if (canceled || !pdfPath) return { success: false, canceled: true };
-
-        // Crear PDF con pdf-lib
-        const pdfDoc  = await PDFDocument.create();
-        const page    = pdfDoc.addPage([595, 842]); // A4
-        const { width, height } = page.getSize();
-        const fontBold   = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-        const fontNormal = await pdfDoc.embedFont(StandardFonts.Helvetica);
-        const fontMono   = await pdfDoc.embedFont(StandardFonts.Courier);
-
-        let y = height - 50;
-        const margin = 50;
-        const lineH  = 20;
-
-        // Encabezado
-        page.drawText('Procurador SCW', { x: margin, y, font: fontBold, size: 20, color: rgb(0.1, 0.3, 0.6) });
-        y -= 30;
-        page.drawText('Instrucciones de instalación — Extensión PJN para Chrome', {
-            x: margin, y, font: fontBold, size: 13, color: rgb(0.15, 0.15, 0.15)
-        });
-        y -= 15;
-        // Línea separadora
-        page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1, color: rgb(0.7, 0.7, 0.7) });
-        y -= 20;
-
-        // Info de versión y fecha
-        const now = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        page.drawText(`Versión: ${version}   |   Descargado el: ${now}`, {
-            x: margin, y, font: fontNormal, size: 10, color: rgb(0.4, 0.4, 0.4)
-        });
-        y -= 30;
-
-        // Ruta de descarga — recuadro destacado
-        page.drawText('Ruta de la extensión:', { x: margin, y, font: fontBold, size: 12, color: rgb(0.1, 0.3, 0.6) });
-        y -= 18;
-        page.drawRectangle({
-            x: margin, y: y - 8, width: width - margin * 2, height: 24,
-            color: rgb(0.94, 0.97, 1.0), borderColor: rgb(0.4, 0.6, 0.9), borderWidth: 1
-        });
-        page.drawText(extPath, { x: margin + 8, y: y, font: fontMono, size: 9, color: rgb(0.1, 0.1, 0.5) });
-        y -= 35;
-
-        // Instrucciones
-        page.drawText('Pasos para instalar la extensión:', { x: margin, y, font: fontBold, size: 12, color: rgb(0.15, 0.15, 0.15) });
-        y -= 25;
-
-        const pasos = [
-            ['1.', 'Abrí Google Chrome.'],
-            ['2.', 'En la barra de direcciones escribí:  chrome://extensions  y presioná Enter.'],
-            ['3.', 'Activá el "Modo desarrollador" (interruptor en la esquina superior derecha).'],
-            ['4.', 'Hacé clic en el botón "Cargar extensión sin empaquetar".'],
-            ['5.', 'En el cuadro de diálogo que se abre, en el campo "Nombre de carpeta", pegá'],
-            ['',   'la ruta de arriba y presioná Aceptar.'],
-            ['6.', 'La extensión "PJN – Automatización" aparecerá en la lista. ¡Listo!'],
-        ];
-
-        for (const [num, texto] of pasos) {
-            if (num) {
-                page.drawText(num, { x: margin, y, font: fontBold, size: 11, color: rgb(0.1, 0.3, 0.6) });
-            }
-            page.drawText(texto, { x: margin + (num ? 20 : 20), y, font: fontNormal, size: 11, color: rgb(0.15, 0.15, 0.15) });
-            y -= lineH;
-        }
-
-        y -= 15;
-        // Nota de actualización
-        page.drawRectangle({
-            x: margin, y: y - 10, width: width - margin * 2, height: 42,
-            color: rgb(1.0, 0.98, 0.9), borderColor: rgb(0.9, 0.7, 0.2), borderWidth: 1
-        });
-        page.drawText('Nota:', { x: margin + 8, y: y + 12, font: fontBold, size: 10, color: rgb(0.5, 0.35, 0) });
-        page.drawText('Si descargás una nueva versión, deberás repetir este proceso con la nueva ruta.', {
-            x: margin + 8, y: y - 2, font: fontNormal, size: 10, color: rgb(0.3, 0.2, 0)
-        });
-
-        const pdfBytes = await pdfDoc.save();
-        fs.writeFileSync(pdfPath, pdfBytes);
-        await shell.openPath(pdfPath); // Abrir el PDF directamente
-        return { success: true, pdfPath };
-    } catch (err) {
-        console.error('[ext] Error generando PDF:', err.message);
-        return { success: false, error: err.message };
-    }
-});
+// E2-5 (revisión E2, Bloque D): eliminado el handler 'generate-extension-pdf' — vestigio de
+// la distribución CRX/ZIP que RI-4 (2026-07-22) documentó haber eliminado. Generaba
+// instrucciones para "Cargar extensión sin empaquetar" en chrome://extensions; la extensión
+// se instala hoy desde la Chrome Web Store. Expuesto en ambos preloads sin ningún consumidor
+// real (verificado por grep) — se retira también el bridge de preload.js/preload-onboarding.js.
 
 ipcMain.handle('onboarding-complete', async (event, opts = {}) => {
     try {
@@ -763,6 +670,10 @@ ipcMain.handle('copy-to-clipboard', (_, text) => {
     clipboard.writeText(text);
 });
 
+// E2-1 (revisión E2, Bloque D): `key` llega crudo desde IPC — sin sanear, un valor como
+// '../../../algo' resolvía fuera de userData vía path.join (path traversal). Los 3 usos
+// reales (renderer/login.js) son identificadores simples ('psc_accounts', 'psc_remember'),
+// así que path.basename() no cambia ningún comportamiento legítimo y bloquea el resto.
 ipcMain.handle('safe-storage-set', (_, key, value) => {
     try {
         if (!safeStorage.isEncryptionAvailable()) {
@@ -770,7 +681,7 @@ ipcMain.handle('safe-storage-set', (_, key, value) => {
         }
         const encrypted = safeStorage.encryptString(value);
         const userData = app.getPath('userData');
-        fs.writeFileSync(path.join(userData, `${key}.enc`), encrypted);
+        fs.writeFileSync(path.join(userData, `${path.basename(String(key))}.enc`), encrypted);
         return { success: true };
     } catch (e) {
         return { success: false, error: e.message };
@@ -781,7 +692,7 @@ ipcMain.handle('safe-storage-get', (_, key) => {
     try {
         if (!safeStorage.isEncryptionAvailable()) return null;
         const userData = app.getPath('userData');
-        const filePath = path.join(userData, `${key}.enc`);
+        const filePath = path.join(userData, `${path.basename(String(key))}.enc`);
         if (!fs.existsSync(filePath)) return null;
         const encrypted = fs.readFileSync(filePath);
         return safeStorage.decryptString(encrypted);
@@ -793,7 +704,7 @@ ipcMain.handle('safe-storage-get', (_, key) => {
 ipcMain.handle('safe-storage-delete', (_, key) => {
     try {
         const userData = app.getPath('userData');
-        const filePath = path.join(userData, `${key}.enc`);
+        const filePath = path.join(userData, `${path.basename(String(key))}.enc`);
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         return { success: true };
     } catch (e) {
@@ -1193,12 +1104,15 @@ async function runProcessLogic(options = {}) {
         }
 
         const scriptName = 'procesarNovedadesCompleto.js';
-        mainWindow.webContents.send('batch-progress', { indeterminate: true, label: 'Procurando expedientes...' });
+        // E2-7 (revisión E2, Bloque D): optional chaining defensivo — runProcessLogic también
+        // la invoca dailyVerification.js "sin pasar por un evento de renderer" (sin escenario
+        // real confirmado donde mainWindow sea null hoy, pero de bajo costo aplicarlo igual).
+        mainWindow?.webContents.send('batch-progress', { indeterminate: true, label: 'Procurando expedientes...' });
 
         // Adquirir lock multi-dispositivo
         const lockResult = await acquireExecutionLock(scriptName);
         if (!lockResult.success) {
-            mainWindow.webContents.send('batch-progress', { done: true });
+            mainWindow?.webContents.send('batch-progress', { done: true });
             return {
                 success: false,
                 error: lockResult.error,
@@ -1214,10 +1128,10 @@ async function runProcessLogic(options = {}) {
         } finally {
             await releaseExecutionLock();
         }
-        mainWindow.webContents.send('batch-progress', { done: true });
+        mainWindow?.webContents.send('batch-progress', { done: true });
 
         updateRunStats('procuracion', result.success);
-        mainWindow.webContents.send('process-finished', {
+        mainWindow?.webContents.send('process-finished', {
             code: result.success ? 0 : 1,
             success: result.success
         });
@@ -1228,9 +1142,9 @@ async function runProcessLogic(options = {}) {
         const stopped = isSigtermError(error);
         console.error('Error ejecutando proceso:', error);
         await releaseExecutionLock();
-        mainWindow.webContents.send('batch-progress', { done: true, stopped });
+        mainWindow?.webContents.send('batch-progress', { done: true, stopped });
         if (!stopped) updateRunStats('procuracion', false);
-        mainWindow.webContents.send('process-finished', { code: 1, success: false, stopped });
+        mainWindow?.webContents.send('process-finished', { code: 1, success: false, stopped });
         return { success: false, error: error.message || error.error };
     } finally {
         isExecuting = false;
@@ -1531,15 +1445,31 @@ ipcMain.handle('list-expedientes', async (event, fechaLimite) => {
 
 // ============ IPC HANDLERS - ARCHIVOS Y OTROS (SIN CAMBIOS) ============
 
+// E2-3 (revisión E2, Bloque D): el handler confiaba ciegamente en filePath — shell.openPath()
+// abre CUALQUIER ruta con la aplicación asociada del sistema, así que un .exe/.bat/.cmd
+// terminaría ejecutándose. Los 4 call sites reales (renderer.js) siempre pasan rutas que
+// main.js mismo construyó (dentro de userData), nunca datos crudos de un expediente — pero
+// se valida igual, como defensa en profundidad (documentado junto a P-2/E4-1 en el informe
+// de revisión: si esos hallazgos alguna vez se combinaran, este handler no debe ser el
+// eslabón que complete la cadena).
+const EXTENSIONES_EJECUTABLES = new Set(['.exe', '.bat', '.cmd', '.scr', '.ps1', '.msi', '.com', '.vbs', '.js']);
 ipcMain.handle('open-file', async (event, filePath) => {
     try {
         const { shell } = require('electron');
 
-        if (!fs.existsSync(filePath)) {
+        const resolved = path.resolve(String(filePath || ''));
+        const userDataRoot = path.resolve(app.getPath('userData'));
+        if (!resolved.startsWith(userDataRoot + path.sep) && resolved !== userDataRoot) {
+            return { success: false, error: 'Ruta no permitida' };
+        }
+        if (EXTENSIONES_EJECUTABLES.has(path.extname(resolved).toLowerCase())) {
+            return { success: false, error: 'Tipo de archivo no permitido' };
+        }
+        if (!fs.existsSync(resolved)) {
             return { success: false, error: 'Archivo no encontrado' };
         }
 
-        await shell.openPath(filePath);
+        await shell.openPath(resolved);
         return { success: true };
     } catch (error) {
         return { success: false, error: error.message };
@@ -2453,14 +2383,20 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
         const token   = authManager.backendClient.token;
         const apiBase = authManager.backendClient.baseURL;
 
-        const configMonitoreo = JSON.stringify({ modo, partes, token, apiBase });
+        // E2-8 (revisión E2, Bloque D): el JWT ya no se escribe en config_monitoreo.json
+        // (quedaba en texto plano en la carpeta temporal del proceso hijo). Se pasa por
+        // extraEnv (MONITOR_TOKEN), mismo mecanismo que ya usa DECRYPT_KEY/DECRYPT_IV en
+        // authManager.js. El script (procesarMonitoreo.js, ya actualizado en el Bloque C)
+        // tolera también config.token, así que una app vieja que aún no se actualizó a
+        // este release sigue funcionando mientras el auto-updater la alcanza.
+        const configMonitoreo = JSON.stringify({ modo, partes, apiBase });
 
         mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Monitoreando ${partes.length} parte${partes.length !== 1 ? 's' : ''}...` });
         await closeChromeProfile();
         const result = await authManager.executeRemoteScriptAsLocal(
             'procesarMonitoreo.js',
             [],
-            { extraFiles: { 'config_monitoreo.json': configMonitoreo }, extraEnv: buildRunEnv(cuit), processLabel: modo === 'novedades' ? 'Monitor (novedades)' : 'Monitor (consulta inicial)' }
+            { extraFiles: { 'config_monitoreo.json': configMonitoreo }, extraEnv: { ...buildRunEnv(cuit), MONITOR_TOKEN: token }, processLabel: modo === 'novedades' ? 'Monitor (novedades)' : 'Monitor (consulta inicial)' }
         );
 
         // Parsear RESULT del output (executeRemoteScriptAsLocal retorna { success, output, executionTime })

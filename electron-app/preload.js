@@ -146,7 +146,7 @@ try {
         // ============ EXTENSIÓN CHROME ============
         // RI-4 (2026-07-19/22): installExtension/checkExtensionVersion eliminados —
         // bridges de IPC handlers muertos (ver nota en main.js).
-        generateExtensionPdf:   (data) => ipcRenderer.invoke('generate-extension-pdf', data),
+        // E2-5 (Bloque D, 2026-07-28): generateExtensionPdf eliminado (mismo criterio).
         getExtensionEnabled:    () => ipcRenderer.invoke('get-extension-enabled'),
         setExtensionEnabled:    (v) => ipcRenderer.invoke('set-extension-enabled', v),
         openChromeExtensions:   () => ipcRenderer.invoke('open-chrome-extensions'),

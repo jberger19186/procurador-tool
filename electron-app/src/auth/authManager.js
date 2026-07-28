@@ -1,7 +1,6 @@
 ﻿const path = require('path');
 const BackendClient = require('../api/backendClient');
 const ScriptCache = require('../scripts/scriptCache');
-const ScriptExecutor = require('../scripts/scriptExecutor');
 const CodeObfuscator = require('../security/codeObfuscator');
 const SecureTempFolder = require('../security/secureTempFolder');
 const ScriptAutoDestruct = require('../security/scriptAutoDestruct');
@@ -41,7 +40,6 @@ class AuthManager {
     constructor(backendURL) {
         this.backendClient = new BackendClient(backendURL);
         this.scriptCache = new ScriptCache();
-        this.scriptExecutor = new ScriptExecutor(this.scriptCache);
 
         // ✅ MÓDULOS DE SEGURIDAD
         this.obfuscator = new CodeObfuscator();
@@ -280,102 +278,12 @@ class AuthManager {
         }
     }
 
-    /**
-     * Ejecutar script en VM (pequeños scripts sin Puppeteer)
-     */
-    async executeScript(scriptName, params = {}) {
-        try {
-            const startTime = Date.now();
-
-            // ✅ Lista de scripts dependientes
-            const dependencies = {
-                'procesarNovedadesCompleto.js': [
-                    'testM1.js',
-                    'testM2.js',
-                    'consultarscwpjn.js',
-                    'listarSCWPJN.js'
-                ],
-                'listarSCWPJN.js': [
-                    'consultarscwpjn.js'
-                ]
-            };
-
-            // ✅ Cargar script principal
-            const loadResult = await this.loadScript(scriptName);
-            if (!loadResult.success) {
-                return {
-                    success: false,
-                    error: `No se pudo cargar el script: ${loadResult.error}`
-                };
-            }
-
-            // ✅ Cargar dependencias si existen
-            if (dependencies[scriptName]) {
-                console.log(`📦 Cargando dependencias de ${scriptName}...`);
-
-                for (const dep of dependencies[scriptName]) {
-                    const depResult = await this.loadScript(dep);
-                    if (!depResult.success) {
-                        console.warn(`⚠️ No se pudo cargar dependencia ${dep}: ${depResult.error}`);
-                    }
-                }
-            }
-
-            // Obtener código del caché
-            const code = this.scriptCache.get(scriptName);
-            if (!code) {
-                return {
-                    success: false,
-                    error: 'Script no encontrado en caché'
-                };
-            }
-
-            // Ejecutar
-            const execResult = await this.scriptExecutor.executeScript(
-                code,
-                scriptName,
-                params
-            );
-
-            const totalTime = Date.now() - startTime;
-
-            // Determinar subsistema según nombre del script
-            const subsystem = getSubsystemForScript(scriptName);
-
-            // Reportar ejecución al backend
-            await this.backendClient.logExecution(
-                scriptName,
-                execResult.success,
-                execResult.error || null,
-                totalTime,
-                subsystem
-            );
-
-            return {
-                ...execResult,
-                totalTime: totalTime
-            };
-
-        } catch (error) {
-            console.error(`❌ Error ejecutando ${scriptName}:`, error);
-
-            const subsystem = getSubsystemForScript(scriptName);
-
-            // Reportar error al backend
-            await this.backendClient.logExecution(
-                scriptName,
-                false,
-                error.message,
-                0,
-                subsystem
-            );
-
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
+    // E2-4 (revisión E2, Bloque D): eliminado el método executeScript() — corría scripts en
+    // un vm.createContext sandboxeado (this.scriptExecutor), pero puppeteer.launch() no puede
+    // correr funcionalmente dentro de ese sandbox. Ningún handler de main.js lo invocaba
+    // (verificado por grep); todos los flujos reales usan executeRemoteScriptAsLocal() más
+    // abajo, que hace fork() de un proceso hijo real. Vestigio de una arquitectura de
+    // ejecución anterior — ver también la eliminación de ScriptExecutor en el constructor.
 
     /**
      * ✅ NUEVO: Ejecutar script con child_process (Puppeteer scripts)
@@ -808,35 +716,16 @@ class AuthManager {
 
                     // ✅ 11. NOTIFICACIONES según resultado
                     if (code === 0) {
-                        // Intentar leer estadísticas del resultado
-                        try {
-                            const procesosPath = path.join(tempDir, 'descargas', 'procesos_automaticos');
-
-                            if (fs.existsSync(procesosPath)) {
-                                const outputFiles = fs.readdirSync(procesosPath);
-                                const jsonFile = outputFiles.find(f => f.endsWith('.json'));
-
-                                if (jsonFile) {
-                                    const resultData = JSON.parse(
-                                        fs.readFileSync(path.join(procesosPath, jsonFile), 'utf8')
-                                    );
-
-                                    const stats = {
-                                        expedientes: resultData.expedientes?.length || 0,
-                                        exitosos: resultData.expedientes?.filter(e => e.estado === 'exitoso').length || 0,
-                                        fallidos: resultData.expedientes?.filter(e => e.estado === 'fallido').length || 0,
-                                        tiempo: totalTime
-                                    };
-
-                                    this.notificationManager.notifyProcessComplete(stats);
-                                    this.securityMetrics.recordNotification();
-                                }
-                            }
-                        } catch (e) {
-                            // Si no se puede leer stats, notificar sin detalles
-                            this.notificationManager.notifyProcessComplete({ tiempo: totalTime });
-                            this.securityMetrics.recordNotification();
-                        }
+                        // E2-6 (revisión E2, Bloque D): antes intentaba leer estadísticas
+                        // detalladas desde tempDir/descargas/procesos_automaticos/*.json —
+                        // esa subcarpeta se eliminó en la unificación de nombres de v2.7.33
+                        // (los scripts escriben directo en 'descargas', sin subcarpeta
+                        // intermedia), así que ese lookup siempre fallaba y caía en el catch
+                        // (notificación sin detalles). updateRunStats() en main.js ya lleva
+                        // las estadísticas reales por tipo de proceso — se deja solo el
+                        // comportamiento que efectivamente corría hasta ahora.
+                        this.notificationManager.notifyProcessComplete({ tiempo: totalTime });
+                        this.securityMetrics.recordNotification();
                     } else {
                         this.notificationManager.notifyError(`Proceso terminó con código ${code}`);
                         this.securityMetrics.recordNotification();
@@ -967,7 +856,8 @@ class AuthManager {
     getStats() {
         return {
             cache: this.scriptCache.getStats(),
-            executor: this.scriptExecutor.getStats(),
+            // E2-4: 'executor' (this.scriptExecutor.getStats()) eliminado junto con
+            // ScriptExecutor — sin consumidor (verificado por grep en renderer.js/main.js).
             security: this.securityMetrics.getMetrics(),
             audit: this.securityAudit.getSummary(),         // ← NUEVO
             verifier: this.scriptVerifier.getConfig(),      // ← NUEVO
