@@ -1,13 +1,49 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
+// E1-5 (revisión E1, Bloque C.2): antes vivía en __dirname (compartido entre TODAS las
+// cuentas/CUIT de la misma PC, violando el aislamiento que D6 estableció para las
+// descargas), sin rotación (crecía indefinidamente con ejecuciones repetidas) y sin
+// protección: fs.appendFileSync corría dentro de listeners de eventos de Puppeteer sin
+// try/catch, con el mismo riesgo de crash no capturado que E1-1 corrige en otros scripts.
+const DATA_DIR = process.env.PROCURADOR_DATA_DIR || __dirname;
+const LOG_DIR = path.join(DATA_DIR, 'logs');
+const MAX_LOG_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function ensureLogDir() {
+    try {
+        if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+    } catch (_) { /* si no se puede crear, log() más abajo falla en silencio igual */ }
+}
+
+// Rotación simple por tamaño: al iniciar una sesión de monitoreo, si el log previo ya
+// pasó el umbral, se renombra a .old (pisando la rotación anterior) en vez de crecer
+// indefinidamente. No se chequea en cada log() individual (correría en cada respuesta
+// HTTP de la sesión) — alcanza con revisarlo una vez por sesión de monitoreo.
+function rotateIfNeeded(logFilePath) {
+    try {
+        if (!fs.existsSync(logFilePath)) return;
+        const { size } = fs.statSync(logFilePath);
+        if (size > MAX_LOG_SIZE_BYTES) {
+            fs.renameSync(logFilePath, `${logFilePath}.old`);
+        }
+    } catch (_) { /* no bloquear el monitoreo por un problema de rotación */ }
+}
+
 function setupMonitoring(page, options = {}) {
-    const logFilePath = path.join(__dirname, 'monitoring.log');
+    ensureLogDir();
+    const logFilePath = path.join(LOG_DIR, 'monitoring.log');
+    rotateIfNeeded(logFilePath);
     const errorSummary = { networkErrors: {}, responseErrors: {}, redirections: 0 };
 
     function log(message) {
         const timestamp = new Date().toISOString();
-        fs.appendFileSync(logFilePath, `[${timestamp}] ${message}\n`);
+        try {
+            fs.appendFileSync(logFilePath, `[${timestamp}] ${message}\n`);
+        } catch (_) {
+            // Silencioso a propósito: este log es de diagnóstico interno, no debe
+            // interrumpir ni el monitoreo ni el proceso que lo invoca.
+        }
     }
 
     function incrementErrorCount(url, errorType) {

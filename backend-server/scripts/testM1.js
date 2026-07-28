@@ -814,7 +814,10 @@ function buscarUltimaFechaExpedientes(filas) {
  * @returns {string} Ruta del archivo guardado.
  */
 function guardarListaExpedientes(todasLasFilas, identificador, tipo = "") {
-    const filePath = path.join(__dirname, `${identificador}${tipo ? "_" + tipo : ""}.txt`);
+    // E1-7 (revisión E1, Bloque C.2): antes en __dirname. El nombre ya incluye el CUIT
+    // (identificador), así que dos cuentas distintas no se pisaban entre sí — pero el
+    // archivo seguía viviendo fuera del directorio aislado por usuario que D6 estableció.
+    const filePath = path.join(process.env.PROCURADOR_DATA_DIR || __dirname, `${identificador}${tipo ? "_" + tipo : ""}.txt`);
     const fileContent = todasLasFilas.map(fila =>
         `${fila.expediente} | ${fila.dependencia} | ${fila.caratula} | ${fila.situacion} | ${fila.ultimaAct}`
     ).join('\n');

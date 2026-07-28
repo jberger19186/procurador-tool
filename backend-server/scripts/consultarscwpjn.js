@@ -86,7 +86,11 @@ if (fs.existsSync(backupFilePath)) {
 }
 
 // --- Configuración del Lock y Eliminación de Backups Antiguos ---
-const lockFilePath = path.join(__dirname, 'execution.lock');
+// E1-7 (revisión E1, Bloque C.2): antes vivía en __dirname, compartido entre TODAS las
+// cuentas (CUIT) de la misma PC. El candado server-side (active_executions) es por
+// user_id, no por machine_id — dos CUITs distintos en la misma PC no chocan ahí, así
+// que este archivo compartido sí podía pisarse entre cuentas ejecutando en paralelo.
+const lockFilePath = path.join(getDataPath(), 'execution.lock');
 // Se crea el lock (solo para indicar el inicio de esta ejecución)
 fs.writeFileSync(lockFilePath, JSON.stringify({ start: Date.now() }));
 
@@ -471,11 +475,18 @@ console.log(`📄 PROGRESS: Expedientes recibidos: ${expedientesInput.length}`);
                 if (!Array.isArray(movimientos)) {
                     movimientos = [movimientos];
                 }
+                // E1-12 (revisión E1, Bloque C.2): la comparación apuntaba a 'quick5' pero el
+                // modo real usado en iterarTablaActuaciones (2 líneas arriba) es 'quick5mam' —
+                // la condición nunca era verdadera. Sin cambio de comportamiento hoy: el modo
+                // real tiene maxDownloadsPerPage:0, así que mov.archivo siempre es "nn" de
+                // todas formas (el otro guard de esta misma condición ya lo cubre). Se corrige
+                // igual para que la lógica sea honesta si algún día se habilitan descargas
+                // bajo este modo.
                 const modoSeleccionado = 'quick5mam'; // modo usado en iterarTablaActuaciones (maxDownloadsPerPage: 0)
                 // En la función que renderiza los movimientos:
                 movimientos.map(mov => {
                     // Comprobar si, además de existir archivo, el modo activo prevé descarga
-                    if (mov.archivo && mov.archivo !== "nn" && modoSeleccionado === 'quick5') {
+                    if (mov.archivo && mov.archivo !== "nn" && modoSeleccionado === 'quick5mam') {
                         // 1. Calcula la carpeta base 'descargas' de tu proyecto:
                         const baseDir = path.join(getDataPath(), 'descargas');
                         // 2. Obtén la ruta relativa desde 'baseDir' hasta el archivo:

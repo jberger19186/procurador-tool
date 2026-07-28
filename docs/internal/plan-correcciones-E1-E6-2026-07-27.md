@@ -13,8 +13,8 @@
 > despliegues sin ganar nada.
 >
 > **Elaborado con:** Opus 5, 2026-07-27. **Estado:** en ejecución.
-> **✅ Bloque A ejecutado y en producción el 2026-07-28** (commit `03e294d`) — ver el recuadro en §2.
-> **Q1, Q2, Q3 y Q5 resueltas** (ver §7); quedan **Q4, Q6, Q7** para los bloques que las necesitan.
+> **✅ Bloques A, B, C (C.1+C.2) y E (código) ejecutados el 2026-07-28** — ver los recuadros en
+> §2, §3, §4 y §6. **Q1, Q2, Q3, Q4 y Q5 resueltas** (ver §7); quedan **Q6, Q7**.
 
 ---
 
@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|
 | ✅ **A** | Backend + dashboard | `scp` + `pm2 restart` · sin release | E5-1(P-1), E3-1, E3-2, E6-1, E6-2 | Sonnet MEDIO (A.3 en **Opus**) | **HECHO 28/07** |
 | ✅ **B** | Base de datos | Migración additiva + regenerar snapshot | E5-2, E3-4 | Sonnet BAJO-MEDIO | **HECHO 28/07** |
-| 🟡 **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet ALTO | **C.1 HECHO 28/07** · C.2 pendiente |
+| ✅ **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet ALTO | **C.1 y C.2 HECHOS 28/07** · falta verificación real |
 | **D** | App Electron | Release completo (bump + tag + 5 lugares de versión) | E4-1(P-2), E2-1, E2-3…E2-9, E4-3 | Sonnet **MEDIO-ALTO** | 4º |
 | ✅ **E** | Extensión Chrome | Bump manifest + ZIP + revisión de Google | Logo (2 estados, SSO decidido), `checkExtensionVersion()` — *(el ítem de `cs-notif.js` se descartó, ya no era un problema)* | Sonnet MEDIO-BAJO | **CÓDIGO 28/07** · falta subir ZIP |
 | **F** | Decisiones pendientes | — | E2-2, E3-3, E3-5, E1-7 | — | Tras §7 |
@@ -252,11 +252,57 @@ obligatorio, staging antes que prod.
 
 ## 4. Bloque C — Motor de automatización Puppeteer
 
-> ## ✅ C.1 EJECUTADO Y EN PRODUCCIÓN — 2026-07-28
+> ## ✅ C.1 Y C.2 EJECUTADOS Y EN PRODUCCIÓN — 2026-07-28
 >
-> Los 5 ítems de C.1 (E1-1, E1-2, E1-3, E1-4, E1-6) están implementados, verificados por
-> escritorio y desplegados en producción. **C.2 (aislamiento/limpieza) queda para una próxima
-> sesión**, tal como el plan recomendaba (2 sesiones separadas).
+> Los 5 ítems de C.1 y los 8 de C.2 están implementados, verificados por escritorio y
+> desplegados en producción. **Todo el Bloque C está en código** — solo falta la verificación
+> funcional real contra el PJN (ver §8), que necesita al operador.
+>
+> ### C.2 — lo que se hizo
+>
+> - **E1-7 (Q4 investigada y resuelta):** se verificó en `routes/license.js` que el candado
+>   server-side (`active_executions`, `ON CONFLICT (user_id)`) es por **cuenta**, no por
+>   **máquina** — dos CUITs distintos en la misma PC obtienen filas separadas, sin chocar entre
+>   sí. Esto confirma que **el escenario de E1-7 es real** (no lo prevenía nada más). Se movieron
+>   los 4 archivos de control a `PROCURADOR_DATA_DIR`: `execution.lock` (`consultarscwpjn.js`,
+>   `listarSCWPJN.js`), `pid_quickscw.txt`/`stop_quickscw.flag` (`informequickscwpjn.js`),
+>   `backup_exp_*.json`/`estado_secciones.json`/`acumulador_resultados.json` (`listarSCWPJN.js`),
+>   `<identificador>.txt` (`testM1.guardarListaExpedientes`). Los `config_*.json` se dejaron
+>   deliberadamente en `__dirname` — son el contrato de `main.js` con el proceso hijo, no datos
+>   de usuario.
+> - **E1-5:** `monitoreo.js` reescrito — el log vive ahora en
+>   `PROCURADOR_DATA_DIR/logs/monitoring.log` (aislado por cuenta), con rotación por tamaño
+>   (5 MB, se renombra a `.old` al iniciar una sesión de monitoreo si lo excede) y
+>   `fs.appendFileSync` envuelto en try/catch silencioso.
+> - **E4-2:** helper `sanitizeExcelCell()` en `procesarNovedadesCompleto.js` — antepone `'` a
+>   los 4 campos de texto libre del PJN (`tipo`, `detalle`, `oficina`, `caratula`) en la hoja
+>   "Movimientos" si empiezan con `=`, `+`, `-`, `@`. *(Nota: `exp.caratula` se repite sin
+>   sanear en la hoja "Expedientes" — no estaba en el alcance original de E4-2, que se limitó a
+>   la hoja Movimientos; queda como observación para un futuro hallazgo, no corregido acá.)*
+> - **E1-9:** `testM2.iterarTablaActuacionesHistoricas` comparaba `resultado.movimientos`
+>   cuando la función subyacente devuelve `movimientosHistoricos` — corregido (código sin
+>   consumidores hoy, verificado por grep).
+> - **E1-8:** el `Math.min(options.startPage, /* comentario */)` (equivalente a
+>   `Math.min(options.startPage)`, sin acotar nada) se reemplazó por `options.startPage`
+>   directo, con un comentario honesto de por qué no hay total-de-páginas contra qué acotar
+>   todavía. Dormido: ningún llamador pasa `startPage`.
+> - **E1-10:** `txtPath` (referenciado sin declarar en `procesarNovedadesCompleto.js`, su
+>   generación estaba comentada) reemplazado por `null` explícito — `enviarEmail` ya maneja
+>   `null` correctamente. Código muerto en la práctica (el email está desactivado por defecto).
+> - **E1-11:** eliminadas ~95 líneas inalcanzables en `listarSCWPJN.js` (la rama `else` de
+>   `modoReintento === "seccion"`, constante hardcodeada a `"seccion"` — nunca podía ejecutarse).
+>   Verificado por grep que las 4 funciones que solo usaba ese bloque muerto
+>   (`verificarPagina`, `navegarDirectamenteAPagina`, `iterarListaExpedientesConSimulacion`,
+>   `paginasConErrorGlobal`) se siguen usando en el camino real — nada quedó huérfano.
+> - **E1-12:** en `consultarscwpjn.js`, `modoSeleccionado` comparaba contra `'quick5'` cuando el
+>   modo real es `'quick5mam'` — corregido sin cambio de comportamiento hoy (el otro guard de
+>   la misma condición, `mov.archivo !== "nn"`, ya cubría el caso).
+>
+> **Verificación:** `node -c` en los 7 archivos tocados, sin sintaxis rota; grep de referencias
+> huérfanas tras la eliminación de E1-11, limpio. Desplegado en staging y prod (mismo
+> procedimiento correcto del incidente de C.1 — ver arriba: reencrypt desde el propio directorio
+> de cada entorno, con su propio `.env`, sin ambigüedad). Verificado en prod: 13 scripts en la
+> whitelist, `listarSCWPJN.js` descarga 200, `backup-db.js` sigue en 404, health/API/landing 200.
 >
 > - **E1-1:** `process.on('uncaughtException'/'unhandledRejection')` (solo loguea, sin `exit`)
 >   agregado a `consultarscwpjn.js`, `procesarMonitoreo.js` y `procesarCustomExpedientes.js` —
@@ -547,15 +593,17 @@ suspensión reales** — no solo en `subscriptionService.js` como asumía el pla
 - **Opción 3 — Dejarlo como está** y solo agregar una notificación cuando se aplique tarde.
 </details>
 
-### Q4 — E1-7: ¿vale la pena aislar los archivos de control por CUIT? (afecta C.2)
-Varios archivos de control (`execution.lock`, `pid_quickscw.txt`, `stop_quickscw.flag`, los backups
-de `listarSCWPJN.js`) usan `__dirname` en vez de `PROCURADOR_DATA_DIR`, así que se comparten entre
-cuentas en la misma PC. **El impacto real depende de algo que no verifiqué:** si el candado
-server-side (`active_executions`) ya impide que dos CUITs distintos ejecuten en paralelo en la
-misma máquina, el escenario problemático no puede darse y esto es cosmético.
+### ~~Q4~~ — E1-7: ¿vale la pena aislar los archivos de control por CUIT? — ✅ INVESTIGADA Y RESUELTA (2026-07-28)
 
-**Propuesta:** verificar primero eso (es una lectura de `license.js` + una prueba en staging, ~30
-min). Si el lock ya lo previene → bajar el ítem a "cosmético, opcional". Si no → incluirlo en C.2.
+**Verificado en `routes/license.js`:** el candado server-side (`active_executions`) hace
+`INSERT ... ON CONFLICT (user_id) DO UPDATE ... WHERE active_executions.machine_id = EXCLUDED.machine_id`
+— la clave única es **`user_id`**, no `machine_id`. Dos cuentas (CUIT) distintas en la misma PC
+obtienen filas **separadas** en `active_executions` (no hay conflicto entre ellas), así que el
+lock **no previene** que corran en paralelo compartiendo archivos de control. **El escenario de
+E1-7 es real**, no cosmético.
+
+**Implementado:** los 4 archivos de control movidos a `PROCURADOR_DATA_DIR` — ver el recuadro del
+Bloque C arriba.
 
 ### Q5 — E5-2: ¿cómo evitamos que el schema se vuelva a desactualizar? (afecta B.1)
 
@@ -599,7 +647,7 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 | ⏳ **Forzar un error de red a mitad de ejecución** | **C.1** | Verificar E1-1 (Chrome huérfano) requiere provocar el fallo a mano, con la app real |
 | ⏳ **Subir `pjn-extension-1.3.7.zip` al Chrome Web Store** | **E** | Solo el operador tiene acceso al dashboard de publicación. El ZIP ya está generado en la raíz del repo |
 | ⏳ **Verificar el logo en Chrome real** (extensión desempaquetada) | **E** | El sandbox no puede abrir `chrome://extensions`; la lógica ya está verificada por simulación, falta el click real en los 2 estados |
-| Responder Q4, Q6, Q7 | C.2, —, — | Decisiones de diseño aún abiertas (Q1, Q2, Q3, Q5 ya resueltas) |
+| Responder Q6, Q7 | —, — | Decisiones de diseño aún abiertas (Q1, Q2, Q3, Q4, Q5 ya resueltas) |
 
 ---
 
@@ -614,9 +662,9 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
    Google corre en paralelo mientras se sigue con el resto.
 4. ~~**Bloque B**~~ — ✅ **ejecutado y en producción** (2026-07-28). Drift de schema cerrado +
    regeneración automatizada en el backup diario (Q5) + los 4 índices.
-5. ~~**Bloque C.1**~~ — ✅ **ejecutado y en producción** (2026-07-28). Los 5 fixes de robustez de
-   errores desplegados; C.2 (aislamiento/limpieza) y la verificación funcional real contra el PJN
-   quedan para cuando el operador tenga ventana.
+5. ~~**Bloque C (C.1 + C.2)**~~ — ✅ **ejecutado y en producción** (2026-07-28). Los 13 fixes de
+   código están hechos; solo queda la verificación funcional real contra el PJN, para cuando el
+   operador tenga ventana (no bloquea seguir con el resto del plan).
 6. **Bloque D** — el release, al final, agrupando todo lo de Electron en una sola versión.
    ⚠️ Recordar: **D antes de la Fase 2 de Bitácora** (ver `revision-bitacora-vs-correcciones-2026-07-27.md`).
 

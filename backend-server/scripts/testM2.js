@@ -1076,7 +1076,15 @@ async function extraerTablaActuacionesHistoricas(page, options = {}) {
         }
 
         // —— Nuevo: navegar hasta la página inicial definida por el usuario ——
-        const start = Math.min(options.startPage, /* opcional: totalPages si lo detectas */);
+        // E1-8 (revisión E1, Bloque C.2): el `Math.min(options.startPage, /* comentario */)`
+        // original tenía un segundo argumento vacío (comentario tras una coma final, JS
+        // válido) — equivalía a `Math.min(options.startPage)`, sin acotar nada realmente.
+        // No existe (todavía) detección del total real de páginas históricas en esta
+        // función (a diferencia de la extracción no-histórica, que sí lo tiene vía
+        // `paginasAProcesar`), así que no hay contra qué acotar. Dormido hoy: ningún
+        // llamador pasa `startPage` (siempre usa el default 1, donde `start > 1` es
+        // falso y este bloque no se ejecuta) — se deja explícito en vez de simulado.
+        const start = options.startPage;
         if (start > 1) {
             console.log(`Saltando de página 1 a página ${start} de históricas…`);
             for (let p = 1; p < start; p++) {
@@ -1256,8 +1264,11 @@ async function iterarTablaActuacionesHistoricas(page, options = {}) {
     while (continuar) {
         console.log(`Extrayendo datos históricos en página ${paginaActual}...`);
         let resultado = await extraerTablaActuacionesHistoricasConReintentos(page, options);
-        if (resultado && resultado.movimientos) {
-            const movs = Array.isArray(resultado.movimientos) ? resultado.movimientos : [resultado.movimientos];
+        // E1-9 (revisión E1, Bloque C.2): la función subyacente devuelve `movimientosHistoricos`,
+        // no `movimientos` — la condición era siempre falsa y esta función nunca acumulaba
+        // datos reales. Código sin consumidores hoy (verificado por grep), corregido igual.
+        if (resultado && resultado.movimientosHistoricos) {
+            const movs = Array.isArray(resultado.movimientosHistoricos) ? resultado.movimientosHistoricos : [resultado.movimientosHistoricos];
             movimientosHistoricos.push(...movs);
         } else {
             console.warn(`No se extrajeron datos históricos en la página ${paginaActual}.`);

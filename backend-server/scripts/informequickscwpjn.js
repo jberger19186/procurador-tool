@@ -24,7 +24,9 @@ const {
 
 // Constantes
 const PROFILE_PATH = path.join(process.env.LOCALAPPDATA, 'ProcuradorSCW', 'ChromeProfile');
-const PID_FILE_PATH = path.join(__dirname, 'pid_quickscw.txt');
+// E1-7 (revisión E1, Bloque C.2): antes en __dirname, compartido entre todas las cuentas
+// (CUIT) de la misma PC — mismo criterio que DOWNLOADS_DIR arriba.
+const PID_FILE_PATH = path.join(process.env.PROCURADOR_DATA_DIR || __dirname, 'pid_quickscw.txt');
 
 // Evitar límite de listeners para no generar memory leaks
 process.setMaxListeners(0);
@@ -787,7 +789,8 @@ async function main() {
     }
     procesoEjecutado = true;
 
-    const FLAG_PATH = path.join(__dirname, 'stop_quickscw.flag');
+    // E1-7: mismo criterio que PID_FILE_PATH — aislado por cuenta (CUIT).
+    const FLAG_PATH = path.join(process.env.PROCURADOR_DATA_DIR || __dirname, 'stop_quickscw.flag');
 
     // 2. Bucle de reintentos: mientras queden disponibles
     while (puedeReintentar(identificador, expedienteStr)) {

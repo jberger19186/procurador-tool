@@ -518,7 +518,12 @@ async function procesarNovedadesCompleto(config) {
         if (config.email.activado && nodemailer) {
             console.log("\n📧 Enviando email...");
             try {
-                await enviarEmail(config.email, resultados, jsonPath, txtPath);
+                // E1-10 (revisión E1, Bloque C.2): txtPath no estaba declarado en este scope
+                // (su generación quedó comentada arriba) — referenciarlo lanzaba un
+                // ReferenceError, capturado por este mismo try/catch (fallaba el envío del
+                // email en silencio con un error que no reflejaba la causa real).
+                // enviarEmail ya maneja null correctamente (adjunta el TXT solo si existe).
+                await enviarEmail(config.email, resultados, jsonPath, null);
                 console.log("   ✅ Email enviado correctamente");
             } catch (emailError) {
                 console.error(`   ❌ Error al enviar email: ${emailError.message}`);
@@ -628,6 +633,16 @@ function generarResumenTexto(resultados) {
 }
 
 // ============ GENERAR EXCEL ============
+// E4-2 (revisión E4, Bloque C.2): mitigación estándar de formula injection en Excel/CSV.
+// Si el texto libre del PJN (tipo, detalle, oficina, carátula) empezara con uno de estos
+// caracteres, Excel/LibreOffice lo interpretaría como fórmula al abrir el archivo en vez
+// de como texto plano. Anteponer un apóstrofe fuerza el tipo texto sin alterar el
+// contenido visible (Excel oculta el apóstrofe inicial de las celdas de texto).
+function sanitizeExcelCell(value) {
+    if (typeof value !== 'string') return value;
+    return /^[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
 async function generarExcel(resultados, timestamp, incluirMovimientos) {
     try {
         const workbook = new ExcelJS.Workbook();
@@ -723,10 +738,10 @@ async function generarExcel(resultados, timestamp, incluirMovimientos) {
                         const row = sheetMovimientos.addRow({
                             expediente: exp.expediente,
                             fecha: mov.fecha,
-                            tipo: mov.tipo,
-                            detalle: mov.detalle,
-                            oficina: mov.oficina || '',
-                            caratula: exp.caratula,              // ← Carátula del expediente
+                            tipo: sanitizeExcelCell(mov.tipo),
+                            detalle: sanitizeExcelCell(mov.detalle),
+                            oficina: sanitizeExcelCell(mov.oficina || ''),
+                            caratula: sanitizeExcelCell(exp.caratula),  // ← Carátula del expediente
                             href: mov.viewHref || '',            // ← URL (se convertirá a hipervínculo)
                             separador: '-'                       // ← Siempre "-"
                         });

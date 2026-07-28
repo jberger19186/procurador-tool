@@ -28,6 +28,11 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 const profilePath = path.join(process.env.LOCALAPPDATA, 'ProcuradorSCW', 'ChromeProfile');
+// E1-7 (revisión E1, Bloque C.2): archivos de control/estado (lock, backups, acumulador)
+// aislados por cuenta (CUIT), mismo criterio que D6 (2026-06-30) ya aplicó a las descargas.
+// Los config_*.json siguen en __dirname a propósito — son el contrato de main.js con el
+// proceso hijo, no datos de usuario.
+const DATA_DIR = process.env.PROCURADOR_DATA_DIR || __dirname;
 const _config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config_proceso.json'), 'utf8'));
 const identificador = _config.general.identificador;
 const fechaLimite = process.argv.length > 2 ? process.argv[2] : null;
@@ -297,7 +302,7 @@ async function procesarSeccion(sec, page, fechaLimiteParam) {
     }
     console.log(`🔢 Se detectaron ${totalPaginas} páginas en total para ${sec.type}.`);
 
-    const backupFilePathSec = path.join(__dirname, `backup_exp_${sec.type.replace(/ /g, '_')}.json`);
+    const backupFilePathSec = path.join(DATA_DIR, `backup_exp_${sec.type.replace(/ /g, '_')}.json`);
     let backupData = { paginas: {}, ultimaPaginaProcesada: 0 };
     let paginaInicial = 1;
     if (fs.existsSync(backupFilePathSec)) {
@@ -378,7 +383,7 @@ async function procesarSeccion(sec, page, fechaLimiteParam) {
 /* Función principal que ejecuta el proceso completo */
 async function ejecutarProceso(reintento = 0, fechaLimiteParam = '01/01/2017') {
     let browser, page;  // Declaración de browser en el ámbito de la función
-    const lockFilePath = path.join(__dirname, 'execution.lock');
+    const lockFilePath = path.join(DATA_DIR, 'execution.lock');
     if (reintento === 0) {
         fs.writeFileSync(lockFilePath, JSON.stringify({ start: Date.now() }));
         const filesToCheck = [
@@ -390,7 +395,7 @@ async function ejecutarProceso(reintento = 0, fechaLimiteParam = '01/01/2017') {
             'backup_exp_FAVORITOS.json'
         ];
         filesToCheck.forEach(fileName => {
-            const filePath = path.join(__dirname, fileName);
+            const filePath = path.join(DATA_DIR, fileName);
             if (fs.existsSync(filePath)) {
                 const stats = fs.statSync(filePath);
                 const lockStats = fs.statSync(lockFilePath);
@@ -402,7 +407,7 @@ async function ejecutarProceso(reintento = 0, fechaLimiteParam = '01/01/2017') {
         });
     }
 
-    const acumuladorPath = path.join(__dirname, 'acumulador_resultados.json');
+    const acumuladorPath = path.join(DATA_DIR, 'acumulador_resultados.json');
     if (reintento === 0 && fs.existsSync(acumuladorPath)) {
         fs.unlinkSync(acumuladorPath);
     }
@@ -414,7 +419,7 @@ async function ejecutarProceso(reintento = 0, fechaLimiteParam = '01/01/2017') {
     const configPath = path.join(__dirname, 'config_listar.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    const estadoPath = path.join(__dirname, 'estado_secciones.json');
+    const estadoPath = path.join(DATA_DIR, 'estado_secciones.json');
     let estadoSecciones = {};
     if (fs.existsSync(estadoPath)) {
         estadoSecciones = JSON.parse(fs.readFileSync(estadoPath, 'utf8'));
@@ -524,7 +529,7 @@ async function ejecutarProceso(reintento = 0, fechaLimiteParam = '01/01/2017') {
                         } catch (verifyErr) {
                             console.warn(`⚠️ Verificación post-sección ${sec.type} falló: ${verifyErr.message}. Los datos ya fueron guardados en backup.`);
                         }
-                        const backupFilePathSec = path.join(__dirname, `backup_exp_${sec.type.replace(/ /g, '_')}.json`);
+                        const backupFilePathSec = path.join(DATA_DIR, `backup_exp_${sec.type.replace(/ /g, '_')}.json`);
                         if (fs.existsSync(backupFilePathSec)) {
                             fs.unlinkSync(backupFilePathSec);
                             console.log(`🗑️ Backup eliminado para ${sec.type} tras la extracción exitosa.`);
@@ -568,103 +573,15 @@ async function ejecutarProceso(reintento = 0, fechaLimiteParam = '01/01/2017') {
                         }
                     }
                 }
-            } else {
-                console.log(`\n🔄 Procesando sección: ${sec.type}`);
-                await testM1.consultarExpedientes(page, sec.code);
-                console.log("📂 Ordenando y contando expedientes...");
-                const { totalPaginas } = await testM1.ordenarYContarExpedientes(page);
-                if (totalPaginas === 0) {
-                    console.log(`No hay expedientes disponibles para ${sec.type}. Se continúa con la siguiente sección.`);
-                    await delay(3000);
-                    continue;
-                }
-                const backupFilePathSec = path.join(__dirname, `backup_exp_${sec.type.replace(/ /g, '_')}.json`);
-                let backupData = { paginas: {}, ultimaPaginaProcesada: 0 };
-                let paginaInicial = 1;
-                if (fs.existsSync(backupFilePathSec)) {
-                    console.log(`📂 Recuperando datos previos del backup para ${sec.type}...`);
-                    backupData = JSON.parse(fs.readFileSync(backupFilePathSec, 'utf8'));
-                    const registrosBackup = Object.values(backupData.paginas).flat();
-                    console.log(`✅ Se recuperaron ${registrosBackup.length} registros para ${sec.type}, última página procesada: ${backupData.ultimaPaginaProcesada}.`);
-                    paginaInicial = backupData.ultimaPaginaProcesada + 1;
-                    console.log(`🔄 Se continuará desde la página ${paginaInicial} para ${sec.type}.`);
-                }
-                if (backupData.ultimaPaginaProcesada > 0) {
-                    console.log(`🔍 Verificando consistencia de la última página procesada (${backupData.ultimaPaginaProcesada}) para ${sec.type}...`);
-                    const backupPageData = backupData.paginas[backupData.ultimaPaginaProcesada] || [];
-                    const ok = await verificarPagina(page, backupData.ultimaPaginaProcesada, backupPageData);
-                    if (!ok) {
-                        console.error(`❌ La verificación falló para ${sec.type}. Se descartará el backup y se reiniciará la extracción desde la página 1.`);
-                        backupData = { paginas: {}, ultimaPaginaProcesada: 0 };
-                        paginaInicial = 1;
-                    }
-                }
-                if (paginaInicial > 1) {
-                    console.log(`🚀 Intentando navegación directa a la página ${paginaInicial} para ${sec.type}...`);
-                    const exitoNavegacion = await navegarDirectamenteAPagina(page, paginaInicial);
-                    if (!exitoNavegacion) {
-                        console.log(`⚠️ No se pudo realizar navegación directa para ${sec.type}; se usará navegación secuencial.`);
-                    }
-                }
-                let paginasConError = paginasConErrorGlobal[sec.type] || [];
-                const resultadoExtraccion = await iterarListaExpedientesConSimulacion(page, totalPaginas, fechaLimite, paginasConError, paginaInicial);
-                const nuevasFilas = resultadoExtraccion.datosExtraidos;
-                const ultimaPaginaProcesada = resultadoExtraccion.ultimaPaginaProcesada;
-                const stoppedByLimit = resultadoExtraccion.stoppedByLimit;
-                const paginasData = resultadoExtraccion.paginasData;
-
-                backupData.paginas = { ...backupData.paginas, ...paginasData };
-                backupData.ultimaPaginaProcesada = ultimaPaginaProcesada;
-                let datosCompletos = Object.keys(backupData.paginas)
-                    .sort((a, b) => Number(a) - Number(b))
-                    .reduce((acc, key) => acc.concat(backupData.paginas[key]), []);
-
-                const tipoAbreviado = {
-                    "LETRADO": "L",
-                    "PARTE": "P",
-                    "AUTORIZADO NE": "A",
-                    "FAVORITOS": "F"
-                };
-
-                datosCompletos = datosCompletos.map(item => ({
-                    ...item,
-                    caratula: `${item.caratula} |${tipoAbreviado[sec.type]}`,
-                    tipo: sec.type
-                }));
-
-                fs.writeFileSync(backupFilePathSec, JSON.stringify(backupData, null, 2));
-                console.log(`💾 Backup actualizado para ${sec.type}: ${datosCompletos.length} registros, última página procesada: ${ultimaPaginaProcesada}.`);
-
-                const duplicados = testM1.controlarDuplicados(datosCompletos);
-                if (duplicados.totalDuplicados > 0) {
-                    throw new Error(`Se encontraron ${duplicados.totalDuplicados} duplicados en ${sec.type}: ${JSON.stringify(duplicados.duplicados)}`);
-                }
-
-                if (stoppedByLimit) {
-                    console.log(`✅ Extracción detenida por condición de fecha límite para ${sec.type}. Se considera completa la extracción.`);
-                } else if (ultimaPaginaProcesada < totalPaginas) {
-                    throw new Error(`Extracción incompleta para ${sec.type}, error en la página ${ultimaPaginaProcesada + 1}`);
-                }
-
-                console.log(`💾 Guardando lista de expedientes final para ${sec.type}...`);
-                const filePathSec = testM1.guardarListaExpedientes(datosCompletos, identificador, sec.type);
-                console.log(`📌 Lista guardada en: ${filePathSec}`);
-
-                estadoSecciones[sec.type] = "completo";
-                fs.writeFileSync(estadoPath, JSON.stringify(estadoSecciones, null, 2));
-                console.log(`🔍 Consultando expedientes para ${sec.type}...`);
-                try {
-                    await testM1.consultarExpedientes(page, sec.code);
-                } catch (verifyErr) {
-                    console.warn(`⚠️ Verificación post-sección ${sec.type} falló: ${verifyErr.message}. Los datos ya fueron guardados.`);
-                }
-                if (fs.existsSync(backupFilePathSec)) {
-                    fs.unlinkSync(backupFilePathSec);
-                    console.log(`🗑️ Backup eliminado para ${sec.type} tras la extracción exitosa.`);
-                }
-                finalResultados = finalResultados.concat(datosCompletos);
-                fs.writeFileSync(acumuladorPath, JSON.stringify(finalResultados, null, 2));
             }
+            // E1-11 (revisión E1, Bloque C.2): se eliminó el bloque `else` que vivía acá
+            // (~95 líneas) — era inalcanzable porque `modoReintento` (línea 41) está
+            // hardcodeado a "seccion" y nunca se lee de configuración ni se modifica, así
+            // que la condición de arriba es siempre verdadera. El bloque muerto duplicaba
+            // casi toda la lógica de procesamiento de sección pero SIN el manejo de
+            // reintentos por sección ni el catch de SSL_BLOCK_SCREEN_DETECTED — de haberse
+            // activado alguna vez habría sido estrictamente menos resiliente que el camino
+            // real (el `if` de arriba). Ver revision-E1-2026-07-27.md.
             // Espera 3 segundos entre cada sección procesada
             await delay(3000);
         }
@@ -692,7 +609,7 @@ async function ejecutarProceso(reintento = 0, fechaLimiteParam = '01/01/2017') {
         const todasCompletas = secciones.every(sec => estadoSecciones[sec.type] === "completo");
         if (todasCompletas) {
             secciones.forEach(sec => {
-                const backupPath = path.join(__dirname, `backup_exp_${sec.type.replace(/ /g, '_')}.json`);
+                const backupPath = path.join(DATA_DIR, `backup_exp_${sec.type.replace(/ /g, '_')}.json`);
                 if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
             });
             if (fs.existsSync(estadoPath)) fs.unlinkSync(estadoPath);
