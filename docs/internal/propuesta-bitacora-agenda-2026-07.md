@@ -186,6 +186,15 @@ y el navegador navega la pestaña `procurador_portal` a ese POST. El portal (con
 
 - **Por qué POST-formulario y no GET-link (el cambio de esta versión):** un envío de `<form>` es una **navegación de página completa** —igual que hacer clic en un link—, **no** una llamada `fetch`/AJAX; por eso **no dispara CORS** aunque el origen sea `file://null`, exactamente la misma propiedad que tenía el link GET. La diferencia es dónde viajan los datos: un GET los lleva en la **URL** (limitada a ~2.000 caracteres prácticos); un POST los lleva en el **body de la petición**, sin ese límite (el único tope pasa a ser el `body-parser` del servidor, configurable a varios MB — trivial para cualquier snapshot real). **Resultado: desaparece la necesidad de recortar movimientos o de limitar la selección múltiple a 10 casos** (ver §4.2, corregido más abajo). El único costo es que el botón dispara un formulario invisible en vez de ser un link — imperceptible para el usuario, sigue siendo "un clic".
 - **Sin token embebido en el HTML** (que sería compartible por error) — el POST no necesita transportar credenciales, solo los datos del caso ya conocidos por el usuario.
+
+> 🔴 **CORRECCIÓN CRÍTICA (2026-07-27, hallazgo E4-1 de `revision-E4-2026-07-27.md`) — los `value=""` del formulario deben ir ESCAPADOS.** El formulario de arriba inyecta datos crudos del PJN dentro de **atributos HTML** (`value="FCR 1234/2021"`, y sobre todo `<input name="car">` con la carátula y `<input name="movs">` con el JSON de movimientos). La revisión E4 confirmó que `visorModal_template.html` **hoy no escapa nada** (5 campos de texto libre del PJN interpolados vía `innerHTML`, cero mitigación, sin CSP) — si la Bitácora agrega estos `value=""` con el mismo criterio, **suma puntos de inyección nuevos y en un contexto más peligroso**: en atributo, una comilla en la carátula (`RUIZ c/ "LA CAJA" S.A.`) rompe el HTML aunque el texto sea inocente, y una comilla maliciosa cierra el atributo e inyecta markup.
+>
+> **Qué hacer al implementar F2.1/F2.3:**
+> 1. **Prerrequisito:** el fix E4-1 (Bloque D del `plan-correcciones-E1-E6-2026-07-27.md`) debe estar aplicado **antes** — ese fix introduce en el template la función `esc()` que ya existe y funciona en producción en `generarVisorMonitoreo()` (`main.js:2286`).
+> 2. **Escape de atributo, no de contenido:** `esc()` (la de `generarVisorMonitoreo`) escapa `&`, `<`, `>` — **no escapa comillas**, así que **no alcanza para un `value=""`**. Para los atributos del formulario usar una variante que además escape `"` y `'`, equivalente al `escAttr()` que el dashboard admin ya tiene (`dashboard.js:2037`, introducido por el fix XSS-1). Es decir: **`esc()` para el contenido de las celdas, `escAttr()` para los `value=""` del form.**
+> 3. **Aplica a todos los campos derivados del PJN** que viajen en el formulario: `exp`, `jur`, `dep`, `car`, `sit`, y el JSON de `movs` (que además debe ir serializado con `JSON.stringify` y luego escapado como atributo).
+>
+> Sin esto, la Fase 2 reintroduciría —ampliándolo— exactamente el hallazgo que el Bloque D corrige.
 - Cuando el visor se abre automáticamente desde la app (flujo principal), el formulario puede llevar además el hash SSO como ya hace `openPortalSection` → el usuario cae **logueado, con el modal abierto y los campos completos**: 1 clic + guardar.
 - Si el usuario reabre el HTML días después desde la carpeta, pasa por el login del portal y sigue el mismo flujo (aceptable).
 - **Enlaces livianos siguen siendo GET simples**: no todo necesita el formulario — un link "Ver ficha" (`goto=expediente&id=…`, sin payload de datos) sigue siendo un `<a>` normal; el POST-formulario se usa solo donde viaja un snapshot o una selección múltiple.
@@ -660,6 +669,34 @@ ALTER TABLE users ADD COLUMN bitacora_prefs JSONB;  -- personalización: orden d
 
 Migraciones 100% additivas. Dimensionamiento: con el tope 2+2 por caso, un usuario intensivo con 200 casos seguidos son ~800 snapshots compactos (JSONB de pocos KB) — despreciable para el VPS actual.
 
+> ⚠️ **AGREGADO 2026-07-27 (hallazgos E3-4 y E5-2 de la revisión integral) — dos ajustes a F1.1:**
+>
+> **(a) Crear los índices desde el día uno, no después.** El modelo de arriba solo define la
+> constraint `UNIQUE` de deduplicación; no hay ningún índice para las consultas reales. La revisión
+> E3 encontró que ese mismo descuido ya existe en `subscriptions` (6 crons diarios filtrando por 4
+> columnas de fecha **sin un solo índice** — invisible con 3 filas, problema real al escalar). La
+> Bitácora repetiría el patrón: el banner de avisos y la vista mes del calendario filtran
+> exactamente por `user_id` + rango de `due_at`, y la ficha del caso por `expediente_id`. Crearlos
+> junto con las tablas cuesta nada; agregarlos después es otra migración:
+> ```sql
+> CREATE INDEX idx_bitacora_user_due    ON bitacora_entries (user_id, due_at);
+> CREATE INDEX idx_bitacora_pendientes  ON bitacora_entries (user_id, due_at) WHERE done_at IS NULL;
+> CREATE INDEX idx_bitacora_expediente  ON bitacora_entries (expediente_id);
+> CREATE INDEX idx_exp_seguidos_user    ON expedientes_seguidos (user_id);
+> CREATE INDEX idx_snapshots_exp_kind   ON expediente_snapshots (expediente_id, kind, created_at DESC);
+> ```
+> (el último es además el que sostiene el `DELETE … ORDER BY created_at DESC LIMIT 1` del recorte
+> atómico 2+2 del hallazgo H4).
+>
+> **(b) Prerrequisito: regenerar `database/schema.sql` ANTES de escribir la migración.** La revisión
+> E5 encontró que ese archivo **no se actualiza desde el 2026-05-22**: tiene 21 de las 27 tablas
+> reales, le faltan `payments`/`invoices`/`commercial_benefits` completas, y conserva una constraint
+> (`check_plan_valid`) que en producción ya no existe. La verificación de "las 4 tablas nuevas no
+> colisionan" hecha en la revisión de cohesión del 2026-07-25 se hizo **contra producción** (correcta),
+> pero quien implemente F1.1 consultando el archivo versionado estaría mirando una foto vieja. Correr
+> el Bloque B.1 del `plan-correcciones-E1-E6-2026-07-27.md` primero (es un `pg_dump --schema-only`,
+> minutos) y validar la migración contra el snapshot regenerado.
+
 ### Endpoints (patrón existente del portal, todos con gate de plan salvo aclaración)
 
 > ⚠️ **Reorganizado por fase (revisión 2026-07-25, hallazgo C2).** Los endpoints de
@@ -788,8 +825,27 @@ GET                  /client/bitacora/seguidos            — (app Electron, JWT
 > se movieron de Fase 1 a Fase 2 (hallazgo C2, ver también §7). El deliverable de Fase 2
 > ahora aclara que incluye deploy de backend, no solo el release de Electron (hallazgo C3).
 
+> 🔗 **Dependencias con el plan de correcciones (agregado 2026-07-27).** La revisión integral
+> E1-E6 produjo `docs/internal/plan-correcciones-E1-E6-2026-07-27.md`, cuyos bloques **B** y **D**
+> tocan terreno compartido con esta propuesta. **Dos prerrequisitos duros, ninguno bloqueante a
+> largo plazo (ambos son trabajo chico):**
+>
+> | Prerrequisito | Bloquea | Por qué |
+> |---|---|---|
+> | **Bloque B.1** — regenerar `database/schema.sql` | **F1.1** | El schema versionado tiene 2 meses de drift (21 de 27 tablas); escribir la migración contra esa foto vieja es arriesgado. Ver la nota (b) de §7. |
+> | **Bloque D** — fix E4-1 (escape en `visorModal_template.html`) | **F2.1 / F2.3** | La Fase 2 inyecta datos del PJN en atributos `value=""` del formulario de captura. Sin el escape del Bloque D como base, la Fase 2 **amplía** el hallazgo XSS en vez de heredarlo resuelto. Ver el recuadro rojo de §4.1. |
+>
+> **No hay conflicto con los demás bloques:** el Bloque C (motor Puppeteer) toca los scripts
+> encriptados, que esta propuesta explícitamente **no** toca (H1 ya movió el trabajo a un
+> post-procesado en `main.js`); el Bloque A (backend/crons) no cruza con los endpoints nuevos; la
+> whitelist de scripts del Bloque A.1 filtra **scripts**, no endpoints, así que
+> `GET /client/bitacora/seguidos` no se ve afectado. **Nota menor de coordinación:** el Bloque A
+> edita `server.js` (los crons) y F2.2 también lo edita (el parser de 5 MB montado antes del
+> router) — son zonas distintas del archivo, pero conviene no ejecutarlos en paralelo para evitar
+> un conflicto de merge trivial.
+
 ### Fase 1 — Núcleo (backend + portal, sin release de Electron)
-1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **3 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`) + seed de feriados AR 2026/2027.
+1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **3 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`) **+ los 5 índices de §7 (agregado 2026-07-27)** + seed de feriados AR 2026/2027. ⚠️ **Prerrequisito: Bloque B.1** (regenerar `schema.sql`) — ver el recuadro de dependencias arriba.
 2. **(F1.2)** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)*
 3. **(F1.3)** Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos).
 4. **(F1.4)** Portal: sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas).
@@ -803,7 +859,7 @@ GET                  /client/bitacora/seguidos            — (app Electron, JWT
 ### Fase 2 — Captura desde los visores (backend + release de Electron)
 > **Requiere DOS despliegues, no uno** (hallazgo C3): un deploy de backend (los endpoints de `capture` + `GET /client/bitacora/seguidos`) **y** un release de Electron. Planificar ambos.
 
-1. **(F2.1)** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan.
+1. **(F2.1)** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. 🔴 **Prerrequisito: el fix E4-1 del Bloque D** (escape en `visorModal_template.html`) debe estar aplicado y publicado — sin él esta fase amplía el hallazgo XSS; ver el recuadro rojo de §4.1 para el detalle de `esc()` vs `escAttr()`. ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan.
 2. **(F2.2)** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor.
 3. **(F2.3)** **Selección múltiple** en la tabla de los visores (checkboxes + barra de acciones "Guardar casos" / "Crear entradas…") + pantalla de revisión del lote en el portal, contra el endpoint de F2.2.
 4. **(F2.4)** **Marcado de casos ya seguidos**: endpoint `GET /client/bitacora/seguidos` (backend) + consumido por el post-procesado de F2.1 + link 📁 a la ficha desde fila y modal.
