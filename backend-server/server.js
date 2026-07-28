@@ -574,20 +574,29 @@ cron.schedule('0 * * * *', async () => {
                 WHERE e.user_id = u.id AND e.event_type = 'trial_exhausted_blocked'
               )
         `);
+        let okCount = 0;
         for (const u of exhausted.rows) {
-            // Dos mensajes distintos: antes de activación el usuario NO puede
-            // configurar el pago (depende del admin); después de activación sí.
-            const lim = u.usage_limit ?? 20;
-            const notActivated = u.registration_status === 'pending_activation';
-            const message = notActivated
-                ? `Agotaste tus ${lim} usos de prueba. Tu cuenta está pendiente de activación por el equipo — te avisaremos por email cuando puedas continuar.`
-                : `Agotaste tus ${lim} usos de prueba. Configurá tu método de pago desde el portal para acceder a los límites de tu plan y seguir usando la app y la extensión.`;
-            await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'trial_exhausted_blocked')`, [u.id]);
-            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'trial_exhausted', $2)`,
-                [u.id, message]);
-            mailerCron.sendTrialExhaustedEmail(u.email, u.nombre, { notActivated, usageLimit: lim }).catch(() => {});
+            // A.2 (E3-1): iteración aislada — un registro problemático no debe detener
+            // el procesamiento de los usuarios restantes del batch de este día.
+            try {
+                // Dos mensajes distintos: antes de activación el usuario NO puede
+                // configurar el pago (depende del admin); después de activación sí.
+                const lim = u.usage_limit ?? 20;
+                const notActivated = u.registration_status === 'pending_activation';
+                const message = notActivated
+                    ? `Agotaste tus ${lim} usos de prueba. Tu cuenta está pendiente de activación por el equipo — te avisaremos por email cuando puedas continuar.`
+                    : `Agotaste tus ${lim} usos de prueba. Configurá tu método de pago desde el portal para acceder a los límites de tu plan y seguir usando la app y la extensión.`;
+                await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'trial_exhausted_blocked')`, [u.id]);
+                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'trial_exhausted', $2)`,
+                    [u.id, message]);
+                mailerCron.sendTrialExhaustedEmail(u.email, u.nombre, { notActivated, usageLimit: lim }).catch(() => {});
+                okCount++;
+            } catch (iterErr) {
+                logger.error(`[CRON] trial_exhausted: error procesando user_id=${u.id}:`, iterErr.message);
+            }
         }
-        if (exhausted.rowCount > 0) logger.info(`[CRON] trial_exhausted: ${exhausted.rowCount} usuarios notificados (sin rechazo)`);
+        // Se reporta procesados/total: si difieren, hubo iteraciones que fallaron (ver los error de arriba).
+        if (exhausted.rowCount > 0) logger.info(`[CRON] trial_exhausted: ${okCount}/${exhausted.rowCount} usuarios notificados (sin rechazo)`);
     } catch (err) {
         logger.error('[CRON] Error en aviso de trial agotado:', err.message);
     }
@@ -607,14 +616,20 @@ cron.schedule('0 11 * * *', async () => {
                   AND n.created_at > NOW() - INTERVAL '6 days'
               )
         `);
+        let okCount = 0;
         for (const u of expiring.rows) {
-            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expiry_warning', $2)`,
-                [u.id, `Tu plan se discontinúa el ${new Date(u.plan_expiry_date).toLocaleDateString('es-AR')}. Vas a tener que elegir un nuevo plan.`]);
-            await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_expiry_warning', $2)`,
-                [u.id, JSON.stringify({ plan_expiry_date: u.plan_expiry_date })]);
-            mailerCron.sendPlanExpiryWarningEmail(u.email, u.nombre, u.plan_expiry_date).catch(() => {});
+            try {
+                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expiry_warning', $2)`,
+                    [u.id, `Tu plan se discontinúa el ${new Date(u.plan_expiry_date).toLocaleDateString('es-AR')}. Vas a tener que elegir un nuevo plan.`]);
+                await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_expiry_warning', $2)`,
+                    [u.id, JSON.stringify({ plan_expiry_date: u.plan_expiry_date })]);
+                mailerCron.sendPlanExpiryWarningEmail(u.email, u.nombre, u.plan_expiry_date).catch(() => {});
+                okCount++;
+            } catch (iterErr) {
+                logger.error(`[CRON] plan_expiry_warning: error procesando user_id=${u.id}:`, iterErr.message);
+            }
         }
-        if (expiring.rowCount > 0) logger.info(`[CRON] plan_expiry_warning: ${expiring.rowCount} avisos enviados`);
+        if (expiring.rowCount > 0) logger.info(`[CRON] plan_expiry_warning: ${okCount}/${expiring.rowCount} avisos enviados`);
     } catch (err) {
         logger.error('[CRON] Error en aviso vencimiento plan:', err.message);
     }
@@ -638,29 +653,38 @@ cron.schedule('5 11 * * *', async () => {
               AND s.plan_expiry_date < NOW()
               AND s.cancel_at IS NULL
         `);
+        let okCount = 0;
         for (const u of due.rows) {
-            const periodEnd = u.period_end ? new Date(u.period_end) : null;
-            // Pausar el cobro en MP cuanto antes (no cobrar el próximo período del plan retirado)
-            await subSvc.pausePreapproval(u.id, u.external_subscription_id).catch(() => {});
-            if (!periodEnd || periodEnd <= new Date()) {
-                // Período ya terminado → suspender ahora + ventana de gracia 7 días
-                await pool.query(`UPDATE users SET registration_status = 'suspended_plan_expired', updated_at = NOW() WHERE id = $1`, [u.id]);
-                await pool.query(`UPDATE subscriptions SET status = 'suspended_plan_expired', suspension_cause = 'plan_expired', suspended_at = NOW(), auto_renewal = FALSE, payment_grace_ends_at = NOW() + INTERVAL '7 days', updated_at = NOW() WHERE user_id = $1`, [u.id]);
-                await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'plan_expired_suspended')`, [u.id]);
-                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expired', $2)`,
-                    [u.id, 'Tu plan se discontinuó. Elegí un nuevo plan en el portal para reactivar tu acceso.']);
-                mailerCron.sendPlanExpiredSuspendedEmail(u.email, u.nombre).catch(() => {});
-            } else {
-                // Respetar el período pago: programar el corte al fin del período (el cobro ya
-                // quedó pausado). Al vencer cancel_at, 5f lo pasa a suspended_plan_expired.
-                await pool.query(`UPDATE subscriptions SET cancel_at = $2, auto_renewal = FALSE, updated_at = NOW() WHERE user_id = $1`, [u.id, periodEnd]);
-                await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_retirement_scheduled', $2)`,
-                    [u.id, JSON.stringify({ period_end: periodEnd })]);
-                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_discontinued', $2)`,
-                    [u.id, `Tu plan se discontinúa. Mantenés el acceso hasta el ${periodEnd.toLocaleDateString('es-AR')}; después vas a poder elegir un nuevo plan.`]);
+            try {
+                const periodEnd = u.period_end ? new Date(u.period_end) : null;
+                // Pausar el cobro en MP cuanto antes (no cobrar el próximo período del plan retirado)
+                await subSvc.pausePreapproval(u.id, u.external_subscription_id).catch(() => {});
+                if (!periodEnd || periodEnd <= new Date()) {
+                    // Período ya terminado → suspender ahora + ventana de gracia 7 días
+                    await pool.query(`UPDATE users SET registration_status = 'suspended_plan_expired', updated_at = NOW() WHERE id = $1`, [u.id]);
+                    // A.3 (E3-2): se cancela cualquier downgrade programado. Si el usuario reactiva
+                    // más adelante, el cron 5g no debe aplicar una decisión tomada antes de la
+                    // suspensión y ya vencida — se re-programa si el admin sigue queriéndola.
+                    await pool.query(`UPDATE subscriptions SET status = 'suspended_plan_expired', suspension_cause = 'plan_expired', suspended_at = NOW(), auto_renewal = FALSE, payment_grace_ends_at = NOW() + INTERVAL '7 days', scheduled_plan = NULL, updated_at = NOW() WHERE user_id = $1`, [u.id]);
+                    await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'plan_expired_suspended')`, [u.id]);
+                    await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expired', $2)`,
+                        [u.id, 'Tu plan se discontinuó. Elegí un nuevo plan en el portal para reactivar tu acceso.']);
+                    mailerCron.sendPlanExpiredSuspendedEmail(u.email, u.nombre).catch(() => {});
+                } else {
+                    // Respetar el período pago: programar el corte al fin del período (el cobro ya
+                    // quedó pausado). Al vencer cancel_at, 5f lo pasa a suspended_plan_expired.
+                    await pool.query(`UPDATE subscriptions SET cancel_at = $2, auto_renewal = FALSE, updated_at = NOW() WHERE user_id = $1`, [u.id, periodEnd]);
+                    await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_retirement_scheduled', $2)`,
+                        [u.id, JSON.stringify({ period_end: periodEnd })]);
+                    await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_discontinued', $2)`,
+                        [u.id, `Tu plan se discontinúa. Mantenés el acceso hasta el ${periodEnd.toLocaleDateString('es-AR')}; después vas a poder elegir un nuevo plan.`]);
+                }
+                okCount++;
+            } catch (iterErr) {
+                logger.error(`[CRON] plan_retirement: error procesando user_id=${u.id}:`, iterErr.message);
             }
         }
-        if (due.rowCount > 0) logger.info(`[CRON] plan_retirement: ${due.rowCount} cuentas procesadas`);
+        if (due.rowCount > 0) logger.info(`[CRON] plan_retirement: ${okCount}/${due.rowCount} cuentas procesadas`);
     } catch (err) {
         logger.error('[CRON] Error en retiro de plan:', err.message);
     }
@@ -682,9 +706,13 @@ cron.schedule('10 11 * * *', async () => {
               )
         `);
         for (const u of renewing.rows) {
-            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'billing_reminder', $2)`,
-                [u.id, `Tu suscripción se renueva el ${new Date(u.next_billing_date).toLocaleDateString('es-AR')}.`]);
-            mailerCron.sendBillingReminderEmail(u.email, u.nombre, u.next_billing_date).catch(() => {});
+            try {
+                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'billing_reminder', $2)`,
+                    [u.id, `Tu suscripción se renueva el ${new Date(u.next_billing_date).toLocaleDateString('es-AR')}.`]);
+                mailerCron.sendBillingReminderEmail(u.email, u.nombre, u.next_billing_date).catch(() => {});
+            } catch (iterErr) {
+                logger.error(`[CRON] billing_reminder: error procesando user_id=${u.id}:`, iterErr.message);
+            }
         }
     } catch (err) {
         logger.error('[CRON] Error en aviso renovación:', err.message);
@@ -728,39 +756,48 @@ cron.schedule('20 11 * * *', async () => {
                   AND p.created_at > s.cancel_at - INTERVAL '1 hour'
               )
         `);
+        let okCount = 0;
         for (const u of cancelled.rows) {
-            // RETIRO DE PLAN (plan_expiry_date pasado): el corte se programó por discontinuación
-            // del plan, NO por baja voluntaria. El preapproval ya está pausado (no cobra). Pasa a
-            // un estado RECUPERABLE (suspended_plan_expired): app bloqueada, portal abierto para
-            // elegir un nuevo plan. NO se marca cancelled (que es terminal sin retorno propio).
-            if (u.plan_expiry_date && new Date(u.plan_expiry_date) < new Date()) {
-                await pool.query(`UPDATE users SET registration_status = 'suspended_plan_expired', updated_at = NOW() WHERE id = $1`, [u.id]);
-                await pool.query(`UPDATE subscriptions SET status = 'suspended_plan_expired', suspension_cause = 'plan_expired', suspended_at = NOW(), payment_grace_ends_at = NOW() + INTERVAL '7 days', updated_at = NOW() WHERE user_id = $1`, [u.id]);
-                await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'plan_expired_suspended')`, [u.id]);
-                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expired', $2)`,
-                    [u.id, 'Tu plan se discontinuó. Elegí un nuevo plan en el portal para reactivar tu acceso.']);
-                mailerCron.sendPlanExpiredSuspendedEmail(u.email, u.nombre).catch(() => {});
-                continue;
-            }
-            // CANCELACIÓN VOLUNTARIA: el preapproval quedó PAUSADO al cancelar (reversible). Como
-            // el usuario no reactivó y venció el período, ahora se cancela DEFINITIVAMENTE en MP.
-            const extId = u.external_subscription_id;
-            if (extId && !extId.startsWith('pay-') && process.env.MP_ACCESS_TOKEN) {
-                try {
-                    await fetch(`https://api.mercadopago.com/preapproval/${extId}`, {
-                        method: 'PUT',
-                        headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: 'cancelled' })
-                    });
-                } catch (e) {
-                    logger.warn(`[CRON] No se pudo cancelar preapproval ${extId} en MP: ${e.message}`);
+            try {
+                // RETIRO DE PLAN (plan_expiry_date pasado): el corte se programó por discontinuación
+                // del plan, NO por baja voluntaria. El preapproval ya está pausado (no cobra). Pasa a
+                // un estado RECUPERABLE (suspended_plan_expired): app bloqueada, portal abierto para
+                // elegir un nuevo plan. NO se marca cancelled (que es terminal sin retorno propio).
+                if (u.plan_expiry_date && new Date(u.plan_expiry_date) < new Date()) {
+                    await pool.query(`UPDATE users SET registration_status = 'suspended_plan_expired', updated_at = NOW() WHERE id = $1`, [u.id]);
+                    // A.3 (E3-2): ver nota en 5c — el downgrade programado se cancela al suspender.
+                    await pool.query(`UPDATE subscriptions SET status = 'suspended_plan_expired', suspension_cause = 'plan_expired', suspended_at = NOW(), payment_grace_ends_at = NOW() + INTERVAL '7 days', scheduled_plan = NULL, updated_at = NOW() WHERE user_id = $1`, [u.id]);
+                    await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'plan_expired_suspended')`, [u.id]);
+                    await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_expired', $2)`,
+                        [u.id, 'Tu plan se discontinuó. Elegí un nuevo plan en el portal para reactivar tu acceso.']);
+                    mailerCron.sendPlanExpiredSuspendedEmail(u.email, u.nombre).catch(() => {});
+                    okCount++;
+                    continue;
                 }
+                // CANCELACIÓN VOLUNTARIA: el preapproval quedó PAUSADO al cancelar (reversible). Como
+                // el usuario no reactivó y venció el período, ahora se cancela DEFINITIVAMENTE en MP.
+                const extId = u.external_subscription_id;
+                if (extId && !extId.startsWith('pay-') && process.env.MP_ACCESS_TOKEN) {
+                    try {
+                        await fetch(`https://api.mercadopago.com/preapproval/${extId}`, {
+                            method: 'PUT',
+                            headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'cancelled' })
+                        });
+                    } catch (e) {
+                        logger.warn(`[CRON] No se pudo cancelar preapproval ${extId} en MP: ${e.message}`);
+                    }
+                }
+                await pool.query(`UPDATE users SET registration_status = 'cancelled', updated_at = NOW() WHERE id = $1`, [u.id]);
+                // A.3 (E3-2): estado terminal — se descarta cualquier downgrade programado.
+                await pool.query(`UPDATE subscriptions SET status = 'cancelled', scheduled_plan = NULL, updated_at = NOW() WHERE user_id = $1`, [u.id]);
+                await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'subscription_cancelled_expired')`, [u.id]);
+                okCount++;
+            } catch (iterErr) {
+                logger.error(`[CRON] subscriptions_cancelled: error procesando user_id=${u.id}:`, iterErr.message);
             }
-            await pool.query(`UPDATE users SET registration_status = 'cancelled', updated_at = NOW() WHERE id = $1`, [u.id]);
-            await pool.query(`UPDATE subscriptions SET status = 'cancelled', updated_at = NOW() WHERE user_id = $1`, [u.id]);
-            await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'subscription_cancelled_expired')`, [u.id]);
         }
-        if (cancelled.rowCount > 0) logger.info(`[CRON] subscriptions_cancelled: ${cancelled.rowCount} cuentas canceladas`);
+        if (cancelled.rowCount > 0) logger.info(`[CRON] subscriptions_cancelled: ${okCount}/${cancelled.rowCount} cuentas procesadas`);
     } catch (err) {
         logger.error('[CRON] Error en cancelaciones vencidas:', err.message);
     }
@@ -777,42 +814,48 @@ cron.schedule('25 11 * * *', async () => {
               AND s.status = 'active'
         `);
         const subSvc = require('./services/subscriptionService');
+        let okCount = 0;
         for (const u of downgrades.rows) {
-            const sp = u.scheduled_plan;
-            const newPlanResult = await pool.query(`SELECT * FROM plans WHERE id = $1`, [sp.plan_id]);
-            if (newPlanResult.rows.length === 0) continue;
-            const np = newPlanResult.rows[0];
-            // Pago → enforcement por submódulo (usage_limit=999999). SIN pago (trial/activado
-            // sin método) → conservar el cupo actual (mismo criterio que el cambio de plan del
-            // admin): recalcularlo del plan podía dar 0 (ej. EXTENSION_PROMO, proc=0) y violar
-            // check_usage_limit_positive → el UPDATE fallaba y el scheduled_plan quedaba
-            // reintentando a diario sin aplicarse.
-            const newUsageLimit = (u.payment_provider || np.proc_executions_limit === -1) ? 999999 : null;
-            const newExpiry = new Date();
-            newExpiry.setDate(newExpiry.getDate() + (np.period_days || 30));
+            try {
+                const sp = u.scheduled_plan;
+                const newPlanResult = await pool.query(`SELECT * FROM plans WHERE id = $1`, [sp.plan_id]);
+                if (newPlanResult.rows.length === 0) continue;
+                const np = newPlanResult.rows[0];
+                // Pago → enforcement por submódulo (usage_limit=999999). SIN pago (trial/activado
+                // sin método) → conservar el cupo actual (mismo criterio que el cambio de plan del
+                // admin): recalcularlo del plan podía dar 0 (ej. EXTENSION_PROMO, proc=0) y violar
+                // check_usage_limit_positive → el UPDATE fallaba y el scheduled_plan quedaba
+                // reintentando a diario sin aplicarse.
+                const newUsageLimit = (u.payment_provider || np.proc_executions_limit === -1) ? 999999 : null;
+                const newExpiry = new Date();
+                newExpiry.setDate(newExpiry.getDate() + (np.period_days || 30));
 
-            await pool.query(`
-                UPDATE subscriptions SET
-                    plan = $1, plan_id = $2, usage_limit = COALESCE($3, usage_limit),
-                    expires_at = $4, next_billing_date = $4,
-                    period_start = NOW(),
-                    plan_changes_this_cycle = 0,
-                    scheduled_plan = NULL,
-                    updated_at = NOW()
-                WHERE user_id = $5
-            `, [np.name, np.id, newUsageLimit, newExpiry, u.id]);
+                await pool.query(`
+                    UPDATE subscriptions SET
+                        plan = $1, plan_id = $2, usage_limit = COALESCE($3, usage_limit),
+                        expires_at = $4, next_billing_date = $4,
+                        period_start = NOW(),
+                        plan_changes_this_cycle = 0,
+                        scheduled_plan = NULL,
+                        updated_at = NOW()
+                    WHERE user_id = $5
+                `, [np.name, np.id, newUsageLimit, newExpiry, u.id]);
 
-            // Ajustar el monto que cobra MercadoPago al plan ya rebajado (best-effort)
-            if (u.payment_provider) {
-                subSvc.updatePreapprovalAmount(u.id, np.name).catch(() => {});
+                // Ajustar el monto que cobra MercadoPago al plan ya rebajado (best-effort)
+                if (u.payment_provider) {
+                    subSvc.updatePreapprovalAmount(u.id, np.name).catch(() => {});
+                }
+
+                await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_downgrade_applied', $2)`,
+                    [u.id, JSON.stringify({ to: np.name })]);
+                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_downgrade_applied', $2)`,
+                    [u.id, `Tu plan fue actualizado a ${np.display_name}.`]);
+                okCount++;
+            } catch (iterErr) {
+                logger.error(`[CRON] downgrades_applied: error procesando user_id=${u.id}:`, iterErr.message);
             }
-
-            await pool.query(`INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'plan_downgrade_applied', $2)`,
-                [u.id, JSON.stringify({ to: np.name })]);
-            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'plan_downgrade_applied', $2)`,
-                [u.id, `Tu plan fue actualizado a ${np.display_name}.`]);
         }
-        if (downgrades.rowCount > 0) logger.info(`[CRON] downgrades_applied: ${downgrades.rowCount}`);
+        if (downgrades.rowCount > 0) logger.info(`[CRON] downgrades_applied: ${okCount}/${downgrades.rowCount}`);
     } catch (err) {
         logger.error('[CRON] Error aplicando downgrades:', err.message);
     }
@@ -828,14 +871,21 @@ cron.schedule('30 11 * * *', async () => {
               AND s.payment_grace_ends_at IS NOT NULL
               AND s.payment_grace_ends_at < NOW()
         `);
+        let okCount = 0;
         for (const u of grace.rows) {
-            await pool.query(`UPDATE users SET registration_status = 'suspended', updated_at = NOW() WHERE id = $1`, [u.id]);
-            await pool.query(`UPDATE subscriptions SET status = 'suspended', suspension_cause = 'payment', suspended_at = NOW(), payment_grace_ends_at = NULL, updated_at = NOW() WHERE user_id = $1`, [u.id]);
-            await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'payment_failed_suspended')`, [u.id]);
-            await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'payment_suspended', $2)`,
-                [u.id, 'Pago fallido. Actualizá tu método de pago en el portal para reactivar.']);
+            try {
+                await pool.query(`UPDATE users SET registration_status = 'suspended', updated_at = NOW() WHERE id = $1`, [u.id]);
+                // A.3 (E3-2): ver nota en 5c — el downgrade programado se cancela al suspender.
+                await pool.query(`UPDATE subscriptions SET status = 'suspended', suspension_cause = 'payment', suspended_at = NOW(), payment_grace_ends_at = NULL, scheduled_plan = NULL, updated_at = NOW() WHERE user_id = $1`, [u.id]);
+                await pool.query(`INSERT INTO user_events (user_id, event_type) VALUES ($1, 'payment_failed_suspended')`, [u.id]);
+                await pool.query(`INSERT INTO notifications (user_id, type, message) VALUES ($1, 'payment_suspended', $2)`,
+                    [u.id, 'Pago fallido. Actualizá tu método de pago en el portal para reactivar.']);
+                okCount++;
+            } catch (iterErr) {
+                logger.error(`[CRON] payment_failed_suspended: error procesando user_id=${u.id}:`, iterErr.message);
+            }
         }
-        if (grace.rowCount > 0) logger.info(`[CRON] payment_failed_suspended: ${grace.rowCount} usuarios suspendidos`);
+        if (grace.rowCount > 0) logger.info(`[CRON] payment_failed_suspended: ${okCount}/${grace.rowCount} usuarios suspendidos`);
     } catch (err) {
         logger.error('[CRON] Error en suspensión por pago:', err.message);
     }

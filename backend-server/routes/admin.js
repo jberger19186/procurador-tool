@@ -621,6 +621,10 @@ router.post('/users/:userId/suspend', authenticateAdmin, async (req, res) => {
                 suspended_by = $1,
                 billing_paused = $2,
                 suspension_reason = $3,
+                -- A.3 (E3-2): se cancela el downgrade programado. Si la cuenta se reactiva más
+                -- adelante, el cron 5g no debe aplicar una decisión previa a la suspensión y ya
+                -- vencida; el admin la re-programa si la sigue queriendo.
+                scheduled_plan = NULL,
                 updated_at = NOW()
             WHERE user_id = $4
         `, [req.user.id, billing_paused, reason.trim(), userId]);
@@ -945,6 +949,9 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
                 UPDATE subscriptions
                 SET status = 'suspended', usage_count = 0, usage_limit = 20,
                     proc_usage = 0, batch_usage = 0, informe_usage = 0, monitor_novedades_usage = 0,
+                    -- A.3 (E3-2): volver a trial descarta cualquier downgrade programado
+                    -- (el plan al que apuntaba ya no tiene sentido con el cupo reseteado).
+                    scheduled_plan = NULL,
                     updated_at = NOW()
                 WHERE user_id = $1
             `, [userId]);
@@ -1367,7 +1374,8 @@ router.post('/subscriptions/:userId/suspend', authenticateAdmin, async (req, res
 
     try {
         await db.query(
-            `UPDATE subscriptions SET status = 'suspended' WHERE user_id = $1`,
+            // A.3 (E3-2): la suspensión cancela el downgrade programado (ver nota en /users/:id/suspend).
+            `UPDATE subscriptions SET status = 'suspended', scheduled_plan = NULL WHERE user_id = $1`,
             [userId]
         );
 

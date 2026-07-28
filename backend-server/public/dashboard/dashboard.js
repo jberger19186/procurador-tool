@@ -487,7 +487,7 @@ async function renderUserDetail(userId) {
                     <div class="detail-grid">
                         <div class="detail-item"><label>Email</label><span>${escHtml(u.email)}</span></div>
                         <div class="detail-item"><label>Rol</label><span>${roleBadge(u.role)}</span></div>
-                        <div class="detail-item"><label>CUIT</label><span>${u.cuit || '—'}</span></div>
+                        <div class="detail-item"><label>CUIT</label><span>${escHtml(u.cuit || '—')}</span></div>
                         <div class="detail-item"><label>Hardware vinculado</label><span>${u.machine_id ? '✅ Sí' : '❌ No'}</span></div>
                         <div class="detail-item"><label>Último login</label><span>${u.last_login ? fmtDate(u.last_login) : '—'}</span></div>
                     </div>
@@ -501,7 +501,7 @@ async function renderUserDetail(userId) {
                     <div style="margin-top:12px">
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Asignar CUIT</label>
                         <div style="display:flex;gap:6px">
-                            <input type="text" id="cuit-input" placeholder="27123456789" value="${u.cuit || ''}" maxlength="11" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                            <input type="text" id="cuit-input" placeholder="27123456789" value="${escAttr(u.cuit || '')}" maxlength="11" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
                             <button class="btn btn-sm btn-primary" onclick="assignCuit(${u.id})">Guardar</button>
                         </div>
                     </div>
@@ -2823,7 +2823,7 @@ async function loadAdjustmentHistory(userId) {
                 <tbody>${adjs.map(a => `<tr>
                     <td>${subsysLabel[a.subsystem] || a.subsystem}</td>
                     <td style="color:${a.amount > 0 ? '#16a34a' : '#dc2626'};font-weight:600">${a.amount > 0 ? '+' : ''}${a.amount}</td>
-                    <td style="color:var(--text-muted)">${a.reason || '—'}</td>
+                    <td style="color:var(--text-muted)">${escHtml(a.reason || '—')}</td>
                     <td style="font-size:11px">${a.admin_email || '—'}</td>
                     <td style="font-size:11px">${fmtDate(a.created_at)}</td>
                 </tr>`).join('')}</tbody>

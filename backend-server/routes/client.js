@@ -6,6 +6,23 @@ const { getSignatureCache } = require('../src/security/signatureCache');
 const { getDecryptedScript } = require('../utils/scriptEncryption');
 const authenticateToken = require('../middleware/authenticateToken');
 
+// A.1 (revisión 2026-07-27, hallazgo E5-1/P-1): whitelist de scripts que el cliente
+// (Electron) realmente descarga y ejecuta. Antes /scripts/download y /scripts/available
+// no filtraban por nombre ni por plan, así que cualquier suscripción viva podía bajar
+// también los scripts de operación del servidor (backup-db.js, data-retention.js, etc.)
+// y los de testing que reencrypt_scripts.js barre indiscriminadamente del directorio.
+// Esta lista espeja exactamente el mapa `dependencies` de electron-app/src/auth/authManager.js
+// (los scripts principales + sus dependencias) — no es una lista nueva, es la que ya existe
+// del lado del cliente.
+const SCRIPTS_DISTRIBUIBLES = new Set([
+    'testM1.js', 'testM2.js',
+    'consultarscwpjn.js', 'listarSCWPJN.js',
+    'procesarNovedadesCompleto.js', 'procesarCustomExpedientes.js',
+    'informequickscwpjn.js', 'procesarMonitoreo.js',
+    'sessionManager.js', 'errorHandler.js', 'cerrarNavegador.js', 'monitoreo.js',
+    'buscarPorParteScwpjn.js',
+]);
+
 function buildExtPromoStatus(sub) {
     const { plan_type, promo_type, promo_end_date, promo_max_users, promo_used_count, promo_alert_days } = sub;
     if (!plan_type || plan_type === 'electron') return null;
@@ -173,6 +190,11 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
         // Normalizar nombre: agregar .js si no tiene extensión
         const normalizedName = scriptName.endsWith('.js') ? scriptName : `${scriptName}.js`;
 
+        // A.1 (E5-1/P-1): solo los scripts que el cliente realmente ejecuta son descargables
+        if (!SCRIPTS_DISTRIBUIBLES.has(normalizedName)) {
+            return res.status(404).json({ error: 'Script no encontrado' });
+        }
+
         // Obtener script de la BD
         const scriptResult = await db.query(`
             SELECT script_name, encrypted_content, iv, hash, version
@@ -255,7 +277,7 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
 
         const plan = subResult.rows[0].plan;
 
-        // Obtener scripts (puedes filtrar por plan si quieres)
+        // A.1 (E5-1/P-1): listar solo los scripts distribuibles al cliente
         const scriptsResult = await db.query(`
             SELECT script_name, version, hash
             FROM encrypted_scripts
@@ -266,11 +288,13 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
         res.json({
             success: true,
             plan: plan,
-            scripts: scriptsResult.rows.map(s => ({
-                name: s.script_name,
-                version: s.version,
-                hash: s.hash
-            }))
+            scripts: scriptsResult.rows
+                .filter(s => SCRIPTS_DISTRIBUIBLES.has(s.script_name))
+                .map(s => ({
+                    name: s.script_name,
+                    version: s.version,
+                    hash: s.hash
+                }))
         });
 
     } catch (error) {
