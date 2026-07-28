@@ -4,60 +4,10 @@
 // (los archivos son código fuente plain; la integridad la garantiza el repositorio).
 importScripts('config.js', 'auth.js');
 
-function semverGt(a, b) {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) > (pb[i] || 0)) return true;
-    if ((pa[i] || 0) < (pb[i] || 0)) return false;
-  }
-  return false;
-}
-
-// ── Chequeo de versión de la extensión ──────────────────────────────────────
-async function checkExtensionVersion() {
-  try {
-    const session = await PJNAuth.loadSession();
-    if (!session?.token) return;
-
-    const res = await fetch(`${EXT_CONFIG.BACKEND_URL}/api/extension/version`, {
-      headers: { Authorization: `Bearer ${session.token}` }
-    });
-    if (!res.ok) return;
-
-    const { version: serverVersion } = await res.json();
-    if (!serverVersion) return;
-
-    const localVersion = chrome.runtime.getManifest().version;
-
-    if (semverGt(serverVersion, localVersion)) {
-      // Hay versión nueva — badge rojo y guardar en storage
-      chrome.action.setBadgeText({ text: '↑' });
-      chrome.action.setBadgeBackgroundColor({ color: '#dc2626' });
-      await chrome.storage.local.set({
-        pjn_update_available: { serverVersion, localVersion, detectedAt: Date.now() }
-      });
-      console.log(`[PJN] Nueva versión disponible: ${serverVersion} (instalada: ${localVersion})`);
-    } else {
-      // Versión actualizada — limpiar badge y flag
-      chrome.action.setBadgeText({ text: '' });
-      await chrome.storage.local.remove('pjn_update_available');
-    }
-  } catch (e) {
-    console.warn('[PJN-version] No se pudo verificar versión:', e.message);
-  }
-}
-
-checkExtensionVersion();
-
 // ── Alarm: refresh automático del token ─────────────────────────────────────
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'pjn-version-check') checkExtensionVersion();
   PJNAuth.handleRefreshAlarm(alarm);
 });
-
-// Verificar versión cada 4 horas
-chrome.alarms.create('pjn-version-check', { periodInMinutes: 240 });
 
 // ── Menú contextual ────────────────────────────────────────────────────────
 // El menú se muestra siempre que hay texto seleccionado (contexts: ["selection"]).

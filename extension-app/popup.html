@@ -28,11 +28,13 @@
       border-radius: 6px;
       display: block;
       flex-shrink: 0;
+      cursor: pointer;
     }
     .header-text {
       display: flex;
       flex-direction: column;
       line-height: 1.1;
+      cursor: pointer;
     }
     .header-name {
       font-size: 14px;
@@ -410,8 +412,8 @@
 <body>
 
   <div class="header">
-    <img src="icon128.png" alt="Procurador SCW" class="header-logo">
-    <div class="header-text">
+    <img id="header-logo-img" src="icon128.png" alt="Procurador SCW" class="header-logo">
+    <div id="header-logo-text" class="header-text">
       <span class="header-name">Procurador <b>TOOL</b></span>
       <span class="header-sub">Procurador SCW</span>
     </div>

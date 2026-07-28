@@ -118,6 +118,33 @@ function semverGt(a, b) {
 // Mostrar versión en el header
 document.getElementById('ext-version').textContent = `v${chrome.runtime.getManifest().version}`;
 
+// ── Logo clickeable (E.1, plan-correcciones-E1-E6, Bloque E) ────────────────
+// Sin sesión → landing. Con sesión → SSO automático al home del panel (mismo
+// patrón que openPortalSection() de la app Electron: #sso=<token>, sin goto=).
+async function handleHeaderLogoClick() {
+  const hasSession = document.getElementById('view-main')?.classList.contains('active');
+  if (hasSession) {
+    const session = await PJNAuth.loadSession();
+    const url = session?.token
+      ? `${EXT_CONFIG.BACKEND_URL}/usuarios/#sso=${session.token}`
+      : `${EXT_CONFIG.BACKEND_URL}/usuarios/`;
+    chrome.tabs.create({ url });
+  } else {
+    chrome.tabs.create({ url: 'https://procuradortool.com' });
+  }
+}
+function updateHeaderLogoTitle() {
+  const hasSession = document.getElementById('view-main')?.classList.contains('active');
+  const title = hasSession ? 'Abrir mi panel' : 'Ir a procuradortool.com';
+  document.getElementById('header-logo-img').title = title;
+  document.getElementById('header-logo-text').title = title;
+}
+document.getElementById('header-logo-img').addEventListener('click', handleHeaderLogoClick);
+document.getElementById('header-logo-text').addEventListener('click', handleHeaderLogoClick);
+// El title se recalcula cada vez que cambia la vista visible (showView hace el toggle de .active).
+new MutationObserver(updateHeaderLogoTitle).observe(document.getElementById('view-main'), { attributes: true, attributeFilter: ['class'] });
+updateHeaderLogoTitle();
+
 // ── Vistas ──────────────────────────────────────────────────────────────────
 function showView(viewId) {
   ['view-loading', 'view-login', 'view-main'].forEach(id => {
