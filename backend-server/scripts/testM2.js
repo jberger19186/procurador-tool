@@ -255,6 +255,12 @@ async function _forzarLogout(page) {
 
 // INICIAR SESIÓN
 async function iniciarSesion(page, URL, identificador, browser, _reloginAttempt = false) {
+    // E1-6 (revisión E1, Bloque C.1): a diferencia de testM1.iniciarSesion (su función
+    // hermana), esta versión no tenía NINGÚN try/catch — un error a mitad de login
+    // dejaba el browser sin cerrar (chrome.exe huérfano) y sin restaurar la ventana
+    // en el escenario headless simulado. Se espeja el mismo patrón de cierre proactivo
+    // (el bloque interno se deja en su indentación original para minimizar el diff).
+    try {
     console.log(`Navegando a ${URL}`);
     await page.goto(URL, { waitUntil: 'networkidle2', timeout: 60000 });
 
@@ -406,6 +412,23 @@ async function iniciarSesion(page, URL, identificador, browser, _reloginAttempt 
     // Verificación de carga de página
     await page.waitForSelector('h2.form_title', { timeout: 30000 });
     console.log("Inicio de sesión completado.");
+    } catch (error) {
+        // En caso de error restaurar la ventana antes de cerrar para que el usuario
+        // pueda ver qué ocurrió (solo relevante si el modo headless simulado está activo).
+        try { await showBrowser(page); } catch (_) { /* ignorar */ }
+
+        // En caso de error, se intenta cerrar el navegador para evitar procesos zombie.
+        // Solo cerramos si el navegador sigue conectado: en el escenario de _reloginAttempt
+        // la llamada recursiva ya puede haber cerrado el browser desde su propio catch.
+        try {
+            if (browser && typeof browser.isConnected === 'function' && browser.isConnected()) {
+                await browser.close();
+            }
+        } catch (closeError) {
+            console.error("Error al cerrar el navegador:", closeError.message);
+        }
+        throw error;
+    }
 }
 // =============================================================================
 // Funciones para Consulta y Extracción de Datos

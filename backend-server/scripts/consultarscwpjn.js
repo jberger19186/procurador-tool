@@ -17,6 +17,19 @@ const fs = require('fs');
 const path = require('path');
 const cerrarNavegador = require('./cerrarNavegador');
 
+// E1-1 (revisión E1, Bloque C.1): sin esto, un error no capturado o una promesa
+// rechazada sin catch mataban el proceso de golpe, dejando Chrome huérfano y sin
+// que el sistema de reintentos de ejecutarProceso llegara a correr. Mismo patrón
+// que listarSCWPJN.js / procesarNovedadesCompleto.js.
+process.on('uncaughtException', error => {
+    console.error("❌ Excepción no capturada (inesperada):", error.message, error.stack);
+    // NO llamar process.exit(1) — dejar que el sistema de reintentos maneje la recuperación.
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error("❌ Rechazo de promesa no manejado:", reason);
+    // NO llamar process.exit(1) — misma razón: el sistema de reintentos necesita seguir vivo.
+});
+
 // ============ OBTENER RUTA DE DATOS ============
 function getDataPath() {
     // PRIORIDAD 0: carpeta por usuario (CUIT) inyectada por main.js (descargas por usuario)
@@ -212,44 +225,57 @@ console.log(`📄 PROGRESS: Expedientes recibidos: ${expedientesInput.length}`);
             }
 
             // Verificar consistencia de la última página procesada, si existe
+            // E1-4 (revisión E1, Bloque C.1): este bloque no tenía su propio try/catch — un
+            // error acá (ej. nuevaConsultaPublica, page.content()) escapaba hasta el catch
+            // externo de la IIFE, abortando el procesamiento de TODOS los expedientes
+            // restantes por un problema puntual de este. Ahora degrada solo este expediente:
+            // se descarta la verificación y se reinicia su extracción desde la página 1,
+            // dejando que el flujo normal de soft/hard reintentos de abajo se haga cargo.
             if (
                 paginaInicial > 1 &&
                 backupData[exp.expediente]?.paginas?.[String(paginaInicial - 1)] &&
                 Array.isArray(backupData[exp.expediente].paginas[String(paginaInicial - 1)]) &&
                 backupData[exp.expediente].paginas[String(paginaInicial - 1)].length > 0
             ) {
-                const ultimaPaginaProcesada = paginaInicial - 1;
-                const backupMovimientos = backupData[exp.expediente].paginas[String(ultimaPaginaProcesada)];
+                try {
+                    const ultimaPaginaProcesada = paginaInicial - 1;
+                    const backupMovimientos = backupData[exp.expediente].paginas[String(ultimaPaginaProcesada)];
 
-                console.log(`🔍 Verificando consistencia de la última página procesada (${ultimaPaginaProcesada}) para el expediente ${exp.expediente}...`);
+                    console.log(`🔍 Verificando consistencia de la última página procesada (${ultimaPaginaProcesada}) para el expediente ${exp.expediente}...`);
 
-                await testM2.nuevaConsultaPublica(page, exp.jurisdiccion, exp.numero, exp.anio);
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                    await testM2.nuevaConsultaPublica(page, exp.jurisdiccion, exp.numero, exp.anio);
+                    await new Promise(resolve => setTimeout(resolve, 3000));
 
-                // Obtenemos el contenido HTML de la página
-                const htmlContent = await page.content();
+                    // Obtenemos el contenido HTML de la página
+                    const htmlContent = await page.content();
 
-                // Verificamos si el HTML contiene la cadena que indica el error SSL
-                if (htmlContent.includes("Pantalla de error SSL detectada en el contenido HTML")) {
-                    console.error("❌ Pantalla de error SSL detectada en el contenido HTML.");
-                    // Cierra el navegador antes de cambiar de estrategia a hard reintentos
-                    await cerrarNavegador(browser);
-                    // Lanza un error para que el bloque catch capture esta condición y se proceda con los hard reintentos
-                    throw new Error("SSL_BLOCK_SCREEN_DETECTED");
-                }
+                    // Verificamos si el HTML contiene la cadena que indica el error SSL
+                    if (htmlContent.includes("Pantalla de error SSL detectada en el contenido HTML")) {
+                        console.error("❌ Pantalla de error SSL detectada en el contenido HTML.");
+                        // Cierra el navegador antes de cambiar de estrategia a hard reintentos
+                        await cerrarNavegador(browser);
+                        // Lanza un error para que el bloque catch capture esta condición y se proceda con los hard reintentos
+                        throw new Error("SSL_BLOCK_SCREEN_DETECTED");
+                    }
 
-                const verificacion = await verificarPaginaExpediente(page, ultimaPaginaProcesada, backupMovimientos);
+                    const verificacion = await verificarPaginaExpediente(page, ultimaPaginaProcesada, backupMovimientos);
 
-                if (!verificacion) {
-                    console.error(`❌ Verificación fallida para la página ${ultimaPaginaProcesada} en el expediente ${exp.expediente}. Se reiniciará la extracción desde la página 1.`);
+                    if (!verificacion) {
+                        console.error(`❌ Verificación fallida para la página ${ultimaPaginaProcesada} en el expediente ${exp.expediente}. Se reiniciará la extracción desde la página 1.`);
+                        backupData[exp.expediente] = { ultimaPaginaProcesada: 0, paginas: {}, completo: false };
+                        guardarBackup();
+                        paginaInicial = 1;
+                    } else {
+                        console.log(`✅ Verificación exitosa para la página ${ultimaPaginaProcesada} en el expediente ${exp.expediente}.`);
+                        // Aquí forzamos que, si la verificación es exitosa, se use la información respaldada sin reintento
+                        resultadoExpediente = { movimientos: backupMovimientos };
+                        procesado = true;
+                    }
+                } catch (verifError) {
+                    console.error(`❌ Error inesperado verificando el backup del expediente ${exp.expediente}: ${verifError.message}. Se degrada a reinicio desde la página 1 (no se aborta el resto de los expedientes).`);
                     backupData[exp.expediente] = { ultimaPaginaProcesada: 0, paginas: {}, completo: false };
                     guardarBackup();
                     paginaInicial = 1;
-                } else {
-                    console.log(`✅ Verificación exitosa para la página ${ultimaPaginaProcesada} en el expediente ${exp.expediente}.`);
-                    // Aquí forzamos que, si la verificación es exitosa, se use la información respaldada sin reintento
-                    resultadoExpediente = { movimientos: backupMovimientos };
-                    procesado = true;
                 }
             }
 

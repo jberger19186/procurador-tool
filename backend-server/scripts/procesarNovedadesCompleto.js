@@ -191,6 +191,11 @@ async function procesarNovedadesCompleto(config) {
                     const expedientes = await testM1.iterarListaExpedientes(page, totalPaginas, fechaLimite);
                     expedientesParaProcesar.push(...expedientes);
 
+                    // E1-3: iterarListaExpedientes ahora informa si alguna página falló durante
+                    // la extracción — antes esto era invisible y el log de abajo mentía ("éxito").
+                    if (expedientes.paginasFallidas && expedientes.paginasFallidas.length > 0) {
+                        console.warn(`     ⚠️ ${expedientes.paginasFallidas.length} página(s) de "${sec.type}" fallaron durante la extracción — el resultado de esta sección puede estar incompleto.`);
+                    }
                     console.log(`     ✅ ${expedientes.length} expedientes con movimientos\n`);
 
                 } catch (error) {

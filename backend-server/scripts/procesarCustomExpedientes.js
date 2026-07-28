@@ -10,6 +10,18 @@ const fs = require('fs');
 const path = require('path');
 const cerrarNavegador = require('./cerrarNavegador');
 
+// E1-1 (revisión E1, Bloque C.1): sin esto, un error no capturado o una promesa
+// rechazada sin catch mataban el proceso de golpe, dejando Chrome huérfano.
+// Mismo patrón que listarSCWPJN.js / procesarNovedadesCompleto.js.
+process.on('uncaughtException', error => {
+    console.error("❌ Excepción no capturada (inesperada):", error.message, error.stack);
+    // NO llamar process.exit(1) — dejar que el sistema de reintentos maneje la recuperación.
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error("❌ Rechazo de promesa no manejado:", reason);
+    // NO llamar process.exit(1) — misma razón: el sistema de reintentos necesita seguir vivo.
+});
+
 // ============ RUTA DE DATOS ============
 function getDataPath() {
     // PRIORIDAD 0: carpeta por usuario (CUIT) inyectada por main.js (descargas por usuario)

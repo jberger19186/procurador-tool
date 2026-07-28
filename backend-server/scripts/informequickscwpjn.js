@@ -83,15 +83,26 @@ let procesoEjecutado = false;
 // Control de cierres manuales vs. programáticos
 let cierreProgramatico = false;
 
-// Manejo global de errores para asegurar respuesta JSON en caso de fallos inesperados
-process.on('uncaughtException', function (err) {
+// E1-2 (revisión E1, Bloque C.1): referencia sincronizada al browser activo de main(),
+// para que el handler global pueda cerrarlo antes de salir. Este script SÍ necesita
+// exit(1) (a diferencia de sus hermanos con reintentos): el proceso padre en Electron
+// parsea la línea "RESULT: {...}" de stdout y espera que el proceso termine — no puede
+// adoptar el patrón "loguear sin exit". Lo que sí faltaba era cerrar Chrome antes de morir.
+let browserActivo = null;
+
+/**
+ * Manejo global de errores para asegurar respuesta JSON en caso de fallos inesperados.
+ * Antes salía sin cerrar el navegador — dejaba chrome.exe huérfano en cualquier error
+ * no capturado a mitad de ejecución (el mismo escenario que E1-1 corrige en los scripts
+ * con reintentos, acá aplicado al camino que sí debe terminar el proceso).
+ */
+async function manejarErrorGlobalFatal(err) {
     console.log('RESULT: {"error": "Error inesperado: ' + (err && err.message ? err.message : err) + '"}');
+    await cerrarNavegadorSeguro(browserActivo);
     process.exit(1);
-});
-process.on('unhandledRejection', function (err) {
-    console.log('RESULT: {"error": "Error inesperado: ' + (err && err.message ? err.message : err) + '"}');
-    process.exit(1);
-});
+}
+process.on('uncaughtException', manejarErrorGlobalFatal);
+process.on('unhandledRejection', manejarErrorGlobalFatal);
 
 /**
  * Obtiene y valida los argumentos de entrada
@@ -796,6 +807,7 @@ async function main() {
         // 1️⃣ Inicializar navegador
         const result = await configuracionesGenerales(PROFILE_PATH);
         browser = result.browser;
+        browserActivo = browser; // E1-2: mantiene sincronizado el handler global de errores
         const page = result.page;
         guardarPID(browser);
         configurarEventos(browser);

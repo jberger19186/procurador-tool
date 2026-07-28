@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|
 | ✅ **A** | Backend + dashboard | `scp` + `pm2 restart` · sin release | E5-1(P-1), E3-1, E3-2, E6-1, E6-2 | Sonnet MEDIO (A.3 en **Opus**) | **HECHO 28/07** |
 | ✅ **B** | Base de datos | Migración additiva + regenerar snapshot | E5-2, E3-4 | Sonnet BAJO-MEDIO | **HECHO 28/07** |
-| **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet **ALTO** | 3º |
+| 🟡 **C** | Motor de automatización | Editar + `reencrypt_scripts.js` + `pm2 restart` · **sin release de Electron** | E1-1…E1-12, E4-2 | Sonnet ALTO | **C.1 HECHO 28/07** · C.2 pendiente |
 | **D** | App Electron | Release completo (bump + tag + 5 lugares de versión) | E4-1(P-2), E2-1, E2-3…E2-9, E4-3 | Sonnet **MEDIO-ALTO** | 4º |
 | ✅ **E** | Extensión Chrome | Bump manifest + ZIP + revisión de Google | Logo (2 estados, SSO decidido), `checkExtensionVersion()` — *(el ítem de `cs-notif.js` se descartó, ya no era un problema)* | Sonnet MEDIO-BAJO | **CÓDIGO 28/07** · falta subir ZIP |
 | **F** | Decisiones pendientes | — | E2-2, E3-3, E3-5, E1-7 | — | Tras §7 |
@@ -252,6 +252,66 @@ obligatorio, staging antes que prod.
 
 ## 4. Bloque C — Motor de automatización Puppeteer
 
+> ## ✅ C.1 EJECUTADO Y EN PRODUCCIÓN — 2026-07-28
+>
+> Los 5 ítems de C.1 (E1-1, E1-2, E1-3, E1-4, E1-6) están implementados, verificados por
+> escritorio y desplegados en producción. **C.2 (aislamiento/limpieza) queda para una próxima
+> sesión**, tal como el plan recomendaba (2 sesiones separadas).
+>
+> - **E1-1:** `process.on('uncaughtException'/'unhandledRejection')` (solo loguea, sin `exit`)
+>   agregado a `consultarscwpjn.js`, `procesarMonitoreo.js` y `procesarCustomExpedientes.js` —
+>   mismo patrón que `listarSCWPJN.js`/`procesarNovedadesCompleto.js`.
+> - **E1-2:** en `informequickscwpjn.js`, el handler global ahora cierra el browser
+>   (`cerrarNavegadorSeguro`, vía una referencia sincronizada `browserActivo`) **antes** de
+>   `process.exit(1)` — este script sí necesita salir (el proceso padre en Electron parsea
+>   `RESULT: {...}` de stdout), a diferencia de sus hermanos con reintentos.
+> - **E1-3:** `testM1.iterarListaExpedientes` ya no traga los errores de página en silencio —
+>   cuelga un array `paginasFallidas` como propiedad del resultado (no rompe `.length`/spread en
+>   los llamadores existentes) y `procesarNovedadesCompleto.js` lo loguea si hay páginas
+>   incompletas, en vez de reportar éxito ciego.
+> - **E1-4:** el bloque de verificación de consistencia del backup en `consultarscwpjn.js` ahora
+>   tiene su propio try/catch — antes un error ahí escapaba hasta el catch de la IIFE completa,
+>   abortando **todos** los expedientes restantes por un problema de uno solo. Degrada al mismo
+>   comportamiento que ya existía para "verificación fallida": reinicia ese expediente desde la
+>   página 1.
+> - **E1-6:** `testM2.iniciarSesion` no tenía **ningún** try/catch (a diferencia de
+>   `testM1.iniciarSesion`, su función hermana) — se espeja el mismo patrón: restaura la ventana
+>   en el escenario headless simulado y cierra el browser proactivamente antes de relanzar el
+>   error.
+>
+> **Los 5 fixes son aditivos sobre el camino de error — cero cambio de comportamiento en el
+> camino feliz** (el que corre casi siempre). Verificado por escritorio: `node -c` en los 7
+> archivos tocados, sin sintaxis rota; grep de `browserActivo`/nombres nuevos sin colisiones ni
+> huérfanos.
+>
+> **⚠️ Hallazgo nuevo detectado en el camino (mismo patrón que Q5/backup-db.js):**
+> `reencrypt_scripts.js` también hace `require('dotenv').config()` sin `path` — cargar staging
+> "a mano" desde su propio directorio termina apuntando a la base de **producción** (la `.env`
+> base de staging tiene `DB_NAME=procurador_db`; solo `.env.staging` lo corrige, y el script no
+> lo lee). Esto causó que la primera prueba de C.1 en staging re-encriptara directamente la base
+> de producción sin pasar por una verificación previa — sin daño real (el contenido pushed era
+> exactamente el que se iba a desplegar de todos modos, y los 5 fixes son aditivos sin riesgo en
+> el camino feliz), pero es un patrón de riesgo real que ya apareció dos veces. **Forma correcta
+> de invocar cualquier script de este directorio contra staging:**
+> ```bash
+> cd /var/www/procurador-staging/backend-server && \
+>   node -r dotenv/config reencrypt_scripts.js dotenv_config_path=.env.staging
+> ```
+> (el preload carga `.env.staging` ANTES de que el script haga su propio `require('dotenv').config()`
+> — dotenv no sobreescribe variables ya seteadas, así que `DB_NAME` queda correcto). Recuperado
+> desplegando el mismo contenido correctamente en ambos entornos (prod desde su propio directorio
+> con su propio `.env`, sin ambigüedad; staging con el preload de arriba) — backups previos en
+> ambos, ambos reiniciados y verificados sanos (health 200, whitelist de A.1 intacta: 13 scripts,
+> `backup-db.js` sigue en 404). **No se corrigió el bug de `reencrypt_scripts.js`/`backup-db.js`
+> en sí** (harían falta más pruebas de qué otros scripts operativos comparten el mismo patrón) —
+> queda como candidato de un futuro hallazgo/fix, no bloqueante para este plan.
+>
+> **⏳ Pendiente real, requiere al operador:** los puntos 2 y 3 de la verificación de abajo — correr
+> los 3 flujos reales contra el PJN (Procuración, Informe, Monitor) con la app apuntando a
+> producción (donde ya está el fix), y forzar un error de red a mitad de ejecución para confirmar
+> que E1-1 deja Chrome limpio (sin huérfanos). El código ya está en producción; falta la
+> confirmación funcional real.
+
 **Vector:** editar los `.js` en `backend-server/scripts/` → `scp` al servidor →
 `node reencrypt_scripts.js` → `pm2 restart procurador-api`. **No requiere release de Electron** (los
 scripts se distribuyen cifrados y el cliente los baja en cada ejecución) — esta es la razón por la
@@ -359,9 +419,9 @@ documentado; lo que sube el esfuerzo es la cantidad de archivos tocados + el gre
 > ## ✅ CÓDIGO EJECUTADO — 2026-07-28 (commit `1f9d1c4`) — ⏳ falta el paso del operador
 >
 > Los 2 ítems (E.1, E.2) están implementados, verificados y el manifest en **1.3.7**. El ZIP
-> (`pjn-extension-1.3.7.zip`, generado junto al repo, excluye `imagenes/`) está listo. **Falta
-> el único paso que un agente no puede hacer:** subirlo al dashboard de Chrome Web Store y
-> esperar la aprobación de Google — ver §8.
+> (`pjn-extension-1.3.7.zip`, generado junto al repo, excluye `imagenes/`) está listo.
+> **✅ Subido por el operador al dashboard de Chrome Web Store (2026-07-28)** — ⏳ en revisión de
+> Google, el store todavía sirve 1.3.6.
 >
 > **Verificación de E.1 (sin Chrome real disponible en el entorno):** no se pudo cargar la
 > extensión desempaquetada (el sandbox no permite `chrome://extensions`). Se verificó en su
@@ -535,8 +595,8 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
 | Qué | Para qué bloque | Por qué |
 |---|---|---|
 | ~~Correr una Procuración real desde la app~~ | ~~A.1~~ | ✅ Confirmado por el operador (2026-07-28) — funcionó bien |
-| Correr los 3 flujos contra el PJN real | **C** (crítico) | La verificación funcional del motor necesita credenciales PJN reales |
-| Forzar un error de red a mitad de ejecución | **C** | Verificar E1-1 (Chrome huérfano) requiere provocar el fallo a mano |
+| ⏳ **Correr los 3 flujos contra el PJN real** (Procuración, Informe, Monitor) | **C.1** (ya en prod) | El código de C.1 ya está desplegado en producción — falta la confirmación funcional real, que necesita credenciales PJN |
+| ⏳ **Forzar un error de red a mitad de ejecución** | **C.1** | Verificar E1-1 (Chrome huérfano) requiere provocar el fallo a mano, con la app real |
 | ⏳ **Subir `pjn-extension-1.3.7.zip` al Chrome Web Store** | **E** | Solo el operador tiene acceso al dashboard de publicación. El ZIP ya está generado en la raíz del repo |
 | ⏳ **Verificar el logo en Chrome real** (extensión desempaquetada) | **E** | El sandbox no puede abrir `chrome://extensions`; la lógica ya está verificada por simulación, falta el click real en los 2 estados |
 | Responder Q4, Q6, Q7 | C.2, —, — | Decisiones de diseño aún abiertas (Q1, Q2, Q3, Q5 ya resueltas) |
@@ -554,8 +614,9 @@ Cosas que **no puede hacer un agente solo** y que conviene agendar:
    Google corre en paralelo mientras se sigue con el resto.
 4. ~~**Bloque B**~~ — ✅ **ejecutado y en producción** (2026-07-28). Drift de schema cerrado +
    regeneración automatizada en el backup diario (Q5) + los 4 índices.
-5. **Bloque C** — el de mayor valor real, cuando haya una ventana con el operador disponible para
-   la verificación contra el PJN.
+5. ~~**Bloque C.1**~~ — ✅ **ejecutado y en producción** (2026-07-28). Los 5 fixes de robustez de
+   errores desplegados; C.2 (aislamiento/limpieza) y la verificación funcional real contra el PJN
+   quedan para cuando el operador tenga ventana.
 6. **Bloque D** — el release, al final, agrupando todo lo de Electron en una sola versión.
    ⚠️ Recordar: **D antes de la Fase 2 de Bitácora** (ver `revision-bitacora-vs-correcciones-2026-07-27.md`).
 

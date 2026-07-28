@@ -601,6 +601,10 @@ async function iterarListaExpedientes(page, totalPaginas, fechaLimite) {
     let totalFilas = 0;
     let stopExtraction = false;
     let fechaLimiteDate = null;
+    // E1-3 (revisión E1, Bloque C.1): antes, un error de página se logueaba y el loop
+    // seguía a la página siguiente sin dejar rastro — el flujo "Procurar" podía reportar
+    // éxito con expedientes faltantes, sin que nadie (ni el llamador) se enterara.
+    const paginasFallidas = [];
 
     if (fechaLimite) {
         const partes = fechaLimite.split('/');
@@ -713,10 +717,18 @@ async function iterarListaExpedientes(page, totalPaginas, fechaLimite) {
             }
         } catch (error) {
             console.error(`Error al procesar la página ${paginaActual}:`, error.message);
+            paginasFallidas.push({ pagina: paginaActual, error: error.message });
         }
     }
 
     console.log(`Total de filas procesadas (sin títulos): ${totalFilas}`);
+    if (paginasFallidas.length > 0) {
+        console.warn(`⚠️ ${paginasFallidas.length} página(s) fallaron durante la extracción: ${paginasFallidas.map(p => p.pagina).join(', ')} — el resultado puede estar incompleto.`);
+    }
+    // Se cuelga como propiedad del array (no rompe .length/spread/push(...) en los
+    // llamadores existentes) para que quien reciba el resultado pueda saber si hubo
+    // páginas incompletas, en vez de asumir éxito total en silencio.
+    todasLasFilas.paginasFallidas = paginasFallidas;
     return todasLasFilas;
 }
 
