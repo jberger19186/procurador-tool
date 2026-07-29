@@ -16,6 +16,20 @@ const path = require('path');
 // Sufijo de timestamp que la unificación de nombres agrega a cada PDF:
 // `_2026-07-29T13-01-31.pdf`
 const SUFIJO_TIMESTAMP = /_\d{4}-\d{2}-\d{2}t\d{2}-\d{2}-\d{2}\.pdf$/;
+const PREFIJO = /^(informe|expediente)_/;
+
+/**
+ * Descompone un identificador de expediente en sus componentes (jurisdicción,
+ * número, año), normalizando los separadores. Se aplica igual al expediente
+ * pedido y al nombre del archivo, para poder compararlos por igualdad.
+ */
+function tokenizar(texto) {
+    return texto
+        .toLowerCase()
+        .replace(/[\/:"*?<>|_]/g, ' ')
+        .split(/\s+/)
+        .filter(p => p.length > 0);
+}
 
 /**
  * @param {string} rutaBase - Carpeta de descargas donde viven los PDFs
@@ -34,21 +48,25 @@ function buscarPdfExpediente(rutaBase, expediente) {
                 (lower.startsWith('informe_') || lower.startsWith('expediente_'));
         });
 
-        // Búsqueda flexible por partes del nombre del expediente
-        const partes = expediente
-            .toLowerCase()
-            .replace(/[\/:"*?<>|]/g, ' ')
-            .split(/\s+/)
-            .filter(p => p.length > 0);
-
+        const partes = tokenizar(expediente);
         if (partes.length === 0) return null;
+        const buscado = partes.join('|');
 
         const coincidencias = candidatos.filter(archivo => {
             // Se recorta el timestamp ANTES de comparar: si no, el año de la corrida
             // matchea el año del expediente (un expediente 2026 daría por bueno el PDF
             // de otro año generado en 2026) y se devuelve el archivo equivocado.
-            const base = archivo.toLowerCase().replace(SUFIJO_TIMESTAMP, '');
-            return partes.every(parte => base.includes(parte));
+            const base = archivo
+                .toLowerCase()
+                .replace(SUFIJO_TIMESTAMP, '')
+                .replace(/\.pdf$/, '')
+                .replace(PREFIJO, '');
+
+            // Comparación por componente exacto, NO por subcadena. La versión anterior
+            // pedía que el nombre "contuviera" cada parte, y así el expediente
+            // 18745/2017 daba por bueno el PDF de 018745/2017 — enlazar el informe de
+            // otro expediente es peor que no enlazar ninguno.
+            return tokenizar(base).join('|') === buscado;
         });
 
         if (coincidencias.length === 0) return null;
