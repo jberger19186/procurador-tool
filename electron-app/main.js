@@ -952,6 +952,44 @@ function readRunStats() {
     }
 }
 
+/**
+ * El informe termina con código de salida 0 en varios caminos que NO generan
+ * ningún PDF: expediente inexistente en el PJN, o navegador cerrado por el
+ * usuario antes de completar. El script ya distingue esos casos y emite un
+ * payload `RESULT: {...}`, pero hasta ahora nadie lo leía, así que el lote los
+ * marcaba "Exitoso" y el visor ofrecía un "Abrir PDF" que no existía.
+ *
+ * Se apoya en los campos estructurados del payload, no en el texto del mensaje.
+ * Si no hay payload legible no se asume nada (devuelve null) — ante la duda,
+ * se respeta el código de salida del proceso.
+ *
+ * @param {string} output - stdout completo de la ejecución
+ * @returns {string|null} Motivo legible si terminó sin informe, o null si fue OK
+ */
+function motivoInformeSinPDF(output) {
+    const lineas = String(output || '')
+        .split('\n')
+        .filter(l => l.trim().startsWith('RESULT:'));
+    if (lineas.length === 0) return null;
+
+    let payload;
+    try {
+        // El último RESULT es el desenlace: cada uno va seguido de un exit inmediato,
+        // pero si en el futuro se emitiera más de uno, el que vale es el final.
+        payload = JSON.parse(lineas[lineas.length - 1].trim().substring(7));
+    } catch (_) {
+        return null;
+    }
+
+    if (payload?.codigo === 'EXPEDIENTE_INEXISTENTE') {
+        return payload.mensaje || 'Expediente inexistente o no disponible para su consulta pública';
+    }
+    if (payload?.navegador_cerrado === true) {
+        return 'Proceso interrumpido: se cerró el navegador antes de generar el informe';
+    }
+    return null;
+}
+
 function updateRunStats(tipo, exitoso) {
     try {
         const stats = readRunStats();
@@ -1909,11 +1947,28 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
             }
             mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Generando informe: ${expediente}` });
             await closeChromeProfile();
-            const result = await authManager.executeRemoteScriptAsLocal(
+            let result = await authManager.executeRemoteScriptAsLocal(
                 'informequickscwpjn.js',
                 [expediente, cuit],
-                { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit), processLabel: 'Informe' }
+                // silentComplete: la notificación se emite acá abajo, una vez evaluado si
+                // el informe realmente se generó. Si la dejara emitir a executeRemoteScript-
+                // AsLocal, saldría "✅ Proceso Completado" (código 0) aunque no haya informe.
+                { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit), processLabel: 'Informe', silentComplete: true }
             );
+
+            // El proceso puede salir con código 0 sin haber generado informe
+            // (expediente inexistente, navegador cerrado): en ese caso no es un éxito.
+            const motivoIndividual = result.success ? motivoInformeSinPDF(result.output) : null;
+            if (motivoIndividual) {
+                result = { ...result, success: false, error: motivoIndividual };
+                mainWindow.webContents.send('process-log', { type: 'error', text: `❌ ${motivoIndividual}` });
+                authManager.notificationManager.notifyError(motivoIndividual);
+            } else {
+                authManager.notificationManager.notifyProcessComplete({
+                    label: 'Informe',
+                    tiempo: result.executionTime
+                });
+            }
 
             // Abrir el PDF generado automáticamente
             if (result.success && result.output) {
@@ -1987,6 +2042,7 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
             });
 
             let expSuccess = false;
+            let motivoFallo = null;
             try {
                 const expResult = await authManager.executeRemoteScriptAsLocal(
                     'informequickscwpjn.js',
@@ -1994,9 +2050,13 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
                     { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit), silentStart: true, silentComplete: true }
                 );
                 expSuccess = expResult.success;
+                // Código de salida 0 no alcanza: el script sale así también cuando el
+                // expediente no existe o se cerró el navegador, sin generar informe.
+                motivoFallo = expSuccess ? motivoInformeSinPDF(expResult.output) : null;
+                if (motivoFallo) expSuccess = false;
                 mainWindow.webContents.send('process-log', {
                     type: expSuccess ? 'success' : 'error',
-                    text: `  ${expSuccess ? '✅' : '❌'} [${i + 1}/${validLines.length}] ${expStr}: ${expSuccess ? 'OK' : 'falló (exit code ≠ 0)'}`
+                    text: `  ${expSuccess ? '✅' : '❌'} [${i + 1}/${validLines.length}] ${expStr}: ${expSuccess ? 'OK' : (motivoFallo || 'falló (exit code ≠ 0)')}`
                 });
             } catch (err) {
                 const errMsg = err?.error || err?.message || String(err) || '';
@@ -2028,7 +2088,7 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
             }
 
             if (!abortado) {
-                batchResults.push({ expediente: expStr, ok: expSuccess, exitCode: expSuccess ? 0 : 1 });
+                batchResults.push({ expediente: expStr, ok: expSuccess, exitCode: expSuccess ? 0 : 1, motivo: motivoFallo || undefined });
                 // Pausa entre expedientes (excepto el último) para que Chrome libere el perfil
                 if (i < validLines.length - 1) {
                     mainWindow.webContents.send('process-log', {

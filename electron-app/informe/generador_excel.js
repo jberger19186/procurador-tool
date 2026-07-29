@@ -333,6 +333,12 @@ async function crearHojaErrores(workbook, expedientesFallidos) {
  * @returns {string} Mensaje de error formateado
  */
 function extraerMensajeError(expediente) {
+    // Motivo explícito informado por el orquestador (ej: expediente inexistente).
+    // Ya viene legible, no hace falta rasparlo del stderr.
+    if (expediente.motivo && expediente.motivo.trim()) {
+        return expediente.motivo.trim().substring(0, 500);
+    }
+
     // Si el expediente tiene stderr completo
     if (expediente.stderr && expediente.stderr.trim()) {
         const lineas = expediente.stderr.split('\n').filter(l => l.trim());
