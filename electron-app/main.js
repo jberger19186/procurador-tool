@@ -1991,7 +1991,7 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
                 const expResult = await authManager.executeRemoteScriptAsLocal(
                     'informequickscwpjn.js',
                     [expStr, cuit],
-                    { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit), silentStart: true }
+                    { extraFiles: { 'config_informe.json': configInforme }, extraEnv: buildRunEnv(cuit), silentStart: true, silentComplete: true }
                 );
                 expSuccess = expResult.success;
                 mainWindow.webContents.send('process-log', {
@@ -2084,6 +2084,23 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
         }
 
         const overallSuccess = batchResults.some(r => r.ok);
+
+        // Una sola notificación de cierre para todo el lote (las individuales van con
+        // silentComplete), con los conteos REALES que el propio loop acaba de calcular.
+        // Va acá y no dentro del bloque de reportes para que se emita aunque falle la
+        // generación del Excel/visor. Si el lote se abortó a mano no se notifica: la UI
+        // ya avisó "detenido manualmente" y decir "Completado" sería engañoso.
+        if (!abortado) {
+            const exitososLote = batchResults.filter(r => r.ok).length;
+            authManager.notificationManager.notifyProcessComplete({
+                label: 'Informe Por Lote',
+                expedientes: batchResults.length,
+                exitosos: exitososLote,
+                fallidos: batchResults.length - exitososLote,
+                tiempo: Date.now() - batchStartTime
+            });
+        }
+
         updateRunStats('informes', overallSuccess);
         mainWindow.webContents.send('batch-progress', { done: true });
         mainWindow.webContents.send('process-finished', { code: overallSuccess ? 0 : 1, success: overallSuccess, isInformeBatch: true, isInforme: true });

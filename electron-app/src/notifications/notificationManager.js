@@ -23,22 +23,26 @@ class NotificationManager {
     notifyProcessComplete(stats = {}) {
         if (!this.enabled) return;
 
-        const {
-            expedientes = 0,
-            exitosos = 0,
-            fallidos = 0,
-            tiempo = 0
-        } = stats;
+        const { expedientes, exitosos, fallidos, tiempo = 0, label } = stats;
 
         const tiempoMin = Math.floor(tiempo / 60000);
         const tiempoSeg = Math.floor((tiempo % 60000) / 1000);
 
-        const title = '✅ Proceso Completado';
-        const body = `Expedientes procesados: ${expedientes}\n` +
-            `Exitosos: ${exitosos} | Fallidos: ${fallidos}\n` +
-            `Tiempo: ${tiempoMin}m ${tiempoSeg}s`;
+        // Las cantidades se informan SOLO si el llamador realmente las conoce.
+        // Antes se destructuraban con default 0 y se imprimían siempre: como el
+        // lookup que las calculaba dejó de existir en la unificación de nombres
+        // de v2.7.33, toda ejecución mostraba "Expedientes procesados: 0 /
+        // Exitosos: 0 | Fallidos: 0" aunque hubiera procesado expedientes.
+        // Hoy solo el informe por lote (main.js) tiene el conteo real y lo pasa.
+        const lineas = [];
+        if (label) lineas.push(label);
+        if (Number.isFinite(expedientes)) {
+            lineas.push(`Expedientes procesados: ${expedientes}`);
+            lineas.push(`Exitosos: ${exitosos ?? 0} | Fallidos: ${fallidos ?? 0}`);
+        }
+        lineas.push(`Tiempo: ${tiempoMin}m ${tiempoSeg}s`);
 
-        this.show(title, body, 'success');
+        this.show('✅ Proceso Completado', lineas.join('\n'), 'success');
     }
 
     /**

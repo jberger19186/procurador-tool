@@ -293,7 +293,7 @@ class AuthManager {
         const { fork } = require('child_process');
         const fs = require('fs');
         const path = require('path');
-        const { cuitOverride, extraFiles, processLabel, silentStart } = options;
+        const { cuitOverride, extraFiles, processLabel, silentStart, silentComplete } = options;
 
         return new Promise(async (resolve, reject) => {
             try {
@@ -715,19 +715,30 @@ class AuthManager {
                     }
 
                     // ✅ 11. NOTIFICACIONES según resultado
-                    if (code === 0) {
-                        // E2-6 (revisión E2, Bloque D): antes intentaba leer estadísticas
-                        // detalladas desde tempDir/descargas/procesos_automaticos/*.json —
-                        // esa subcarpeta se eliminó en la unificación de nombres de v2.7.33
-                        // (los scripts escriben directo en 'descargas', sin subcarpeta
-                        // intermedia), así que ese lookup siempre fallaba y caía en el catch
-                        // (notificación sin detalles). updateRunStats() en main.js ya lleva
-                        // las estadísticas reales por tipo de proceso — se deja solo el
-                        // comportamiento que efectivamente corría hasta ahora.
-                        this.notificationManager.notifyProcessComplete({ tiempo: totalTime });
-                        this.securityMetrics.recordNotification();
-                    } else {
-                        this.notificationManager.notifyError(`Proceso terminó con código ${code}`);
+                    // E2-6 (revisión E2, Bloque D): antes intentaba leer estadísticas
+                    // detalladas desde tempDir/descargas/procesos_automaticos/*.json —
+                    // esa subcarpeta se eliminó en la unificación de nombres de v2.7.33
+                    // (los scripts escriben directo en 'descargas', sin subcarpeta
+                    // intermedia), así que ese lookup siempre fallaba y caía en el catch.
+                    // Desde acá no hay forma de conocer cuántos expedientes procesó el
+                    // script, así que se informa solo lo que sí se sabe (qué proceso fue
+                    // y cuánto tardó); notifyProcessComplete omite las cantidades cuando
+                    // no se le pasan, en vez de imprimir ceros.
+                    //
+                    // silentComplete: el llamador se hace cargo de la notificación final.
+                    // Lo usa el informe por lote, que invoca este método UNA VEZ POR
+                    // EXPEDIENTE — sin esta guarda disparaba un toast de cierre por cada
+                    // uno. Es la contraparte de silentStart, que en v2.7.34 resolvió el
+                    // mismo spam del lado de la notificación de inicio.
+                    if (!silentComplete) {
+                        if (code === 0) {
+                            this.notificationManager.notifyProcessComplete({
+                                tiempo: totalTime,
+                                label: this.notificationManager.friendlyLabel(processLabel || scriptName)
+                            });
+                        } else {
+                            this.notificationManager.notifyError(`Proceso terminó con código ${code}`);
+                        }
                         this.securityMetrics.recordNotification();
                     }
 

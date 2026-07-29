@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { buscarPdfExpediente } = require('./buscarPdfExpediente');
 
 /**
  * Genera visor HTML con resultados del batch
@@ -126,30 +127,10 @@ function prepararDatos(expedientes, config, rutaExcel) {
         let rutaPDF = null;
 
         if (exp.ok) {
-            try {
-                const archivos = fs.readdirSync(rutaBase);
-                const pdfsExpedientes = archivos.filter(f =>
-                    f.startsWith('expediente_') && f.endsWith('.pdf')
-                );
-
-                // Búsqueda flexible por partes del nombre
-                const partes = exp.expediente
-                    .toLowerCase()
-                    .replace(/[\/:"*?<>|]/g, ' ')
-                    .split(/\s+/)
-                    .filter(p => p.length > 0);
-
-                const archivoEncontrado = pdfsExpedientes.find(archivo => {
-                    const archivoLower = archivo.toLowerCase();
-                    return partes.every(parte => archivoLower.includes(parte));
-                });
-
-                if (archivoEncontrado && fs.existsSync(path.join(rutaBase, archivoEncontrado))) {
-                    // Ruta relativa: funciona al copiar la carpeta con el HTML y los PDFs
-                    rutaPDF = `./${archivoEncontrado}`;
-                }
-            } catch (error) {
-                console.warn(`   ⚠️ Error al buscar PDF para ${exp.expediente}`);
+            const archivoEncontrado = buscarPdfExpediente(rutaBase, exp.expediente);
+            if (archivoEncontrado && fs.existsSync(path.join(rutaBase, archivoEncontrado))) {
+                // Ruta relativa: funciona al copiar la carpeta con el HTML y los PDFs
+                rutaPDF = `./${encodeURIComponent(archivoEncontrado)}`;
             }
         }
 

@@ -7,6 +7,7 @@
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
+const { buscarPdfExpediente } = require('./buscarPdfExpediente');
 
 /**
  * Genera archivo Excel con resultados del batch
@@ -228,28 +229,7 @@ async function crearHojaExpedientes(workbook, expedientes, config) {
                 ? carpetaDescargas
                 : path.join(process.cwd(), carpetaDescargas);
 
-            let archivoEncontrado = null;
-
-            try {
-                const archivos = fs.readdirSync(rutaBase);
-                const pdfsExpedientes = archivos.filter(f =>
-                    f.startsWith('expediente_') && f.endsWith('.pdf')
-                );
-
-                // Búsqueda flexible por partes del nombre del expediente
-                const partes = exp.expediente
-                    .toLowerCase()
-                    .replace(/[\/:"*?<>|]/g, ' ')
-                    .split(/\s+/)
-                    .filter(p => p.length > 0);
-
-                archivoEncontrado = pdfsExpedientes.find(archivo => {
-                    const archivoLower = archivo.toLowerCase();
-                    return partes.every(parte => archivoLower.includes(parte));
-                });
-            } catch (error) {
-                console.error(`   ⚠️ Error al buscar PDF: ${error.message}`);
-            }
+            const archivoEncontrado = buscarPdfExpediente(rutaBase, exp.expediente);
 
             if (archivoEncontrado && fs.existsSync(path.join(rutaBase, archivoEncontrado))) {
                 const cellPDF = fila.getCell(5);
