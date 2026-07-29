@@ -234,8 +234,11 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
             };
             console.log(`🔏 Script firmado: ${scriptName}`);
         } catch (signError) {
-            console.warn(`⚠️ No se pudo firmar ${scriptName}:`, signError.message);
-            // Continúa sin firma (degradación elegante)
+            console.error(`[SEGURIDAD] No se pudo firmar ${scriptName}: ${signError.message}`);
+            return res.status(500).json({
+                success: false,
+                error: 'No se pudo firmar el script. Intentá de nuevo en unos minutos.'
+            });
         }
 
         res.json({
