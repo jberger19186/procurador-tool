@@ -22,13 +22,21 @@ const PREFIJO = /^(informe|expediente)_/;
  * Descompone un identificador de expediente en sus componentes (jurisdicción,
  * número, año), normalizando los separadores. Se aplica igual al expediente
  * pedido y al nombre del archivo, para poder compararlos por igualdad.
+ *
+ * Los componentes puramente numéricos se normalizan quitando los ceros a la
+ * izquierda: el usuario escribe "FCR 18745/2017" pero el PJN devuelve el número
+ * con padding, y el script nombra el PDF con la forma normalizada del PJN
+ * (`informe_FCR 018745_2017_...`). Son el MISMO expediente — el cero a la
+ * izquierda es formato de presentación, no parte del identificador.
  */
 function tokenizar(texto) {
     return texto
         .toLowerCase()
         .replace(/[\/:"*?<>|_]/g, ' ')
         .split(/\s+/)
-        .filter(p => p.length > 0);
+        .filter(p => p.length > 0)
+        // `|| '0'` evita que un token que sea todo ceros quede vacío.
+        .map(p => /^\d+$/.test(p) ? (p.replace(/^0+/, '') || '0') : p);
 }
 
 /**
@@ -62,10 +70,13 @@ function buscarPdfExpediente(rutaBase, expediente) {
                 .replace(/\.pdf$/, '')
                 .replace(PREFIJO, '');
 
-            // Comparación por componente exacto, NO por subcadena. La versión anterior
-            // pedía que el nombre "contuviera" cada parte, y así el expediente
-            // 18745/2017 daba por bueno el PDF de 018745/2017 — enlazar el informe de
-            // otro expediente es peor que no enlazar ninguno.
+            // Comparación por componente, NO por subcadena: la versión original pedía
+            // que el nombre "contuviera" cada parte, y así el expediente 18745/2017
+            // podía dar por bueno el PDF de, por ejemplo, 118745/2017 — enlazar el
+            // informe de otro expediente es peor que no enlazar ninguno. La comparación
+            // es entre componentes ya normalizados (ver tokenizar), así que la
+            // diferencia de ceros a la izquierda entre lo que tipea el usuario y lo
+            // que devuelve el PJN NO cuenta como expediente distinto.
             return tokenizar(base).join('|') === buscado;
         });
 
