@@ -9,6 +9,15 @@ const NotificationManager = require('../notifications/notificationManager');
 const SecurityMetrics = require('../telemetry/securityMetrics');
 const { ScriptVerifier, SignatureVerificationError, ChecksumMismatchError } = require('../security/scriptVerifier');
 const SecurityAudit = require('../telemetry/securityAudit');
+const { motivoInformeSinPDF } = require('../../informe/motivoInformeSinPDF');
+
+// Q6 (2026-07-30, Fase 2 del plan de verificación de firmas): mensaje único para
+// los 4 casos de rechazo por integridad (C2/F1, C3/F4, C4/F7, C5/F2-F3). El
+// detalle técnico (qué script, qué etapa, qué excepción) va solo a console.error
+// y a securityAudit — el usuario ve siempre el mismo texto, accionable y sin
+// jerga, tal como decidió el operador en la decisión Q6.c del plan.
+const ERROR_INTEGRIDAD = 'No se pudo verificar la integridad de los componentes de la aplicación. ' +
+    'Cerrá y volvé a abrir; si el problema persiste, contactá a soporte.';
 
 /**
  * Determina el subsistema al que pertenece un script para el tracking granular
@@ -207,6 +216,16 @@ class AuthManager {
                 return { success: false, error: 'Script vacío o no recibido' };
             }
 
+            // Q6 (2026-07-30, C4/F7): si la clave pública no se pudo cargar,
+            // verifySignature() devuelve true para CUALQUIER firma
+            // (scriptVerifier.js — "degradación elegante"). Se exige acá que el
+            // verificador esté operativo ANTES de confiar en su resultado, sin
+            // modificar src/security/, que es zona protegida.
+            if (!this.scriptVerifier.isReady()) {
+                console.error(`🚨 Verificador de integridad no inicializado — no se puede validar ${scriptName}`);
+                return { success: false, error: ERROR_INTEGRIDAD };
+            }
+
             // ═══════════════════════════════════════════
             // Verificación RSA + Checksum Etapa 1
             // ═══════════════════════════════════════════
@@ -251,14 +270,21 @@ class AuthManager {
                         return { success: false, error: `Integridad comprometida: ${scriptName}` };
                     }
 
-                    // Error genérico de verificación - log pero no bloquear
+                    // Q6 (2026-07-30, C2/F1): fail-CLOSED. Si la verificación no se
+                    // puede completar, no se puede afirmar que el script sea
+                    // legítimo — antes se logueaba y el script se cacheaba igual.
                     this.securityAudit.logSecurityError(scriptName, verifyError);
-                    console.warn(`⚠️ Error verificando ${scriptName}:`, verifyError.message);
+                    console.error(`🚨 VERIFICACIÓN FALLIDA: ${scriptName} - ${verifyError.message}`);
+                    return { success: false, error: ERROR_INTEGRIDAD };
                 }
             } else {
-                // Sin datos de firma (backend sin RSA configurado)
+                // Q6 (2026-07-30, C3/F4): el backend SIEMPRE firma (Fase 1 de este
+                // mismo plan, ya en producción desde 2026-07-29). Un script sin
+                // datos de firma indica un problema real del servidor, no un caso
+                // normal a tolerar.
                 this.securityAudit.logVerificationSkipped(scriptName, 'Sin datos de firma del servidor');
-                console.warn(`⚠️ Script sin firma digital: ${scriptName}`);
+                console.error(`🚨 SCRIPT SIN FIRMA DIGITAL: ${scriptName} - rechazado`);
+                return { success: false, error: ERROR_INTEGRIDAD };
             }
 
             // Guardar en caché (solo RAM) con metadata de seguridad
@@ -319,7 +345,14 @@ class AuthManager {
                             if (versionCheck.success && versionCheck.hash !== cachedHash) {
                                 console.log(`🔄 Script actualizado en servidor: ${scriptName}. Re-descargando...`);
                                 this.scriptCache.delete(scriptName);
-                                await this.loadScript(scriptName);
+                                // Q6 (2026-07-30, C6/F5): antes se descartaba el resultado — si
+                                // la verificación fallaba, loadScript() ya rechazaba por efecto
+                                // colateral (la caché quedaba vacía y el `if (!code)` de abajo
+                                // rechazaba), pero con un mensaje genérico que perdía la causa real.
+                                const loadResult = await this.loadScript(scriptName);
+                                if (!loadResult.success) {
+                                    return reject({ success: false, error: loadResult.error || ERROR_INTEGRIDAD });
+                                }
                                 code = this.scriptCache.get(scriptName);
                             }
                         } catch (e) {
@@ -329,7 +362,10 @@ class AuthManager {
                     }
                 } else {
                     // No está en caché: descargar
-                    await this.loadScript(scriptName);
+                    const loadResult = await this.loadScript(scriptName);
+                    if (!loadResult.success) {
+                        return reject({ success: false, error: loadResult.error || ERROR_INTEGRIDAD });
+                    }
                     code = this.scriptCache.get(scriptName);
                 }
 
@@ -487,9 +523,11 @@ class AuthManager {
                             actual: checksumError.actual
                         });
                         console.error(`🚨 CHECKSUM ETAPA 2 FALLIDO: ${scriptName}`);
-                        return reject({ success: false, error: 'Integridad comprometida en etapa 2' });
+                        return reject({ success: false, error: ERROR_INTEGRIDAD });
                     }
-                    console.warn(`⚠️ Error checksum etapa 2:`, checksumError.message);
+                    // Q6 (2026-07-30, C5/F2): fail-CLOSED, mismo criterio que la etapa 1.
+                    console.error(`🚨 ERROR EN VERIFICACIÓN ETAPA 2: ${scriptName} - ${checksumError.message}`);
+                    return reject({ success: false, error: ERROR_INTEGRIDAD });
                 }
 
                 // ✅ 6b. SEGURIDAD: Encriptar script principal con GCM
@@ -537,9 +575,11 @@ class AuthManager {
                             actual: checksumError.actual
                         });
                         console.error(`🚨 CHECKSUM ETAPA 3 FALLIDO: ${scriptName}`);
-                        return reject({ success: false, error: 'Integridad comprometida en etapa 3' });
+                        return reject({ success: false, error: ERROR_INTEGRIDAD });
                     }
-                    console.warn(`⚠️ Error checksum etapa 3:`, checksumError.message);
+                    // Q6 (2026-07-30, C5/F3): fail-CLOSED, mismo criterio que las etapas 1 y 2.
+                    console.error(`🚨 ERROR EN VERIFICACIÓN ETAPA 3: ${scriptName} - ${checksumError.message}`);
+                    return reject({ success: false, error: ERROR_INTEGRIDAD });
                 }
 
                 const child = fork(tempScriptPath, args, {
@@ -750,10 +790,24 @@ class AuthManager {
                     // 13. Reportar ejecución al backend (incrementa usage_count en BD)
                     try {
                         const subsystem = getSubsystemForScript(scriptName);
+
+                        // El informe puede terminar con código 0 sin haber generado
+                        // ningún PDF (expediente inexistente, navegador cerrado) — ese
+                        // caso NO debe consumir cupo de informe_usage. El backend ya
+                        // respeta el flag `success` que se le manda acá (no incrementa
+                        // si es false); antes se mandaba siempre `code === 0`, así que
+                        // consumía cupo igual. Mismo helper que usa main.js para el
+                        // reporte visual (motivoInformeSinPDF.js), para no duplicar el
+                        // parseo del RESULT.
+                        const motivoSinInforme = (subsystem === 'informe' && code === 0)
+                            ? motivoInformeSinPDF(output)
+                            : null;
+                        const exitosoReal = code === 0 && !motivoSinInforme;
+
                         await this.backendClient.logExecution(
                             scriptName,
-                            code === 0,
-                            code !== 0 ? `Proceso terminó con código ${code}` : null,
+                            exitosoReal,
+                            motivoSinInforme || (code !== 0 ? `Proceso terminó con código ${code}` : null),
                             totalTime,
                             subsystem
                         );
