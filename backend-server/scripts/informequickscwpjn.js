@@ -959,14 +959,21 @@ main().catch(err => {
 // === GESTIÓN DE ESTADO DE SECCIONES ===
 
 /**
- * Devuelve la ruta al archivo estado_secciones.json para un expediente y usuario
+ * Devuelve la ruta a la carpeta de backup de un expediente (sin crearla)
  */
-function getEstadoSeccionesPath(identificador, expedienteStr) {
-    const backupDir = path.join(
+function getBackupDir(identificador, expedienteStr) {
+    return path.join(
         DOWNLOADS_DIR,
         `${identificador}_temp`,
         `${expedienteStr}_backup`
     );
+}
+
+/**
+ * Devuelve la ruta al archivo estado_secciones.json para un expediente y usuario
+ */
+function getEstadoSeccionesPath(identificador, expedienteStr) {
+    const backupDir = getBackupDir(identificador, expedienteStr);
     if (!fs.existsSync(backupDir)) {
         fs.mkdirSync(backupDir, { recursive: true });
     }
@@ -974,9 +981,24 @@ function getEstadoSeccionesPath(identificador, expedienteStr) {
 }
 
 /**
- * Inicializa el archivo de estado si no existe
+ * Inicializa el estado de secciones para una corrida nueva. Se invoca una sola
+ * vez por ejecución de main(), ANTES del bucle de reintentos (nunca dentro),
+ * así que borrar acá la carpeta de backup no afecta el resume entre reintentos
+ * de la misma corrida — ese resume depende de que el estado sobreviva DURANTE
+ * el bucle, no entre corridas distintas.
+ *
+ * Antes este archivo se creaba "si no existe" y quedaba huérfano de la corrida
+ * anterior para siempre: un informe exitoso de ayer dejaba pdfGenerado:true, y
+ * hoy, al pedir el mismo expediente, el script veía ese estado viejo y
+ * saltaba la generación del PDF ("PDF ya generado. Saltando sección") sin
+ * producir un archivo nuevo.
  */
 function inicializarEstadoSecciones(identificador, expedienteStr, configInforme) {
+    const backupDir = getBackupDir(identificador, expedienteStr);
+    if (fs.existsSync(backupDir)) {
+        fs.rmSync(backupDir, { recursive: true, force: true });
+    }
+
     const estadoPath = getEstadoSeccionesPath(identificador, expedienteStr);
 
     // Calcular localmente el máximo de reintentos
@@ -1031,9 +1053,9 @@ function inicializarEstadoSecciones(identificador, expedienteStr, configInforme)
         pdfGenerado: false
     };
 
-    if (!fs.existsSync(estadoPath)) {
-        fs.writeFileSync(estadoPath, JSON.stringify(estadoInicial, null, 2), "utf-8");
-    }
+    // Ya no hace falta el guard "si no existe": la carpeta se acaba de borrar
+    // arriba, así que esta corrida siempre escribe el estado desde cero.
+    fs.writeFileSync(estadoPath, JSON.stringify(estadoInicial, null, 2), "utf-8");
 }
 
 /**
