@@ -539,6 +539,15 @@ class AuthManager {
                 const encryptedContent = `${encryptionResult.encrypted}|||${encryptionResult.authTag}`;
                 fs.writeFileSync(encScriptPath, encryptedContent, 'utf8');
 
+                // Q6 (Fase 3, C7/F6): hash del contenido cifrado tal como quedó
+                // escrito en disco, calculado en el momento de la escritura. La
+                // ETAPA 3 (más abajo) relee este mismo archivo del disco y compara
+                // contra este hash — antes comparaba la caché en RAM contra el
+                // hash de esa misma RAM ("diskCode" nunca tocaba el disco), así
+                // que siempre pasaba y no defendía la ventana que dice cubrir
+                // (manipulación del .enc entre esta escritura y el fork() de abajo).
+                const encDiskHash = this.scriptVerifier.calculateChecksum(encryptedContent);
+
                 // Crear wrapper que desencripta
                 const wrapperCode = this.fileEncryption.createWrapperScript(`${scriptName}.enc`);
                 const tempScriptPath = path.join(tempDir, scriptName);
@@ -562,22 +571,31 @@ class AuthManager {
                 const credentials = this.fileEncryption.getSessionCredentials();
 
                 // ✅ CHECKSUM ETAPA 3: Verificar antes de ejecutar
+                // Q6 (Fase 3, C7/F6): relee el .enc DEL DISCO (no de scriptCache/RAM,
+                // como hacía antes bajo el nombre engañoso "diskCode") y lo compara
+                // contra encDiskHash, calculado al escribirlo unas líneas arriba.
+                // Esto sí verifica lo que la etapa dice verificar: que el archivo
+                // que va a ejecutar fork() no fue manipulado entre la escritura y
+                // este punto.
                 try {
-                    const diskCode = this.scriptCache.get(scriptName);
-                    if (diskCode) {
-                        this.scriptVerifier.verifyMultiStage(scriptName, 3, diskCode);
-                        this.securityAudit.logScriptVerified(scriptName, { stage: 3 });
-                    }
-                } catch (checksumError) {
-                    if (checksumError instanceof ChecksumMismatchError) {
+                    const encOnDisk = fs.readFileSync(encScriptPath, 'utf8');
+                    const diskChecksum = this.scriptVerifier.calculateChecksum(encOnDisk);
+
+                    if (diskChecksum !== encDiskHash) {
                         this.securityAudit.logChecksumMismatch(scriptName, 3, {
-                            expected: checksumError.expected,
-                            actual: checksumError.actual
+                            expected: encDiskHash,
+                            actual: diskChecksum
                         });
-                        console.error(`🚨 CHECKSUM ETAPA 3 FALLIDO: ${scriptName}`);
+                        console.error(`🚨 CHECKSUM ETAPA 3 FALLIDO (archivo en disco manipulado): ${scriptName}`);
                         return reject({ success: false, error: ERROR_INTEGRIDAD });
                     }
+
+                    this.securityAudit.logScriptVerified(scriptName, { stage: 3 });
+                    console.log(`✅ [ScriptVerifier] Checksum Etapa 3 OK (disco): ${scriptName}`);
+                } catch (checksumError) {
                     // Q6 (2026-07-30, C5/F3): fail-CLOSED, mismo criterio que las etapas 1 y 2.
+                    // Cubre también un fallo de fs.readFileSync (ej: el .enc no está
+                    // donde debería) — no se puede afirmar que el script sea legítimo.
                     console.error(`🚨 ERROR EN VERIFICACIÓN ETAPA 3: ${scriptName} - ${checksumError.message}`);
                     return reject({ success: false, error: ERROR_INTEGRIDAD });
                 }
