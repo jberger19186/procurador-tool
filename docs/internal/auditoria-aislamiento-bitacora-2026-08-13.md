@@ -289,23 +289,31 @@ No es una sola respuesta — las tres cosas tienen perfiles de riesgo muy distin
 | **Exportar/respaldar** la Bitácora de un usuario | ✅ **Sí, tiene valor real** | Es una operación de **lectura**, y resuelve el caso de soporte concreto: el usuario dice "perdí mis vencimientos" y hoy el admin no tiene forma de darle su propio backup. Reusa el mismo generador de F1.6, cambiando de quién son los datos. |
 | **Cargar/restaurar** un backup en la cuenta de un usuario | ❌ **No en v1** | Es la única operación **destructiva sobre datos de otro**. Y es **parcialmente redundante**: el backup diario de la base (`backup-db.js`, cron 03:00 → DO Spaces, retención 30 días) ya cubre la recuperación ante desastre. Si un usuario se autodestruye la Bitácora, la restauración correcta es puntual desde ese backup, no un flujo de UI que puede pisar datos buenos. Si con el uso aparece que hace falta, se agrega después con el cuidado de F1.7 (Opus, alto). |
 
-### Si se acepta, esto es lo que se agrega al plan
+### ✅ DECISIÓN DEL OPERADOR (2026-08-13): se deja como estaba previsto — **no se agrega nada**
 
-**Sub-bloque nuevo — F1.9: "Bitácora del usuario en la ficha del admin (consulta + exportación)"**
+**El operador resolvió que el administrador NO consulte los registros de Bitácora desde el
+dashboard, y que NO exporte ni restaure manualmente.** El sub-bloque F1.9 propuesto arriba **queda
+descartado**; el dashboard admin incorpora únicamente lo que ya estaba en el plan (checkbox de plan
+en F1.5 + ABM de feriados en F1.8).
 
-| Campo | Valor |
-|---|---|
-| **Alcance** | Card en la ficha de usuario del dashboard con conteos/metadata + botón "Descargar backup de su Bitácora" (Excel/JSON, mismo formato que F1.6) |
-| **Endpoints** | `GET /admin/users/:id/bitacora-resumen` · `GET /admin/users/:id/bitacora-export` — auth admin, **sin** gate de plan (es herramienta interna) |
-| **Modelo / esfuerzo** | **Sonnet, bajo-medio** · **Chico-mediano** — CRUD de lectura con el patrón de card que la ficha ya usa 6 veces; el export reusa el generador de F1.6 |
-| **Dependencia** | **F1.6 terminado** (reusa su serializador). Va después, no en paralelo |
-| **Efecto en el total** | Fase 1 pasa de ~9-14 a **~10-15 sesiones** |
-| **Aislamiento** | 🟢 Muy bajo riesgo: solo agrega endpoints y una card. No toca nada existente del dashboard |
+**Fundamento:** para v1 alcanza con el **backup diario de la base** que ya está en producción
+(`backend-server/scripts/backup-db.js`, cron 03:00 → DO Spaces, retención 30 días + copias locales
+en `/var/backups/procurador/`). Cubre la recuperación ante desastre sin construir superficie nueva.
 
-> 📌 **Un detalle que conviene decidir junto con esto:** si el admin va a poder ver datos de la
-> Bitácora, **conviene dejar registro de ese acceso** (el proyecto ya tiene `user_events` y el
-> patrón de auditoría). No por desconfianza — porque es la clase de acceso que, si alguna vez hay
-> una discusión con un cliente sobre confidencialidad, querés poder demostrar cuándo y quién.
+**Registrado como decisión D14** en `bitacora-decisiones-pendientes-2026-08-12.md`.
+
+**Lo que esta decisión evita, además del trabajo:**
+
+- **La discusión de confidencialidad.** Al no exponer nunca la Bitácora al admin, no hay que decidir
+  qué mostrar, ni construir auditoría de accesos, ni justificar nada ante un cliente. La estrategia
+  del caso y las notas del abogado quedan solo con su dueño.
+- **La única operación destructiva sobre datos de otro.** Un "restaurar backup en la cuenta de un
+  usuario" desde el dashboard es la clase de botón que borra trabajo real por un clic equivocado.
+- **Redundancia.** El backup diario ya cubre el desastre, y su restauración es puntual y controlada.
+
+**La puerta queda abierta:** si con el uso real aparece un caso de soporte recurrente ("perdí mis
+vencimientos"), se reevalúa entonces con datos concretos — pero no se construye por anticipado.
+**Efecto en el plan: ninguno.** La Fase 1 se mantiene en 8 sub-bloques y ~9-14 sesiones.
 
 ---
 
@@ -316,5 +324,5 @@ No es una sola respuesta — las tres cosas tienen perfiles de riesgo muy distin
 | ¿La Bitácora puede romper el resto del proyecto? | **Puede, en 3 puntos concretos** (A1, A2, A3) — todos evitables con decisiones de diseño que no cuestan trabajo extra. |
 | ¿El plan ya está bien aislado? | **En lo estructural, sí** — Fase 1 sin Electron, flag apagado por defecto, migraciones additivas, sin tocar scripts encriptados, sin crons nuevos. Lo que falta son 4 precauciones de implementación (R1-R4) y 2 pruebas de no-regresión (R5-R6). |
 | ¿Cuál es el riesgo más grave? | **A2** — un parser mal montado rompe la firma HMAC de los webhooks de MercadoPago. No es el más probable, pero es el único que toca el cobro. |
-| ¿Va a haber algo de Bitácora en el dashboard admin? | **Hoy, casi nada** (solo el checkbox del plan y el ABM de feriados). Lo que preguntás **no está previsto**; propuesto como **F1.9** (consulta + export sí; restauración no en v1). |
+| ¿Va a haber algo de Bitácora en el dashboard admin? | **No — decisión tomada (D14, 2026-08-13):** solo el checkbox del plan (F1.5) y el ABM de feriados (F1.8). El admin **no consulta, no exporta y no restaura**. Alcanza con el backup diario de la base. F1.9 descartado. |
 | ¿Cambia esto la viabilidad del plan? | **No.** Ninguno de los hallazgos toca el diseño del módulo — son todas precauciones de implementación. |

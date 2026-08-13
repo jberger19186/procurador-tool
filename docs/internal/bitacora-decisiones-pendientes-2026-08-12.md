@@ -86,6 +86,33 @@ retrabajo.
 
 ---
 
+## Bloque 7 — Alcance en el dashboard de administración
+
+> Decisión agregada el **2026-08-13**, a partir de la consulta del operador durante la auditoría de
+> aislamiento (`auditoria-aislamiento-bitacora-2026-08-13.md`, §6).
+
+| # | Qué se definió | Solución confirmada |
+|---|---|---|
+| **D14** | **¿El dashboard de administración incorpora algo más de Bitácora?** Concretamente: ¿el admin puede **consultar** los registros de un usuario, **exportar** su backup y **restaurarlo** manualmente? | ✅ **No. Se deja exactamente como estaba previsto.** El dashboard admin incorpora **solo dos cosas**: el checkbox "Incluye Bitácora" en el formulario de planes (F1.5) y el ABM de feriados (F1.8). **El admin NO consulta los registros de Bitácora de un usuario, NO exporta su backup y NO restaura manualmente.** La exportación e importación (F1.6/F1.7) quedan **exclusivamente del lado del usuario**, operadas por el dueño de los datos desde el portal. **Fundamento del operador:** para v1 alcanza con el **backup diario de la base** que ya existe (`backend-server/scripts/backup-db.js`, cron 03:00 → DO Spaces, retención 30 días + copias locales) — cubre la recuperación ante desastre sin construir superficie nueva. **Consecuencia:** el sub-bloque **F1.9** que la auditoría había propuesto **queda descartado**; la Fase 1 se mantiene en sus 8 sub-bloques y ~9-14 sesiones. |
+
+### Por qué esta decisión además simplifica
+
+No es solo "menos trabajo" — descarta de entrada tres cosas que habrían necesitado resolverse:
+
+- **Una discusión de confidencialidad.** La Bitácora contiene la estrategia del caso, las notas y los
+  vencimientos del abogado: es el dato más sensible del producto. Al no exponerlo nunca al admin, no
+  hay que decidir qué mostrar, ni construir auditoría de accesos, ni justificar nada ante un cliente.
+- **La única operación destructiva sobre datos de otro.** Un "restaurar backup en la cuenta de un
+  usuario" desde el dashboard es la clase de botón que borra trabajo real por un clic equivocado.
+- **Redundancia con lo que ya funciona.** El backup diario ya cubre el escenario de desastre, y su
+  restauración es puntual y controlada, no un flujo de UI.
+
+**Si con el uso real aparece la necesidad** (ej. un caso de soporte recurrente de "perdí mis
+vencimientos"), se reevalúa entonces con datos concretos — la puerta queda abierta, solo que no se
+construye por anticipado.
+
+---
+
 ## Resumen
 
 | | Cantidad | Cuándo se necesitaba |
@@ -94,9 +121,15 @@ retrabajo.
 | Se usan durante la Fase 1 | 6 — D5 … D10 | En la sub-fase correspondiente |
 | Se usan durante la Fase 2 | 2 — D11, D12 | D11 antes de F2.1; D12 antes de F2.5 |
 | No bloquean nada | 1 — D13 | Fase 3 |
+| **Alcance del dashboard admin** | **1 — D14** *(agregada 2026-08-13)* | Define qué NO se construye |
 | Ya resueltas antes de esta ronda, sin acción | 2 | **Q10** (resuelta en v6: el POST transporta el snapshot completo, sin recorte) · **Q11** (resuelta como F1.8, el ABM de feriados — el alcance del seed quedó como D4) |
 
-**Las 13 decisiones quedan cerradas con la solución propuesta en cada caso.** No hay ninguna
+**Las 14 decisiones quedan cerradas con la solución propuesta en cada caso.** No hay ninguna
 pregunta de diseño pendiente para arrancar F1.1. El único paso que sigue siendo del operador es
 decidir **cuándo** arrancar la implementación — la propuesta como conjunto sigue sin comprometerse a
 un release ni a fechas.
+
+> 🚨 **Al ejecutar, leer primero §11.0 de la propuesta** — los 3 puntos donde la implementación no
+> puede ser descuidada (el gate que rompería el portal, el parser que rompería el cobro, el
+> post-procesado que dejaría la procuración sin visor). Son decisiones de *cómo* escribirlo, no de
+> *qué* construir, y en los 3 la forma más natural de implementarlo es la que rompe.

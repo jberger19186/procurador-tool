@@ -844,6 +844,97 @@ GET                  /client/bitacora/seguidos            — (app Electron, JWT
 
 ## 11. Plan de implementación por fases
 
+---
+
+### 🚨 11.0 — LOS 3 PUNTOS DONDE NO SE PUEDE SER DESCUIDADO
+
+> **Leer antes de escribir la primera línea de código de cualquier fase.**
+>
+> La auditoría de aislamiento del 2026-08-13
+> (`docs/internal/auditoria-aislamiento-bitacora-2026-08-13.md`) encontró que la Bitácora **puede
+> romper funcionalidad que hoy está en producción** en exactamente 3 lugares. No son riesgos
+> teóricos ni de diseño: en los 3, **la forma más natural de implementarlo es la que rompe**. Por eso
+> están acá arriba y repetidos en el sub-bloque que les corresponde.
+>
+> Ninguno cuesta trabajo extra evitarlo. Los tres son decisiones de *cómo* escribirlo, no de *cuánto*.
+
+#### 🔴 P1 — El gate de plan NO va en `routes/usuarios.js` · afecta a **F1.2**
+
+**Lo que rompe:** ese archivo **no está vacío esperando la Bitácora** — tiene **8 rutas vivas en
+producción**: `/profile`, `/password`, `/plans`, `/ai-chat`, `/payments`, `/invoices`,
+`/invoices/:id/pdf`, `/subscription/current`. Un `router.use(gateBitacora)` al tope (la lectura
+natural de "middleware en todos los endpoints de bitácora") deja a **todo usuario sin el flag** sin
+poder ver sus facturas, cambiar su contraseña ni escribirle a soporte — con un mensaje que además
+confunde ("tu plan no incluye la Bitácora" al cambiar la contraseña).
+
+**Cómo se hace bien — aislamiento por estructura, no por disciplina:**
+
+```js
+// routes/bitacora.js — archivo NUEVO. Nada preexistente adentro.
+router.use(gateBitacora);            // seguro: este router SOLO tiene rutas de Bitácora
+
+// server.js — montaje propio, SIN tocar el de /usuarios/api
+app.use('/usuarios/api/bitacora',    generalAuthLimiter, require('./routes/bitacora'));
+app.use('/usuarios/api/expedientes', generalAuthLimiter, require('./routes/bitacora-expedientes'));
+```
+
+Así es **imposible** que el gate alcance una ruta existente. Beneficio extra: apagar la Bitácora de
+urgencia = comentar una línea de montaje, sin tocar el resto del portal.
+
+**Prueba de no-regresión obligatoria al cerrar F1.2:** entrar al portal con un usuario **sin** el
+flag y verificar que **las 8 rutas siguen funcionando**.
+
+#### 🔴 P2 — El parser de 5 MB puede romper el cobro · afecta a **F2.2**
+
+**Lo que rompe:** `server.js:110` no es un parser cualquiera — su hook `verify` captura el `rawBody`
+que `routes/webhooks.js` usa para validar la **firma HMAC-SHA256 de MercadoPago**:
+
+```js
+// server.js:109-113  ← el orden de estas líneas sostiene el cobro
+app.use(express.json({
+    verify: (req, _res, buf) => { req.rawBody = buf; }   // ← de esto depende que los pagos se acrediten
+}));
+app.use(express.urlencoded({ extended: false }));
+```
+
+La instrucción de §4.1.1 ("montar arriba del `urlencoded` global") **es ambigua**: admite montarlo
+antes de la línea 110, y ahí se interfiere con el camino del webhook. **Un webhook cuya firma no
+valida = un pago que no se acredita.**
+
+**Cómo se hace bien:**
+1. Montar **inmediatamente antes de la línea 113**, nunca antes de la 110 — así el camino
+   `express.json` + `verify` queda **exactamente como está hoy** para todo lo demás.
+2. **Siempre** path-scoped: `app.use('/usuarios/capture', express.urlencoded({ extended:false, limit:'5mb' }))`. **Jamás** subir el límite del parser global (ya descartado en §4.1.1 por el hallazgo C5).
+3. **Antes de ir a prod:** correr `dev-tools/smoke-payments.js` en **staging** (19 checks, ya existe) y confirmar que la firma del webhook sigue validando. Es la única forma de comprobar que el `rawBody` no se rompió.
+
+#### 🟠 P3 — El post-procesado del visor nunca puede cancelar la apertura · afecta a **F2.1**
+
+**Lo que rompe:** F2.1 mete un paso nuevo entre "el script generó el visor" y "se abre el visor", y
+ese paso **consulta la red** (`GET /client/bitacora/seguidos`). Hoy ese camino es **puramente de
+disco y no puede fallar por conexión**.
+
+No es hipotético: la corrida del **2026-08-12** atravesó una ventana de degradación de red en la que
+hasta el backend propio daba timeouts de 30 s. Con el post-procesado desprotegido, esa tarde la
+procuración habría terminado bien **pero el visor no se habría abierto** — proceso "exitoso" sin
+resultado a la vista.
+
+**Cómo se hace bien:**
+1. **Todo el bloque en `try/catch`, y el `catch` NO propaga.** Si falla lo que sea (red, permisos,
+   archivo en uso) → **se abre el visor sin botonera**. Jamás se cancela la apertura.
+2. **Timeout corto y explícito** (2-3 s) en la consulta de seguidos, no el default.
+3. **La red es opcional, el flag no:** `bitacoraEnabled` sale de `/client/account`, que la app ya
+   tiene de la sesión — sin red nueva. Si solo falla la lista de seguidos, se inyecta la botonera
+   igual con lista vacía (peor caso: aparece `📔+` en un caso ya seguido, y el upsert lo resuelve sin
+   duplicar — ya aceptado en §4.2c).
+
+> **Además, de severidad menor pero mismo espíritu (hallazgo A4 de la auditoría):** al implementar
+> **F1.5**, `home_section` debe validarse **en el punto de uso** (`public/usuarios/app.js:340`, hoy
+> `navigateTo('plan')` fijo), no solo al escribirlo. Si un usuario quedó con `home_section='bitacora'`
+> y perdió el plan, sin esa guarda **aterriza en una sección gateada en cada login**.
+> Forma correcta: `const destino = (homeSection === 'bitacora' && account.bitacoraEnabled) ? 'bitacora' : 'plan';`
+
+---
+
 > ⚠️ **Reescrita 2026-07-25 (hallazgos C1-C4, C6).** La numeración de esta sección ahora
 > mapea **1:1** con los sub-bloques F1.1–F1.8/F2.1–F2.7 de §11.1 (antes el punto 3 de Fase 1
 > se partía en dos sub-bloques y los puntos 4-5 se juntaban en uno solo, generando confusión
@@ -872,10 +963,10 @@ GET                  /client/bitacora/seguidos            — (app Electron, JWT
 
 ### Fase 1 — Núcleo (backend + portal, sin release de Electron)
 1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **4 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`, `users.bitacora_lost_access_at` [agregada 2026-08-12, decisión D2/Q6, ver §8]) **+ la columna `expediente_key` en `expedientes_seguidos`** (decisión D1, hallazgo N1 — reusa `tokenizar()` de `buscarPdfExpediente.js`, ver §7) **+ los 5 índices de §7 (agregado 2026-07-27)** + seed de feriados **resto de 2026 + todo 2027** (alcance confirmado 2026-08-12, decisión D4). ⚠️ **Prerrequisito Bloque B.1 (regenerar `schema.sql`): ✅ ya cumplido** (schema regenerado el 28/07, 27 tablas verificadas — ver `revision-bitacora-preimplementacion-2026-08-12.md`).
-2. **(F1.2)** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)*
+2. **(F1.2)** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)* 🚨 **PUNTO CRÍTICO P1 (§11.0): el gate NO va en `routes/usuarios.js`** — ese archivo tiene 8 rutas vivas del portal que quedarían en 403. Router propio + montaje aparte. **Incluye prueba de no-regresión al cerrar: entrar sin el flag y verificar las 8 rutas existentes.**
 3. **(F1.3)** Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos).
 4. **(F1.4)** Portal: sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas).
-5. **(F1.5)** Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal + checkbox "Incluye Bitácora" en el form de planes del admin.
+5. **(F1.5)** Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal + checkbox "Incluye Bitácora" en el form de planes del admin. ⚠️ **Ver la nota de §11.0 (hallazgo A4): `home_section` debe validarse contra `bitacoraEnabled` en el punto de uso** (`public/usuarios/app.js:340`), no solo al escribirlo — si no, un usuario que perdió el plan aterriza en una sección gateada en cada login.
 6. **(F1.6)** **Exportación** (Excel + JSON, global y por ficha) — el backup del usuario desde el día uno. **Dependencia dura de F1.7** (hallazgo C4): la salvaguarda de importación (§5.3, "respaldo automático antes de aplicar") descarga un export del estado actual, así que F1.6 debe estar terminada y probada **antes** de empezar F1.7, no solo "antes en la numeración".
 7. **(F1.7)** **Importación/restauración** desde backup JSON (modos reemplazar/combinar, vista previa dry-run, respaldo automático previo, transaccional). Requiere F1.6 completo (ver punto 6).
 8. **(F1.8)** ABM de feriados en el dashboard admin (hallazgo H2) — sin esto, la calculadora de plazos de F1.3 no tiene cómo mantenerse actualizada año a año.
@@ -885,8 +976,8 @@ GET                  /client/bitacora/seguidos            — (app Electron, JWT
 ### Fase 2 — Captura desde los visores (backend + release de Electron)
 > **Requiere DOS despliegues, no uno** (hallazgo C3): un deploy de backend (los endpoints de `capture` + `GET /client/bitacora/seguidos`) **y** un release de Electron. Planificar ambos.
 
-1. **(F2.1)** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. 🔴 **Prerrequisito: el fix E4-1 del Bloque D** (escape en `visorModal_template.html`) debe estar aplicado y publicado — sin él esta fase amplía el hallazgo XSS; ver el recuadro rojo de §4.1 para el detalle de `esc()` vs `escAttr()`. ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan.
-2. **(F2.2)** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor.
+1. **(F2.1)** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. 🔴 **Prerrequisito: el fix E4-1 del Bloque D** (escape en `visorModal_template.html`) debe estar aplicado y publicado — sin él esta fase amplía el hallazgo XSS; ver el recuadro rojo de §4.1 para el detalle de `esc()` vs `escAttr()`. ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan. 🚨 **PUNTO CRÍTICO P3 (§11.0): el post-procesado NUNCA puede cancelar la apertura del visor** — va en `try/catch` que no propaga, con timeout corto en la consulta de seguidos. Si falla, se abre el visor sin botonera. Hoy ese camino no depende de la red y no puede empezar a depender.
+2. **(F2.2)** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor. 🚨 **PUNTO CRÍTICO P2 (§11.0): el parser va inmediatamente antes de `server.js:113`, NUNCA antes de la 110** — la 110 tiene el hook `verify` del que depende la firma HMAC de los webhooks de MercadoPago. **Antes de prod: correr `dev-tools/smoke-payments.js` en staging.**
 3. **(F2.3)** **Selección múltiple** en la tabla de los visores (checkboxes + barra de acciones "Guardar casos" / "Crear entradas…") + pantalla de revisión del lote en el portal, contra el endpoint de F2.2.
 4. **(F2.4)** **Marcado de casos ya seguidos**: endpoint `GET /client/bitacora/seguidos` (backend) + consumido por el post-procesado de F2.1 + link 📁 a la ficha desde fila y modal.
 5. **(F2.5)** **Mini-visor del informe individual** (nuevo, desde `main.js`, sin tocar scripts encriptados — el informe individual no genera visor hoy).
