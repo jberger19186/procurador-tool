@@ -906,7 +906,26 @@ GET                  /client/bitacora/seguidos            — (app Electron, JWT
 
 > Guía para ejecutar cada tramo. Criterio: **Opus** para diseño de esquema, lógica de negocio del gating/cobro y decisiones que afectan datos del usuario (import/restauración destructiva); **Sonnet** para CRUD mecánico, UI y trabajo repetitivo con patrones ya establecidos. El esfuerzo es orientativo y asume las reglas del proyecto (staging → backup → prod; sin tocar scripts encriptados; migraciones additivas).
 >
+> **¿Y Haiku? — evaluado explícitamente (2026-08-12), y la respuesta es "casi nunca".** No por capacidad del modelo, sino por el **contexto implícito del proyecto**: cada sub-bloque termina en un deploy a producción con usuarios que pagan, y este repo tiene una densidad alta de convenciones que no están en el código sino en `CLAUDE.md` (nunca `git add -A` porque arrastra el worktree; el bug de `dotenv` que hace que un script "de staging" toque producción; el `npm run release` que falla desde v2.7.38 y exige subir assets a mano; staging antes que prod, siempre). El riesgo no es que Haiku escriba mal el código — es que **se saltee una de esas convenciones en la parte de deploy/verificación de la sesión**, que es donde se rompe producción. El ahorro no compensa.
+>
+> **La excepción concreta donde sí conviene:** generar el **seed de feriados** de F1.1 (lista de feriados nacionales argentinos + ferias judiciales de enero y julio para el resto de 2026 y todo 2027, como `INSERT`s). Es generación de datos pura — sin convenciones del proyecto en juego, tedioso de tipear, y **trivialmente verificable** contra el calendario oficial. Es una **sub-tarea dentro de F1.1**, no un sub-bloque propio; por eso no tiene fila en la tabla.
+>
 > ⚠️ **Correcciones 2026-07-25:** F1.2 ya no incluye `capture` (movido a F2.2, hallazgo C2) — su esfuerzo baja de Mediano a Chico-mediano. F2.1 se separa de "F2.1–F2.6" en una fila propia porque ahora incluye el post-procesado de `main.js` para los visores de procuración (hallazgo H1) — sube de esfuerzo. Se agrega F1.8 (hallazgo H2). La fila "F2.1–F2.6" se abre en F2.1 (propia) + F2.2–F2.6 (grupo restante).
+>
+> ✅ **Actualización 2026-08-12 (tras confirmar las 13 decisiones):** **F1.1 sube de alcance sin subir de esfuerzo** — la decisión D1 le agrega la extracción de `tokenizar()` a un **módulo compartido entre `backend-server/` y `electron-app/`** (hoy vive solo en `electron-app/informe/buscarPdfExpediente.js`). Sigue siendo "Chico", pero conviene saber de antemano que **toca dos codebases**, que es la clase de detalle que sorprende a mitad de tarea. **F2.1 baja de incertidumbre** — la decisión D11 fija el punto de enganche del post-procesado (una sola vez al terminar la corrida, no en `get-visor-path`) y exige inyección idempotente; el esfuerzo se mantiene en Mediano pero ya no hay que resolver ese diseño durante la implementación.
+
+#### Resumen por fase (vista de planificación)
+
+| Fase | Modelo predominante | Tramos que exigen Opus | Esfuerzo total | Deploy que produce |
+|---|---|---|---|---|
+| **Fase 1** — núcleo backend + portal | **Sonnet** (5 de 8 sub-bloques) | **3**: F1.1 (esquema), F1.2 (gate + carve-out), **F1.7 (importación destructiva — el más delicado de todo el plan)** | ~9–14 sesiones | Deploy de backend + portal. **Sin release de Electron.** |
+| **Fase 2** — captura desde los visores | **Sonnet** (4 de 5 sub-bloques) | **1**: F2.2 (único endpoint anónimo del sistema) | ~4–6 sesiones + 1 release | **Dos despliegues:** backend primero, después release de Electron |
+| **Fase 3** — pulido y palancas | **Sonnet**, salvo un tramo | **1**: sugerencias automáticas por novedades del monitor (matching no trivial) | Variable | Según lo que se decida hacer |
+
+> **Lectura rápida:** el plan es **mayormente Sonnet** — 9 de las 14 filas de la tabla de abajo, unas
+> 2 de cada 3. Opus se reserva para **5 tramos puntuales** (F1.1, F1.2, F1.7, F2.2 y las sugerencias
+> de F3), y de esos el que más importa es **F1.7** — es el único que puede destruir datos reales de
+> un usuario.
 
 | Sub-bloque | Modelo | Esfuerzo | Por qué |
 |---|---|---|---|
