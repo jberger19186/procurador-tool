@@ -1107,15 +1107,54 @@ resultado a la vista.
 > siguen en 200, `pm2-error.log` sin entradas nuevas. **Nada visible para ningún usuario real** — el
 > flag sigue apagado en los 6 planes, y sin él la píldora de Bitácora ni siquiera se renderiza
 > (`display:none` en `renderHomePills()`). **Con esto, la Fase 1 lleva 5 de 8 sub-bloques cerrados**
-> (F1.1–F1.5) — sigue **F1.6** (exportación Excel/JSON, el backup del usuario desde el día uno,
-> dependencia dura de F1.7 antes de tocar la importación).
+> (F1.1–F1.5).
+>
+> ✅ **F1.6 EJECUTADA Y EN PRODUCCIÓN (2026-08-14, misma sesión).** Exportación: botón "⬇ Exportar"
+> en Bitácora y en Mis Expedientes (listado), "⬇ Exportar este caso" en la ficha — un modal
+> compartido con los 3 alcances × 2 formatos del mockup de §5.3. **1 endpoint nuevo:**
+> `GET /usuarios/api/bitacora/export` (`alcance=todo|entradas|expediente`, `formato=xlsx|json`,
+> `expediente_id=`, `desde=`/`hasta=` para el rango de "entradas"). **Gate DISTINTO al resto de
+> `/bitacora/*`, a propósito:** usa `checkBitacoraPlan({ conGracia: true })` (la opción que F1.2
+> dejó lista sin usar) — sostiene los 90 días de acceso a la exportación tras perder el plan
+> (decisión D2/Q6, §8). Para que conviva con el gate estricto del resto sin tocarlo, la ruta se
+> registra directamente en el router raíz **antes** del `router.use('/bitacora', ..., entradas)`:
+> Express matchea por orden de registro, así que `/bitacora/export` (más específica) gana la carrera
+> antes de llegar al `.use()` genérico — mismo principio de sub-paths que ya sostenía el punto
+> crítico P1 de F1.2, aplicado una vez más. **Nueva dependencia: `exceljs` en `backend-server`**
+> (no estaba — el backend nunca había generado Excel, a diferencia de Electron) — instalada con
+> `npm install`, diff de `package-lock.json` verificado limpio (solo agrega el árbol de `exceljs`,
+> ninguna versión de una dependencia existente cambió). **3 hojas en el Excel** (Expedientes,
+> Entradas, Historial) según el alcance — "todo" trae las 3, "entradas" solo Entradas, "expediente"
+> trae Entradas + Historial sin la hoja de Expedientes (ya se sabe de qué caso se trata). El JSON es
+> un volcado fiel con `backup_version:1`, pensado para que F1.7 lo sepa leer. **2 bugs reales
+> encontrados y corregidos durante la verificación en staging, no en el diseño:** (1) la validación
+> de rango de fechas invertía el contrato de `fecha()` (que devuelve `undefined` tanto para "no vino"
+> como para "inválida") — un `GET` sin `desde`/`hasta` (el caso normal para "todo"/"expediente") daba
+> 400 en vez de exportar sin filtro; corregido siguiendo el mismo criterio permisivo que ya usa
+> `GET /bitacora`. (2) en el Excel de alcance "todo", la columna "Expediente vinculado" de la hoja
+> Entradas quedaba vacía porque esa consulta no hace `JOIN` con `expedientes_seguidos` (a diferencia
+> de "entradas", que sí) — corregido resolviendo el nombre por un `Map` construido desde
+> `datos.expedientes`, con el valor ya unido teniendo prioridad. **Verificado en staging con datos
+> reales:** las 6 combinaciones alcance×formato devuelven 200 con contenido correcto (el JSON
+> descargado y el Excel re-parseado con `exceljs` localmente, no solo el status code) · IDOR
+> (`expediente_id` inexistente → 404) · no-regresión de `/bitacora` y `/bitacora/avisos` (no quedaron
+> tapadas por la ruta nueva) · **las 3 ramas del gate de gracia**, una por una: flag apagado sin
+> gracia → 403 en CRUD normal pero el propio export también 403 sin `bitacora_lost_access_at` seteado
+> · flag apagado con `bitacora_lost_access_at` de hace 10 días → CRUD sigue en 403, **export en 200**
+> (la gracia funcionando) · `bitacora_lost_access_at` de hace 100 días (>90) → export vuelve a 403
+> con `BITACORA_GRACIA_VENCIDA`. **No-regresión repetida en prod** tras el deploy (incluyendo el
+> `npm install` de la dependencia nueva): `/bitacora`/`/bitacora/avisos` en 403 con el flag apagado
+> (como siempre), `/usuarios/api/plans` en 200, `pm2-error.log` sin entradas nuevas. **Nada visible
+> para ningún usuario real** — el flag sigue en `false` en los 6 planes. **Con esto, la Fase 1 lleva
+> 6 de 8 sub-bloques cerrados** (F1.1–F1.6) — sigue **F1.7** (importación/restauración desde backup
+> JSON, Opus/alto, el único tramo de todo el plan que puede destruir datos reales del usuario).
 
 1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **4 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`, `users.bitacora_lost_access_at` [agregada 2026-08-12, decisión D2/Q6, ver §8]) **+ la columna `expediente_key` en `expedientes_seguidos`** con `UNIQUE (user_id, expediente_key)` — **sin `jurisdiccion` en la clave** (decisión D1 + corrección 2026-08-13, ver §7) **+ los 4 índices de §7** *(eran 5; `idx_exp_seguidos_user` quedó redundante al corregir la clave única)* + seed de feriados **resto de 2026 + todo 2027** (alcance confirmado 2026-08-12, decisión D4). **Incluye crear `backend-server/utils/expedienteKey.js`** (normalización canónica) **+ el fixture de casos compartido** con Electron — ver la nota "DÓNDE VIVE LA NORMALIZACIÓN" de §7. ⚠️ **Prerrequisito Bloque B.1 (regenerar `schema.sql`): ✅ ya cumplido** (schema regenerado el 28/07, 27 tablas verificadas — ver `revision-bitacora-preimplementacion-2026-08-12.md`).
 2. **(F1.2)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)* 🚨 **PUNTO CRÍTICO P1 (§11.0): el gate NO va en `routes/usuarios.js`** — ese archivo tiene 8 rutas vivas del portal que quedarían en 403. **Resuelto así:** `routes/bitacora.js` se monta en `/usuarios/api` (mismo prefijo que `usuarios.js`) pero aplica el gate sobre **sub-paths** (`router.use('/bitacora', auth, gate, …)`), no sobre el router — una petición a `/usuarios/api/profile` entra, no matchea ningún sub-path y cae al router de usuarios **sin tocar el gate**. **Prueba de no-regresión hecha y pasada**, en staging (39/39) y repetida en prod: con el flag apagado, las 8 rutas existentes responden normal (200/400/404, **ninguna 403**) y las 3 de Bitácora dan 403 con mensaje claro. Archivos: `routes/bitacora.js`, `middleware/checkBitacoraPlan.js` (con la opción `conGracia` lista para el export de F1.6).
 3. **(F1.3)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos). Archivos: `public/usuarios/index.html` (`#section-bitacora`, `#modal-bitacora-entrada`, nav item `#nav-bitacora`), `app.js` (~700 líneas nuevas: estado `state.bitacora`, calendario, lista agrupada, CRUD, calculadora de plazos en días hábiles), `app.css` (clases `.bitacora-*`). Reutiliza `showToast`/`showConfirm`/`escapeHtml` existentes — sin diálogos nativos ni HTML sin escapar. **Semana** del toggle Mes/Lista quedó fuera de esta implementación (el plan la mencionaba de forma ambigua en §5.1); se dejó Mes + Lista, que cubren el mismo caso de uso — candidato a agregar después si se pide explícitamente.
 4. **(F1.4)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Portal: sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas). El bloque "Historial del caso" (§5.2) queda construido y funcional pero sin datos posibles hasta la Fase 2 (nada escribe en `expediente_snapshots` todavía).
 5. **(F1.5)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal + checkbox "Incluye Bitácora" en el form de planes del admin. La guarda del hallazgo A4 (`home_section` validado contra `bitacoraEnabled` en el punto de uso, no solo al escribirlo) quedó implementada en `initDashboard()`.
-6. **(F1.6)** **Exportación** (Excel + JSON, global y por ficha) — el backup del usuario desde el día uno. **Dependencia dura de F1.7** (hallazgo C4): la salvaguarda de importación (§5.3, "respaldo automático antes de aplicar") descarga un export del estado actual, así que F1.6 debe estar terminada y probada **antes** de empezar F1.7, no solo "antes en la numeración".
+6. **(F1.6)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** **Exportación** (Excel + JSON, global y por ficha) — el backup del usuario desde el día uno. Queda cumplida la **dependencia dura de F1.7** (hallazgo C4): la salvaguarda de importación (§5.3, "respaldo automático antes de aplicar") va a poder descargar un export real del estado actual.
 7. **(F1.7)** **Importación/restauración** desde backup JSON (modos reemplazar/combinar, vista previa dry-run, respaldo automático previo, transaccional). Requiere F1.6 completo (ver punto 6).
 8. **(F1.8)** ABM de feriados en el dashboard admin (hallazgo H2) — sin esto, la calculadora de plazos de F1.3 no tiene cómo mantenerse actualizada año a año.
 - **Entregable**: módulo completo operable a mano desde el portal (entrada manual, sin captura desde visores todavía), con backup y restauración, gateado por plan. Deployable a staging→prod sin release de Electron. (Si hiciera falta acortar la fase, F1.7 es el único candidato razonable a diferir — nunca F1.6, del que depende.)

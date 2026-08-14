@@ -34,6 +34,7 @@
  */
 
 const express = require('express');
+const ExcelJS = require('exceljs');
 const authenticateToken = require('../middleware/authenticateToken');
 const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
 const { expedienteKey, esExpedienteValido } = require('../utils/expedienteKey');
@@ -98,6 +99,212 @@ async function fichaDelUsuario(db, userId, expedienteId) {
     );
     return rows.length > 0 ? rows[0].id : null;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  EXPORTACIÓN  →  GET /usuarios/api/bitacora/export  (F1.6)
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ Gate DISTINTO al resto de `/bitacora/*` — a propósito. El resto usa
+// `checkBitacoraPlan()` (estricto); este endpoint usa `checkBitacoraPlan({ conGracia:
+// true })` porque el usuario nunca debe quedar sin poder llevarse sus propios datos:
+// si perdió el flag hace menos de 90 días (`users.bitacora_lost_access_at`, decisión
+// D2/Q6, §8 del plan), igual puede exportar. Por eso esta ruta se registra ACÁ, en el
+// router raíz, ANTES del `router.use('/bitacora', ..., entradas)` de más abajo —
+// Express matchea rutas específicas por orden de registro, así que esta gana la
+// carrera para `/bitacora/export` sin que el `.use()` genérico (con el gate estricto)
+// llegue a tocarla. El resto de `/bitacora/*` no se ve afectado.
+
+const KIND_LABELS_ENTRADA = { vencimiento: 'Vencimiento', audiencia: 'Audiencia', tarea: 'Tarea', gestion: 'Gestión', nota: 'Nota' };
+
+// Sin el LIMITE_LISTADO de las rutas de listado normales: acá se exporta el
+// backup completo del usuario, y truncarlo silenciosamente rompería la promesa
+// de "es tu copia íntegra" (más grave en el JSON, pensado para F1.7). Los
+// volúmenes son chicos por diseño (tope 2+2 snapshots por caso, §7 del plan).
+async function recolectarDatosExport(db, userId, { alcance, expedienteId, desde, hasta }) {
+    const datos = { expedientes: [], entradas: [], snapshots: [] };
+
+    if (alcance === 'todo') {
+        const [exps, ents, snaps] = await Promise.all([
+            db.query('SELECT * FROM expedientes_seguidos WHERE user_id = $1 ORDER BY id', [userId]),
+            db.query('SELECT * FROM bitacora_entries WHERE user_id = $1 ORDER BY due_at ASC NULLS LAST, id', [userId]),
+            db.query(
+                `SELECT s.* FROM expediente_snapshots s
+                   JOIN expedientes_seguidos x ON x.id = s.expediente_id
+                  WHERE x.user_id = $1
+                  ORDER BY s.expediente_id, s.kind, s.created_at DESC`,
+                [userId]
+            ),
+        ]);
+        datos.expedientes = exps.rows;
+        datos.entradas = ents.rows;
+        datos.snapshots = snaps.rows;
+    } else if (alcance === 'entradas') {
+        const cond = ['e.user_id = $1'];
+        const vals = [userId];
+        let i = 2;
+        if (desde) { cond.push(`e.due_at >= $${i++}`); vals.push(desde); }
+        if (hasta) { cond.push(`e.due_at <= $${i++}`); vals.push(hasta); }
+        const { rows } = await db.query(
+            `SELECT e.*, x.expediente
+               FROM bitacora_entries e
+               LEFT JOIN expedientes_seguidos x ON x.id = e.expediente_id
+              WHERE ${cond.join(' AND ')}
+              ORDER BY e.due_at ASC NULLS LAST, e.id`,
+            vals
+        );
+        datos.entradas = rows;
+    } else if (alcance === 'expediente') {
+        const [exp, ents, snaps] = await Promise.all([
+            db.query('SELECT * FROM expedientes_seguidos WHERE id = $1', [expedienteId]),
+            db.query(
+                'SELECT * FROM bitacora_entries WHERE expediente_id = $1 AND user_id = $2 ORDER BY due_at ASC NULLS LAST, id',
+                [expedienteId, userId]
+            ),
+            db.query(
+                'SELECT * FROM expediente_snapshots WHERE expediente_id = $1 ORDER BY kind, created_at DESC',
+                [expedienteId]
+            ),
+        ]);
+        datos.expedientes = exp.rows;
+        datos.entradas = ents.rows;
+        datos.snapshots = snaps.rows;
+    }
+
+    return datos;
+}
+
+// JSON: volcado fiel con `backup_version` — es el formato que F1.7 sabrá leer.
+function enviarExportJson(res, datos, alcance) {
+    const payload = {
+        backup_version: 1,
+        exported_at: new Date().toISOString(),
+        scope: alcance,
+        expedientes: datos.expedientes,
+        entradas: datos.entradas,
+        snapshots: datos.snapshots,
+    };
+    const filename = `bitacora-backup-${alcance}-${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.json(payload);
+}
+
+// Excel: hojas separadas, para leer/imprimir/archivar — NO es restaurable (eso es el JSON).
+async function enviarExportXlsx(res, datos, alcance) {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Procurador SCW';
+    wb.created = new Date();
+
+    // Hoja "Expedientes": solo tiene sentido con el caso completo (alcance=todo);
+    // en "expediente" ya se sabe de qué caso se trata (es la ficha entera del export),
+    // y en "entradas" no hay fichas involucradas.
+    if (alcance === 'todo') {
+        const wsExp = wb.addWorksheet('Expedientes');
+        wsExp.columns = [
+            { header: 'Expediente', key: 'expediente', width: 22 },
+            { header: 'Carátula', key: 'caratula', width: 40 },
+            { header: 'Jurisdicción', key: 'jurisdiccion', width: 30 },
+            { header: 'Dependencia', key: 'dependencia', width: 25 },
+            { header: 'Situación actual', key: 'situacion_actual', width: 25 },
+            { header: 'Fecha de situación', key: 'situacion_fecha', width: 16, style: { numFmt: 'dd/mm/yyyy' } },
+            { header: 'Notas', key: 'notas', width: 40 },
+            { header: 'Creado', key: 'created_at', width: 18, style: { numFmt: 'dd/mm/yyyy hh:mm' } },
+        ];
+        wsExp.getRow(1).font = { bold: true };
+        datos.expedientes.forEach(x => wsExp.addRow({
+            expediente: x.expediente,
+            caratula: x.caratula || '',
+            jurisdiccion: x.jurisdiccion || '',
+            dependencia: x.dependencia || '',
+            situacion_actual: x.situacion_actual || '',
+            situacion_fecha: x.situacion_fecha ? new Date(x.situacion_fecha) : null,
+            notas: x.notas || '',
+            created_at: x.created_at ? new Date(x.created_at) : null,
+        }));
+    }
+
+    // Resuelve el nombre del expediente por id — necesario en "todo" (la consulta de
+    // `bitacora_entries` ahí no hace JOIN, a diferencia de "entradas") y en "Historial"
+    // (que nunca trae `expediente` propio). En "entradas", `e.expediente` ya viene del
+    // JOIN de `recolectarDatosExport` y tiene prioridad.
+    const expPorId = new Map(datos.expedientes.map(x => [x.id, x.expediente]));
+
+    const wsEnt = wb.addWorksheet('Entradas');
+    wsEnt.columns = [
+        { header: 'Fecha', key: 'due_at', width: 16, style: { numFmt: 'dd/mm/yyyy' } },
+        { header: 'Tipo', key: 'kind', width: 14 },
+        { header: 'Título', key: 'title', width: 40 },
+        { header: 'Descripción', key: 'description', width: 40 },
+        { header: 'Estado', key: 'estado', width: 12 },
+        { header: 'Expediente vinculado', key: 'expediente', width: 22 },
+    ];
+    wsEnt.getRow(1).font = { bold: true };
+    datos.entradas.forEach(e => wsEnt.addRow({
+        due_at: e.due_at ? new Date(e.due_at) : null,
+        kind: KIND_LABELS_ENTRADA[e.kind] || e.kind,
+        title: e.title,
+        description: e.description || '',
+        estado: e.done_at ? 'Hecha' : 'Pendiente',
+        expediente: e.expediente || expPorId.get(e.expediente_id) || '',
+    }));
+
+    // Hoja "Historial": junto con Entradas en "todo" y "expediente"; ausente en
+    // "entradas" (no tiene sentido sin el contexto de un caso).
+    if (alcance !== 'entradas') {
+        const wsHist = wb.addWorksheet('Historial');
+        wsHist.columns = [
+            { header: 'Expediente', key: 'expediente', width: 22 },
+            { header: 'Tipo', key: 'kind', width: 14 },
+            { header: 'Fecha de corrida', key: 'run_date', width: 16, style: { numFmt: 'dd/mm/yyyy' } },
+            { header: 'Situación registrada', key: 'situacion', width: 30 },
+        ];
+        wsHist.getRow(1).font = { bold: true };
+        datos.snapshots.forEach(s => wsHist.addRow({
+            expediente: expPorId.get(s.expediente_id) || '',
+            kind: s.kind === 'procuracion' ? 'Procuración' : 'Informe',
+            run_date: s.run_date ? new Date(s.run_date) : null,
+            situacion: s.situacion || '',
+        }));
+    }
+
+    const filename = `bitacora-${alcance}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await wb.xlsx.write(res);
+    res.end();
+}
+
+router.get('/bitacora/export', authenticateToken, checkBitacoraPlan({ conGracia: true }), async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+
+    const alcance = ['todo', 'entradas', 'expediente'].includes(req.query.alcance) ? req.query.alcance : 'todo';
+    const formato = req.query.formato === 'json' ? 'json' : 'xlsx';
+
+    let expedienteId = null;
+    if (alcance === 'expediente') {
+        expedienteId = await fichaDelUsuario(db, userId, req.query.expediente_id);
+        if (!expedienteId) return res.status(404).json({ error: 'Expediente no encontrado' });
+    }
+
+    // Mismo criterio permisivo que GET /bitacora (arriba): `fecha()` devuelve
+    // undefined tanto si el query param no vino como si vino con un valor
+    // ilegible — en ambos casos, sin filtro (no hay nada "incorrecto" que
+    // rechazar con 400, es simplemente "no acotar por fecha").
+    const desde = fecha(req.query.desde) || null;
+    const hasta = fecha(req.query.hasta) || null;
+
+    try {
+        const datos = await recolectarDatosExport(db, userId, { alcance, expedienteId, desde, hasta });
+        if (formato === 'json') {
+            enviarExportJson(res, datos, alcance);
+        } else {
+            await enviarExportXlsx(res, datos, alcance);
+        }
+    } catch (error) {
+        console.error('Error generando export de bitácora:', error);
+        if (!res.headersSent) res.status(500).json({ error: 'Error del servidor' });
+    }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  ENTRADAS DE BITÁCORA  →  /usuarios/api/bitacora

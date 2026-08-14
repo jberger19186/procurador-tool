@@ -335,6 +335,7 @@
                     </div>
                     <div style="display:flex;align-items:center;gap:10px">
                         <button type="button" class="home-pill" id="home-pill-bitacora" onclick="setHomeSection('bitacora')"></button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openExportModal()">⬇ Exportar</button>
                         <button class="btn btn-primary btn-sm" id="btn-bitacora-nueva">＋ Nueva entrada</button>
                     </div>
                 </div>
@@ -415,7 +416,10 @@
                             <div>Mis expedientes</div>
                             <div class="section-subtitle" style="margin-top:2px">Casos que seguís en la Bitácora</div>
                         </div>
-                        <button class="btn btn-primary btn-sm" id="btn-mexp-nueva">＋ Agregar expediente</button>
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="openExportModal('todo')">⬇ Exportar</button>
+                            <button class="btn btn-primary btn-sm" id="btn-mexp-nueva">＋ Agregar expediente</button>
+                        </div>
                     </div>
                     <div class="card" style="margin-bottom:16px">
                         <div class="card-body" style="padding:12px 16px">
@@ -672,6 +676,70 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeBitacoraModal()">Cancelar</button>
             <button class="btn btn-primary" id="btn-guardar-bitacora">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: EXPORTAR MI INFORMACIÓN ===== -->
+<div class="modal-overlay hidden" id="modal-bitacora-export">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>⬇ Exportar mi información</h3>
+            <button class="modal-close" onclick="closeExportModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div id="export-modal-alert" class="alert"></div>
+
+            <div class="form-group">
+                <label>Qué exportar</label>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+                        <input type="radio" name="export-alcance" value="todo" id="export-alcance-todo" checked>
+                        Todo (expedientes + bitácora)
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+                        <input type="radio" name="export-alcance" value="entradas" id="export-alcance-entradas">
+                        Solo entradas de bitácora
+                    </label>
+                    <div id="export-rango-wrap" style="display:none;padding-left:26px;gap:10px" class="form-row">
+                        <div class="form-group" style="flex:1;margin-bottom:0">
+                            <label style="font-size:11.5px">Desde</label>
+                            <input type="date" id="export-desde">
+                        </div>
+                        <div class="form-group" style="flex:1;margin-bottom:0">
+                            <label style="font-size:11.5px">Hasta</label>
+                            <input type="date" id="export-hasta">
+                        </div>
+                    </div>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+                        <input type="radio" name="export-alcance" value="expediente" id="export-alcance-expediente">
+                        Solo un expediente
+                    </label>
+                    <div id="export-expediente-wrap" style="display:none;padding-left:26px">
+                        <select id="export-expediente-id" style="width:100%">
+                            <option value="">— Elegí un expediente —</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Formato</label>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+                        <input type="radio" name="export-formato" value="xlsx" id="export-formato-xlsx" checked>
+                        Excel — para leer y trabajar
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+                        <input type="radio" name="export-formato" value="json" id="export-formato-json">
+                        JSON — backup completo (restaurable)
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeExportModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btn-export-descargar" onclick="descargarExportBitacora()">Descargar</button>
         </div>
     </div>
 </div>

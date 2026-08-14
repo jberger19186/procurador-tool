@@ -2677,6 +2677,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('mexp-ficha-form')?.addEventListener('submit', saveMexpFicha);
     document.getElementById('mexp-search')?.addEventListener('input', (e) => mexpOnSearchInput(e.target.value));
     document.getElementById('btn-mexp-volver')?.addEventListener('click', closeMexpFicha);
+
+    // ─── Exportación: wiring del modal (F1.6) ───────────────────────────────
+    document.querySelectorAll('input[name="export-alcance"]').forEach(r => {
+        r.addEventListener('change', exportUpdateSubfields);
+    });
 });
 
 // =============================================================================
@@ -3410,6 +3415,7 @@ function renderMexpFicha() {
                     ${proximoHtml}
                     <div class="mexp-ficha-actions">
                         <button class="btn btn-outline btn-sm" onclick="openMexpEditarFicha()">✏ Editar</button>
+                        <button class="btn btn-outline btn-sm" onclick="openExportModal('expediente', ${x.id})">⬇ Exportar este caso</button>
                         <button class="btn btn-outline btn-sm" style="color:#ef4444;border-color:#fecaca" onclick="askMexpEliminar()">🗑 Eliminar seguimiento</button>
                     </div>
                     ${x.notas ? `<div class="mexp-ficha-sub" style="margin-top:10px;white-space:pre-line">${escapeHtml(x.notas)}</div>` : ''}
@@ -3592,4 +3598,105 @@ function renderMexpSnapshot(s, titleEl, body) {
 
 function closeMexpSnapshotModal() {
     document.getElementById('modal-mexp-snapshot').classList.add('hidden');
+}
+
+// =============================================================================
+//  EXPORTACIÓN — backup del usuario (F1.6)
+// =============================================================================
+// Modal compartido entre Bitácora, Mis Expedientes (listado) y la ficha de un
+// expediente ("⬇ Exportar este caso"). El único endpoint (GET, no JSON) se
+// descarga con fetch + blob porque necesita el header Authorization — un
+// <a href> plano no puede mandarlo (mismo patrón que openInvoicePdf()).
+
+function openExportModal(presetAlcance, presetExpedienteId) {
+    document.getElementById('export-modal-alert').classList.remove('visible');
+    document.getElementById('export-alcance-todo').checked = true;
+    document.getElementById('export-formato-xlsx').checked = true;
+    document.getElementById('export-desde').value = '';
+    document.getElementById('export-hasta').value = '';
+
+    // Reusa el listado ya cargado por Bitácora/Mis Expedientes (loadBitacoraExpedientes) —
+    // sin pedirlo de nuevo.
+    const sel = document.getElementById('export-expediente-id');
+    const opts = (state.bitacora.expedientes || []).map(x =>
+        `<option value="${x.id}">${escapeHtml(x.expediente)}${x.caratula ? ' — ' + escapeHtml(x.caratula) : ''}</option>`
+    ).join('');
+    sel.innerHTML = '<option value="">— Elegí un expediente —</option>' + opts;
+
+    if (presetAlcance === 'expediente' && presetExpedienteId) {
+        document.getElementById('export-alcance-expediente').checked = true;
+        sel.value = presetExpedienteId;
+    } else if (presetAlcance) {
+        const radio = document.getElementById(`export-alcance-${presetAlcance}`);
+        if (radio) radio.checked = true;
+    }
+
+    exportUpdateSubfields();
+    document.getElementById('modal-bitacora-export').classList.remove('hidden');
+}
+
+function exportUpdateSubfields() {
+    const alcance = document.querySelector('input[name="export-alcance"]:checked')?.value || 'todo';
+    document.getElementById('export-rango-wrap').style.display = alcance === 'entradas' ? 'flex' : 'none';
+    document.getElementById('export-expediente-wrap').style.display = alcance === 'expediente' ? 'block' : 'none';
+}
+
+function closeExportModal() {
+    document.getElementById('modal-bitacora-export').classList.add('hidden');
+}
+
+async function descargarExportBitacora() {
+    const alertEl = document.getElementById('export-modal-alert');
+    const alcance = document.querySelector('input[name="export-alcance"]:checked')?.value || 'todo';
+    const formato = document.querySelector('input[name="export-formato"]:checked')?.value || 'xlsx';
+
+    const params = new URLSearchParams();
+    params.set('alcance', alcance);
+    params.set('formato', formato);
+
+    if (alcance === 'expediente') {
+        const expId = document.getElementById('export-expediente-id').value;
+        if (!expId) { showAlert(alertEl, 'error', 'Elegí un expediente.'); return; }
+        params.set('expediente_id', expId);
+    }
+    if (alcance === 'entradas') {
+        const desde = document.getElementById('export-desde').value;
+        const hasta = document.getElementById('export-hasta').value;
+        if (desde) params.set('desde', bitToIsoMidday(desde));
+        if (hasta) params.set('hasta', bitToIsoMidday(hasta));
+    }
+
+    const btn = document.getElementById('btn-export-descargar');
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.innerHTML = '<span class="spinner"></span> Generando...';
+
+    try {
+        const res = await fetch(`${BASE_URL}/usuarios/api/bitacora/export?${params.toString()}`, {
+            headers: { Authorization: `Bearer ${getToken()}` }
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            showAlert(alertEl, 'error', data.error || 'No se pudo generar la exportación.');
+            return;
+        }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const ext = formato === 'json' ? 'json' : 'xlsx';
+        const fechaHoy = new Date().toISOString().slice(0, 10);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `bitacora-${alcance}-${fechaHoy}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        closeExportModal();
+        showToast('Exportación descargada.', 'success');
+    } catch (e) {
+        showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
 }
