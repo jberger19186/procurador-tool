@@ -1636,3 +1636,71 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     color: var(--text-muted);
     margin-bottom: 4px;
 }
+
+/* =============================================
+   Mis expedientes (F1.4)
+   ============================================= */
+
+.mexp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.mexp-table th {
+    text-align: left;
+    padding: 10px 16px;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 1px solid var(--border);
+    background: #f9fafb;
+}
+.mexp-table td { padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.mexp-table tr:last-child td { border-bottom: none; }
+.mexp-table tbody tr { cursor: pointer; transition: background .12s; }
+.mexp-table tbody tr:hover { background: var(--accent-light); }
+.mexp-pend-badge {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #991b1b;
+    background: #fee2e2;
+    border-radius: 20px;
+    padding: 1px 8px;
+}
+
+/* Ficha del expediente */
+.mexp-ficha-header { padding: 4px 0 16px; }
+.mexp-ficha-titulo { font-size: 19px; font-weight: 700; color: var(--text); font-family: inherit; }
+.mexp-ficha-sub { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+.mexp-ficha-actions { display: flex; gap: 8px; margin-top: 12px; }
+.mexp-proximo-venc {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #92400e;
+    font-weight: 600;
+}
+
+.mexp-bloque { margin-bottom: 16px; }
+.mexp-bloque-header { display: flex; justify-content: space-between; align-items: center; }
+
+.mexp-historial-kind { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.mexp-historial-kind:last-child { border-bottom: none; }
+.mexp-historial-kind-titulo { font-size: 12.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
+.mexp-historial-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    padding: 4px 0;
+}
+
+.mexp-snapshot-mov {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}
+.mexp-snapshot-mov:last-child { border-bottom: none; }

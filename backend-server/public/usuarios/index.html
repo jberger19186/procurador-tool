@@ -90,6 +90,10 @@
                 <span class="nav-icon">📔</span>
                 Bitácora
             </button>
+            <button class="nav-item" id="nav-mis-expedientes" data-section="mis-expedientes" style="display:none">
+                <span class="nav-icon">📁</span>
+                Mis expedientes
+            </button>
             <button class="nav-item" data-section="facturacion">
                 <span class="nav-icon">💳</span>
                 Facturación
@@ -396,6 +400,38 @@
                 </div>
             </section>
 
+            <!-- ===== SECCIÓN: MIS EXPEDIENTES ===== -->
+            <section class="section" id="section-mis-expedientes">
+                <!-- Vista Listado -->
+                <div id="mexp-vista-lista">
+                    <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+                        <div>
+                            <div>Mis expedientes</div>
+                            <div class="section-subtitle" style="margin-top:2px">Casos que seguís en la Bitácora</div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" id="btn-mexp-nueva">＋ Agregar expediente</button>
+                    </div>
+                    <div class="card" style="margin-bottom:16px">
+                        <div class="card-body" style="padding:12px 16px">
+                            <input type="search" id="mexp-search" placeholder="🔍 Buscar por expediente o carátula...">
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body" id="mexp-lista-body" style="padding:0">
+                            <div class="empty-state"><p>Cargando...</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Ficha -->
+                <div id="mexp-vista-ficha" style="display:none">
+                    <button type="button" class="btn btn-outline btn-sm" id="btn-mexp-volver" style="margin-bottom:14px">&#8249; Volver al listado</button>
+                    <div id="mexp-ficha-body">
+                        <div class="empty-state"><p>Cargando...</p></div>
+                    </div>
+                </div>
+            </section>
+
             <!-- ===== SECCIÓN: FACTURACIÓN ===== -->
             <section class="section" id="section-facturacion">
                 <div class="section-title">Facturación</div>
@@ -630,6 +666,100 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeBitacoraModal()">Cancelar</button>
             <button class="btn btn-primary" id="btn-guardar-bitacora">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: NUEVO/EDITAR EXPEDIENTE SEGUIDO ===== -->
+<div class="modal-overlay hidden" id="modal-mexp-ficha">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="mexp-modal-title">Agregar expediente</h3>
+            <button class="modal-close" onclick="closeMexpFichaModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div id="mexp-modal-alert" class="alert"></div>
+            <form id="mexp-ficha-form" novalidate>
+                <input type="hidden" id="mexp-id" value="">
+                <div class="form-group">
+                    <label for="mexp-expediente">Expediente</label>
+                    <input type="text" id="mexp-expediente" maxlength="60" placeholder="Ej: FCR 18745/2017" required>
+                </div>
+                <div class="form-row" style="display:flex;gap:10px">
+                    <div class="form-group" style="flex:1">
+                        <label for="mexp-jurisdiccion">Jurisdicción</label>
+                        <input type="text" id="mexp-jurisdiccion" maxlength="200" placeholder="Ej: Justicia Federal de Comodoro Rivadavia">
+                    </div>
+                    <div class="form-group" style="flex:1">
+                        <label for="mexp-dependencia">Dependencia</label>
+                        <input type="text" id="mexp-dependencia" maxlength="200" placeholder="Ej: Juzgado Federal 2">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="mexp-caratula">Carátula</label>
+                    <input type="text" id="mexp-caratula" maxlength="300" placeholder="Ej: PEREZ c/ GOMEZ s/ DAÑOS">
+                </div>
+                <div class="form-row" style="display:flex;gap:10px">
+                    <div class="form-group" style="flex:1">
+                        <label for="mexp-situacion">Situación actual</label>
+                        <input type="text" id="mexp-situacion" maxlength="200" placeholder="Ej: EN DESPACHO">
+                    </div>
+                    <div class="form-group" style="flex:1">
+                        <label for="mexp-situacion-fecha">Fecha de situación</label>
+                        <input type="date" id="mexp-situacion-fecha">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="mexp-notas">Notas</label>
+                    <textarea id="mexp-notas" rows="3" maxlength="5000" placeholder="Notas del caso..."></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeMexpFichaModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btn-guardar-mexp">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: ELIMINAR SEGUIMIENTO DE EXPEDIENTE ===== -->
+<div class="modal-overlay hidden" id="modal-mexp-eliminar">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Eliminar seguimiento</h3>
+            <button class="modal-close" onclick="closeMexpEliminarModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:14px;color:var(--text);line-height:1.5;margin-bottom:14px">
+                Vas a dejar de seguir este expediente. ¿Qué querés hacer con sus entradas de bitácora vinculadas?
+            </p>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <button type="button" class="btn btn-outline" style="justify-content:flex-start" onclick="mexpEliminarFicha('keep')">
+                    Conservar las entradas (quedan sueltas, sin expediente vinculado)
+                </button>
+                <button type="button" class="btn btn-outline" style="justify-content:flex-start;color:#ef4444;border-color:#fecaca" onclick="mexpEliminarFicha('delete')">
+                    Eliminar también las entradas de este caso
+                </button>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeMexpEliminarModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: VER SNAPSHOT DEL HISTORIAL ===== -->
+<div class="modal-overlay hidden" id="modal-mexp-snapshot">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="mexp-snapshot-title">Historial</h3>
+            <button class="modal-close" onclick="closeMexpSnapshotModal()">&#10005;</button>
+        </div>
+        <div class="modal-body" id="mexp-snapshot-body">
+            <div class="empty-state"><p>Cargando...</p></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeMexpSnapshotModal()">Cerrar</button>
         </div>
     </div>
 </div>

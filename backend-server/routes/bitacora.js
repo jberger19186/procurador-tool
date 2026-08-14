@@ -512,6 +512,41 @@ expedientes.get('/:id', async (req, res) => {
     }
 });
 
+// ─── GET /:id/snapshots/:snapshotId — contenido completo de un snapshot ────
+// Separado de GET /:id a propósito: ese endpoint trae el listado resumido
+// (sin `data`, el JSONB con los movimientos capturados) para no cargar la
+// ficha con contenido que el usuario no pidió ver. Este endpoint es lo que
+// alimenta el modal "👁 Ver" del historial (F1.4, §5.2). Hoy no hay forma de
+// generar filas en `expediente_snapshots` (eso lo construye la captura desde
+// los visores, Fase 2 / F2.2-F2.4, todavía sin implementar) — el endpoint
+// existe desde ya para que la ficha no necesite tocarse otra vez cuando F2
+// empiece a escribir snapshots reales.
+expedientes.get('/:id/snapshots/:snapshotId', async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+    const id = parseInt(req.params.id, 10);
+    const snapshotId = parseInt(req.params.snapshotId, 10);
+    if (Number.isNaN(id) || Number.isNaN(snapshotId)) return res.status(400).json({ error: 'Id inválido' });
+
+    try {
+        const fichaId = await fichaDelUsuario(db, userId, id);
+        if (!fichaId) return res.status(404).json({ error: 'Expediente no encontrado' });
+
+        const { rows } = await db.query(
+            `SELECT id, kind, run_date, situacion, data, created_at
+               FROM expediente_snapshots
+              WHERE id = $1 AND expediente_id = $2`,
+            [snapshotId, fichaId]
+        );
+        if (rows.length === 0) return res.status(404).json({ error: 'Snapshot no encontrado' });
+
+        res.json({ success: true, snapshot: rows[0] });
+    } catch (error) {
+        console.error('Error obteniendo snapshot de expediente:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 // ─── PUT /:id — actualizar la ficha ────────────────────────────────────────
 expedientes.put('/:id', async (req, res) => {
     const db = req.app.get('db');

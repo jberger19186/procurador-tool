@@ -1064,12 +1064,34 @@ resultado a la vista.
 > (flag encendido temporalmente en `COMBO_PROMO`, revertido al cerrar, 0 filas residuales): crear
 > entrada → aparece en el rango de fechas del mes → aparece en `/avisos` → marcar hecha → borrar,
 > los 5 pasos contra los endpoints reales, no mockeados. **Nada visible para ningún usuario real**
-> (el flag sigue en `false` en los 6 planes de producción). Sigue F1.4.
+> (el flag sigue en `false` en los 6 planes de producción).
+>
+> ✅ **F1.4 EJECUTADA Y EN PRODUCCIÓN (2026-08-14, misma sesión).** Portal: sección **Mis
+> expedientes** — listado con búsqueda, ficha completa (datos + próximo vencimiento + entradas del
+> caso, reusando `bitEntryRowHtml()` de Bitácora + historial acotado 2+2 con selector
+> Última/Anteúltima), edición, y eliminación con elección sobre las entradas (conservar sueltas /
+> eliminar también). **1 endpoint nuevo:** `GET /usuarios/api/expedientes/:id/snapshots/:snapshotId`
+> (el contenido completo del `data` JSONB de un snapshot, separado del listado resumido de `GET /:id`
+> para no cargar la ficha con datos que el usuario no pidió ver) — mismo patrón IDOR que el resto de
+> F1.2 (`fichaDelUsuario()` antes de tocar nada). **Nada puede escribir en `expediente_snapshots`
+> todavía** (eso lo construye la captura desde los visores, Fase 2, sin implementar) — el bloque
+> "Historial del caso" siempre muestra "No hay guardados" en producción hoy; se probó insertando una
+> fila de prueba a mano en staging (borrada al cerrar) para validar el camino feliz del modal "👁 Ver"
+> antes de que exista una forma real de generarlas. **Verificado en staging con el flag encendido a
+> mano:** crear ficha → vincular una entrada → editar carátula → `GET /:id` la refleja → `GET
+> .../snapshots/999` (inexistente) → 404 → insertar snapshot de prueba → `GET
+> .../snapshots/<id>` → contenido correcto → `DELETE ?entries=delete` → `entradasBorradas:1` y 0
+> filas residuales. **No-regresión repetida en staging y prod** (rutas de `usuarios.js` en 200, gate
+> sigue en 403 con el flag apagado). Comparte el listado de fichas con Bitácora (`loadBitacoraExpedientes()`,
+> sin duplicar la llamada de red) y el módulo de entradas (`bitEntryRowHtml`, `bitacoraRefreshCurrentContext()`
+> — nueva función despachadora que decide si repintar la vista de Bitácora o la ficha abierta de Mis
+> Expedientes según la sección activa, para que tildar/borrar una entrada desde cualquiera de los dos
+> lugares refresque el contexto correcto). Sigue F1.5.
 
 1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **4 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`, `users.bitacora_lost_access_at` [agregada 2026-08-12, decisión D2/Q6, ver §8]) **+ la columna `expediente_key` en `expedientes_seguidos`** con `UNIQUE (user_id, expediente_key)` — **sin `jurisdiccion` en la clave** (decisión D1 + corrección 2026-08-13, ver §7) **+ los 4 índices de §7** *(eran 5; `idx_exp_seguidos_user` quedó redundante al corregir la clave única)* + seed de feriados **resto de 2026 + todo 2027** (alcance confirmado 2026-08-12, decisión D4). **Incluye crear `backend-server/utils/expedienteKey.js`** (normalización canónica) **+ el fixture de casos compartido** con Electron — ver la nota "DÓNDE VIVE LA NORMALIZACIÓN" de §7. ⚠️ **Prerrequisito Bloque B.1 (regenerar `schema.sql`): ✅ ya cumplido** (schema regenerado el 28/07, 27 tablas verificadas — ver `revision-bitacora-preimplementacion-2026-08-12.md`).
 2. **(F1.2)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)* 🚨 **PUNTO CRÍTICO P1 (§11.0): el gate NO va en `routes/usuarios.js`** — ese archivo tiene 8 rutas vivas del portal que quedarían en 403. **Resuelto así:** `routes/bitacora.js` se monta en `/usuarios/api` (mismo prefijo que `usuarios.js`) pero aplica el gate sobre **sub-paths** (`router.use('/bitacora', auth, gate, …)`), no sobre el router — una petición a `/usuarios/api/profile` entra, no matchea ningún sub-path y cae al router de usuarios **sin tocar el gate**. **Prueba de no-regresión hecha y pasada**, en staging (39/39) y repetida en prod: con el flag apagado, las 8 rutas existentes responden normal (200/400/404, **ninguna 403**) y las 3 de Bitácora dan 403 con mensaje claro. Archivos: `routes/bitacora.js`, `middleware/checkBitacoraPlan.js` (con la opción `conGracia` lista para el export de F1.6).
 3. **(F1.3)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos). Archivos: `public/usuarios/index.html` (`#section-bitacora`, `#modal-bitacora-entrada`, nav item `#nav-bitacora`), `app.js` (~700 líneas nuevas: estado `state.bitacora`, calendario, lista agrupada, CRUD, calculadora de plazos en días hábiles), `app.css` (clases `.bitacora-*`). Reutiliza `showToast`/`showConfirm`/`escapeHtml` existentes — sin diálogos nativos ni HTML sin escapar. **Semana** del toggle Mes/Lista quedó fuera de esta implementación (el plan la mencionaba de forma ambigua en §5.1); se dejó Mes + Lista, que cubren el mismo caso de uso — candidato a agregar después si se pide explícitamente.
-4. **(F1.4)** Portal: sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas).
+4. **(F1.4)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Portal: sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas). El bloque "Historial del caso" (§5.2) queda construido y funcional pero sin datos posibles hasta la Fase 2 (nada escribe en `expediente_snapshots` todavía).
 5. **(F1.5)** Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal + checkbox "Incluye Bitácora" en el form de planes del admin. ⚠️ **Ver la nota de §11.0 (hallazgo A4): `home_section` debe validarse contra `bitacoraEnabled` en el punto de uso** (`public/usuarios/app.js:340`), no solo al escribirlo — si no, un usuario que perdió el plan aterriza en una sección gateada en cada login.
 6. **(F1.6)** **Exportación** (Excel + JSON, global y por ficha) — el backup del usuario desde el día uno. **Dependencia dura de F1.7** (hallazgo C4): la salvaguarda de importación (§5.3, "respaldo automático antes de aplicar") descarga un export del estado actual, así que F1.6 debe estar terminada y probada **antes** de empezar F1.7, no solo "antes en la numeración".
 7. **(F1.7)** **Importación/restauración** desde backup JSON (modos reemplazar/combinar, vista previa dry-run, respaldo automático previo, transaccional). Requiere F1.6 completo (ver punto 6).

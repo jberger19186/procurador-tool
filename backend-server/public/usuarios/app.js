@@ -30,9 +30,15 @@ const state = {
         entries: [],            // último listado cargado (según filtros/rango vigente)
         expedientes: [],        // fichas del usuario, para el <select> de vínculo/filtro
         feriados: new Set(),    // 'YYYY-MM-DD' del año(s) cargado(s), para el cálculo de plazos
-        loaded: false,
         _cache: new Map(),       // id → entrada, alimentado por cada fetch (avisos/mes/lista)
         _feriadosYears: new Set(),
+    },
+    miExp: {
+        loaded: false,
+        list: [],           // último listado de expedientes seguidos
+        search: '',
+        fichaId: null,       // id de la ficha abierta (null = vista listado)
+        ficha: null,         // { expediente, entradas, snapshots } de la ficha abierta
     },
 };
 
@@ -538,10 +544,15 @@ function updateSidebarForStatus() {
     if (reactivBtn) {
         reactivBtn.style.display = rs === 'suspended_admin' ? '' : 'none';
     }
-    // Bitácora: visible solo si el plan de la cuenta la incluye (plans.bitacora_enabled)
+    // Bitácora + Mis expedientes: visibles solo si el plan de la cuenta las incluye
+    // (plans.bitacora_enabled) — mismo flag para las dos secciones.
     const bitBtn = document.getElementById('nav-bitacora');
     if (bitBtn) {
         bitBtn.style.display = state.account?.bitacoraEnabled ? '' : 'none';
+    }
+    const mexpBtn = document.getElementById('nav-mis-expedientes');
+    if (mexpBtn) {
+        mexpBtn.style.display = state.account?.bitacoraEnabled ? '' : 'none';
     }
 }
 
@@ -581,6 +592,7 @@ function navigateTo(section, fromHistory) {
         case 'ayuda': renderAyuda(); break;
         case 'reactivacion': renderReactivacion(); break;
         case 'bitacora': renderBitacora(); break;
+        case 'mis-expedientes': renderMisExpedientes(); break;
     }
 
     // Historial del navegador: que el botón Atrás vuelva a la sección anterior del
@@ -2601,6 +2613,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('bitacora-search')?.addEventListener('input', (e) => bitacoraOnSearchInput(e.target.value));
     document.getElementById('bitacora-mes-prev')?.addEventListener('click', () => bitacoraMonthNav(-1));
     document.getElementById('bitacora-mes-next')?.addEventListener('click', () => bitacoraMonthNav(1));
+
+    // ─── Mis Expedientes: wiring de la sección (F1.4) ──────────────────────
+    document.getElementById('btn-mexp-nueva')?.addEventListener('click', openMexpNuevaFicha);
+    document.getElementById('mexp-ficha-form')?.addEventListener('submit', saveMexpFicha);
+    document.getElementById('mexp-search')?.addEventListener('input', (e) => mexpOnSearchInput(e.target.value));
+    document.getElementById('btn-mexp-volver')?.addEventListener('click', closeMexpFicha);
 });
 
 // =============================================================================
@@ -2703,10 +2721,11 @@ async function calcularPlazoBitacora() {
 
 // ─── Entrada del módulo (al navegar a la sección) ──────────────────────────
 async function renderBitacora() {
-    if (!state.bitacora.loaded) {
-        await loadBitacoraExpedientes();
-        state.bitacora.loaded = true;
-    }
+    // Se releé en cada entrada a la sección (no se cachea con un flag "loaded"):
+    // el listado de expedientes también lo edita Mis Expedientes, y ambas
+    // secciones comparten esta misma llamada — más simple mantenerlo fresco que
+    // invalidar la caché de una sección desde la otra.
+    await loadBitacoraExpedientes();
     loadBitacoraAvisos();
     bitacoraApplyViewToggle();
     bitacoraLoadAndRenderView();
@@ -3030,12 +3049,13 @@ function bitTogglePlazoBlock() {
     if (block) block.style.display = kind === 'vencimiento' ? 'block' : 'none';
 }
 
-function openBitacoraModal() {
+function openBitacoraModal(presetExpedienteId) {
     document.getElementById('bitacora-entrada-form').reset();
     document.getElementById('bit-id').value = '';
     document.getElementById('bitacora-modal-title').textContent = 'Nueva entrada';
     document.getElementById('bitacora-modal-alert').classList.remove('visible');
     document.getElementById('bit-due').value = state.bitacora.selectedDay || bitLocalYmd(new Date());
+    if (presetExpedienteId) document.getElementById('bit-expediente').value = presetExpedienteId;
     bitTogglePlazoBlock();
     document.getElementById('modal-bitacora-entrada').classList.remove('hidden');
 }
@@ -3102,8 +3122,7 @@ async function saveBitacoraEntrada(e) {
         }
         closeBitacoraModal();
         showToast(id ? 'Entrada actualizada.' : 'Entrada creada.', 'success');
-        loadBitacoraAvisos();
-        bitacoraLoadAndRenderView();
+        bitacoraRefreshCurrentContext();
     } catch (err) {
         showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
     } finally {
@@ -3112,12 +3131,25 @@ async function saveBitacoraEntrada(e) {
     }
 }
 
+// Refresca la vista activa tras crear/editar/tildar/borrar una entrada — la
+// misma entrada puede tocarse desde el banner/calendario/lista de Bitácora O
+// desde el bloque "Entradas de este caso" de una ficha en Mis Expedientes; el
+// llamador (bitEntryRowHtml, el banner de avisos) es el mismo en los dos
+// contextos, así que quien decide qué repintar es esta función, no cada botón.
+function bitacoraRefreshCurrentContext() {
+    if (state.currentSection === 'mis-expedientes' && state.miExp.fichaId) {
+        openMexpFicha(state.miExp.fichaId);
+        return;
+    }
+    loadBitacoraAvisos();
+    bitacoraLoadAndRenderView();
+}
+
 async function toggleBitacoraDone(id, done) {
     try {
         const res = await apiFetch(`/usuarios/api/bitacora/${id}/done`, { method: 'POST', body: { done } });
         if (!res || !res.ok) { showToast('No se pudo actualizar la entrada.', 'error'); return; }
-        loadBitacoraAvisos();
-        bitacoraLoadAndRenderView();
+        bitacoraRefreshCurrentContext();
     } catch (e) {
         showToast('Error de conexión.', 'error');
     }
@@ -3129,9 +3161,377 @@ async function deleteBitacoraEntrada(id) {
         const res = await apiFetch(`/usuarios/api/bitacora/${id}`, { method: 'DELETE' });
         if (!res || !res.ok) { showToast('No se pudo eliminar la entrada.', 'error'); return; }
         showToast('Entrada eliminada.', 'success');
-        loadBitacoraAvisos();
-        bitacoraLoadAndRenderView();
+        bitacoraRefreshCurrentContext();
     } catch (e) {
         showToast('Error de conexión.', 'error');
     }
+}
+
+// =============================================================================
+//  SECCIÓN: MIS EXPEDIENTES (F1.4)
+// =============================================================================
+// Listado + ficha completa de los casos que el usuario sigue en la Bitácora.
+// Comparte el listado de fichas con el módulo Bitácora (`state.bitacora.expedientes`,
+// poblado por `loadBitacoraExpedientes()` de ese módulo) para no duplicar la
+// llamada de red ni el <select> de vínculo. También reusa `bitEntryRowHtml()` y
+// `bitCacheEntries()` de Bitácora para el bloque "Entradas de este caso" — es el
+// mismo tipo de registro, mostrado en otro contexto.
+
+// ─── Navegación listado ↔ ficha ─────────────────────────────────────────────
+async function renderMisExpedientes() {
+    state.miExp.fichaId = null;
+    state.miExp.ficha = null;
+    mexpShowLista();
+    await loadMexpList();
+}
+
+function mexpShowLista() {
+    document.getElementById('mexp-vista-lista').style.display = 'block';
+    document.getElementById('mexp-vista-ficha').style.display = 'none';
+}
+
+function mexpShowFicha() {
+    document.getElementById('mexp-vista-lista').style.display = 'none';
+    document.getElementById('mexp-vista-ficha').style.display = 'block';
+}
+
+// ─── Listado ─────────────────────────────────────────────────────────────────
+async function loadMexpList() {
+    await loadBitacoraExpedientes(); // hace el fetch real y llena los <select> compartidos
+    state.miExp.list = state.bitacora.expedientes || [];
+    renderMexpLista();
+}
+
+function mexpOnSearchInput(value) {
+    state.miExp.search = value.trim().toLowerCase();
+    renderMexpLista();
+}
+
+function renderMexpLista() {
+    const body = document.getElementById('mexp-lista-body');
+    if (!body) return;
+
+    let rows = state.miExp.list || [];
+    if (state.miExp.search) {
+        const q = state.miExp.search;
+        rows = rows.filter(x =>
+            (x.expediente || '').toLowerCase().includes(q) ||
+            (x.caratula || '').toLowerCase().includes(q)
+        );
+    }
+
+    if (rows.length === 0) {
+        const msg = state.miExp.search ? 'Sin resultados para tu búsqueda' : 'Todavía no seguís ningún expediente';
+        body.innerHTML = `<div class="empty-state"><p>${msg}</p></div>`;
+        return;
+    }
+
+    const trs = rows.map(x => `
+        <tr onclick="openMexpFicha(${x.id})">
+            <td><strong>${escapeHtml(x.expediente)}</strong></td>
+            <td>${escapeHtml(x.caratula || '—')}</td>
+            <td>${escapeHtml(x.situacion_actual || '—')}</td>
+            <td>${x.vencidas > 0 ? `<span class="mexp-pend-badge">🔴 ${x.vencidas}</span>` : '—'}</td>
+            <td>${formatDate(x.updated_at)}</td>
+        </tr>
+    `).join('');
+
+    body.innerHTML = `<table class="mexp-table">
+        <thead><tr><th>Expediente</th><th>Carátula</th><th>Situación</th><th>Pendien.</th><th>Últ. act.</th></tr></thead>
+        <tbody>${trs}</tbody>
+    </table>`;
+}
+
+// ─── Ficha ───────────────────────────────────────────────────────────────────
+async function openMexpFicha(id) {
+    mexpShowFicha();
+    state.miExp.fichaId = id;
+    document.getElementById('mexp-ficha-body').innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
+
+    try {
+        const res = await apiFetch(`/usuarios/api/expedientes/${id}`);
+        if (!res || !res.ok) {
+            showToast('No se pudo abrir el expediente.', 'error');
+            mexpShowLista();
+            return;
+        }
+        const data = await res.json();
+        state.miExp.ficha = data;
+        bitCacheEntries(data.entradas || []); // para que el check/editar/borrar de cada entrada funcione acá también
+        renderMexpFicha();
+    } catch (e) {
+        console.error('Error abriendo ficha de expediente:', e);
+        showToast('Error de conexión.', 'error');
+        mexpShowLista();
+    }
+}
+
+function closeMexpFicha() {
+    state.miExp.fichaId = null;
+    state.miExp.ficha = null;
+    mexpShowLista();
+    loadMexpList(); // por si hubo cambios (editar/agregar entrada) mientras se veía la ficha
+}
+
+function mexpProximoVencimiento(entradas) {
+    const pendientes = (entradas || [])
+        .filter(e => e.due_at && !e.done_at)
+        .sort((a, b) => new Date(a.due_at) - new Date(b.due_at));
+    return pendientes.length > 0 ? pendientes[0] : null;
+}
+
+// Pendientes primero (por fecha, las sin fecha al final), después lo hecho —
+// criterio del mockup de §5.2: "vencimientos y audiencias arriba".
+function mexpEntradasOrdenadas(entradas) {
+    const list = entradas || [];
+    const pendientes = list.filter(e => !e.done_at).sort((a, b) => {
+        if (!a.due_at && !b.due_at) return 0;
+        if (!a.due_at) return 1;
+        if (!b.due_at) return -1;
+        return new Date(a.due_at) - new Date(b.due_at);
+    });
+    const hechas = list.filter(e => e.done_at).sort((a, b) =>
+        new Date(b.due_at || b.updated_at) - new Date(a.due_at || a.updated_at)
+    );
+    return [...pendientes, ...hechas];
+}
+
+// Bloque "Última / Anteúltima" de un tipo de snapshot (procuracion|informe).
+// Hoy siempre muestra "No hay X guardados" — nada escribe en expediente_snapshots
+// todavía (eso lo construye la captura desde los visores, Fase 2, sin implementar).
+function mexpHistorialBloqueHtml(snapshots, kind, label) {
+    const deEsteKind = (snapshots || []).filter(s => s.kind === kind); // ya viene ordenado DESC por created_at
+    if (deEsteKind.length === 0) {
+        return `<div class="mexp-historial-kind">
+            <div class="mexp-historial-kind-titulo">${escapeHtml(label)}</div>
+            <div style="font-size:13px;color:var(--text-muted)">No hay ${label.toLowerCase()} guardados</div>
+        </div>`;
+    }
+    const filas = deEsteKind.slice(0, 2).map((s, i) => `
+        <div class="mexp-historial-item">
+            <span>${i === 0 ? 'Última' : 'Anteúltima'} — ${formatDate(s.run_date)}${s.situacion ? ` · ${escapeHtml(s.situacion)}` : ''}</span>
+            <button type="button" class="btn btn-outline btn-sm" onclick="verMexpSnapshot(${s.id})">👁 Ver</button>
+        </div>
+    `).join('');
+    return `<div class="mexp-historial-kind">
+        <div class="mexp-historial-kind-titulo">${escapeHtml(label)}</div>
+        ${filas}
+    </div>`;
+}
+
+function renderMexpFicha() {
+    const wrap = document.getElementById('mexp-ficha-body');
+    if (!wrap || !state.miExp.ficha) return;
+
+    const { expediente: x, entradas, snapshots } = state.miExp.ficha;
+
+    const subPartes = [x.jurisdiccion, x.dependencia].filter(Boolean).join(' · ');
+    const situacionTxt = x.situacion_actual
+        ? `Situación actual: ${escapeHtml(x.situacion_actual)}${x.situacion_fecha ? ` (${formatDate(x.situacion_fecha)})` : ''}`
+        : '';
+    const proximo = mexpProximoVencimiento(entradas);
+    const proximoHtml = proximo
+        ? `<div class="mexp-proximo-venc">⏰ Próximo vencimiento: ${formatDate(proximo.due_at)} — ${escapeHtml(proximo.title)}</div>`
+        : '';
+
+    const entradasOrdenadas = mexpEntradasOrdenadas(entradas);
+    const entradasHtml = entradasOrdenadas.length > 0
+        ? entradasOrdenadas.map(bitEntryRowHtml).join('')
+        : '<div class="empty-state"><p>Sin entradas vinculadas a este caso</p></div>';
+
+    const historialHtml = mexpHistorialBloqueHtml(snapshots, 'procuracion', 'Procuraciones guardadas')
+        + mexpHistorialBloqueHtml(snapshots, 'informe', 'Informes guardados');
+
+    wrap.innerHTML = `
+        <div class="card">
+            <div class="card-body">
+                <div class="mexp-ficha-header">
+                    <div class="mexp-ficha-titulo">${escapeHtml(x.expediente)}${x.caratula ? ' — ' + escapeHtml(x.caratula) : ''}</div>
+                    ${subPartes ? `<div class="mexp-ficha-sub">${escapeHtml(subPartes)}</div>` : ''}
+                    ${situacionTxt ? `<div class="mexp-ficha-sub">${situacionTxt}</div>` : ''}
+                    ${proximoHtml}
+                    <div class="mexp-ficha-actions">
+                        <button class="btn btn-outline btn-sm" onclick="openMexpEditarFicha()">✏ Editar</button>
+                        <button class="btn btn-outline btn-sm" style="color:#ef4444;border-color:#fecaca" onclick="askMexpEliminar()">🗑 Eliminar seguimiento</button>
+                    </div>
+                    ${x.notas ? `<div class="mexp-ficha-sub" style="margin-top:10px;white-space:pre-line">${escapeHtml(x.notas)}</div>` : ''}
+                </div>
+            </div>
+        </div>
+        <div class="card mexp-bloque">
+            <div class="card-header mexp-bloque-header">
+                <h3>📔 Entradas de este caso (${entradas.length})</h3>
+                <button class="btn btn-primary btn-sm" onclick="openBitacoraModal(${x.id})">＋ Nueva entrada</button>
+            </div>
+            <div class="card-body">${entradasHtml}</div>
+        </div>
+        <div class="card mexp-bloque">
+            <div class="card-header"><h3>📜 Historial del caso</h3></div>
+            <div class="card-body">${historialHtml}</div>
+        </div>`;
+}
+
+// ─── Modal: agregar/editar la ficha ─────────────────────────────────────────
+function openMexpNuevaFicha() {
+    document.getElementById('mexp-ficha-form').reset();
+    document.getElementById('mexp-id').value = '';
+    document.getElementById('mexp-modal-title').textContent = 'Agregar expediente';
+    document.getElementById('mexp-modal-alert').classList.remove('visible');
+    document.getElementById('modal-mexp-ficha').classList.remove('hidden');
+}
+
+function openMexpEditarFicha() {
+    const x = state.miExp.ficha?.expediente;
+    if (!x) return;
+    document.getElementById('mexp-ficha-form').reset();
+    document.getElementById('mexp-id').value = x.id;
+    document.getElementById('mexp-modal-title').textContent = 'Editar expediente';
+    document.getElementById('mexp-modal-alert').classList.remove('visible');
+    document.getElementById('mexp-expediente').value = x.expediente || '';
+    document.getElementById('mexp-jurisdiccion').value = x.jurisdiccion || '';
+    document.getElementById('mexp-dependencia').value = x.dependencia || '';
+    document.getElementById('mexp-caratula').value = x.caratula || '';
+    document.getElementById('mexp-situacion').value = x.situacion_actual || '';
+    document.getElementById('mexp-situacion-fecha').value = x.situacion_fecha ? bitLocalYmd(x.situacion_fecha) : '';
+    document.getElementById('mexp-notas').value = x.notas || '';
+    document.getElementById('modal-mexp-ficha').classList.remove('hidden');
+}
+
+function closeMexpFichaModal() {
+    document.getElementById('modal-mexp-ficha').classList.add('hidden');
+}
+
+async function saveMexpFicha(e) {
+    e.preventDefault();
+    const alertEl = document.getElementById('mexp-modal-alert');
+    const btn = document.getElementById('btn-guardar-mexp');
+
+    const id = document.getElementById('mexp-id').value;
+    const expediente = document.getElementById('mexp-expediente').value.trim();
+    if (!expediente) {
+        showAlert(alertEl, 'error', 'El expediente es obligatorio.');
+        return;
+    }
+
+    const situacionFechaYmd = document.getElementById('mexp-situacion-fecha').value;
+    const body = {
+        expediente,
+        jurisdiccion: document.getElementById('mexp-jurisdiccion').value.trim() || null,
+        dependencia: document.getElementById('mexp-dependencia').value.trim() || null,
+        caratula: document.getElementById('mexp-caratula').value.trim() || null,
+        situacion_actual: document.getElementById('mexp-situacion').value.trim() || null,
+        situacion_fecha: situacionFechaYmd ? bitToIsoMidday(situacionFechaYmd) : null,
+        notas: document.getElementById('mexp-notas').value.trim() || null,
+    };
+
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.innerHTML = '<span class="spinner"></span> Guardando...';
+
+    try {
+        const res = id
+            ? await apiFetch(`/usuarios/api/expedientes/${id}`, { method: 'PUT', body })
+            : await apiFetch('/usuarios/api/expedientes', { method: 'POST', body });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            showAlert(alertEl, 'error', data.error || 'Error al guardar.');
+            return;
+        }
+        closeMexpFichaModal();
+        if (!id && data.creado === false) {
+            showToast('Ya seguías ese expediente — se actualizó la ficha existente.', 'info');
+        } else {
+            showToast(id ? 'Expediente actualizado.' : 'Expediente agregado.', 'success');
+        }
+        await loadMexpList();
+        openMexpFicha(data.expediente.id);
+    } catch (err) {
+        showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+}
+
+// ─── Eliminar seguimiento (con elección sobre las entradas) ─────────────────
+function askMexpEliminar() {
+    document.getElementById('modal-mexp-eliminar').classList.remove('hidden');
+}
+
+function closeMexpEliminarModal() {
+    document.getElementById('modal-mexp-eliminar').classList.add('hidden');
+}
+
+async function mexpEliminarFicha(modo) {
+    const id = state.miExp.fichaId;
+    if (!id) return;
+    closeMexpEliminarModal();
+
+    try {
+        const res = await apiFetch(`/usuarios/api/expedientes/${id}?entries=${modo}`, { method: 'DELETE' });
+        if (!res || !res.ok) { showToast('No se pudo eliminar el expediente.', 'error'); return; }
+        const data = await res.json();
+        showToast(
+            modo === 'delete'
+                ? `Expediente eliminado junto con ${data.entradasBorradas} entrada(s).`
+                : 'Expediente eliminado. Sus entradas quedaron sueltas, sin vínculo.',
+            'success'
+        );
+        state.miExp.fichaId = null;
+        state.miExp.ficha = null;
+        mexpShowLista();
+        await loadMexpList();
+    } catch (e) {
+        showToast('Error de conexión.', 'error');
+    }
+}
+
+// ─── Modal: ver un snapshot del historial ───────────────────────────────────
+async function verMexpSnapshot(snapshotId) {
+    const modal = document.getElementById('modal-mexp-snapshot');
+    const body = document.getElementById('mexp-snapshot-body');
+    const titleEl = document.getElementById('mexp-snapshot-title');
+    modal.classList.remove('hidden');
+    body.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
+
+    const fichaId = state.miExp.fichaId;
+    if (!fichaId) return;
+
+    try {
+        const res = await apiFetch(`/usuarios/api/expedientes/${fichaId}/snapshots/${snapshotId}`);
+        if (!res || !res.ok) {
+            body.innerHTML = '<div class="empty-state"><p>No se pudo cargar el historial.</p></div>';
+            return;
+        }
+        const data = await res.json();
+        renderMexpSnapshot(data.snapshot, titleEl, body);
+    } catch (e) {
+        body.innerHTML = '<div class="empty-state"><p>Error de conexión.</p></div>';
+    }
+}
+
+function renderMexpSnapshot(s, titleEl, body) {
+    titleEl.textContent = (s.kind === 'procuracion' ? 'Procuración' : 'Informe') + ' — ' + formatDate(s.run_date);
+
+    const movimientos = Array.isArray(s.data?.movimientos) ? s.data.movimientos : [];
+    let html = `<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+        Corrida del ${formatDate(s.run_date)}${s.situacion ? ` · Situación registrada: ${escapeHtml(s.situacion)}` : ''}
+    </p>`;
+
+    if (movimientos.length === 0) {
+        html += '<div class="empty-state"><p>Sin movimientos registrados en esta corrida</p></div>';
+    } else {
+        html += movimientos.map(m => `
+            <div class="mexp-snapshot-mov">
+                <strong>${escapeHtml(m.fecha || '')}</strong> ${escapeHtml(m.tipo || '')}<br>
+                <span style="color:var(--text-muted)">${escapeHtml(m.detalle || '')}</span>
+            </div>
+        `).join('');
+    }
+    body.innerHTML = html;
+}
+
+function closeMexpSnapshotModal() {
+    document.getElementById('modal-mexp-snapshot').classList.add('hidden');
 }
