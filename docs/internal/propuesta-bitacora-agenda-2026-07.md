@@ -1038,6 +1038,21 @@ resultado a la vista.
 > un conflicto de merge trivial.
 
 ### Fase 1 — Núcleo (backend + portal, sin release de Electron)
+
+> ✅ **F1.1 EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Migración
+> `database/migrations/20260814_bitacora_f1_1.sql` aplicada a staging → prod (backup previo en
+> ambos). 4 tablas + 4 columnas + 4 índices + 52 feriados. `backend-server/utils/expedienteKey.js`
+> (normalización canónica) con **21/21** tests, y el fixture compartido
+> `tests/fixtures/expediente-key-cases.json` verificado desde **ambos** codebases (**15/15** de cada
+> lado — las dos implementaciones coinciden hoy). **Nada visible para ningún usuario:** 0 de 6 planes
+> con el flag encendido. Verificado en staging con datos reales: la deduplicación **rechaza** el
+> mismo caso escrito distinto, y las cascadas (`CASCADE` en snapshots, `SET NULL` en entradas)
+> funcionan. **Hallazgo del camino:** staging tenía privilegios por defecto para tablas pero **no
+> para secuencias** (prod sí), así que sin los `GRANT` explícitos que la migración incluye la app
+> habría fallado ahí con *"permission denied for sequence"* en el primer INSERT — el mismo bug que
+> ya ocurrió con `commercial_benefits_id_seq` en junio. Ver §11.2 por los 2 pendientes que dejó.
+> **Sigue F1.2.**
+
 1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **4 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`, `users.bitacora_lost_access_at` [agregada 2026-08-12, decisión D2/Q6, ver §8]) **+ la columna `expediente_key` en `expedientes_seguidos`** con `UNIQUE (user_id, expediente_key)` — **sin `jurisdiccion` en la clave** (decisión D1 + corrección 2026-08-13, ver §7) **+ los 4 índices de §7** *(eran 5; `idx_exp_seguidos_user` quedó redundante al corregir la clave única)* + seed de feriados **resto de 2026 + todo 2027** (alcance confirmado 2026-08-12, decisión D4). **Incluye crear `backend-server/utils/expedienteKey.js`** (normalización canónica) **+ el fixture de casos compartido** con Electron — ver la nota "DÓNDE VIVE LA NORMALIZACIÓN" de §7. ⚠️ **Prerrequisito Bloque B.1 (regenerar `schema.sql`): ✅ ya cumplido** (schema regenerado el 28/07, 27 tablas verificadas — ver `revision-bitacora-preimplementacion-2026-08-12.md`).
 2. **(F1.2)** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)* 🚨 **PUNTO CRÍTICO P1 (§11.0): el gate NO va en `routes/usuarios.js`** — ese archivo tiene 8 rutas vivas del portal que quedarían en 403. Router propio + montaje aparte. **Incluye prueba de no-regresión al cerrar: entrar sin el flag y verificar las 8 rutas existentes.**
 3. **(F1.3)** Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos).
@@ -1112,6 +1127,19 @@ resultado a la vista.
 | **F3** — Pulido y palancas (badge, captura del monitor, sugerencias por novedades) | **Opus para las sugerencias automáticas · Sonnet para lo demás** | Variable | Las "sugerencias a partir de novedades del monitor" son el diferencial con lógica no trivial (matching novedad→entrada) → Opus. El resto (badge, captura del monitor) es mecánico → Sonnet. Solo si el uso real de F1/F2 lo valida. |
 
 > **Regla transversal (crítica para no romper nada):** cada sub-bloque se valida en **staging** antes de prod, y el flag `bitacora_enabled` nace en `false` en **todos** los planes → aunque algo salga mal, ningún usuario ve la Bitácora hasta encender el flag en un plan de prueba. La Fase 1 completa se prueba y publica **sin emitir ningún release de Electron**. Ver también §11 "Nota de producto" (hallazgo C6): la Fase 1 sola no debe anunciarse ni venderse — es para validación interna.
+
+---
+
+### 11.2 Pendientes abiertos durante la implementación
+
+> Decisiones tomadas **al ejecutar** un sub-bloque que dejan algo pendiente para más
+> adelante. No son bugs ni deuda técnica urgente — son cabos sueltos conscientes, anotados acá
+> para que no se pierdan entre sesiones. Se van agregando a medida que cada fase se ejecuta.
+
+| # | Pendiente | Surgió en | Cuándo se cierra | Estado |
+|---|---|---|---|---|
+| **P-F1.1-a** | **La feria judicial de julio no está en el seed de feriados.** Se cargaron los feriados nacionales del resto de 2026 y todo 2027, más la feria de enero completa (que es fija). La **feria de invierno NO**: su fecha exacta la fija la CSJN (y cada cámara) por acordada cada año y no es predecible — cargarla inventada sería peor que no cargarla, porque la calculadora de plazos daría un resultado incorrecto con apariencia de correcto. | F1.1 (2026-08-14) | Al construir **F1.8** (ABM de feriados): el admin la carga cuando se publica la acordada. Mientras tanto, la calculadora ya muestra el disclaimer *"verificá el plazo"* (§12, riesgo 5). | 🟡 Abierto |
+| **P-F1.1-b** | **El test de Electron extrae `tokenizar()` del fuente en vez de importarla.** `tokenizar` es interna a `electron-app/informe/buscarPdfExpediente.js` (el módulo solo exporta `buscarPdfExpediente`). Para no cambiar la superficie pública de un archivo que hoy está en producción enlazando PDFs, `electron-app/test/tokenizar-fixture.test.js` la extrae del código fuente con una regex y la evalúa. Funciona, pero es más frágil que un `require`: si la función se renombra o se reescribe con otra forma, el test falla con un mensaje de "no la encontré" en vez de comparar. | F1.1 (2026-08-14) | Cuando haya otra razón para tocar `buscarPdfExpediente.js`: exportar `tokenizar` y simplificar el test a un `require`. **No vale un cambio propio** — el archivo funciona y tocarlo sin necesidad es el riesgo mayor. | 🟡 Abierto |
 
 ---
 

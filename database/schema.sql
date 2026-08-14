@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict TFeUSAta59bb74XMGep4XFpqQw0vX3XhzX1exrOBiHB6PuvzYWAaH515qfMhBp3
+\restrict s8mm4LcoK11aIPGuxoaat8x9TWkaASZqCjZeNbOGdgwHh7HmYw1AFpB5TVxizxR
 
 -- Dumped from database version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
 -- Dumped by pg_dump version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
@@ -227,6 +227,69 @@ CREATE TABLE public.app_settings (
 ALTER TABLE public.app_settings OWNER TO postgres;
 
 --
+-- Name: bitacora_entries; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.bitacora_entries (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    expediente_id integer,
+    kind character varying(20) NOT NULL,
+    title character varying(300) NOT NULL,
+    description text,
+    due_at timestamp with time zone,
+    all_day boolean DEFAULT true,
+    done_at timestamp with time zone,
+    repeat_rule character varying(20),
+    meta jsonb,
+    source character varying(20) DEFAULT 'manual'::character varying,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT bitacora_entries_kind_chk CHECK (((kind)::text = ANY ((ARRAY['vencimiento'::character varying, 'audiencia'::character varying, 'tarea'::character varying, 'gestion'::character varying, 'nota'::character varying])::text[]))),
+    CONSTRAINT bitacora_entries_repeat_chk CHECK (((repeat_rule IS NULL) OR ((repeat_rule)::text = ANY ((ARRAY['weekly'::character varying, 'monthly'::character varying, 'yearly'::character varying])::text[])))),
+    CONSTRAINT bitacora_entries_source_chk CHECK (((source)::text = ANY ((ARRAY['manual'::character varying, 'visor_procuracion'::character varying, 'visor_informe'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.bitacora_entries OWNER TO postgres;
+
+--
+-- Name: COLUMN bitacora_entries.due_at; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.bitacora_entries.due_at IS 'NULL = tarea/gestión sin fecha, o nota';
+
+
+--
+-- Name: COLUMN bitacora_entries.done_at; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.bitacora_entries.done_at IS 'NULL = pendiente. Con valor = confirmada la realización (el check del banner de avisos)';
+
+
+--
+-- Name: bitacora_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.bitacora_entries_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.bitacora_entries_id_seq OWNER TO postgres;
+
+--
+-- Name: bitacora_entries_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.bitacora_entries_id_seq OWNED BY public.bitacora_entries.id;
+
+
+--
 -- Name: commercial_benefits; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -325,6 +388,153 @@ ALTER TABLE public.encrypted_scripts_id_seq OWNER TO procurador_user;
 --
 
 ALTER SEQUENCE public.encrypted_scripts_id_seq OWNED BY public.encrypted_scripts.id;
+
+
+--
+-- Name: expediente_snapshots; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.expediente_snapshots (
+    id integer NOT NULL,
+    expediente_id integer NOT NULL,
+    kind character varying(15) NOT NULL,
+    run_date date NOT NULL,
+    situacion character varying(200),
+    data jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT expediente_snapshots_kind_chk CHECK (((kind)::text = ANY ((ARRAY['procuracion'::character varying, 'informe'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.expediente_snapshots OWNER TO postgres;
+
+--
+-- Name: TABLE expediente_snapshots; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.expediente_snapshots IS 'Máx. 2 filas por (expediente_id, kind) — el recorte lo hace el endpoint en la misma transacción del insert';
+
+
+--
+-- Name: expediente_snapshots_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.expediente_snapshots_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.expediente_snapshots_id_seq OWNER TO postgres;
+
+--
+-- Name: expediente_snapshots_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.expediente_snapshots_id_seq OWNED BY public.expediente_snapshots.id;
+
+
+--
+-- Name: expedientes_seguidos; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.expedientes_seguidos (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    expediente character varying(60) NOT NULL,
+    expediente_key character varying(60) NOT NULL,
+    jurisdiccion character varying(100),
+    dependencia character varying(200),
+    caratula character varying(300),
+    situacion_actual character varying(200),
+    situacion_fecha date,
+    notas text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.expedientes_seguidos OWNER TO postgres;
+
+--
+-- Name: COLUMN expedientes_seguidos.expediente; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.expedientes_seguidos.expediente IS 'Identificador tal como se muestra al usuario (forma original del PJN o tipeada)';
+
+
+--
+-- Name: COLUMN expedientes_seguidos.expediente_key; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.expedientes_seguidos.expediente_key IS 'Clave normalizada para deduplicar. La calcula backend-server/utils/expedienteKey.js — NO escribir a mano';
+
+
+--
+-- Name: COLUMN expedientes_seguidos.jurisdiccion; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.expedientes_seguidos.jurisdiccion IS 'Descriptivo. NO forma parte de la clave única (la sigla ya viaja dentro de expediente_key)';
+
+
+--
+-- Name: expedientes_seguidos_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.expedientes_seguidos_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.expedientes_seguidos_id_seq OWNER TO postgres;
+
+--
+-- Name: expedientes_seguidos_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.expedientes_seguidos_id_seq OWNED BY public.expedientes_seguidos.id;
+
+
+--
+-- Name: feriados; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.feriados (
+    id integer NOT NULL,
+    fecha date NOT NULL,
+    motivo character varying(200)
+);
+
+
+ALTER TABLE public.feriados OWNER TO postgres;
+
+--
+-- Name: feriados_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.feriados_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.feriados_id_seq OWNER TO postgres;
+
+--
+-- Name: feriados_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.feriados_id_seq OWNED BY public.feriados.id;
 
 
 --
@@ -676,6 +886,7 @@ CREATE TABLE public.plans (
     promo_alert_days integer DEFAULT 15,
     plan_expiry_date timestamp without time zone,
     visibility character varying(10) DEFAULT 'public'::character varying NOT NULL,
+    bitacora_enabled boolean DEFAULT false,
     CONSTRAINT plans_plan_type_check CHECK (((plan_type)::text = ANY ((ARRAY['electron'::character varying, 'extension'::character varying, 'combo'::character varying])::text[]))),
     CONSTRAINT plans_promo_type_check CHECK (((promo_type)::text = ANY ((ARRAY['date'::character varying, 'quota'::character varying])::text[]))),
     CONSTRAINT plans_visibility_check CHECK (((visibility)::text = ANY ((ARRAY['public'::character varying, 'private'::character varying])::text[])))
@@ -683,6 +894,13 @@ CREATE TABLE public.plans (
 
 
 ALTER TABLE public.plans OWNER TO procurador_user;
+
+--
+-- Name: COLUMN plans.bitacora_enabled; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.plans.bitacora_enabled IS 'Gate por plan. FALSE por defecto — el módulo se enciende plan por plan desde el dashboard admin';
+
 
 --
 -- Name: plans_id_seq; Type: SEQUENCE; Schema: public; Owner: procurador_user
@@ -1234,7 +1452,11 @@ CREATE TABLE public.users (
     telefono character varying(50),
     email_change_prev_status character varying(30),
     admin_created boolean DEFAULT false NOT NULL,
+    home_section character varying(20) DEFAULT 'plan'::character varying,
+    bitacora_prefs jsonb,
+    bitacora_lost_access_at timestamp with time zone,
     CONSTRAINT check_role_valid CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'admin'::character varying])::text[]))),
+    CONSTRAINT users_home_section_chk CHECK (((home_section)::text = ANY ((ARRAY['plan'::character varying, 'bitacora'::character varying])::text[]))),
     CONSTRAINT users_registration_status_check CHECK (((registration_status)::text = ANY (ARRAY[('pending_email'::character varying)::text, ('pending_activation'::character varying)::text, ('active'::character varying)::text, ('rejected'::character varying)::text, ('suspended'::character varying)::text, ('suspended_admin'::character varying)::text, ('suspended_plan_expired'::character varying)::text, ('cancelled'::character varying)::text])))
 );
 
@@ -1267,6 +1489,20 @@ COMMENT ON COLUMN public.users.last_login IS 'Timestamp del último login exitos
 --
 
 COMMENT ON COLUMN public.users.cuit_deleted_at IS 'CUIT anulado 90 días post-cancelación (retención legal)';
+
+
+--
+-- Name: COLUMN users.home_section; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.users.home_section IS 'Pantalla de inicio del portal: plan | bitacora. Validar contra bitacora_enabled en el punto de uso';
+
+
+--
+-- Name: COLUMN users.bitacora_lost_access_at; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.users.bitacora_lost_access_at IS 'Momento en que perdió el flag de Bitácora. Sostiene la ventana de exportación de 90 días (D2/Q6)';
 
 
 --
@@ -1366,6 +1602,13 @@ ALTER TABLE ONLY public.analytics_events ALTER COLUMN id SET DEFAULT nextval('pu
 
 
 --
+-- Name: bitacora_entries id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_entries ALTER COLUMN id SET DEFAULT nextval('public.bitacora_entries_id_seq'::regclass);
+
+
+--
 -- Name: commercial_benefits id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -1377,6 +1620,27 @@ ALTER TABLE ONLY public.commercial_benefits ALTER COLUMN id SET DEFAULT nextval(
 --
 
 ALTER TABLE ONLY public.encrypted_scripts ALTER COLUMN id SET DEFAULT nextval('public.encrypted_scripts_id_seq'::regclass);
+
+
+--
+-- Name: expediente_snapshots id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.expediente_snapshots ALTER COLUMN id SET DEFAULT nextval('public.expediente_snapshots_id_seq'::regclass);
+
+
+--
+-- Name: expedientes_seguidos id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.expedientes_seguidos ALTER COLUMN id SET DEFAULT nextval('public.expedientes_seguidos_id_seq'::regclass);
+
+
+--
+-- Name: feriados id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.feriados ALTER COLUMN id SET DEFAULT nextval('public.feriados_id_seq'::regclass);
 
 
 --
@@ -1553,6 +1817,14 @@ ALTER TABLE ONLY public.app_settings
 
 
 --
+-- Name: bitacora_entries bitacora_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_entries
+    ADD CONSTRAINT bitacora_entries_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: commercial_benefits commercial_benefits_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1582,6 +1854,46 @@ ALTER TABLE ONLY public.encrypted_scripts
 
 ALTER TABLE ONLY public.encrypted_scripts
     ADD CONSTRAINT encrypted_scripts_script_name_key UNIQUE (script_name);
+
+
+--
+-- Name: expediente_snapshots expediente_snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.expediente_snapshots
+    ADD CONSTRAINT expediente_snapshots_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: expedientes_seguidos expedientes_seguidos_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.expedientes_seguidos
+    ADD CONSTRAINT expedientes_seguidos_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: expedientes_seguidos expedientes_seguidos_user_key_uniq; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.expedientes_seguidos
+    ADD CONSTRAINT expedientes_seguidos_user_key_uniq UNIQUE (user_id, expediente_key);
+
+
+--
+-- Name: feriados feriados_fecha_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.feriados
+    ADD CONSTRAINT feriados_fecha_key UNIQUE (fecha);
+
+
+--
+-- Name: feriados feriados_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.feriados
+    ADD CONSTRAINT feriados_pkey PRIMARY KEY (id);
 
 
 --
@@ -1894,6 +2206,27 @@ CREATE INDEX idx_ai_logs_ticket ON public.ai_assistance_logs USING btree (ticket
 
 
 --
+-- Name: idx_bitacora_expediente; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_bitacora_expediente ON public.bitacora_entries USING btree (expediente_id);
+
+
+--
+-- Name: idx_bitacora_pendientes; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_bitacora_pendientes ON public.bitacora_entries USING btree (user_id, due_at) WHERE (done_at IS NULL);
+
+
+--
+-- Name: idx_bitacora_user_due; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_bitacora_user_due ON public.bitacora_entries USING btree (user_id, due_at);
+
+
+--
 -- Name: idx_comments_ticket; Type: INDEX; Schema: public; Owner: procurador_user
 --
 
@@ -2066,6 +2399,13 @@ CREATE INDEX idx_script_active ON public.encrypted_scripts USING btree (active);
 --
 
 CREATE INDEX idx_script_name ON public.encrypted_scripts USING btree (script_name);
+
+
+--
+-- Name: idx_snapshots_exp_kind; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_snapshots_exp_kind ON public.expediente_snapshots USING btree (expediente_id, kind, created_at DESC);
 
 
 --
@@ -2341,6 +2681,22 @@ ALTER TABLE ONLY public.analytics_events
 
 
 --
+-- Name: bitacora_entries bitacora_entries_expediente_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_entries
+    ADD CONSTRAINT bitacora_entries_expediente_id_fkey FOREIGN KEY (expediente_id) REFERENCES public.expedientes_seguidos(id) ON DELETE SET NULL;
+
+
+--
+-- Name: bitacora_entries bitacora_entries_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_entries
+    ADD CONSTRAINT bitacora_entries_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: commercial_benefits commercial_benefits_applied_by_admin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -2362,6 +2718,22 @@ ALTER TABLE ONLY public.commercial_benefits
 
 ALTER TABLE ONLY public.commercial_benefits
     ADD CONSTRAINT commercial_benefits_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: expediente_snapshots expediente_snapshots_expediente_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.expediente_snapshots
+    ADD CONSTRAINT expediente_snapshots_expediente_id_fkey FOREIGN KEY (expediente_id) REFERENCES public.expedientes_seguidos(id) ON DELETE CASCADE;
+
+
+--
+-- Name: expedientes_seguidos expedientes_seguidos_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.expedientes_seguidos
+    ADD CONSTRAINT expedientes_seguidos_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -2646,6 +3018,20 @@ GRANT ALL ON TABLE public.app_settings TO procurador_user;
 
 
 --
+-- Name: TABLE bitacora_entries; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.bitacora_entries TO procurador_user;
+
+
+--
+-- Name: SEQUENCE bitacora_entries_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.bitacora_entries_id_seq TO procurador_user;
+
+
+--
 -- Name: TABLE commercial_benefits; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -2657,6 +3043,48 @@ GRANT ALL ON TABLE public.commercial_benefits TO procurador_user;
 --
 
 GRANT ALL ON SEQUENCE public.commercial_benefits_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE expediente_snapshots; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.expediente_snapshots TO procurador_user;
+
+
+--
+-- Name: SEQUENCE expediente_snapshots_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.expediente_snapshots_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE expedientes_seguidos; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.expedientes_seguidos TO procurador_user;
+
+
+--
+-- Name: SEQUENCE expedientes_seguidos_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.expedientes_seguidos_id_seq TO procurador_user;
+
+
+--
+-- Name: TABLE feriados; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.feriados TO procurador_user;
+
+
+--
+-- Name: SEQUENCE feriados_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.feriados_id_seq TO procurador_user;
 
 
 --
@@ -2803,5 +3231,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict TFeUSAta59bb74XMGep4XFpqQw0vX3XhzX1exrOBiHB6PuvzYWAaH515qfMhBp3
+\unrestrict s8mm4LcoK11aIPGuxoaat8x9TWkaASZqCjZeNbOGdgwHh7HmYw1AFpB5TVxizxR
 

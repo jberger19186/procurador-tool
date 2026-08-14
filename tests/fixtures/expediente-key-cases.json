@@ -1,0 +1,112 @@
+{
+  "_comment": [
+    "Fixture COMPARTIDO de normalización de expedientes — Bitácora F1.1.",
+    "",
+    "Lo ejercitan DOS implementaciones que viven en codebases separados y deben",
+    "producir exactamente el mismo resultado:",
+    "  · backend-server/utils/expedienteKey.js         (canónica)",
+    "  · electron-app/informe/buscarPdfExpediente.js   (tokenizar)",
+    "",
+    "Si alguien toca una y no la otra, los tests de ambos lados fallan y se entera",
+    "enseguida. Ese es todo el punto de este archivo.",
+    "",
+    "Correrlos:",
+    "  node backend-server/test/expedienteKey.test.js",
+    "  node electron-app/test/tokenizar-fixture.test.js",
+    "",
+    "`tokens` es la salida de tokenizar(); `key` es esos tokens unidos con '|',",
+    "que es lo que se persiste en expedientes_seguidos.expediente_key."
+  ],
+  "casos": [
+    {
+      "descripcion": "Forma del PJN, con padding de ceros (la que llega por captura desde un visor)",
+      "input": "FCR 018745/2017",
+      "tokens": ["fcr", "18745", "2017"],
+      "key": "fcr|18745|2017"
+    },
+    {
+      "descripcion": "Forma que tipea el usuario, sin padding — MISMO caso que el anterior. Es el bug debb503",
+      "input": "FCR 18745/2017",
+      "tokens": ["fcr", "18745", "2017"],
+      "key": "fcr|18745|2017"
+    },
+    {
+      "descripcion": "Minúsculas — no debe generar una ficha distinta",
+      "input": "fcr 18745/2017",
+      "tokens": ["fcr", "18745", "2017"],
+      "key": "fcr|18745|2017"
+    },
+    {
+      "descripcion": "Padding extremo, tomado de monitor_expedientes real (FCR 034000485/2010)",
+      "input": "FCR 034000485/2010",
+      "tokens": ["fcr", "34000485", "2010"],
+      "key": "fcr|34000485|2010"
+    },
+    {
+      "descripcion": "Expediente REALMENTE distinto cuyo número contiene al otro: 118745 no es 18745",
+      "input": "FCR 118745/2017",
+      "tokens": ["fcr", "118745", "2017"],
+      "key": "fcr|118745|2017"
+    },
+    {
+      "descripcion": "Otra jurisdicción, mismo número y año — son casos distintos",
+      "input": "CAF 18745/2017",
+      "tokens": ["caf", "18745", "2017"],
+      "key": "caf|18745|2017"
+    },
+    {
+      "descripcion": "Año de 2 dígitos, como aparece en algunos visores (CIV 887/23)",
+      "input": "CIV 887/23",
+      "tokens": ["civ", "887", "23"],
+      "key": "civ|887|23"
+    },
+    {
+      "descripcion": "Espacios de más y al principio/final — no deben afectar la clave",
+      "input": "  FCR   18745 / 2017  ",
+      "tokens": ["fcr", "18745", "2017"],
+      "key": "fcr|18745|2017"
+    },
+    {
+      "descripcion": "Separador guión bajo (los nombres de archivo lo usan en vez de '/')",
+      "input": "FCR 018745_2017",
+      "tokens": ["fcr", "18745", "2017"],
+      "key": "fcr|18745|2017"
+    },
+    {
+      "descripcion": "Caracteres inválidos de nombre de archivo se tratan como separadores",
+      "input": "FCR:018745*2017",
+      "tokens": ["fcr", "18745", "2017"],
+      "key": "fcr|18745|2017"
+    },
+    {
+      "descripcion": "Número que es todo ceros — no debe quedar como token vacío",
+      "input": "FCR 000/2020",
+      "tokens": ["fcr", "0", "2020"],
+      "key": "fcr|0|2020"
+    },
+    {
+      "descripcion": "Sigla de 3 letras con número largo sin padding",
+      "input": "CAF 018685/2024",
+      "tokens": ["caf", "18685", "2024"],
+      "key": "caf|18685|2024"
+    },
+    {
+      "descripcion": "Sin sigla (el usuario tipeó solo número/año). Produce clave válida pero NO matchea con la versión con sigla — por eso el formulario debe validar el formato",
+      "input": "18745/2017",
+      "tokens": ["18745", "2017"],
+      "key": "18745|2017"
+    },
+    {
+      "descripcion": "Cadena vacía — clave vacía, el endpoint debe rechazarla antes de insertar",
+      "input": "",
+      "tokens": [],
+      "key": ""
+    },
+    {
+      "descripcion": "Solo separadores — mismo caso que la cadena vacía",
+      "input": "  /  ",
+      "tokens": [],
+      "key": ""
+    }
+  ]
+}
