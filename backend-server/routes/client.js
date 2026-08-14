@@ -531,7 +531,7 @@ router.get('/account', authenticateToken, async (req, res) => {
                    p.proc_executions_limit, p.proc_expedientes_limit,
                    p.batch_executions_limit, p.batch_expedientes_limit,
                    p.informe_limit, p.monitor_partes_limit, p.monitor_novedades_limit,
-                   p.period_days, p.plan_type
+                   p.period_days, p.plan_type, p.bitacora_enabled
             FROM users u
             LEFT JOIN subscriptions s ON u.id = s.user_id
             LEFT JOIN plans p ON s.plan_id = p.id
@@ -659,6 +659,7 @@ router.get('/account', authenticateToken, async (req, res) => {
                     }
                 },
                 planType: u.plan_type || null,
+                bitacoraEnabled: u.bitacora_enabled === true,
                 // backward compat
                 usageCount: u.usage_count ?? 0,
                 usageLimit: u.usage_limit ?? 0,

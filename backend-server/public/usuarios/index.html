@@ -86,6 +86,10 @@
                 <span class="nav-icon">📊</span>
                 Mi Plan
             </button>
+            <button class="nav-item" id="nav-bitacora" data-section="bitacora" style="display:none">
+                <span class="nav-icon">📔</span>
+                Bitácora
+            </button>
             <button class="nav-item" data-section="facturacion">
                 <span class="nav-icon">💳</span>
                 Facturación
@@ -315,6 +319,83 @@
 
             </section>
 
+            <!-- ===== SECCIÓN: BITÁCORA ===== -->
+            <section class="section" id="section-bitacora">
+                <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+                    <div>
+                        <div>Bitácora</div>
+                        <div class="section-subtitle" style="margin-top:2px">Agenda de vencimientos, audiencias, tareas y gestiones</div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="btn-bitacora-nueva">＋ Nueva entrada</button>
+                </div>
+
+                <!-- Banner de avisos (vencidos sin confirmar + próximos) -->
+                <div id="bitacora-avisos" style="display:none"></div>
+
+                <!-- Barra de vista + filtros -->
+                <div class="card" style="margin-bottom:16px">
+                    <div class="card-body" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+                            <div class="bitacora-view-toggle" role="tablist">
+                                <button type="button" class="bitacora-view-btn active" data-view="mes">Mes</button>
+                                <button type="button" class="bitacora-view-btn" data-view="lista">Lista</button>
+                            </div>
+                            <input type="search" id="bitacora-search" placeholder="🔍 Buscar por título o expediente..." style="max-width:260px">
+                        </div>
+                        <div class="bitacora-filters" id="bitacora-filters">
+                            <div class="bitacora-chip active" data-tipo="">Todos</div>
+                            <div class="bitacora-chip" data-tipo="vencimiento">⏰ Vencimiento</div>
+                            <div class="bitacora-chip" data-tipo="audiencia">⚖️ Audiencia</div>
+                            <div class="bitacora-chip" data-tipo="tarea">✅ Tarea</div>
+                            <div class="bitacora-chip" data-tipo="gestion">📋 Gestión</div>
+                            <div class="bitacora-chip" data-tipo="nota">📝 Nota</div>
+                            <select id="bitacora-filtro-estado" style="margin-left:auto">
+                                <option value="">Todos los estados</option>
+                                <option value="pendiente">Pendientes</option>
+                                <option value="hecho">Hechos</option>
+                            </select>
+                            <select id="bitacora-filtro-expediente">
+                                <option value="">Todos los expedientes</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Mes: calendario + panel del día -->
+                <div id="bitacora-vista-mes" class="bitacora-mes-layout">
+                    <div class="card">
+                        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+                            <button class="btn btn-outline btn-sm" id="bitacora-mes-prev">&#8249;</button>
+                            <h3 id="bitacora-mes-label">—</h3>
+                            <button class="btn btn-outline btn-sm" id="bitacora-mes-next">&#8250;</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="bitacora-calendar-weekdays">
+                                <span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span>
+                            </div>
+                            <div class="bitacora-calendar-grid" id="bitacora-calendar-grid">
+                                <div class="empty-state"><p>Cargando calendario...</p></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 id="bitacora-day-panel-title">Entradas del día</h3>
+                        </div>
+                        <div class="card-body" id="bitacora-day-panel-body">
+                            <div class="empty-state"><p>Seleccioná un día en el calendario</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Lista: agrupada -->
+                <div id="bitacora-vista-lista" class="card" style="display:none">
+                    <div class="card-body" id="bitacora-lista-body">
+                        <div class="empty-state"><p>Cargando...</p></div>
+                    </div>
+                </div>
+            </section>
+
             <!-- ===== SECCIÓN: FACTURACIÓN ===== -->
             <section class="section" id="section-facturacion">
                 <div class="section-title">Facturación</div>
@@ -482,6 +563,73 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeNewTicketModal()">Cancelar</button>
             <button class="btn btn-primary" id="btn-submit-ticket" onclick="document.getElementById('new-ticket-form').dispatchEvent(new Event('submit'))">Enviar ticket</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: NUEVA/EDITAR ENTRADA BITÁCORA ===== -->
+<div class="modal-overlay hidden" id="modal-bitacora-entrada">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="bitacora-modal-title">Nueva entrada</h3>
+            <button class="modal-close" onclick="closeBitacoraModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div id="bitacora-modal-alert" class="alert"></div>
+            <form id="bitacora-entrada-form" novalidate>
+                <input type="hidden" id="bit-id" value="">
+                <div class="form-group">
+                    <label for="bit-kind">Tipo</label>
+                    <select id="bit-kind" name="kind" required>
+                        <option value="vencimiento">⏰ Vencimiento</option>
+                        <option value="audiencia">⚖️ Audiencia</option>
+                        <option value="tarea">✅ Tarea</option>
+                        <option value="gestion">📋 Gestión</option>
+                        <option value="nota">📝 Nota</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="bit-title">Título</label>
+                    <input type="text" id="bit-title" name="title" maxlength="300" placeholder="Ej: Vencimiento de contestación de demanda" required>
+                </div>
+
+                <!-- Plazo (solo vencimiento): fecha de notificación + días hábiles → calcula fecha límite -->
+                <div id="bit-plazo-block" style="display:none">
+                    <div class="form-row" style="display:flex;gap:10px">
+                        <div class="form-group" style="flex:1">
+                            <label for="bit-plazo-desde">Notificado/inicia el</label>
+                            <input type="date" id="bit-plazo-desde">
+                        </div>
+                        <div class="form-group" style="flex:1">
+                            <label for="bit-plazo-dias">Días hábiles</label>
+                            <input type="number" id="bit-plazo-dias" min="1" max="365" placeholder="Ej: 15">
+                        </div>
+                        <div class="form-group" style="flex:0 0 auto;display:flex;align-items:flex-end;padding-bottom:14px">
+                            <button type="button" class="btn btn-outline btn-sm" id="bit-plazo-calcular">Calcular</button>
+                        </div>
+                    </div>
+                    <p style="font-size:12px;color:var(--text-muted);margin:-6px 0 10px">Excluye sábados, domingos y feriados judiciales. El resultado completa la fecha de abajo (podés editarla).</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="bit-due">Fecha</label>
+                    <input type="date" id="bit-due" name="due_date" required>
+                </div>
+                <div class="form-group">
+                    <label for="bit-expediente">Expediente vinculado (opcional)</label>
+                    <select id="bit-expediente" name="expediente_id">
+                        <option value="">— Sin vincular —</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="bit-description">Descripción / notas</label>
+                    <textarea id="bit-description" name="description" rows="3" maxlength="5000" placeholder="Detalle opcional..."></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeBitacoraModal()">Cancelar</button>
+            <button class="btn btn-primary" id="btn-guardar-bitacora">Guardar</button>
         </div>
     </div>
 </div>

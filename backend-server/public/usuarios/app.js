@@ -19,6 +19,21 @@ const state = {
     chatMessages: [],
     chatLoading: false,
     plans: [],
+    bitacora: {
+        view: 'mes',            // 'mes' | 'lista'
+        monthCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+        selectedDay: null,      // 'YYYY-MM-DD'
+        tipo: '',                // filtro por chip ('' = todos)
+        estado: '',
+        expedienteId: '',
+        search: '',
+        entries: [],            // último listado cargado (según filtros/rango vigente)
+        expedientes: [],        // fichas del usuario, para el <select> de vínculo/filtro
+        feriados: new Set(),    // 'YYYY-MM-DD' del año(s) cargado(s), para el cálculo de plazos
+        loaded: false,
+        _cache: new Map(),       // id → entrada, alimentado por cada fetch (avisos/mes/lista)
+        _feriadosYears: new Set(),
+    },
 };
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
@@ -523,6 +538,11 @@ function updateSidebarForStatus() {
     if (reactivBtn) {
         reactivBtn.style.display = rs === 'suspended_admin' ? '' : 'none';
     }
+    // Bitácora: visible solo si el plan de la cuenta la incluye (plans.bitacora_enabled)
+    const bitBtn = document.getElementById('nav-bitacora');
+    if (bitBtn) {
+        bitBtn.style.display = state.account?.bitacoraEnabled ? '' : 'none';
+    }
 }
 
 function renderTopbar() {
@@ -560,6 +580,7 @@ function navigateTo(section, fromHistory) {
         case 'ia': renderIA(); break;
         case 'ayuda': renderAyuda(); break;
         case 'reactivacion': renderReactivacion(); break;
+        case 'bitacora': renderBitacora(); break;
     }
 
     // Historial del navegador: que el botón Atrás vuelva a la sección anterior del
@@ -2552,4 +2573,565 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('login-page').style.display = 'flex';
         renderRememberedUsers();
     }
+
+    // ─── Bitácora: wiring de la sección (F1.3) ─────────────────────────────
+    document.getElementById('btn-bitacora-nueva')?.addEventListener('click', () => openBitacoraModal());
+    document.getElementById('bitacora-entrada-form')?.addEventListener('submit', saveBitacoraEntrada);
+    document.getElementById('bit-kind')?.addEventListener('change', bitTogglePlazoBlock);
+    document.getElementById('bit-plazo-calcular')?.addEventListener('click', calcularPlazoBitacora);
+
+    document.querySelectorAll('.bitacora-view-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.bitacora.view = btn.dataset.view;
+            bitacoraApplyViewToggle();
+            bitacoraLoadAndRenderView();
+        });
+    });
+    document.querySelectorAll('.bitacora-chip').forEach(chip => {
+        chip.addEventListener('click', () => bitacoraSetTipoFilter(chip.dataset.tipo || ''));
+    });
+    document.getElementById('bitacora-filtro-estado')?.addEventListener('change', (e) => {
+        state.bitacora.estado = e.target.value;
+        bitacoraLoadAndRenderView();
+    });
+    document.getElementById('bitacora-filtro-expediente')?.addEventListener('change', (e) => {
+        state.bitacora.expedienteId = e.target.value;
+        bitacoraLoadAndRenderView();
+    });
+    document.getElementById('bitacora-search')?.addEventListener('input', (e) => bitacoraOnSearchInput(e.target.value));
+    document.getElementById('bitacora-mes-prev')?.addEventListener('click', () => bitacoraMonthNav(-1));
+    document.getElementById('bitacora-mes-next')?.addEventListener('click', () => bitacoraMonthNav(1));
 });
+
+// =============================================================================
+//  SECCIÓN: BITÁCORA (F1.3)
+// =============================================================================
+// Consume los endpoints de F1.2 (`routes/bitacora.js`, montados en
+// `/usuarios/api/bitacora|expedientes|feriados`). Contrato verificado línea por
+// línea contra ese archivo antes de escribir esto (nombres de query params,
+// columna `due_at` —no `due_date`—, forma de la respuesta de /avisos, etc.):
+// no se adivina nada acá.
+//
+// Fecha local sin corrimiento de huso horario: los <input type="date"> del portal
+// se envían al backend como mediodía local (`bitToIsoMidday`) — evita que una
+// fecha guardada como '2026-08-20T00:00:00Z' se muestre como el día anterior en
+// husos horarios negativos (Argentina, UTC-3). Al volver a leer un `due_at`,
+// `bitLocalYmd()` extrae el día calendario en hora LOCAL del navegador, que para
+// cualquier huso razonable cae en el mismo día que se guardó.
+
+const BIT_TIPOS = {
+    vencimiento: { icon: '⏰', label: 'Vencimiento', color: 'vencimiento' },
+    audiencia:   { icon: '⚖️', label: 'Audiencia',   color: 'audiencia' },
+    tarea:       { icon: '✅', label: 'Tarea',        color: 'tarea' },
+    gestion:     { icon: '📋', label: 'Gestión',      color: 'gestion' },
+    nota:        { icon: '📝', label: 'Nota',         color: 'nota' },
+};
+
+// ─── Fechas ────────────────────────────────────────────────────────────────
+function bitLocalYmd(dateInput) {
+    const d = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+    if (Number.isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function bitParseLocalDate(ymd) {
+    if (!ymd) return null;
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(y, m - 1, d);
+}
+
+function bitToIsoMidday(ymd) {
+    if (!ymd) return null;
+    return new Date(`${ymd}T12:00:00`).toISOString();
+}
+
+// ─── Caché de entradas (para abrir el modal desde banner/calendario/lista
+//     sin re-pedir al servidor ni pasar objetos por el atributo onclick) ───
+function bitCacheEntries(list) {
+    (list || []).forEach(e => state.bitacora._cache.set(Number(e.id), e));
+}
+function bitEntryById(id) {
+    return state.bitacora._cache.get(Number(id)) || null;
+}
+
+// ─── Feriados + calculadora de plazo (días hábiles) ────────────────────────
+async function bitEnsureFeriados(years) {
+    const faltantes = years.filter(y => !state.bitacora._feriadosYears.has(y));
+    for (const y of faltantes) {
+        try {
+            const res = await apiFetch(`/usuarios/api/feriados?year=${y}`);
+            if (res && res.ok) {
+                const data = await res.json();
+                (data.feriados || []).forEach(f => state.bitacora.feriados.add(bitLocalYmd(f.fecha)));
+            }
+            state.bitacora._feriadosYears.add(y);
+        } catch (e) {
+            console.error('Error cargando feriados', y, e);
+        }
+    }
+}
+
+function bitAddBusinessDays(fromYmd, dias) {
+    const cur = bitParseLocalDate(fromYmd);
+    let restantes = dias;
+    while (restantes > 0) {
+        cur.setDate(cur.getDate() + 1);
+        const dow = cur.getDay(); // 0=domingo, 6=sábado
+        if (dow !== 0 && dow !== 6 && !state.bitacora.feriados.has(bitLocalYmd(cur))) {
+            restantes--;
+        }
+    }
+    return bitLocalYmd(cur);
+}
+
+async function calcularPlazoBitacora() {
+    const desde = document.getElementById('bit-plazo-desde').value;
+    const dias = parseInt(document.getElementById('bit-plazo-dias').value, 10);
+    if (!desde || !dias || dias < 1) {
+        showToast('Completá la fecha de notificación y la cantidad de días hábiles.', 'error');
+        return;
+    }
+    const anioBase = bitParseLocalDate(desde).getFullYear();
+    await bitEnsureFeriados([anioBase, anioBase + 1]); // el vencimiento puede caer en el año siguiente
+    const resultado = bitAddBusinessDays(desde, dias);
+    document.getElementById('bit-due').value = resultado;
+    showToast(`Vencimiento calculado: ${formatDate(resultado)}`, 'success');
+}
+
+// ─── Entrada del módulo (al navegar a la sección) ──────────────────────────
+async function renderBitacora() {
+    if (!state.bitacora.loaded) {
+        await loadBitacoraExpedientes();
+        state.bitacora.loaded = true;
+    }
+    loadBitacoraAvisos();
+    bitacoraApplyViewToggle();
+    bitacoraLoadAndRenderView();
+}
+
+function bitacoraApplyViewToggle() {
+    document.querySelectorAll('.bitacora-view-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === state.bitacora.view);
+    });
+    const mes = document.getElementById('bitacora-vista-mes');
+    const lista = document.getElementById('bitacora-vista-lista');
+    if (mes) mes.style.display = state.bitacora.view === 'mes' ? 'grid' : 'none';
+    if (lista) lista.style.display = state.bitacora.view === 'lista' ? 'block' : 'none';
+}
+
+function bitacoraLoadAndRenderView() {
+    if (state.bitacora.view === 'mes') loadBitacoraMonth();
+    else loadBitacoraLista();
+}
+
+function bitacoraSetTipoFilter(tipo) {
+    state.bitacora.tipo = tipo;
+    document.querySelectorAll('.bitacora-chip').forEach(el => {
+        el.classList.toggle('active', (el.dataset.tipo || '') === tipo);
+    });
+    bitacoraLoadAndRenderView();
+}
+
+let bitSearchDebounce = null;
+function bitacoraOnSearchInput(value) {
+    state.bitacora.search = value.trim();
+    clearTimeout(bitSearchDebounce);
+    bitSearchDebounce = setTimeout(() => bitacoraLoadAndRenderView(), 300);
+}
+
+function bitacoraMonthNav(delta) {
+    const c = state.bitacora.monthCursor;
+    state.bitacora.monthCursor = new Date(c.getFullYear(), c.getMonth() + delta, 1);
+    state.bitacora.selectedDay = null;
+    loadBitacoraMonth();
+}
+
+// ─── Expedientes seguidos (para el filtro y el <select> del modal) ─────────
+async function loadBitacoraExpedientes() {
+    try {
+        const res = await apiFetch('/usuarios/api/expedientes');
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        state.bitacora.expedientes = data.expedientes || [];
+        const optsHtml = state.bitacora.expedientes.map(x =>
+            `<option value="${x.id}">${escapeHtml(x.expediente)}${x.caratula ? ' — ' + escapeHtml(x.caratula) : ''}</option>`
+        ).join('');
+        const selFiltro = document.getElementById('bitacora-filtro-expediente');
+        if (selFiltro) selFiltro.innerHTML = '<option value="">Todos los expedientes</option>' + optsHtml;
+        const selModal = document.getElementById('bit-expediente');
+        if (selModal) selModal.innerHTML = '<option value="">— Sin vincular —</option>' + optsHtml;
+    } catch (e) {
+        console.error('Error cargando expedientes seguidos:', e);
+    }
+}
+
+// ─── Banner de avisos ───────────────────────────────────────────────────────
+async function loadBitacoraAvisos() {
+    const cont = document.getElementById('bitacora-avisos');
+    if (!cont) return;
+    try {
+        const res = await apiFetch('/usuarios/api/bitacora/avisos');
+        if (!res || !res.ok) { cont.style.display = 'none'; return; }
+        const data = await res.json();
+        renderBitacoraAvisos(data);
+    } catch (e) {
+        console.error('Error cargando avisos de bitácora:', e);
+        cont.style.display = 'none';
+    }
+}
+
+function renderBitacoraAvisos(data) {
+    const cont = document.getElementById('bitacora-avisos');
+    if (!cont) return;
+    const vencidos = data.vencidos || [];
+    const proximos = data.proximos || [];
+    bitCacheEntries(vencidos);
+    bitCacheEntries(proximos);
+
+    if (vencidos.length === 0 && proximos.length === 0) {
+        cont.style.display = 'none';
+        cont.innerHTML = '';
+        return;
+    }
+
+    const fila = (e) => {
+        const tipo = BIT_TIPOS[e.kind] || BIT_TIPOS.nota;
+        const exp = e.expediente
+            ? ` <span style="color:var(--text-muted);font-weight:400">· ${escapeHtml(e.expediente)}</span>`
+            : '';
+        return `<div class="bitacora-aviso-row">
+            <div class="bitacora-entry-check" style="margin-top:0" onclick="toggleBitacoraDone(${e.id}, true)" title="Marcar como hecho">✓</div>
+            <span class="bitacora-aviso-fecha">${e.due_at ? formatDate(e.due_at) : ''}</span>
+            <span class="bitacora-aviso-titulo" onclick="openBitacoraModalById(${e.id})" style="cursor:pointer">${tipo.icon} ${escapeHtml(e.title)}${exp}</span>
+        </div>`;
+    };
+
+    let html = `<div class="bitacora-avisos-banner ${vencidos.length > 0 ? 'tiene-vencidos' : ''}">`;
+    if (vencidos.length > 0) {
+        const totalMsg = data.totalVencidosSinConfirmar > vencidos.length
+            ? ` (${data.totalVencidosSinConfirmar} en total sin confirmar)` : '';
+        html += `<div class="bitacora-avisos-header vencidos">🔴 Vencidos sin confirmar${totalMsg}</div>`;
+        html += vencidos.map(fila).join('');
+    }
+    if (proximos.length > 0) {
+        html += `<div class="bitacora-avisos-header proximos" style="${vencidos.length > 0 ? 'margin-top:10px' : ''}">🟡 Próximos 7 días</div>`;
+        html += proximos.map(fila).join('');
+    }
+    html += '</div>';
+    cont.innerHTML = html;
+    cont.style.display = 'block';
+}
+
+// ─── Item de entrada (reutilizado por el panel del día y la vista Lista) ───
+function bitEntryRowHtml(e) {
+    const tipo = BIT_TIPOS[e.kind] || BIT_TIPOS.nota;
+    const hecho = !!e.done_at;
+    const exp = e.expediente ? `<span>📁 ${escapeHtml(e.expediente)}</span>` : '';
+    return `<div class="bitacora-entry ${hecho ? 'hecho' : ''}" data-id="${e.id}">
+        <div class="bitacora-entry-check" onclick="toggleBitacoraDone(${e.id}, ${!hecho})">${hecho ? '✓' : ''}</div>
+        <div class="bitacora-entry-body" onclick="openBitacoraModalById(${e.id})" style="cursor:pointer">
+            <div class="bitacora-entry-title"><span class="bit-color-${tipo.color}" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px"></span>${escapeHtml(e.title)}</div>
+            <div class="bitacora-entry-meta">${exp}</div>
+        </div>
+        <div class="bitacora-entry-actions">
+            <button type="button" onclick="deleteBitacoraEntrada(${e.id})" title="Eliminar">🗑</button>
+        </div>
+    </div>`;
+}
+
+// ─── Vista Mes ───────────────────────────────────────────────────────────────
+function bitacoraMonthRange(cursor) {
+    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const startDow = (first.getDay() + 6) % 7; // lunes = 0
+    const gridStart = new Date(first);
+    gridStart.setDate(first.getDate() - startDow);
+    const gridEnd = new Date(gridStart);
+    gridEnd.setDate(gridStart.getDate() + 41); // 6 semanas
+    return { gridStart, gridEnd };
+}
+
+function bitacoraApplyClientFilters(rows) {
+    let out = rows;
+    if (state.bitacora.estado === 'hecho') out = out.filter(e => e.done_at);
+    if (state.bitacora.search) {
+        const q = state.bitacora.search.toLowerCase();
+        out = out.filter(e =>
+            (e.title || '').toLowerCase().includes(q) ||
+            (e.expediente || '').toLowerCase().includes(q)
+        );
+    }
+    return out;
+}
+
+function bitacoraBuildQuery(desdeDate, hastaDate) {
+    const params = new URLSearchParams();
+    params.set('desde', bitToIsoMidday(bitLocalYmd(desdeDate)));
+    params.set('hasta', bitToIsoMidday(bitLocalYmd(hastaDate)));
+    if (state.bitacora.tipo) params.set('kind', state.bitacora.tipo);
+    if (state.bitacora.estado === 'pendiente') params.set('pendientes', '1');
+    if (state.bitacora.expedienteId) params.set('expediente_id', state.bitacora.expedienteId);
+    return params;
+}
+
+async function loadBitacoraMonth() {
+    const { gridStart, gridEnd } = bitacoraMonthRange(state.bitacora.monthCursor);
+    const params = bitacoraBuildQuery(gridStart, gridEnd);
+    try {
+        const res = await apiFetch(`/usuarios/api/bitacora?${params.toString()}`);
+        if (!res || !res.ok) { state.bitacora.entries = []; renderBitacoraCalendar(); return; }
+        const data = await res.json();
+        const rows = bitacoraApplyClientFilters(data.entradas || []);
+        state.bitacora.entries = rows;
+        bitCacheEntries(rows);
+        renderBitacoraCalendar();
+        if (state.bitacora.selectedDay) renderBitacoraDayPanel(state.bitacora.selectedDay);
+    } catch (e) {
+        console.error('Error cargando bitácora (mes):', e);
+        state.bitacora.entries = [];
+        renderBitacoraCalendar();
+    }
+}
+
+function renderBitacoraCalendar() {
+    const grid = document.getElementById('bitacora-calendar-grid');
+    const label = document.getElementById('bitacora-mes-label');
+    if (!grid || !label) return;
+
+    const cursor = state.bitacora.monthCursor;
+    label.textContent = cursor.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+
+    const { gridStart } = bitacoraMonthRange(cursor);
+    const todayYmd = bitLocalYmd(new Date());
+    const porDia = {};
+    (state.bitacora.entries || []).forEach(e => {
+        if (!e.due_at) return;
+        const ymd = bitLocalYmd(e.due_at);
+        (porDia[ymd] = porDia[ymd] || []).push(e);
+    });
+
+    let html = '';
+    const cur = new Date(gridStart);
+    for (let i = 0; i < 42; i++) {
+        const ymd = bitLocalYmd(cur);
+        const inMonth = cur.getMonth() === cursor.getMonth();
+        const entradasDia = porDia[ymd] || [];
+        const tieneVencidoPend = entradasDia.some(e => !e.done_at && ymd < todayYmd);
+
+        const classes = ['bitacora-day'];
+        if (!inMonth) classes.push('otro-mes');
+        if (ymd === todayYmd) classes.push('hoy');
+        if (ymd === state.bitacora.selectedDay) classes.push('selected');
+
+        const dots = entradasDia.slice(0, 4).map(e => {
+            const tipo = BIT_TIPOS[e.kind] || BIT_TIPOS.nota;
+            return `<span class="bitacora-day-dot bit-color-${tipo.color}"></span>`;
+        }).join('');
+
+        html += `<div class="${classes.join(' ')}" data-ymd="${ymd}" onclick="bitacoraSelectDay('${ymd}')">
+            <span class="bitacora-day-num">${cur.getDate()}</span>
+            ${tieneVencidoPend ? '<span class="bitacora-day-vencido-badge">vencido</span>' : ''}
+            <span class="bitacora-day-dots">${dots}</span>
+        </div>`;
+        cur.setDate(cur.getDate() + 1);
+    }
+    grid.innerHTML = html;
+}
+
+function bitacoraSelectDay(ymd) {
+    state.bitacora.selectedDay = ymd;
+    document.querySelectorAll('.bitacora-day').forEach(el => {
+        el.classList.toggle('selected', el.dataset.ymd === ymd);
+    });
+    renderBitacoraDayPanel(ymd);
+}
+
+function renderBitacoraDayPanel(ymd) {
+    const title = document.getElementById('bitacora-day-panel-title');
+    const body = document.getElementById('bitacora-day-panel-body');
+    if (!title || !body) return;
+
+    const d = bitParseLocalDate(ymd);
+    title.textContent = d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    const entradas = (state.bitacora.entries || []).filter(e => e.due_at && bitLocalYmd(e.due_at) === ymd);
+    if (entradas.length === 0) {
+        body.innerHTML = '<div class="empty-state"><p>Sin entradas este día</p></div>';
+        return;
+    }
+    body.innerHTML = entradas.map(bitEntryRowHtml).join('');
+}
+
+// ─── Vista Lista ─────────────────────────────────────────────────────────────
+async function loadBitacoraLista() {
+    const hoy = new Date();
+    const desde = new Date(hoy); desde.setDate(desde.getDate() - 60);
+    const hasta = new Date(hoy); hasta.setDate(hasta.getDate() + 180);
+    const params = bitacoraBuildQuery(desde, hasta);
+    try {
+        const res = await apiFetch(`/usuarios/api/bitacora?${params.toString()}`);
+        if (!res || !res.ok) { state.bitacora.entries = []; renderBitacoraLista(); return; }
+        const data = await res.json();
+        const rows = bitacoraApplyClientFilters(data.entradas || []);
+        state.bitacora.entries = rows;
+        bitCacheEntries(rows);
+        renderBitacoraLista();
+    } catch (e) {
+        console.error('Error cargando bitácora (lista):', e);
+        state.bitacora.entries = [];
+        renderBitacoraLista();
+    }
+}
+
+function renderBitacoraLista() {
+    const body = document.getElementById('bitacora-lista-body');
+    if (!body) return;
+
+    const rows = state.bitacora.entries || [];
+    if (rows.length === 0) {
+        body.innerHTML = '<div class="empty-state"><p>No hay entradas para los filtros seleccionados</p></div>';
+        return;
+    }
+
+    const conFecha = rows.filter(e => e.due_at).sort((a, b) => new Date(a.due_at) - new Date(b.due_at));
+    const sinFecha = rows.filter(e => !e.due_at);
+
+    const grupos = new Map();
+    conFecha.forEach(e => {
+        const ymd = bitLocalYmd(e.due_at);
+        if (!grupos.has(ymd)) grupos.set(ymd, []);
+        grupos.get(ymd).push(e);
+    });
+
+    let html = '';
+    for (const [ymd, entradas] of grupos.entries()) {
+        const d = bitParseLocalDate(ymd);
+        const label = d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        html += `<div class="bitacora-lista-grupo">
+            <div class="bitacora-lista-grupo-titulo">${escapeHtml(label)}</div>
+            ${entradas.map(bitEntryRowHtml).join('')}
+        </div>`;
+    }
+    if (sinFecha.length > 0) {
+        html += `<div class="bitacora-lista-grupo">
+            <div class="bitacora-lista-grupo-titulo">Sin fecha</div>
+            ${sinFecha.map(bitEntryRowHtml).join('')}
+        </div>`;
+    }
+    body.innerHTML = html;
+}
+
+// ─── Modal nueva/editar entrada ─────────────────────────────────────────────
+function bitTogglePlazoBlock() {
+    const kind = document.getElementById('bit-kind').value;
+    const block = document.getElementById('bit-plazo-block');
+    if (block) block.style.display = kind === 'vencimiento' ? 'block' : 'none';
+}
+
+function openBitacoraModal() {
+    document.getElementById('bitacora-entrada-form').reset();
+    document.getElementById('bit-id').value = '';
+    document.getElementById('bitacora-modal-title').textContent = 'Nueva entrada';
+    document.getElementById('bitacora-modal-alert').classList.remove('visible');
+    document.getElementById('bit-due').value = state.bitacora.selectedDay || bitLocalYmd(new Date());
+    bitTogglePlazoBlock();
+    document.getElementById('modal-bitacora-entrada').classList.remove('hidden');
+}
+
+function openBitacoraModalById(id) {
+    const e = bitEntryById(id);
+    if (!e) { showToast('No se pudo abrir la entrada.', 'error'); return; }
+
+    document.getElementById('bitacora-entrada-form').reset();
+    document.getElementById('bit-id').value = e.id;
+    document.getElementById('bitacora-modal-title').textContent = 'Editar entrada';
+    document.getElementById('bitacora-modal-alert').classList.remove('visible');
+    document.getElementById('bit-kind').value = e.kind;
+    document.getElementById('bit-title').value = e.title || '';
+    document.getElementById('bit-description').value = e.description || '';
+    document.getElementById('bit-due').value = e.due_at ? bitLocalYmd(e.due_at) : '';
+    document.getElementById('bit-expediente').value = e.expediente_id || '';
+    bitTogglePlazoBlock();
+    document.getElementById('modal-bitacora-entrada').classList.remove('hidden');
+}
+
+function closeBitacoraModal() {
+    document.getElementById('modal-bitacora-entrada').classList.add('hidden');
+}
+
+async function saveBitacoraEntrada(e) {
+    e.preventDefault();
+    const alertEl = document.getElementById('bitacora-modal-alert');
+    const btn = document.getElementById('btn-guardar-bitacora');
+
+    const id = document.getElementById('bit-id').value;
+    const kind = document.getElementById('bit-kind').value;
+    const title = document.getElementById('bit-title').value.trim();
+    const description = document.getElementById('bit-description').value.trim();
+    const dueYmd = document.getElementById('bit-due').value;
+    const expedienteId = document.getElementById('bit-expediente').value;
+
+    if (!title) {
+        showAlert(alertEl, 'error', 'El título es obligatorio.');
+        return;
+    }
+
+    const body = {
+        kind,
+        title,
+        description: description || null,
+        due_at: dueYmd ? bitToIsoMidday(dueYmd) : null,
+        expediente_id: expedienteId || null,
+    };
+
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.innerHTML = '<span class="spinner"></span> Guardando...';
+
+    try {
+        const res = id
+            ? await apiFetch(`/usuarios/api/bitacora/${id}`, { method: 'PUT', body })
+            : await apiFetch('/usuarios/api/bitacora', { method: 'POST', body });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            showAlert(alertEl, 'error', data.error || 'Error al guardar.');
+            return;
+        }
+        closeBitacoraModal();
+        showToast(id ? 'Entrada actualizada.' : 'Entrada creada.', 'success');
+        loadBitacoraAvisos();
+        bitacoraLoadAndRenderView();
+    } catch (err) {
+        showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+}
+
+async function toggleBitacoraDone(id, done) {
+    try {
+        const res = await apiFetch(`/usuarios/api/bitacora/${id}/done`, { method: 'POST', body: { done } });
+        if (!res || !res.ok) { showToast('No se pudo actualizar la entrada.', 'error'); return; }
+        loadBitacoraAvisos();
+        bitacoraLoadAndRenderView();
+    } catch (e) {
+        showToast('Error de conexión.', 'error');
+    }
+}
+
+async function deleteBitacoraEntrada(id) {
+    if (!(await showConfirm('¿Eliminar esta entrada de la bitácora? Esta acción no se puede deshacer.'))) return;
+    try {
+        const res = await apiFetch(`/usuarios/api/bitacora/${id}`, { method: 'DELETE' });
+        if (!res || !res.ok) { showToast('No se pudo eliminar la entrada.', 'error'); return; }
+        showToast('Entrada eliminada.', 'success');
+        loadBitacoraAvisos();
+        bitacoraLoadAndRenderView();
+    } catch (e) {
+        showToast('Error de conexión.', 'error');
+    }
+}

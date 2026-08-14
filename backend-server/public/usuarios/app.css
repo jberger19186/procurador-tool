@@ -1448,3 +1448,191 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     from { opacity: 1; transform: translateX(0); }
     to   { opacity: 0; transform: translateX(20px); }
 }
+
+/* =============================================
+   Bitácora
+   ============================================= */
+
+/* Toggle Mes/Lista */
+.bitacora-view-toggle { display: inline-flex; gap: 4px; background: var(--bg); padding: 3px; border-radius: 8px; }
+.bitacora-view-btn {
+    padding: 5px 14px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .15s;
+}
+.bitacora-view-btn.active { background: #fff; color: var(--accent); box-shadow: var(--shadow); }
+
+/* Chips de filtro por tipo */
+.bitacora-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bitacora-chip {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all .15s;
+    user-select: none;
+}
+.bitacora-chip:hover { border-color: var(--accent); color: var(--accent); }
+.bitacora-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.bitacora-filters select {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: var(--text);
+    background: #fff;
+    font-family: inherit;
+}
+
+/* Banner de avisos */
+.bitacora-avisos-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    border: 1px solid;
+}
+.bitacora-avisos-banner.tiene-vencidos { background: #fef2f2; border-color: #fecaca; }
+.bitacora-avisos-banner:not(.tiene-vencidos) { background: #fffbeb; border-color: #fde68a; }
+.bitacora-avisos-header { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 13.5px; }
+.bitacora-avisos-header.vencidos { color: #991b1b; }
+.bitacora-avisos-header.proximos { color: #92400e; }
+.bitacora-aviso-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 13px;
+    border-top: 1px solid rgba(0,0,0,.06);
+}
+.bitacora-aviso-row:first-of-type { border-top: none; }
+.bitacora-aviso-fecha { font-weight: 600; white-space: nowrap; }
+.bitacora-aviso-titulo { flex: 1; color: var(--text); }
+
+/* Layout vista Mes: calendario + panel lateral */
+.bitacora-mes-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 16px;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .bitacora-mes-layout { grid-template-columns: 1fr; }
+}
+
+.bitacora-calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 6px;
+}
+.bitacora-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+.bitacora-day {
+    min-height: 66px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 5px;
+    cursor: pointer;
+    background: #fff;
+    transition: all .12s;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.bitacora-day:hover { border-color: var(--accent); }
+.bitacora-day.otro-mes { opacity: .35; }
+.bitacora-day.hoy { border-color: var(--accent); border-width: 2px; }
+.bitacora-day.selected { background: var(--accent-light); border-color: var(--accent); }
+.bitacora-day-num { font-size: 12px; font-weight: 600; color: var(--text); }
+.bitacora-day-dots { display: flex; flex-wrap: wrap; gap: 2px; }
+.bitacora-day-dot { width: 7px; height: 7px; border-radius: 50%; }
+.bitacora-day-vencido-badge {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #991b1b;
+    background: #fee2e2;
+    border-radius: 4px;
+    padding: 0 3px;
+    align-self: flex-start;
+}
+
+/* Colores por tipo de entrada (dot, badge, borde de card) */
+.bit-color-vencimiento { background: var(--red); }
+.bit-color-audiencia { background: var(--purple); }
+.bit-color-tarea { background: var(--accent); }
+.bit-color-gestion { background: var(--yellow); }
+.bit-color-nota { background: var(--text-muted); }
+
+/* Item de entrada (panel del día / lista) */
+.bitacora-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+}
+.bitacora-entry:last-child { border-bottom: none; }
+.bitacora-entry.hecho { opacity: .5; }
+.bitacora-entry.hecho .bitacora-entry-title { text-decoration: line-through; }
+.bitacora-entry-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    margin-top: 2px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #fff;
+}
+.bitacora-entry.hecho .bitacora-entry-check { background: var(--green); border-color: var(--green); }
+.bitacora-entry-body { flex: 1; min-width: 0; }
+.bitacora-entry-title { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.bitacora-entry-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+.bitacora-entry-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.bitacora-entry-actions button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    opacity: .5;
+    padding: 2px 4px;
+}
+.bitacora-entry-actions button:hover { opacity: 1; }
+
+/* Vista Lista: grupos por fecha */
+.bitacora-lista-grupo { margin-bottom: 18px; }
+.bitacora-lista-grupo:last-child { margin-bottom: 0; }
+.bitacora-lista-grupo-titulo {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
