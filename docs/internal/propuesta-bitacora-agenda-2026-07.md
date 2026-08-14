@@ -593,7 +593,7 @@ CREATE TABLE expedientes_seguidos (
   user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expediente       VARCHAR(60)  NOT NULL,     -- como lo vio el usuario/PJN: "FCR 018745/2017"
   expediente_key   VARCHAR(60)  NOT NULL,     -- normalizado para deduplicar: "fcr|18745|2017"
-  jurisdiccion     VARCHAR(100),
+  jurisdiccion     VARCHAR(100),              -- descriptivo, NO forma parte de la clave (ver nota)
   dependencia      VARCHAR(200),
   caratula         VARCHAR(300),
   situacion_actual VARCHAR(200),              -- última situación registrada
@@ -601,28 +601,84 @@ CREATE TABLE expedientes_seguidos (
   notas            TEXT,
   created_at       TIMESTAMPTZ DEFAULT NOW(),
   updated_at       TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (user_id, jurisdiccion, expediente_key)  -- clave de acumulación (no duplica)
+  UNIQUE (user_id, expediente_key)            -- clave de acumulación (no duplica)
 );
--- ⚠️ Corrección 2026-07-19 (bug de esquema que rompería la deduplicación): para que ese
--- UNIQUE funcione, `jurisdiccion` debe ser NOT NULL DEFAULT '' (cambiar la definición de
--- arriba al implementar). En Postgres los NULL son DISTINTOS entre sí dentro de un UNIQUE:
--- con jurisdiccion nullable, dos fichas del mismo caso sin jurisdicción se DUPLICARÍAN y
--- el ON CONFLICT del upsert de capture nunca matchearía. Alternativa equivalente si se
--- prefiere conservar NULL: índice único por expresión
---   CREATE UNIQUE INDEX ux_exp_seguidos ON expedientes_seguidos (user_id, COALESCE(jurisdiccion,''), expediente_key);
--- (con esta variante el upsert debe usar ON CONFLICT sobre la expresión, no sobre la constraint).
---
 -- ✅ CONFIRMADO 2026-08-12 (revisión de pre-implementación, hallazgo N1 / decisión D1) —
--- columna `expediente_key` agregada: el `UNIQUE` original sobre `expediente` (texto tal cual)
--- NO deduplica cuando el PJN devuelve el número con ceros a la izquierda (`FCR 018745/2017`)
--- y el usuario lo tipea sin ellos (`FCR 18745/2017`) — son el MISMO expediente, y sin la clave
--- normalizada quedarían como dos fichas distintas. Es el mismo bug que ya rompió el enlace de
--- PDFs en producción (commit `debb503`, 2026-07-30). `expediente_key` se calcula reusando
--- `tokenizar()` de `electron-app/informe/buscarPdfExpediente.js` (código ya probado en
--- producción, extraído a un módulo compartido entre backend y Electron) — NO reimplementar la
--- normalización desde cero. `expediente` se conserva con el texto original para mostrarlo al
--- usuario; `expediente_key` es solo para deduplicar y para el join futuro con
--- `monitor_expedientes` (Fase 3.3, sugerencias por novedades del monitor).
+-- columna `expediente_key`: el `UNIQUE` original sobre `expediente` (texto tal cual) NO
+-- deduplica cuando el PJN devuelve el número con ceros a la izquierda (`FCR 018745/2017`) y
+-- el usuario lo tipea sin ellos (`FCR 18745/2017`) — son el MISMO expediente. Es el mismo bug
+-- que ya rompió el enlace de PDFs en producción (commit `debb503`, 2026-07-30).
+-- `expediente` conserva el texto original para mostrarlo al usuario; `expediente_key` es la
+-- clave real.
+--
+-- 🧩 DÓNDE VIVE LA NORMALIZACIÓN (definido 2026-08-13, auditoría externa C3). La decisión D1
+-- decía "extraída a un módulo compartido entre backend y Electron" sin definir dónde — y el
+-- proyecto NO es un monorepo (backend-server/ y electron-app/ tienen package.json y
+-- node_modules separados). Hoy `tokenizar()` existe SOLO en electron-app/informe/
+-- buscarPdfExpediente.js. Definición:
+--   · CANÓNICA en el backend: `backend-server/utils/expedienteKey.js` — el backend es quien
+--     escribe las fichas, así que es quien define qué cuenta como "el mismo expediente".
+--   · Electron CONSERVA la suya en buscarPdfExpediente.js (ya existe y la usa para enlazar
+--     PDFs, que es otro propósito) — no se toca.
+--   · CONTRA LA DERIVA, que es el riesgo real: un archivo de casos de prueba compartido
+--     (input → salida esperada: "FCR 018745/2017" → "fcr|18745|2017", con y sin ceros, con
+--     separadores raros, etc.) que los tests de AMBOS lados ejercitan. Si alguien toca una
+--     implementación y no la otra, la prueba falla y se entera enseguida.
+--   · DESCARTADO: paquete npm local vía `file:../shared`. Agregaría complejidad de packaging
+--     a una app que se empaqueta con electron-builder (asar + extraResources), con riesgo de
+--     sorpresas en el build, para compartir una función de 8 líneas sin dependencias.
+-- ⚠️ Por qué importa que no deriven: si backend y app normalizan distinto, la app diría "este
+-- caso ya está en tu Bitácora" y el backend crearía una ficha nueva (o al revés) — un error
+-- silencioso y confuso de diagnosticar.
+--
+-- ✅ CORRECCIÓN 2026-08-13 (auditoría externa B1/B2 + verificación contra la base real) —
+-- `jurisdiccion` SALE de la clave única. Antes era `UNIQUE (user_id, jurisdiccion, expediente_key)`.
+-- Dos razones:
+--   (1) Es REDUNDANTE. La sigla de jurisdicción ya viaja DENTRO del expediente y por lo tanto
+--       dentro de la clave normalizada: tokenizar("FCR 018745/2017") = "fcr|18745|2017" — el
+--       primer token ES la jurisdicción, ya normalizada. Agregarla aparte no discrimina nada.
+--   (2) Es PELIGROSA. `jurisdiccion` llega como texto libre y con distinta forma según el
+--       origen: la captura desde un visor trae lo que manda el PJN ("Justicia Federal de
+--       Comodoro Rivadavia") y el alta manual trae lo que tipee el usuario ("FCR", "Comodoro
+--       Rivadavia"…). Con ese campo dentro del UNIQUE, el MISMO caso cargado por los dos
+--       caminos genera DOS fichas — exactamente el bug que la decisión D1 vino a cerrar,
+--       entrando por el otro componente de la clave.
+-- Al salir de la clave, `jurisdiccion` queda como columna puramente descriptiva y su
+-- nullability deja de importar. Esto DEROGA la corrección del 2026-07-19 que exigía
+-- `jurisdiccion NOT NULL DEFAULT ''` (y su variante con índice por expresión sobre
+-- COALESCE): esa nota resolvía un problema que con esta clave ya no existe.
+--
+-- 📌 Consecuencia sobre los índices (ver más abajo): el `UNIQUE (user_id, expediente_key)`
+-- crea un índice cuya primera columna es `user_id`, así que ya sirve para las consultas que
+-- filtran solo por usuario. `idx_exp_seguidos_user` queda REDUNDANTE — son 4 índices, no 5.
+--
+-- 🔗 CÓMO SE CRUZA CON EL MONITOR (Fase 3.3) — verificado contra la base real el 2026-08-13.
+-- La Fase 3.3 ("sugerencias automáticas a partir de novedades del monitor", el diferencial
+-- mayor del módulo) necesita cruzar los casos seguidos contra lo que el Monitor descubre.
+-- Ese cruce es MÁS SIMPLE de lo que parecía, porque los dos sistemas guardan el expediente
+-- con la sigla adentro y en el mismo formato `SIGLA NUMERO/AÑO`:
+--     monitor_expedientes.numero_expediente  →  "FCR 13764/2025", "FCR 034000485/2010"
+--     expedientes_seguidos.expediente        →  "FCR 018745/2017"
+-- Verificado sobre los 261 registros reales de monitor_expedientes: 261/261 traen la sigla
+-- adelante, y esa sigla coincide siempre con monitor_partes.jurisdiccion_sigla.
+-- Por lo tanto NO hace falta usar monitor_partes.jurisdiccion_codigo ('14') ni reconciliar
+-- formatos de jurisdicción: alcanza con aplicar la MISMA normalización a los dos lados.
+--     tokenizar("FCR 034000485/2010")  →  "fcr|34000485|2010"   (ambos sistemas)
+-- El caso con ceros a la izquierda de arriba muestra por qué la normalización es imprescindible:
+-- comparando los textos crudos ese expediente nunca matchearía. El join queda:
+--     FROM expedientes_seguidos es
+--     JOIN monitor_partes mp       ON mp.user_id  = es.user_id
+--     JOIN monitor_expedientes me  ON me.parte_id = mp.id
+--     WHERE normalizar(me.numero_expediente) = es.expediente_key
+-- Lo único pendiente para F3.3 es aplicar esa normalización del lado del Monitor al consultar
+-- (o materializarla en una columna indexada si el volumen lo pidiera — con unos cientos de
+-- expedientes por usuario no hace falta). NO hay que migrar datos ni cambiar cómo el Monitor
+-- guarda las cosas.
+-- ⚠️ Salvedad honesta: los 261 registros verificados son todos de una jurisdicción (FCR),
+-- porque la cuenta de prueba tiene 2 partes y ambas son FCR. El formato `SIGLA NUMERO/AÑO` es
+-- el estándar del PJN (el mismo que valida `parseExpedienteStr` y el que muestran los visores:
+-- "CAF 018685/2024", "CIV 887/23"), pero conviene reconfirmarlo cuando haya partes de otra
+-- jurisdicción cargadas.
 
 -- Historial acotado del caso: últimas 2 procuraciones + últimos 2 informes
 CREATE TABLE expediente_snapshots (
@@ -708,11 +764,24 @@ Migraciones 100% additivas. Dimensionamiento: con el tope 2+2 por caso, un usuar
 > CREATE INDEX idx_bitacora_user_due    ON bitacora_entries (user_id, due_at);
 > CREATE INDEX idx_bitacora_pendientes  ON bitacora_entries (user_id, due_at) WHERE done_at IS NULL;
 > CREATE INDEX idx_bitacora_expediente  ON bitacora_entries (expediente_id);
-> CREATE INDEX idx_exp_seguidos_user    ON expedientes_seguidos (user_id);
 > CREATE INDEX idx_snapshots_exp_kind   ON expediente_snapshots (expediente_id, kind, created_at DESC);
 > ```
 > (el último es además el que sostiene el `DELETE … ORDER BY created_at DESC LIMIT 1` del recorte
 > atómico 2+2 del hallazgo H4).
+>
+> ⚠️ **Corrección 2026-08-13: son 4 índices, no 5.** La lista original incluía
+> `CREATE INDEX idx_exp_seguidos_user ON expedientes_seguidos (user_id)`. Con la clave única
+> corregida a `UNIQUE (user_id, expediente_key)` (ver §7), Postgres ya crea un índice único cuya
+> **primera columna es `user_id`** — y un índice compuesto sirve para las consultas que filtran por
+> su prefijo. O sea que las consultas "todos los casos seguidos de este usuario" ya están cubiertas.
+> Crear el índice suelto además sería **duplicar el mismo trabajo**: ocupa espacio y encarece cada
+> escritura sin acelerar ninguna lectura.
+>
+> 📌 **Sobre `idx_snapshots_exp_kind` (auditoría externa B3, evaluado y sin acción):** es correcto
+> que ese índice no optimiza el `ORDER BY created_at DESC` de la consulta *sin* filtro de `kind`
+> (con `kind` en el medio, Postgres necesita ordenar). **No se agrega un índice adicional para ese
+> caso**: por diseño hay **máximo 4 filas por expediente** (tope 2+2), y ordenar 4 filas en memoria
+> es instantáneo. Un segundo índice costaría escrituras y espacio para no ganar nada medible.
 >
 > **(b) Prerrequisito: regenerar `database/schema.sql` ANTES de escribir la migración.** La revisión
 > E5 encontró que ese archivo **no se actualiza desde el 2026-05-22**: tiene 21 de las 27 tablas
@@ -902,8 +971,15 @@ antes de la línea 110, y ahí se interfiere con el camino del webhook. **Un web
 valida = un pago que no se acredita.**
 
 **Cómo se hace bien:**
-1. Montar **inmediatamente antes de la línea 113**, nunca antes de la 110 — así el camino
-   `express.json` + `verify` queda **exactamente como está hoy** para todo lo demás.
+1. Montar **inmediatamente antes del `express.urlencoded` GLOBAL** — el que no tiene path y
+   parsea formularios para toda la app (hoy en la línea 113). **Nunca** antes del `express.json`
+   con el hook `verify` (hoy línea 110): así ese camino queda **exactamente como está hoy** para
+   todo lo demás, incluido el webhook.
+   > ⚠️ **Identificar los parsers por lo que son, no por el número de línea.** `server.js` tiene
+   > 943 líneas y se modifica; cualquier agregado más arriba corre la numeración y deja esta
+   > instrucción apuntando al lugar equivocado — con la consecuencia de romper el cobro. Los
+   > números de línea de acá son la foto del 2026-08-13: **verificarlos antes de tocar, no
+   > asumirlos.**
 2. **Siempre** path-scoped: `app.use('/usuarios/capture', express.urlencoded({ extended:false, limit:'5mb' }))`. **Jamás** subir el límite del parser global (ya descartado en §4.1.1 por el hallazgo C5).
 3. **Antes de ir a prod:** correr `dev-tools/smoke-payments.js` en **staging** (19 checks, ya existe) y confirmar que la firma del webhook sigue validando. Es la única forma de comprobar que el `rawBody` no se rompió.
 
@@ -962,7 +1038,7 @@ resultado a la vista.
 > un conflicto de merge trivial.
 
 ### Fase 1 — Núcleo (backend + portal, sin release de Electron)
-1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **4 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`, `users.bitacora_lost_access_at` [agregada 2026-08-12, decisión D2/Q6, ver §8]) **+ la columna `expediente_key` en `expedientes_seguidos`** (decisión D1, hallazgo N1 — reusa `tokenizar()` de `buscarPdfExpediente.js`, ver §7) **+ los 5 índices de §7 (agregado 2026-07-27)** + seed de feriados **resto de 2026 + todo 2027** (alcance confirmado 2026-08-12, decisión D4). ⚠️ **Prerrequisito Bloque B.1 (regenerar `schema.sql`): ✅ ya cumplido** (schema regenerado el 28/07, 27 tablas verificadas — ver `revision-bitacora-preimplementacion-2026-08-12.md`).
+1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **4 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`, `users.bitacora_lost_access_at` [agregada 2026-08-12, decisión D2/Q6, ver §8]) **+ la columna `expediente_key` en `expedientes_seguidos`** con `UNIQUE (user_id, expediente_key)` — **sin `jurisdiccion` en la clave** (decisión D1 + corrección 2026-08-13, ver §7) **+ los 4 índices de §7** *(eran 5; `idx_exp_seguidos_user` quedó redundante al corregir la clave única)* + seed de feriados **resto de 2026 + todo 2027** (alcance confirmado 2026-08-12, decisión D4). **Incluye crear `backend-server/utils/expedienteKey.js`** (normalización canónica) **+ el fixture de casos compartido** con Electron — ver la nota "DÓNDE VIVE LA NORMALIZACIÓN" de §7. ⚠️ **Prerrequisito Bloque B.1 (regenerar `schema.sql`): ✅ ya cumplido** (schema regenerado el 28/07, 27 tablas verificadas — ver `revision-bitacora-preimplementacion-2026-08-12.md`).
 2. **(F1.2)** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)* 🚨 **PUNTO CRÍTICO P1 (§11.0): el gate NO va en `routes/usuarios.js`** — ese archivo tiene 8 rutas vivas del portal que quedarían en 403. Router propio + montaje aparte. **Incluye prueba de no-regresión al cerrar: entrar sin el flag y verificar las 8 rutas existentes.**
 3. **(F1.3)** Portal: sección Bitácora (banner de avisos con checks, vista mes + lista, panel de tareas, modal de entrada con calculadora de plazos).
 4. **(F1.4)** Portal: sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas).
@@ -977,7 +1053,7 @@ resultado a la vista.
 > **Requiere DOS despliegues, no uno** (hallazgo C3): un deploy de backend (los endpoints de `capture` + `GET /client/bitacora/seguidos`) **y** un release de Electron. Planificar ambos.
 
 1. **(F2.1)** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. 🔴 **Prerrequisito: el fix E4-1 del Bloque D** (escape en `visorModal_template.html`) debe estar aplicado y publicado — sin él esta fase amplía el hallazgo XSS; ver el recuadro rojo de §4.1 para el detalle de `esc()` vs `escAttr()`. ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan. 🚨 **PUNTO CRÍTICO P3 (§11.0): el post-procesado NUNCA puede cancelar la apertura del visor** — va en `try/catch` que no propaga, con timeout corto en la consulta de seguidos. Si falla, se abre el visor sin botonera. Hoy ese camino no depende de la red y no puede empezar a depender.
-2. **(F2.2)** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor. 🚨 **PUNTO CRÍTICO P2 (§11.0): el parser va inmediatamente antes de `server.js:113`, NUNCA antes de la 110** — la 110 tiene el hook `verify` del que depende la firma HMAC de los webhooks de MercadoPago. **Antes de prod: correr `dev-tools/smoke-payments.js` en staging.**
+2. **(F2.2)** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor. 🚨 **PUNTO CRÍTICO P2 (§11.0): el parser va inmediatamente antes del `express.urlencoded` GLOBAL, NUNCA antes del `express.json` que tiene el hook `verify`** — de ese hook depende la firma HMAC de los webhooks de MercadoPago. **Identificar los parsers por lo que son, no por número de línea** (hoy 113 y 110, pero el archivo se modifica). **Antes de prod: correr `dev-tools/smoke-payments.js` en staging.**
 3. **(F2.3)** **Selección múltiple** en la tabla de los visores (checkboxes + barra de acciones "Guardar casos" / "Crear entradas…") + pantalla de revisión del lote en el portal, contra el endpoint de F2.2.
 4. **(F2.4)** **Marcado de casos ya seguidos**: endpoint `GET /client/bitacora/seguidos` (backend) + consumido por el post-procesado de F2.1 + link 📁 a la ficha desde fila y modal.
 5. **(F2.5)** **Mini-visor del informe individual** (nuevo, desde `main.js`, sin tocar scripts encriptados — el informe individual no genera visor hoy).

@@ -124,16 +124,27 @@ sobre la clave, no sobre el texto:
 -- en expedientes_seguidos
 expediente      VARCHAR(60) NOT NULL,   -- como lo vio el usuario: "FCR 018745/2017"
 expediente_key  VARCHAR(60) NOT NULL,   -- normalizado: "fcr|18745|2017"
-UNIQUE (user_id, jurisdiccion, expediente_key)
+UNIQUE (user_id, expediente_key)        -- ← corregido 2026-08-13, ver nota
 ```
 
 - La normalización debe **reusar la lógica de `tokenizar()`**, no reescribirla — es código ya
-  probado contra el caso real. Conviene extraerla a un módulo compartido (el backend la necesita en
-  el upsert de `capture`, y `buscarPdfExpediente.js` ya la usa del lado Electron).
+  probado contra el caso real. **Dónde vive quedó definido el 2026-08-13** (auditoría externa C3):
+  canónica en `backend-server/utils/expedienteKey.js`, Electron conserva la suya, y un fixture de
+  casos compartido que ambos tests ejercitan para que no deriven. Ver §7 de la propuesta.
 - Conservar el texto original es importante: es lo que el usuario reconoce, y `expediente_key` no es
   legible.
-- **`jurisdiccion` sigue necesitando `NOT NULL DEFAULT ''`** (corrección de 2026-07-19 que la
-  propuesta ya trae) — no la reemplaza esto, se suman.
+
+> ⚠️ **Corregido el 2026-08-13 — esta sección proponía `UNIQUE (user_id, jurisdiccion, expediente_key)`
+> y decía que `jurisdiccion` seguía necesitando `NOT NULL DEFAULT ''`. Las dos cosas quedaron sin
+> efecto.** La auditoría externa (hallazgos B1/B2) llevó a revisar ese punto y la conclusión fue que
+> **`jurisdiccion` no debe estar en la clave**: (1) es redundante, porque la sigla de jurisdicción ya
+> viaja dentro de `expediente_key` (`tokenizar("FCR 018745/2017")` = `"fcr|18745|2017"` — el primer
+> token *es* la jurisdicción); y (2) es peligrosa, porque llega como texto libre con distinta forma
+> según el origen (el PJN manda "Justicia Federal de Comodoro Rivadavia", el usuario tipea "FCR") y
+> con ella dentro del UNIQUE el mismo caso cargado por los dos caminos genera **dos fichas** — el
+> mismo bug que este hallazgo N1 vino a cerrar, entrando por el otro componente. Al salir de la
+> clave, `jurisdiccion` queda descriptiva y su nullability deja de importar. **Fuente de verdad: §7
+> de la propuesta.**
 
 **Costo:** una columna y una función compartida, decididas antes de escribir la migración.
 **Costo si se descubre después:** migración de datos sobre fichas reales de usuarios, con
