@@ -2097,7 +2097,7 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
         informe_limit,
         monitor_partes_limit, monitor_novedades_limit,
         period_days, extension_flows, visibility,
-        price_usd, price_ars, plan_type
+        price_usd, price_ars, plan_type, bitacora_enabled
     } = req.body;
 
     if (!name || !display_name) {
@@ -2113,8 +2113,8 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
                 proc_executions_limit, proc_expedientes_limit,
                 batch_executions_limit, batch_expedientes_limit,
                 informe_limit, monitor_partes_limit, monitor_novedades_limit, period_days,
-                extension_flows, visibility, price_usd, price_ars, plan_type)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                extension_flows, visibility, price_usd, price_ars, plan_type, bitacora_enabled)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
             RETURNING *
         `, [
             name.toUpperCase(), display_name, description || null,
@@ -2124,7 +2124,8 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
             monitor_partes_limit ?? 3, monitor_novedades_limit ?? 10,
             period_days ?? 30,
             JSON.stringify(extension_flows ?? []), vis,
-            price_usd ?? null, price_ars ?? null, plan_type ?? null
+            price_usd ?? null, price_ars ?? null, plan_type ?? null,
+            bitacora_enabled === true
         ]);
         console.log(`Plan "${name}" creado por admin: ${req.user.id}`);
         res.json({ success: true, plan: result.rows[0] });
@@ -2147,7 +2148,8 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
         period_days, active, extension_flows, visibility,
         // Campos de promo
         price_usd, price_ars, plan_type,
-        promo_type, promo_end_date, promo_max_users, promo_alert_days
+        promo_type, promo_end_date, promo_max_users, promo_alert_days,
+        bitacora_enabled
     } = req.body;
 
     try {
@@ -2173,8 +2175,9 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
                 promo_max_users = COALESCE($18, promo_max_users),
                 promo_alert_days = COALESCE($19, promo_alert_days),
                 visibility = COALESCE($20, visibility),
+                bitacora_enabled = COALESCE($21, bitacora_enabled),
                 updated_at = NOW()
-            WHERE id = $21
+            WHERE id = $22
             RETURNING *
         `, [
             display_name, description,
@@ -2189,6 +2192,7 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
             promo_max_users ?? null,
             promo_alert_days ?? null,
             (visibility === 'public' || visibility === 'private') ? visibility : null,
+            bitacora_enabled ?? null,
             planId
         ]);
 

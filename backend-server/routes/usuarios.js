@@ -12,10 +12,13 @@ router.put('/profile', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     // El CUIT NO se actualiza desde el portal del usuario (solo el admin puede cambiarlo).
     // Aunque llegue en el body, se ignora (defensa en profundidad).
-    const { nombre, apellido, telefono, domicilio } = req.body;
+    const { nombre, apellido, telefono, domicilio, home_section } = req.body;
 
-    if (!nombre && !apellido && !telefono && !domicilio) {
+    if (!nombre && !apellido && !telefono && !domicilio && !home_section) {
         return res.status(400).json({ error: 'Al menos un campo debe ser proporcionado' });
+    }
+    if (home_section !== undefined && !['plan', 'bitacora'].includes(home_section)) {
+        return res.status(400).json({ error: "home_section debe ser 'plan' o 'bitacora'" });
     }
 
     try {
@@ -34,6 +37,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
         // domicilio es jsonb: siempre serializar (un string plano como "Calle 123" no es
         // JSON válido y rompía el UPDATE; JSON.stringify lo convierte en string JSON)
         if (domicilio !== undefined && domicilio !== null) { fields.push(`domicilio = $${idx++}`); values.push(JSON.stringify(domicilio)); }
+        if (home_section !== undefined) { fields.push(`home_section = $${idx++}`); values.push(home_section); }
 
         // Si no quedó ningún campo real para actualizar (todos null/no-string), no tocar la fila.
         if (fields.length === 0) {
@@ -44,7 +48,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
         values.push(userId);
 
         const result = await db.query(
-            `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, nombre, apellido, email, cuit, telefono, domicilio`,
+            `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, nombre, apellido, email, cuit, telefono, domicilio, home_section`,
             values
         );
 

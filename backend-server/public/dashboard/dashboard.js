@@ -2645,6 +2645,12 @@ window.showPlanForm = async function(planId) {
                         <option value="private" ${plan?.visibility === 'private' ? 'selected' : ''}>Privado — solo el administrador lo asigna (oculto al usuario)</option>
                     </select>
                 </div>
+                <div style="margin-top:12px">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                        <input type="checkbox" id="pf-bitacora-enabled" ${plan?.bitacora_enabled ? 'checked' : ''} style="accent-color:#1a73e8">
+                        📔 Incluye Bitácora (agenda/vencimientos/expedientes seguidos)
+                    </label>
+                </div>
             </div>
 
             <!-- CONFIGURACIÓN DE PROMO -->
@@ -2743,6 +2749,7 @@ window.savePlanForm = async function(planId) {
         price_ars:    document.getElementById('pf-price-ars').value ? parseFloat(document.getElementById('pf-price-ars').value) : null,
         plan_type:    document.getElementById('pf-plan-type').value || null,
         visibility:   document.getElementById('pf-visibility')?.value || 'public',
+        bitacora_enabled: document.getElementById('pf-bitacora-enabled')?.checked === true,
         promo_type:   promoType,
         promo_end_date:   promoType === 'date'  ? (document.getElementById('pf-promo-date').value || null) : null,
         promo_max_users:  promoType === 'quota' ? (parseInt(document.getElementById('pf-promo-quota').value) || null) : null,

@@ -1638,6 +1638,34 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
 }
 
 /* =============================================
+   Píldora "Establecer como principal" (F1.5)
+   ============================================= */
+.home-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text-muted);
+    transition: all .15s;
+    white-space: nowrap;
+}
+.home-pill:hover { border-color: var(--accent); color: var(--accent); }
+.home-pill.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+    cursor: default;
+}
+.home-pill.active:hover { border-color: var(--accent); }
+
+/* =============================================
    Mis expedientes (F1.4)
    ============================================= */
 

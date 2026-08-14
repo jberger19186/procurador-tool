@@ -517,7 +517,7 @@ router.get('/account', authenticateToken, async (req, res) => {
             SELECT u.email, u.cuit, u.machine_id, u.last_login,
                    u.email_verified,
                    u.nombre, u.apellido, u.telefono, u.domicilio,
-                   u.registration_status,
+                   u.registration_status, u.home_section,
                    s.plan, s.status, s.expires_at, s.usage_count, s.usage_limit,
                    s.period_start,
                    s.proc_usage, s.batch_usage, s.informe_usage, s.monitor_novedades_usage,
@@ -660,6 +660,10 @@ router.get('/account', authenticateToken, async (req, res) => {
                 },
                 planType: u.plan_type || null,
                 bitacoraEnabled: u.bitacora_enabled === true,
+                // 'plan'|'bitacora' — la validación contra bitacoraEnabled (hallazgo A4: no aterrizar
+                // en una sección gateada si el usuario perdió el plan) se hace en el punto de uso
+                // (app.js), no acá — ver initDashboard().
+                homeSection: u.home_section || 'plan',
                 // backward compat
                 usageCount: u.usage_count ?? 0,
                 usageLimit: u.usage_limit ?? 0,

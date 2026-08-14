@@ -253,7 +253,10 @@
 
             <!-- ===== SECCIÓN: PLAN ===== -->
             <section class="section" id="section-plan">
-                <div class="section-title">Mi Plan</div>
+                <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+                    <div>Mi Plan</div>
+                    <button type="button" class="home-pill" id="home-pill-plan" onclick="setHomeSection('plan')"></button>
+                </div>
                 <div class="section-subtitle">Estado de tu suscripción y uso del período actual</div>
 
                 <div class="plan-card-main">
@@ -330,7 +333,10 @@
                         <div>Bitácora</div>
                         <div class="section-subtitle" style="margin-top:2px">Agenda de vencimientos, audiencias, tareas y gestiones</div>
                     </div>
-                    <button class="btn btn-primary btn-sm" id="btn-bitacora-nueva">＋ Nueva entrada</button>
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <button type="button" class="home-pill" id="home-pill-bitacora" onclick="setHomeSection('bitacora')"></button>
+                        <button class="btn btn-primary btn-sm" id="btn-bitacora-nueva">＋ Nueva entrada</button>
+                    </div>
                 </div>
 
                 <!-- Banner de avisos (vencidos sin confirmar + próximos) -->

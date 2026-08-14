@@ -358,7 +358,13 @@ async function initDashboard() {
         return;
     }
 
-    navigateTo('plan');
+    // Aterrizaje por defecto: la preferencia home_section del usuario, validada
+    // en este mismo punto de uso contra bitacoraEnabled (hallazgo A4) — si el
+    // usuario dejó marcada Bitácora como principal y después perdió el plan,
+    // sin esta guarda quedaría entrando a una sección con candado en cada login.
+    const home = (state.account?.homeSection === 'bitacora' && state.account?.bitacoraEnabled)
+        ? 'bitacora' : 'plan';
+    navigateTo(home);
 }
 
 function showEmailVerificationBanner() {
@@ -427,8 +433,60 @@ async function loadAccount() {
         renderTopbar();
         renderStatusBanner();
         updateSidebarForStatus();
+        renderHomePills();
     } catch (e) {
         console.error('Error cargando cuenta:', e);
+    }
+}
+
+// ─── Píldora "Establecer como principal" (Mi Plan ↔ Bitácora, F1.5) ────────
+// Las dos píldoras viven siempre en el DOM (dentro de cada sección) — no hace
+// falta re-renderizarlas al navegar, solo cuando cambia state.account (login,
+// SSO, o tras guardar la preferencia).
+function renderHomePills() {
+    const acc = state.account;
+    if (!acc) return;
+
+    const home = acc.homeSection === 'bitacora' && acc.bitacoraEnabled ? 'bitacora' : 'plan';
+
+    const pillPlan = document.getElementById('home-pill-plan');
+    if (pillPlan) {
+        const activo = home === 'plan';
+        pillPlan.classList.toggle('active', activo);
+        pillPlan.textContent = activo ? '★ Es tu pantalla principal' : '☆ Establecer como principal';
+        pillPlan.disabled = activo;
+    }
+
+    const pillBit = document.getElementById('home-pill-bitacora');
+    if (pillBit) {
+        if (!acc.bitacoraEnabled) {
+            pillBit.style.display = 'none';
+        } else {
+            pillBit.style.display = '';
+            const activo = home === 'bitacora';
+            pillBit.classList.toggle('active', activo);
+            pillBit.textContent = activo ? '★ Es tu pantalla principal' : '☆ Establecer como principal';
+            pillBit.disabled = activo;
+        }
+    }
+}
+
+async function setHomeSection(section) {
+    if (!['plan', 'bitacora'].includes(section)) return;
+    if (section === 'bitacora' && !state.account?.bitacoraEnabled) return; // defensa, el botón ni debería estar visible
+    if (state.account?.homeSection === section) return; // ya es la actual, nada que hacer
+
+    try {
+        const res = await apiFetch('/usuarios/api/profile', { method: 'PUT', body: { home_section: section } });
+        if (!res || !res.ok) { showToast('No se pudo guardar la preferencia.', 'error'); return; }
+        state.account.homeSection = section;
+        renderHomePills();
+        showToast(
+            section === 'bitacora' ? 'Bitácora establecida como tu pantalla principal.' : 'Mi Plan establecido como tu pantalla principal.',
+            'success'
+        );
+    } catch (e) {
+        showToast('Error de conexión.', 'error');
     }
 }
 
