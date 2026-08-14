@@ -381,6 +381,13 @@ app.get('/descargar', (req, res) => {
 });
 
 // Portal de usuario
+// ⚠️ Bitácora va ANTES que el router de usuarios y comparte el prefijo /usuarios/api.
+//    Es seguro porque routes/bitacora.js aplica su gate de plan sobre sub-paths
+//    (/bitacora, /expedientes, /feriados), NO sobre el router: una petición a
+//    /usuarios/api/profile entra, no matchea ninguno y cae al router de abajo sin
+//    haber tocado el gate. Ver el punto crítico P1 del plan (§11.0) y el encabezado
+//    de routes/bitacora.js antes de modificar este orden.
+app.use('/usuarios/api', generalAuthLimiter, require('./routes/bitacora'));
 app.use('/usuarios/api', generalAuthLimiter, require('./routes/usuarios'));
 app.use('/usuarios', express.static(path.join(__dirname, 'public', 'usuarios')));
 app.get('/usuarios', (req, res) => res.sendFile(path.join(__dirname, 'public', 'usuarios', 'index.html')));
