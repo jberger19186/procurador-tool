@@ -192,6 +192,9 @@ function initializeButtons() {
     bind('btnWinMax',   () => window.electronAPI.maximizeWindow());
     bind('btnWinClose', () => window.electronAPI.closeWindow());
     bind('btnHamburger',() => window.electronAPI.showAppMenu());
+    // F2.7 (Bitácora): botón único de acceso rápido — abre el portal externo vía SSO,
+    // visibilidad la decide updateUserChip() según account.bitacoraEnabled.
+    bind('btnTopbarBitacora', () => openPortalSection('bitacora'));
 
     // ── Sidebar toggle (colapsar / expandir) ──
     const mainLayout = document.querySelector('.main-layout');
@@ -506,6 +509,13 @@ async function updateUserChip() {
             planEl.textContent = planName;
         }
         if (initEl) initEl.textContent = nameRaw.slice(0, 2).toUpperCase();
+
+        // F2.7 (Bitácora): el botón del topbar solo se muestra si el plan lo incluye —
+        // mismo campo (`account.bitacoraEnabled`) que ya usa el portal para ocultar su
+        // propio ítem de sidebar (F1.3/F1.5). Arranca oculto en el HTML; acá es donde
+        // se decide mostrarlo, una vez por carga de la app.
+        const btnBitacora = document.getElementById('btnTopbarBitacora');
+        if (btnBitacora) btnBitacora.style.display = a.bitacoraEnabled === true ? '' : 'none';
     } catch (_) {
         // Silencioso — el chip queda con los defaults del HTML
     }

@@ -188,6 +188,15 @@ body {
 }
 .tab-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
 
+/* F2.7 (Bitácora): distinguible del resto de los tabs — abre el portal externo,
+   no cambia la vista interna. Acento amber en vez del gris/activo de .tab-btn. */
+.bitacora-topbar-btn {
+  color: var(--accent-dark);
+  background: var(--accent-muted);
+  margin-left: 4px;
+}
+.bitacora-topbar-btn:hover { background: var(--accent-dark); color: #fff; }
+
 .topbar-spacer { flex: 1; }
 
 .topbar-actions {

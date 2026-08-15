@@ -109,6 +109,16 @@
         </button>
     </nav>
 
+    <!-- F2.7 (Bitácora): botón único de acceso rápido al portal. Arranca oculto —
+         updateUserChip() (renderer.js) lo muestra solo si la cuenta tiene el módulo
+         habilitado (account.bitacoraEnabled), leído del mismo /client/account que ya
+         se consulta al iniciar. No es un tab más: abre el portal externo vía SSO
+         (openPortalSection('bitacora')), no cambia la vista interna de la app. -->
+    <button class="tab-btn bitacora-topbar-btn" id="btnTopbarBitacora" style="display:none" title="Abrir tu Bitácora en el portal">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h8.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5z"/><path d="M3 12h9.5"/><path d="M6 5.5h4M6 8h4"/></svg>
+        Bitácora
+    </button>
+
     <div class="topbar-spacer"></div>
 
     <!-- Controles de ventana (min / max / close) -->
