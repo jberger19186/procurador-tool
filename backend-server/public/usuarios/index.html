@@ -336,6 +336,7 @@
                     <div style="display:flex;align-items:center;gap:10px">
                         <button type="button" class="home-pill" id="home-pill-bitacora" onclick="setHomeSection('bitacora')"></button>
                         <button type="button" class="btn btn-outline btn-sm" onclick="openExportModal()">⬇ Exportar</button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="openImportModal()">⬆ Restaurar</button>
                         <button class="btn btn-primary btn-sm" id="btn-bitacora-nueva">＋ Nueva entrada</button>
                     </div>
                 </div>
@@ -418,6 +419,7 @@
                         </div>
                         <div style="display:flex;align-items:center;gap:10px">
                             <button type="button" class="btn btn-outline btn-sm" onclick="openExportModal('todo')">⬇ Exportar</button>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="openImportModal()">⬆ Restaurar</button>
                             <button class="btn btn-primary btn-sm" id="btn-mexp-nueva">＋ Agregar expediente</button>
                         </div>
                     </div>
@@ -740,6 +742,55 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeExportModal()">Cancelar</button>
             <button class="btn btn-primary" id="btn-export-descargar" onclick="descargarExportBitacora()">Descargar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL: RESTAURAR BACKUP ===== -->
+<div class="modal-overlay hidden" id="modal-bitacora-import">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>⬆ Restaurar backup</h3>
+            <button class="modal-close" onclick="closeImportModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+            <div id="import-modal-alert" class="alert"></div>
+
+            <!-- Paso 1: archivo + modo -->
+            <div id="import-paso-archivo">
+                <div class="form-group">
+                    <label for="import-file">Archivo de backup</label>
+                    <input type="file" id="import-file" accept="application/json,.json">
+                    <p style="font-size:12px;color:var(--text-muted);margin-top:6px">
+                        Tiene que ser el archivo <strong>.json</strong> que descargaste desde “⬇ Exportar”.
+                        El Excel sirve para leer, no para restaurar.
+                    </p>
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                    <label>Cómo restaurar</label>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+                        <label class="import-modo-opt">
+                            <input type="radio" name="import-modo" value="combinar" checked>
+                            <span><strong>Combinar</strong> — el backup pisa los casos que coinciden, y se conserva
+                            todo lo que está en tu Bitácora y no figura en el backup.</span>
+                        </label>
+                        <label class="import-modo-opt import-modo-peligro">
+                            <input type="radio" name="import-modo" value="reemplazar">
+                            <span><strong>Reemplazar todo</strong> — queda <em>solo</em> lo del backup:
+                            se elimina tu contenido actual.</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 2: vista previa -->
+            <div id="import-paso-preview" style="display:none"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeImportModal()">Cancelar</button>
+            <button type="button" class="btn btn-outline" id="btn-import-volver" style="display:none" onclick="volverPasoArchivoImport()">&#8249; Volver</button>
+            <button type="button" class="btn btn-primary" id="btn-import-preview" onclick="pedirPreviewImport()">Ver vista previa &#8250;</button>
+            <button type="button" class="btn btn-primary" id="btn-import-confirmar" style="display:none" onclick="confirmarImport()">Confirmar restauración</button>
         </div>
     </div>
 </div>

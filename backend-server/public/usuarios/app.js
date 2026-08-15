@@ -3645,6 +3645,204 @@ function closeExportModal() {
     document.getElementById('modal-bitacora-export').classList.add('hidden');
 }
 
+// ─── Restaurar backup (F1.7) ────────────────────────────────────────────────
+// Flujo de dos pasos, deliberadamente incómodo de saltear: elegir archivo+modo →
+// vista previa con números concretos → confirmar. Antes de aplicar, el portal
+// descarga un respaldo del estado actual; si ese respaldo falla, la restauración
+// se ABORTA (sin respaldo, la operación dejaría de ser reversible, que es la
+// garantía que sostiene toda esta pantalla).
+
+function openImportModal() {
+    document.getElementById('import-modal-alert').classList.remove('visible');
+    document.getElementById('import-file').value = '';
+    const combinar = document.querySelector('input[name="import-modo"][value="combinar"]');
+    if (combinar) combinar.checked = true;
+    volverPasoArchivoImport();
+    document.getElementById('modal-bitacora-import').classList.remove('hidden');
+}
+
+function closeImportModal() {
+    document.getElementById('modal-bitacora-import').classList.add('hidden');
+}
+
+function volverPasoArchivoImport() {
+    document.getElementById('import-paso-archivo').style.display = 'block';
+    document.getElementById('import-paso-preview').style.display = 'none';
+    document.getElementById('btn-import-preview').style.display = '';
+    document.getElementById('btn-import-confirmar').style.display = 'none';
+    document.getElementById('btn-import-volver').style.display = 'none';
+}
+
+function importArchivoYModo() {
+    const file = document.getElementById('import-file').files[0] || null;
+    const modo = document.querySelector('input[name="import-modo"]:checked')?.value || 'combinar';
+    return { file, modo };
+}
+
+async function pedirPreviewImport() {
+    const alertEl = document.getElementById('import-modal-alert');
+    const { file, modo } = importArchivoYModo();
+    if (!file) { showAlert(alertEl, 'error', 'Elegí el archivo .json del backup.'); return; }
+
+    const btn = document.getElementById('btn-import-preview');
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.innerHTML = '<span class="spinner"></span> Analizando...';
+
+    try {
+        const fd = new FormData();
+        fd.append('backup', file);
+        fd.append('modo', modo);
+        fd.append('dry_run', '1');
+        // Sin Content-Type a mano: el browser arma el boundary del multipart.
+        const res = await fetch(`${BASE_URL}/usuarios/api/bitacora/import`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getToken()}` },
+            body: fd
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { showAlert(alertEl, 'error', data.error || 'No se pudo leer el backup.'); return; }
+
+        alertEl.classList.remove('visible');
+        renderImportPreview(data);
+        document.getElementById('import-paso-archivo').style.display = 'none';
+        document.getElementById('import-paso-preview').style.display = 'block';
+        document.getElementById('btn-import-preview').style.display = 'none';
+        document.getElementById('btn-import-volver').style.display = '';
+        document.getElementById('btn-import-confirmar').style.display = '';
+    } catch (e) {
+        showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+}
+
+function renderImportPreview(data) {
+    const p = data.preview || {};
+    const c = p.contenido || { expedientes: 0, entradas: 0, snapshots: 0 };
+    const esReemplazo = data.modo === 'reemplazar';
+    const fila = (label, num) =>
+        `<div class="import-preview-row"><span>${escapeHtml(label)}</span><span class="import-preview-num">${Number(num) || 0}</span></div>`;
+
+    let html = `<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+        Backup válido${data.exportado_el ? ` · exportado el ${formatDate(data.exportado_el)}` : ''} ·
+        ${c.expedientes} casos · ${c.entradas} entradas${c.snapshots ? ` · ${c.snapshots} de historial` : ''}
+    </p>`;
+
+    if (esReemplazo) {
+        html += `<div class="import-preview-box import-preview-destruye">
+            <div class="import-preview-titulo">⚠️ Se va a eliminar</div>
+            ${fila('Casos que seguís hoy', p.eliminar?.expedientes)}
+            ${fila('Entradas de tu Bitácora', p.eliminar?.entradas)}
+        </div>`;
+    }
+
+    html += `<div class="import-preview-box">
+        <div class="import-preview-titulo">Se va a crear</div>
+        ${fila('Casos', p.crear?.expedientes)}
+        ${fila('Entradas', p.crear?.entradas)}
+    </div>`;
+
+    if (!esReemplazo) {
+        html += `<div class="import-preview-box">
+            <div class="import-preview-titulo">Se va a sobrescribir con lo del backup</div>
+            ${fila('Casos que ya seguís', p.sobrescribir?.expedientes)}
+            ${fila('Entradas ya existentes', p.sobrescribir?.entradas)}
+        </div>
+        <div class="import-preview-box">
+            <div class="import-preview-titulo">Se conserva intacto</div>
+            ${fila('Casos que no están en el backup', p.conservar?.expedientes)}
+            ${fila('Entradas que no están en el backup', p.conservar?.entradas)}
+        </div>`;
+    }
+
+    html += `<p style="font-size:12.5px;color:var(--text-muted);margin-top:4px;line-height:1.5">
+        Al confirmar se descarga primero un <strong>respaldo automático</strong> de tu estado actual,
+        para que puedas volver atrás si el resultado no era el esperado.
+    </p>`;
+
+    document.getElementById('import-paso-preview').innerHTML = html;
+}
+
+/** Respaldo del estado actual (salvaguarda 2 de §5.3). Devuelve true si se descargó. */
+async function descargarRespaldoAutomatico() {
+    const res = await fetch(`${BASE_URL}/usuarios/api/bitacora/export?alcance=todo&formato=json`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!res.ok) return false;
+    const blobUrl = URL.createObjectURL(await res.blob());
+    const sello = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `bitacora-respaldo-antes-de-restaurar-${sello}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    return true;
+}
+
+async function confirmarImport() {
+    const alertEl = document.getElementById('import-modal-alert');
+    const { file, modo } = importArchivoYModo();
+    if (!file) { showAlert(alertEl, 'error', 'Elegí el archivo .json del backup.'); return; }
+
+    const btn = document.getElementById('btn-import-confirmar');
+    const original = btn.textContent;
+    btn.disabled = true;
+
+    // Salvaguarda 2: respaldo previo. Si falla, no se toca nada.
+    btn.innerHTML = '<span class="spinner"></span> Descargando respaldo...';
+    let respaldoOk = false;
+    try { respaldoOk = await descargarRespaldoAutomatico(); } catch (_) { respaldoOk = false; }
+    if (!respaldoOk) {
+        showAlert(alertEl, 'error', 'No se pudo generar el respaldo previo de tu estado actual. La restauración se canceló — no se modificó nada.');
+        btn.disabled = false;
+        btn.textContent = original;
+        return;
+    }
+
+    btn.innerHTML = '<span class="spinner"></span> Restaurando...';
+    try {
+        const fd = new FormData();
+        fd.append('backup', file);
+        fd.append('modo', modo);
+        const res = await fetch(`${BASE_URL}/usuarios/api/bitacora/import`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getToken()}` },
+            body: fd
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { showAlert(alertEl, 'error', data.error || 'No se pudo restaurar el backup.'); return; }
+
+        const r = data.resumen || {};
+        closeImportModal();
+        showToast(
+            `Backup restaurado: ${r.expedientesCreados || 0} casos nuevos · ${r.expedientesActualizados || 0} actualizados · ` +
+            `${(r.entradasCreadas || 0) + (r.entradasActualizadas || 0)} entradas.`,
+            'success'
+        );
+
+        // Repintar todo lo que quedó desactualizado (la ficha abierta puede ya no existir).
+        state.miExp.fichaId = null;
+        state.miExp.ficha = null;
+        await loadBitacoraExpedientes();
+        if (state.currentSection === 'mis-expedientes') {
+            mexpShowLista();
+            await loadMexpList();
+        } else {
+            loadBitacoraAvisos();
+            bitacoraLoadAndRenderView();
+        }
+    } catch (e) {
+        showAlert(alertEl, 'error', 'Error de conexión durante la restauración.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+}
+
 async function descargarExportBitacora() {
     const alertEl = document.getElementById('export-modal-alert');
     const alcance = document.querySelector('input[name="export-alcance"]:checked')?.value || 'todo';

@@ -1146,8 +1146,51 @@ resultado a la vista.
 > `npm install` de la dependencia nueva): `/bitacora`/`/bitacora/avisos` en 403 con el flag apagado
 > (como siempre), `/usuarios/api/plans` en 200, `pm2-error.log` sin entradas nuevas. **Nada visible
 > para ningún usuario real** — el flag sigue en `false` en los 6 planes. **Con esto, la Fase 1 lleva
-> 6 de 8 sub-bloques cerrados** (F1.1–F1.6) — sigue **F1.7** (importación/restauración desde backup
-> JSON, Opus/alto, el único tramo de todo el plan que puede destruir datos reales del usuario).
+> 6 de 8 sub-bloques cerrados** (F1.1–F1.6).
+>
+> ✅ **F1.7 EJECUTADA Y EN PRODUCCIÓN (2026-08-14, Opus).** La restauración desde backup JSON — el
+> único tramo del módulo que puede destruir datos reales. **1 endpoint nuevo:**
+> `POST /usuarios/api/bitacora/import` (`modo=combinar|reemplazar`, `dry_run=1`), montado dentro del
+> router `entradas` para heredar el gate **estricto** (la gracia de 90 días de D2/Q6 es solo para
+> SACAR los datos, nunca para escribir). **Transporte por multipart (multer + memoryStorage), no por
+> `express.json`** — el parser global tiene el límite de 100 KB y, sobre todo, lleva el hook `verify`
+> del que depende la firma HMAC de los webhooks de MercadoPago (punto crítico P2): multer parsea
+> **solo** esta ruta, sin agregar ni reordenar nada en la cadena global. **Las 3 salvaguardas de §5.3,
+> implementadas y verificadas una por una:** (1) validación completa ANTES de abrir la transacción —
+> versión, estructura, **pertenencia a la cuenta** y cada fila contra los CHECK reales del esquema;
+> (2) dry-run obligatorio desde el portal, con los números concretos del impacto; (3) transacción
+> única, todo o nada. La 4ª (respaldo automático previo) la dispara el portal descargando el export
+> de F1.6 antes de confirmar — **y si ese respaldo falla, la restauración se aborta**, porque sin él
+> la operación dejaría de ser reversible, que es la garantía que sostiene toda la pantalla.
+> **Decisiones de identidad:** las fichas se reconocen por `expediente_key` (la UNIQUE del esquema),
+> las entradas por su id interno — y los ids se **preservan** al insertar, lo que hace la restauración
+> **idempotente**: importar el mismo archivo dos veces deja exactamente el mismo estado en vez de
+> duplicar lo recreado. Un `idMap` traduce los ids de fichas del backup a los reales, así que las
+> entradas quedan re-vinculadas al caso correcto aunque haya cambiado de id.
+> **1 bug encontrado y corregido en staging:** la primera versión ajustaba la secuencia de
+> `bitacora_entries` con `setval` tras preservar ids — y falló con *"permission denied for sequence"*,
+> porque `procurador_user` tiene `USAGE, SELECT` sobre las secuencias (lo que concedió F1.1) y
+> `setval` exige `UPDATE`. **Se eliminó la llamada en vez de ampliar privilegios:** todo id de un
+> backup fue emitido por esa misma secuencia, así que es ≤ su valor actual y el próximo `nextval()`
+> siempre devuelve uno mayor — la colisión que el `setval` pretendía evitar no puede ocurrir
+> (verificado: crear una entrada nueva justo después de un import con ids preservados funciona).
+> **Verificado en staging con un harness de 38 aserciones — 38/38 PASS**, sobre un escenario realista:
+> se crean 2 casos + 3 entradas, se exporta el backup **con el endpoint real de F1.6**, se diverge a
+> propósito (borrar un caso, editar otro, crear un tercero local) y se restaura. Confirmado que
+> combinar **recrea** el borrado con sus entradas y sus ids originales, **pisa** el editado, y
+> **conserva intacto** el local que no está en el backup; que el dry-run no escribe una sola fila; que
+> un segundo import del mismo archivo no cambia nada (idempotencia); que reemplazar deja
+> exactamente el contenido del backup y elimina el local; y las 7 validaciones de rechazo, incluida
+> la de **pertenencia** (un backup con otro `user_id` → 400 sin tocar nada). **La garantía
+> transaccional quedó demostrada sobre un fallo REAL, no simulado:** en la corrida previa al fix, el
+> error de `setval` ocurrió en modo `reemplazar` **después** de haber ejecutado los dos `DELETE` del
+> usuario y todos los inserts — y al verificar la base, el caso local seguía presente con su carátula
+> intacta. Es la prueba más valiosa de la sesión, porque ejercita exactamente el camino que importa.
+> **No-regresión repetida en prod:** las rutas existentes intactas, `pm2-error.log` sin una sola
+> entrada nueva (la última sigue siendo del 30/07), y los 6 planes con el flag en `false`.
+> **Con esto la Fase 1 llega a 7 de 8 sub-bloques** — queda solo **F1.8** (ABM de feriados en el
+> dashboard admin, Sonnet/bajo), que es lo que le da mantenimiento año a año a la calculadora de
+> plazos de F1.3.
 
 1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **4 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`, `users.bitacora_lost_access_at` [agregada 2026-08-12, decisión D2/Q6, ver §8]) **+ la columna `expediente_key` en `expedientes_seguidos`** con `UNIQUE (user_id, expediente_key)` — **sin `jurisdiccion` en la clave** (decisión D1 + corrección 2026-08-13, ver §7) **+ los 4 índices de §7** *(eran 5; `idx_exp_seguidos_user` quedó redundante al corregir la clave única)* + seed de feriados **resto de 2026 + todo 2027** (alcance confirmado 2026-08-12, decisión D4). **Incluye crear `backend-server/utils/expedienteKey.js`** (normalización canónica) **+ el fixture de casos compartido** con Electron — ver la nota "DÓNDE VIVE LA NORMALIZACIÓN" de §7. ⚠️ **Prerrequisito Bloque B.1 (regenerar `schema.sql`): ✅ ya cumplido** (schema regenerado el 28/07, 27 tablas verificadas — ver `revision-bitacora-preimplementacion-2026-08-12.md`).
 2. **(F1.2)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)* 🚨 **PUNTO CRÍTICO P1 (§11.0): el gate NO va en `routes/usuarios.js`** — ese archivo tiene 8 rutas vivas del portal que quedarían en 403. **Resuelto así:** `routes/bitacora.js` se monta en `/usuarios/api` (mismo prefijo que `usuarios.js`) pero aplica el gate sobre **sub-paths** (`router.use('/bitacora', auth, gate, …)`), no sobre el router — una petición a `/usuarios/api/profile` entra, no matchea ningún sub-path y cae al router de usuarios **sin tocar el gate**. **Prueba de no-regresión hecha y pasada**, en staging (39/39) y repetida en prod: con el flag apagado, las 8 rutas existentes responden normal (200/400/404, **ninguna 403**) y las 3 de Bitácora dan 403 con mensaje claro. Archivos: `routes/bitacora.js`, `middleware/checkBitacoraPlan.js` (con la opción `conGracia` lista para el export de F1.6).
@@ -1155,7 +1198,7 @@ resultado a la vista.
 4. **(F1.4)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Portal: sección Mis expedientes (listado, ficha, edición, eliminación con elección sobre entradas). El bloque "Historial del caso" (§5.2) queda construido y funcional pero sin datos posibles hasta la Fase 2 (nada escribe en `expediente_snapshots` todavía).
 5. **(F1.5)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal + checkbox "Incluye Bitácora" en el form de planes del admin. La guarda del hallazgo A4 (`home_section` validado contra `bitacoraEnabled` en el punto de uso, no solo al escribirlo) quedó implementada en `initDashboard()`.
 6. **(F1.6)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** **Exportación** (Excel + JSON, global y por ficha) — el backup del usuario desde el día uno. Queda cumplida la **dependencia dura de F1.7** (hallazgo C4): la salvaguarda de importación (§5.3, "respaldo automático antes de aplicar") va a poder descargar un export real del estado actual.
-7. **(F1.7)** **Importación/restauración** desde backup JSON (modos reemplazar/combinar, vista previa dry-run, respaldo automático previo, transaccional). Requiere F1.6 completo (ver punto 6).
+7. **(F1.7)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** **Importación/restauración** desde backup JSON (modos reemplazar/combinar, vista previa dry-run, respaldo automático previo, transaccional). Requiere F1.6 completo (ver punto 6) — cumplido. ⚠️ **Ambigüedad de §5.3 resuelta hacia el lado menos destructivo, ver P-F1.7-a en §11.2.**
 8. **(F1.8)** ABM de feriados en el dashboard admin (hallazgo H2) — sin esto, la calculadora de plazos de F1.3 no tiene cómo mantenerse actualizada año a año.
 - **Entregable**: módulo completo operable a mano desde el portal (entrada manual, sin captura desde visores todavía), con backup y restauración, gateado por plan. Deployable a staging→prod sin release de Electron. (Si hiciera falta acortar la fase, F1.7 es el único candidato razonable a diferir — nunca F1.6, del que depende.)
 - **⚠️ Nota de producto (hallazgo C6):** al cerrar esta fase, la Bitácora **no tiene el diferencial** que motiva la propuesta (§1/§14: *"el dato nace de la automatización que ya corre todos los días"*) — sin Fase 2 es una agenda manual sin ventaja sobre papel o Google Calendar. **No anunciar ni vender la feature al cerrar la Fase 1**; usarla para validación interna con el flag `bitacora_enabled` encendido en un plan de prueba únicamente.
@@ -1237,6 +1280,8 @@ resultado a la vista.
 | **P-F1.1-a** | **La feria judicial de julio no está en el seed de feriados.** Se cargaron los feriados nacionales del resto de 2026 y todo 2027, más la feria de enero completa (que es fija). La **feria de invierno NO**: su fecha exacta la fija la CSJN (y cada cámara) por acordada cada año y no es predecible — cargarla inventada sería peor que no cargarla, porque la calculadora de plazos daría un resultado incorrecto con apariencia de correcto. | F1.1 (2026-08-14) | Al construir **F1.8** (ABM de feriados): el admin la carga cuando se publica la acordada. Mientras tanto, la calculadora ya muestra el disclaimer *"verificá el plazo"* (§12, riesgo 5). | 🟡 Abierto |
 | **P-F1.1-b** | **El test de Electron extrae `tokenizar()` del fuente en vez de importarla.** `tokenizar` es interna a `electron-app/informe/buscarPdfExpediente.js` (el módulo solo exporta `buscarPdfExpediente`). Para no cambiar la superficie pública de un archivo que hoy está en producción enlazando PDFs, `electron-app/test/tokenizar-fixture.test.js` la extrae del código fuente con una regex y la evalúa. Funciona, pero es más frágil que un `require`: si la función se renombra o se reescribe con otra forma, el test falla con un mensaje de "no la encontré" en vez de comparar. | F1.1 (2026-08-14) | Cuando haya otra razón para tocar `buscarPdfExpediente.js`: exportar `tokenizar` y simplificar el test a un `require`. **No vale un cambio propio** — el archivo funciona y tocarlo sin necesidad es el riesgo mayor. | 🟡 Abierto |
 | **P-F1.3-a** | **Vista "Semana" del toggle no se construyó.** §5.1 mencionaba un toggle [Mes][Semana][Lista] pero sin mockup propio para Semana (a diferencia de Mes y Lista, que sí tenían diseño concreto) — se interpretó como redundante con Mes+Lista para el volumen de datos esperado (una agenda de 1 abogado, no un estudio grande) y se dejó afuera para no inflar el sub-bloque ya marcado como "el más grande del plan". | F1.3 (2026-08-14) | Si el uso real muestra que hace falta una vista semanal (mucho volumen de entradas por día que la vista Mes no puede mostrar bien con solo 4 puntos por celda): agregar un tercer botón de toggle + una grilla de 7 columnas × horas. No es un fix, es una feature nueva a demanda. | 🟡 Abierto (bajo prioridad) |
+| **P-F1.7-a** | **Ambigüedad de §5.3 sobre qué hace "combinar" con las entradas, resuelta hacia el lado menos destructivo.** La tabla de modos dice que el backup "pisa" el caso coincidente *"(ficha, entradas y snapshots de ese caso)"*, lo que se puede leer como "borrar las entradas actuales del caso y reemplazarlas por las del backup". Pero el texto del propio modal, en esa misma sección, dice *"se conserva lo que está en tu Bitácora y no en el backup"*. **Implementado así: combinar NUNCA borra entradas** — actualiza las que coinciden por id y crea las que faltan; una entrada agregada después del backup, aunque sea de un caso pisado, sobrevive. Ante una ambigüedad en la única operación destructiva del módulo, se eligió la lectura que no destruye. El usuario que quiere el estado exacto del backup tiene "Reemplazar todo". | F1.7 (2026-08-14) | Solo si el operador prefiere la otra lectura: sería un `DELETE` de las entradas del caso pisado dentro de la misma transacción. **No cambiar sin decisión explícita** — hoy el comportamiento coincide con lo que el modal le promete al usuario. | 🟢 Cerrado por decisión |
+| **P-F1.7-b** | **El bloque de historial del import no se puede ejercitar de punta a punta todavía.** La restauración de `expediente_snapshots` está implementada completa (respeta el tope 2+2 y remapea el `expediente_id`), pero **nada escribe snapshots en producción** hasta la Fase 2, así que en la práctica hoy siempre restaura un array vacío. En staging se probó con filas insertadas a mano. | F1.7 (2026-08-14) | Al cerrar F2.2/F2.4, exportar un caso con snapshots reales y restaurarlo. No es trabajo pendiente de F1.7 — es una verificación que recién ahí tiene datos con los que correr. | 🟡 Abierto (sin bloqueo) |
 | **P-F1.3-b** | **Sin búsqueda de texto server-side.** El filtro de búsqueda (`#bitacora-search`) y el filtro de estado "Hechos" se resuelven client-side sobre el listado ya traído (`bitacoraApplyClientFilters`), porque `GET /usuarios/api/bitacora` (F1.2) no expone un parámetro `q=` ni `pendientes=0`. Funciona bien para el volumen esperado (rango de la vista Mes = 42 días, vista Lista = 240 días, LIMITE_LISTADO=500 filas), pero no escalaría si un usuario acumulara miles de entradas en un rango. | F1.3 (2026-08-14) | Si hace falta: agregar `q`/`hecho` a los filtros de `routes/bitacora.js` (F1.2) y quitar el filtrado client-side. No urgente — el límite del servidor (500 filas) ya protege contra una respuesta desmedida. | 🟡 Abierto (bajo prioridad) |
 
 ---

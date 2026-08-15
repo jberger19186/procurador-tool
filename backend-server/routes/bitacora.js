@@ -34,6 +34,7 @@
  */
 
 const express = require('express');
+const multer = require('multer');
 const ExcelJS = require('exceljs');
 const authenticateToken = require('../middleware/authenticateToken');
 const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
@@ -47,6 +48,11 @@ const router = express.Router();
 
 const KINDS_ENTRADA = ['vencimiento', 'audiencia', 'tarea', 'gestion', 'nota'];
 const REPEAT_RULES  = ['weekly', 'monthly', 'yearly'];
+// Valores exactos de los CHECK de la migración F1.1 — un backup editado a mano con
+// otro valor debe rechazarse ANTES de abrir la transacción, no romperla a mitad.
+const SOURCES_ENTRADA = ['manual', 'visor_procuracion', 'visor_informe'];
+const KINDS_SNAPSHOT  = ['procuracion', 'informe'];
+const MAX_SNAPSHOTS_POR_KIND = 2;   // tope estructural 2+2 por caso (§7 del plan)
 
 const MAX_TITLE       = 300;    // = VARCHAR(300) de la columna
 const MAX_DESCRIPTION = 5000;   // mismo criterio que el cap de tickets (hallazgo C5)
@@ -307,10 +313,401 @@ router.get('/bitacora/export', authenticateToken, checkBitacoraPlan({ conGracia:
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  IMPORTACIÓN / RESTAURACIÓN  →  POST /usuarios/api/bitacora/import  (F1.7)
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ ES EL ÚNICO ENDPOINT DE TODO EL MÓDULO QUE PUEDE DESTRUIR DATOS DEL USUARIO.
+// Tres salvaguardas, en este orden:
+//   1. Validación completa del archivo ANTES de abrir la transacción (versión,
+//      estructura, pertenencia a la cuenta, y cada fila contra los CHECK reales
+//      del esquema). Nada se toca si algo no cierra.
+//   2. Dry-run obligatorio desde el portal (`dry_run=1`): devuelve los números
+//      concretos del impacto sin escribir una sola fila.
+//   3. Todo o nada: la aplicación corre en una transacción única.
+// El respaldo automático previo (§5.3, salvaguarda 2) lo dispara el portal
+// descargando el export de F1.6 antes de confirmar — por eso F1.6 era
+// dependencia dura de este sub-bloque.
+//
+// 🚨 TRANSPORTE — por qué multipart y no JSON (punto crítico P2 del plan):
+// el parser `express.json()` global (`server.js:110`) tiene el límite default de
+// 100 KB —insuficiente para un backup— y, mucho más importante, lleva el hook
+// `verify` que captura el `rawBody` con el que se valida la firma HMAC de los
+// webhooks de MercadoPago. Subir el backup como multipart lo esquiva por
+// completo: multer parsea SOLO esta ruta, sin agregar ni reordenar nada en la
+// cadena de parsers global. NO cambiar esto por un `express.json({limit})`.
+
+const MAX_BACKUP_BYTES = 10 * 1024 * 1024;   // 10 MB
+const MAX_FILAS_IMPORT = 20000;              // techo de filas totales del archivo
+
+const uploadBackup = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_BACKUP_BYTES },
+    fileFilter: (req, file, cb) => {
+        // El navegador manda application/json; algunos clientes, octet-stream.
+        const ok = ['application/json', 'text/json', 'application/octet-stream'].includes(file.mimetype);
+        if (!ok) return cb(new Error('El backup debe ser el archivo .json que descargaste desde "Exportar".'));
+        cb(null, true);
+    }
+});
+
+// Mismo patrón que `uploadPdfOr400` de admin.js (lección RI-1): sin este wrapper,
+// un rechazo de multer cae al error handler global como 500 genérico en vez de un
+// 400 con el motivo real.
+function uploadBackupOr400(req, res, next) {
+    uploadBackup.single('backup')(req, res, (err) => {
+        if (err) {
+            const msg = err.code === 'LIMIT_FILE_SIZE'
+                ? `El archivo supera el máximo de ${MAX_BACKUP_BYTES / (1024 * 1024)} MB.`
+                : (err.message || 'Archivo inválido.');
+            return res.status(400).json({ error: msg });
+        }
+        next();
+    });
+}
+
+/**
+ * Valida el backup entero antes de tocar la base. Devuelve `{ error }` con un
+ * mensaje accionable, o `{ data }` con los tres arrays ya normalizados.
+ */
+function validarBackup(buffer, userId) {
+    let data;
+    try {
+        data = JSON.parse(buffer.toString('utf8'));
+    } catch (_) {
+        return { error: 'El archivo no es un JSON válido. Tiene que ser el backup que descargaste desde "Exportar".' };
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        return { error: 'El archivo no tiene la estructura de un backup de Bitácora.' };
+    }
+    if (data.backup_version !== 1) {
+        return { error: `Versión de backup no soportada (${data.backup_version ?? 'ausente'}). Este portal restaura backups versión 1.` };
+    }
+
+    const arrays = {};
+    for (const nombre of ['expedientes', 'entradas', 'snapshots']) {
+        const v = data[nombre];
+        if (v === undefined || v === null) { arrays[nombre] = []; continue; }
+        if (!Array.isArray(v)) return { error: `El campo "${nombre}" del backup está corrupto (se esperaba una lista).` };
+        arrays[nombre] = v;
+    }
+    const { expedientes, entradas: entradasBk, snapshots } = arrays;
+
+    const total = expedientes.length + entradasBk.length + snapshots.length;
+    if (total > MAX_FILAS_IMPORT) {
+        return { error: `El backup tiene ${total} registros y el máximo por importación es ${MAX_FILAS_IMPORT}.` };
+    }
+
+    // Pertenencia — un backup de OTRA cuenta se rechaza acá, sin tocar nada.
+    const ajeno = expedientes.some(x => Number(x?.user_id) !== userId)
+               || entradasBk.some(e => Number(e?.user_id) !== userId);
+    if (ajeno) {
+        return { error: 'El backup pertenece a otra cuenta. Solo podés restaurar backups tuyos.' };
+    }
+
+    // Fila por fila, contra los CHECK reales del esquema.
+    for (const x of expedientes) {
+        if (!Number.isInteger(Number(x?.id))) return { error: 'Hay un expediente sin identificador válido en el backup.' };
+        if (!esExpedienteValido(String(x?.expediente ?? ''))) {
+            return { error: `El backup tiene un expediente con formato irreconocible: "${x?.expediente ?? ''}".` };
+        }
+    }
+    for (const e of entradasBk) {
+        if (!Number.isInteger(Number(e?.id))) return { error: 'Hay una entrada sin identificador válido en el backup.' };
+        if (!KINDS_ENTRADA.includes(e?.kind)) return { error: `El backup tiene una entrada con tipo inválido: "${e?.kind}".` };
+        if (typeof e?.title !== 'string' || e.title.trim().length === 0) return { error: 'El backup tiene una entrada sin título.' };
+        if (e?.repeat_rule != null && !REPEAT_RULES.includes(e.repeat_rule)) {
+            return { error: `El backup tiene una repetición inválida: "${e.repeat_rule}".` };
+        }
+        if (e?.source != null && !SOURCES_ENTRADA.includes(e.source)) {
+            return { error: `El backup tiene un origen de entrada inválido: "${e.source}".` };
+        }
+    }
+    for (const s of snapshots) {
+        if (!KINDS_SNAPSHOT.includes(s?.kind)) return { error: `El backup tiene un historial con tipo inválido: "${s?.kind}".` };
+        if (!Number.isInteger(Number(s?.expediente_id))) return { error: 'Hay un historial sin expediente asociado en el backup.' };
+    }
+
+    return { data: { expedientes, entradas: entradasBk, snapshots, exported_at: data.exported_at ?? null } };
+}
+
+/** Números concretos del impacto, sin escribir nada (la vista previa de §5.3). */
+async function calcularPreviewImport(db, userId, backup, modo) {
+    const { rows: [actual] } = await db.query(
+        `SELECT (SELECT count(*)::int FROM expedientes_seguidos WHERE user_id = $1) AS expedientes,
+                (SELECT count(*)::int FROM bitacora_entries    WHERE user_id = $1) AS entradas`,
+        [userId]
+    );
+
+    const contenido = {
+        expedientes: backup.expedientes.length,
+        entradas: backup.entradas.length,
+        snapshots: backup.snapshots.length,
+    };
+
+    if (modo === 'reemplazar') {
+        return {
+            actual,
+            contenido,
+            eliminar: { expedientes: actual.expedientes, entradas: actual.entradas },
+            crear: { expedientes: contenido.expedientes, entradas: contenido.entradas },
+            conservar: { expedientes: 0, entradas: 0 },
+        };
+    }
+
+    // Combinar: los casos se identifican por expediente_key (la UNIQUE del esquema),
+    // las entradas por su id interno (el backup salió de esta misma cuenta).
+    const keys = [...new Set(backup.expedientes.map(x => expedienteKey(x.expediente)))];
+    const { rows: expExistentes } = keys.length
+        ? await db.query(
+            'SELECT expediente_key FROM expedientes_seguidos WHERE user_id = $1 AND expediente_key = ANY($2)',
+            [userId, keys])
+        : { rows: [] };
+    const keysExistentes = new Set(expExistentes.map(r => r.expediente_key));
+
+    const idsEntradas = [...new Set(backup.entradas.map(e => Number(e.id)))];
+    const { rows: entExistentes } = idsEntradas.length
+        ? await db.query('SELECT id FROM bitacora_entries WHERE user_id = $1 AND id = ANY($2)', [userId, idsEntradas])
+        : { rows: [] };
+    const idsExistentes = new Set(entExistentes.map(r => r.id));
+
+    const expSobrescribir = keys.filter(k => keysExistentes.has(k)).length;
+    const entSobrescribir = backup.entradas.filter(e => idsExistentes.has(Number(e.id))).length;
+
+    return {
+        actual,
+        contenido,
+        eliminar: { expedientes: 0, entradas: 0 },   // combinar NUNCA borra
+        crear: {
+            expedientes: keys.length - expSobrescribir,
+            entradas: backup.entradas.length - entSobrescribir,
+        },
+        sobrescribir: { expedientes: expSobrescribir, entradas: entSobrescribir },
+        conservar: {
+            expedientes: actual.expedientes - expSobrescribir,
+            entradas: actual.entradas - entSobrescribir,
+        },
+    };
+}
+
+/** Aplica la restauración. Todo o nada: una sola transacción. */
+async function aplicarImport(db, userId, backup, modo) {
+    const client = await db.connect();
+    const resumen = {
+        expedientesCreados: 0, expedientesActualizados: 0,
+        entradasCreadas: 0, entradasActualizadas: 0,
+        snapshotsCreados: 0,
+        expedientesEliminados: 0, entradasEliminadas: 0,
+    };
+
+    try {
+        await client.query('BEGIN');
+
+        if (modo === 'reemplazar') {
+            // Orden importa: las entradas primero (su FK a expedientes es ON DELETE
+            // SET NULL, así que borrar el caso las dejaría sueltas en vez de borrarlas).
+            const delEnt = await client.query('DELETE FROM bitacora_entries WHERE user_id = $1', [userId]);
+            const delExp = await client.query('DELETE FROM expedientes_seguidos WHERE user_id = $1', [userId]);
+            resumen.entradasEliminadas   = delEnt.rowCount;
+            resumen.expedientesEliminados = delExp.rowCount;
+            // Los snapshots caen solos por el ON DELETE CASCADE de expedientes_seguidos.
+        }
+
+        // ── Fichas ────────────────────────────────────────────────────────────
+        // Identidad = expediente_key (la UNIQUE del esquema), NO el id: así un caso
+        // que hoy existe con otro id igual se reconoce y se pisa en vez de duplicarse.
+        // El idMap traduce los ids del backup a los reales para entradas y snapshots.
+        const idMap = new Map();
+        for (const x of backup.expedientes) {
+            // El backup es autoritativo: pisa TODOS los campos del caso. (A diferencia
+            // del upsert de captura de F1.2, que hace COALESCE para no borrar lo que el
+            // usuario cargó a mano — acá el usuario pidió explícitamente restaurar.)
+            const { rows } = await client.query(
+                `INSERT INTO expedientes_seguidos
+                   (user_id, expediente, expediente_key, jurisdiccion, dependencia, caratula, situacion_actual, situacion_fecha, notas)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                 ON CONFLICT (user_id, expediente_key) DO UPDATE SET
+                   expediente       = EXCLUDED.expediente,
+                   jurisdiccion     = EXCLUDED.jurisdiccion,
+                   dependencia      = EXCLUDED.dependencia,
+                   caratula         = EXCLUDED.caratula,
+                   situacion_actual = EXCLUDED.situacion_actual,
+                   situacion_fecha  = EXCLUDED.situacion_fecha,
+                   notas            = EXCLUDED.notas,
+                   updated_at       = NOW()
+                 RETURNING id, (xmax = 0) AS creado`,
+                [
+                    userId,
+                    texto(x.expediente, MAX_EXPEDIENTE),
+                    expedienteKey(x.expediente),          // siempre recalculada en el servidor
+                    texto(x.jurisdiccion, MAX_TEXTO_CORTO),
+                    texto(x.dependencia, MAX_TEXTO_CORTO),
+                    texto(x.caratula, MAX_CARATULA),
+                    texto(x.situacion_actual, MAX_TEXTO_CORTO),
+                    fecha(x.situacion_fecha) ?? null,
+                    texto(x.notas, MAX_NOTAS),
+                ]
+            );
+            idMap.set(Number(x.id), rows[0].id);
+            if (rows[0].creado) resumen.expedientesCreados++; else resumen.expedientesActualizados++;
+        }
+
+        // ── Entradas ──────────────────────────────────────────────────────────
+        // Identidad = el id interno. Preservarlo hace la restauración idempotente:
+        // importar el mismo archivo dos veces deja el mismo estado, en vez de duplicar
+        // lo que se hubiera recreado. Los ids son GLOBALES (no por usuario), así que si
+        // uno quedó ocupado por otra cuenta se inserta con id nuevo.
+        const idsBackup = [...new Set(backup.entradas.map(e => Number(e.id)))];
+        const { rows: ocupados } = idsBackup.length
+            ? await client.query('SELECT id, user_id FROM bitacora_entries WHERE id = ANY($1)', [idsBackup])
+            : { rows: [] };
+        const idsMios   = new Set(ocupados.filter(r => r.user_id === userId).map(r => r.id));
+        const idsAjenos = new Set(ocupados.filter(r => r.user_id !== userId).map(r => r.id));
+
+        for (const e of backup.entradas) {
+            const idBackup = Number(e.id);
+            const expedienteReal = e.expediente_id != null
+                ? (idMap.get(Number(e.expediente_id)) ?? null)   // caso no incluido en el backup → entrada suelta
+                : null;
+
+            const campos = [
+                expedienteReal,
+                e.kind,
+                texto(e.title, MAX_TITLE),
+                texto(e.description, MAX_DESCRIPTION),
+                fecha(e.due_at) ?? null,
+                e.all_day === undefined || e.all_day === null ? true : Boolean(e.all_day),
+                fecha(e.done_at) ?? null,
+                e.repeat_rule ?? null,
+                e.meta != null ? JSON.stringify(e.meta) : null,
+                SOURCES_ENTRADA.includes(e.source) ? e.source : 'manual',
+            ];
+
+            if (idsMios.has(idBackup)) {
+                await client.query(
+                    `UPDATE bitacora_entries SET
+                       expediente_id=$1, kind=$2, title=$3, description=$4, due_at=$5,
+                       all_day=$6, done_at=$7, repeat_rule=$8, meta=$9, source=$10, updated_at=NOW()
+                     WHERE id=$11 AND user_id=$12`,
+                    [...campos, idBackup, userId]
+                );
+                resumen.entradasActualizadas++;
+            } else if (idsAjenos.has(idBackup)) {
+                await client.query(
+                    `INSERT INTO bitacora_entries
+                       (user_id, expediente_id, kind, title, description, due_at, all_day, done_at, repeat_rule, meta, source)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                    [userId, ...campos]
+                );
+                resumen.entradasCreadas++;
+            } else {
+                await client.query(
+                    `INSERT INTO bitacora_entries
+                       (id, user_id, expediente_id, kind, title, description, due_at, all_day, done_at, repeat_rule, meta, source)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                    [idBackup, userId, ...campos]
+                );
+                resumen.entradasCreadas++;
+            }
+        }
+
+        // ── Historial (snapshots) ─────────────────────────────────────────────
+        // Hoy NADA escribe en expediente_snapshots (eso lo construye la captura desde
+        // los visores, Fase 2), así que en la práctica este bloque restaura backups con
+        // el array vacío. Se implementa completo igual para no volver acá cuando F2 exista.
+        const porCasoKind = new Map();
+        for (const s of backup.snapshots) {
+            const real = idMap.get(Number(s.expediente_id));
+            if (!real) continue;                      // historial de un caso que no vino en el backup
+            const clave = `${real}|${s.kind}`;
+            if (!porCasoKind.has(clave)) porCasoKind.set(clave, []);
+            porCasoKind.get(clave).push(s);
+        }
+        for (const [clave, lista] of porCasoKind.entries()) {
+            const [expIdStr, kind] = clave.split('|');
+            const expId = Number(expIdStr);
+            // El backup pisa el historial del caso (es la foto que el usuario eligió
+            // restaurar) y se respeta el tope estructural: los 2 más nuevos.
+            lista.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+            await client.query(
+                'DELETE FROM expediente_snapshots WHERE expediente_id = $1 AND kind = $2',
+                [expId, kind]
+            );
+            for (const s of lista.slice(0, MAX_SNAPSHOTS_POR_KIND)) {
+                await client.query(
+                    `INSERT INTO expediente_snapshots (expediente_id, kind, run_date, situacion, data)
+                     VALUES ($1,$2,$3,$4,$5)`,
+                    [expId, kind, fecha(s.run_date) ?? new Date().toISOString(),
+                     texto(s.situacion, MAX_TEXTO_CORTO), JSON.stringify(s.data ?? {})]
+                );
+                resumen.snapshotsCreados++;
+            }
+        }
+
+        // ⚠️ NO se toca la secuencia de `bitacora_entries` — y no hace falta.
+        // Insertar ids explícitos normalmente deja la secuencia atrás y el próximo
+        // INSERT chocaría... pero acá no puede pasar: TODO id de un backup fue emitido
+        // en su momento por esta misma secuencia, así que es ≤ su valor actual (las
+        // secuencias solo avanzan). El próximo nextval() devuelve last_value+1, mayor
+        // que cualquier id del backup → nunca colisiona.
+        // Además, un `setval` acá fallaría: `procurador_user` tiene USAGE+SELECT sobre
+        // las secuencias (lo que concedió la migración de F1.1), y setval exige UPDATE.
+        // Verificado en staging: sin esta llamada, crear una entrada nueva justo después
+        // de un import con ids preservados funciona sin colisión.
+
+        await client.query('COMMIT');
+        return resumen;
+    } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  ENTRADAS DE BITÁCORA  →  /usuarios/api/bitacora
 // ═══════════════════════════════════════════════════════════════════════════
 
 const entradas = express.Router();
+
+// ─── POST /import — restaurar desde un backup JSON ─────────────────────────
+// Va montado dentro de `entradas`, así que hereda el gate ESTRICTO del plan
+// (`checkBitacoraPlan()` sin gracia): la ventana de 90 días de la decisión
+// D2/Q6 es solo para SACAR los datos (export), nunca para escribir.
+entradas.post('/import', uploadBackupOr400, async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+
+    if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: 'Subí el archivo .json del backup.' });
+    }
+    // Campos de texto del multipart: llegan siempre como string.
+    const modo   = req.body?.modo === 'reemplazar' ? 'reemplazar' : 'combinar';
+    const dryRun = req.body?.dry_run === '1' || req.body?.dry_run === 'true';
+
+    const validado = validarBackup(req.file.buffer, userId);
+    if (validado.error) return res.status(400).json({ error: validado.error });
+    const backup = validado.data;
+
+    try {
+        if (dryRun) {
+            const preview = await calcularPreviewImport(db, userId, backup, modo);
+            return res.json({
+                success: true, dry_run: true, modo,
+                exportado_el: backup.exported_at,
+                preview
+            });
+        }
+
+        const resumen = await aplicarImport(db, userId, backup, modo);
+        console.log(`📔 Bitácora: import ${modo} aplicado para user ${userId} —`, JSON.stringify(resumen));
+        res.json({ success: true, dry_run: false, modo, resumen });
+    } catch (error) {
+        console.error('Error importando backup de bitácora:', error);
+        res.status(500).json({
+            error: 'Error del servidor al restaurar el backup. No se aplicó ningún cambio.'
+        });
+    }
+});
 
 // ─── GET / — listado con filtros ───────────────────────────────────────────
 // Filtros: ?desde= &hasta= (rango de due_at) &kind= &pendientes=1 &expediente_id=
