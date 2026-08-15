@@ -39,6 +39,7 @@ const ExcelJS = require('exceljs');
 const authenticateToken = require('../middleware/authenticateToken');
 const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
 const { expedienteKey, esExpedienteValido } = require('../utils/expedienteKey');
+const { reclamarDraft } = require('../utils/captureDrafts');
 
 const router = express.Router();
 
@@ -53,6 +54,7 @@ const REPEAT_RULES  = ['weekly', 'monthly', 'yearly'];
 const SOURCES_ENTRADA = ['manual', 'visor_procuracion', 'visor_informe'];
 const KINDS_SNAPSHOT  = ['procuracion', 'informe'];
 const MAX_SNAPSHOTS_POR_KIND = 2;   // tope estructural 2+2 por caso (§7 del plan)
+const MAX_CASOS_CAPTURE_LOTE = 200; // tope de filas por captura en lote (hallazgo H3)
 
 const MAX_TITLE       = 300;    // = VARCHAR(300) de la columna
 const MAX_DESCRIPTION = 5000;   // mismo criterio que el cap de tickets (hallazgo C5)
@@ -664,6 +666,27 @@ async function aplicarImport(db, userId, backup, modo) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  RECLAMO DE BORRADOR DE CAPTURA  →  GET /usuarios/api/capture-draft/:id  (F2.2)
+// ═══════════════════════════════════════════════════════════════════════════
+// Paso 3 del Post/Redirect/Get: el visor posteó anónimo a /usuarios/capture, el
+// servidor guardó el payload en un buffer y redirigió al portal con el id. Acá
+// —y recién acá— hay un usuario autenticado: este endpoint SÍ lleva JWT y el gate
+// de plan, a diferencia del POST anónimo que lo alimenta (ver routes/capture.js).
+//
+// USO ÚNICO: reclamar borra el borrador. Un refresh del portal no vuelve a traerlo,
+// que es justamente lo que el patrón PRG busca evitar (reenvío de formulario).
+router.get('/capture-draft/:id', authenticateToken, checkBitacoraPlan(), (req, res) => {
+    const payload = reclamarDraft(req.params.id);
+    if (!payload) {
+        return res.status(404).json({
+            error: 'El borrador de captura no existe o expiró. Volvé al visor y hacé clic de nuevo.',
+            code: 'CAPTURE_DRAFT_NO_ENCONTRADO'
+        });
+    }
+    res.json({ success: true, draft: payload });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  ENTRADAS DE BITÁCORA  →  /usuarios/api/bitacora
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -991,6 +1014,112 @@ entradas.delete('/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const expedientes = express.Router();
+
+// ─── POST /capture-lote — alta masiva desde la selección del visor (F2.2) ──
+// Consume lo que la SPA sacó del borrador de captura. Dos acciones:
+//   · 'ficha-lote'    → solo crea/actualiza las fichas ("📌 Guardar casos")
+//   · 'snapshot-lote' → además adjunta el snapshot de esta corrida al historial
+//                       ("💾 Guardar procuración/informe de seleccionados")
+//
+// Va declarado ANTES de las rutas con `/:id` por claridad (hoy no hay POST /:id,
+// así que no hay colisión real, pero el orden deja la intención explícita).
+expedientes.post('/capture-lote', async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+    const { casos, accion } = req.body || {};
+
+    if (!['ficha-lote', 'snapshot-lote'].includes(accion)) {
+        return res.status(400).json({ error: "Acción inválida. Debe ser 'ficha-lote' o 'snapshot-lote'." });
+    }
+    if (!Array.isArray(casos) || casos.length === 0) {
+        return res.status(400).json({ error: 'No se recibió ningún caso.' });
+    }
+    // Hallazgo H3: tope de FILAS por request, independiente del límite de bytes del
+    // parser. El rate-limit acota la frecuencia, no el volumen — sin esto, un solo
+    // POST bien armado podría intentar crear miles de fichas en una transacción.
+    if (casos.length > MAX_CASOS_CAPTURE_LOTE) {
+        return res.status(400).json({
+            error: `Máximo ${MAX_CASOS_CAPTURE_LOTE} casos por lote; dividí la selección.`,
+            code: 'LOTE_DEMASIADO_GRANDE'
+        });
+    }
+
+    const conSnapshot = accion === 'snapshot-lote';
+    const client = await db.connect();
+    const resumen = { creados: 0, actualizados: 0, snapshots: 0, omitidos: 0 };
+
+    try {
+        await client.query('BEGIN');
+
+        for (const c of casos) {
+            const exp = texto(c?.expediente, MAX_EXPEDIENTE);
+            // Un expediente irreconocible se saltea en vez de abortar todo el lote:
+            // viene del scraping del PJN y perder los otros 30 casos por uno raro
+            // sería peor que informar cuántos quedaron afuera.
+            if (!exp || !esExpedienteValido(exp)) { resumen.omitidos++; continue; }
+
+            const { rows } = await client.query(
+                `INSERT INTO expedientes_seguidos
+                   (user_id, expediente, expediente_key, jurisdiccion, dependencia, caratula, situacion_actual, situacion_fecha)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+                 ON CONFLICT (user_id, expediente_key) DO UPDATE SET
+                   jurisdiccion     = COALESCE(EXCLUDED.jurisdiccion,     expedientes_seguidos.jurisdiccion),
+                   dependencia      = COALESCE(EXCLUDED.dependencia,      expedientes_seguidos.dependencia),
+                   caratula         = COALESCE(EXCLUDED.caratula,         expedientes_seguidos.caratula),
+                   situacion_actual = COALESCE(EXCLUDED.situacion_actual, expedientes_seguidos.situacion_actual),
+                   situacion_fecha  = EXCLUDED.situacion_fecha,
+                   updated_at       = NOW()
+                 RETURNING id, (xmax = 0) AS creado`,
+                [
+                    userId, exp, expedienteKey(exp),
+                    texto(c?.jurisdiccion, MAX_TEXTO_CORTO),
+                    texto(c?.dependencia, MAX_TEXTO_CORTO),
+                    texto(c?.caratula, MAX_CARATULA),
+                    texto(c?.situacion_actual, MAX_TEXTO_CORTO),
+                ]
+            );
+            const fichaId = rows[0].id;
+            if (rows[0].creado) resumen.creados++; else resumen.actualizados++;
+
+            if (conSnapshot) {
+                const kind = c?.origen === 'informe' ? 'informe' : 'procuracion';
+                await client.query(
+                    `INSERT INTO expediente_snapshots (expediente_id, kind, run_date, situacion, data)
+                     VALUES ($1,$2,NOW(),$3,$4)`,
+                    [
+                        fichaId, kind,
+                        texto(c?.situacion_actual, MAX_TEXTO_CORTO),
+                        JSON.stringify({ movimientos: Array.isArray(c?.movimientos) ? c.movimientos : [] })
+                    ]
+                );
+                // Hallazgo H4: el recorte 2+2 va en la MISMA transacción que el insert.
+                // Si fuera un paso aparte, dos capturas simultáneas del mismo caso podrían
+                // dejar 3+ filas y romper la invariante de máx. 4 por caso sobre la que se
+                // apoya el dimensionamiento del módulo (§10 del plan).
+                await client.query(
+                    `DELETE FROM expediente_snapshots
+                      WHERE id IN (
+                        SELECT id FROM expediente_snapshots
+                         WHERE expediente_id = $1 AND kind = $2
+                         ORDER BY created_at DESC
+                         OFFSET $3
+                      )`,
+                    [fichaId, kind, MAX_SNAPSHOTS_POR_KIND]
+                );
+                resumen.snapshots++;
+            }
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true, accion, resumen });
+    } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error('Error en captura por lote de expedientes:', error);
+        res.status(500).json({ error: 'Error del servidor. No se guardó ningún caso.' });
+    } finally {
+        client.release();
+    }
+});
 
 // ─── GET / — listado de casos seguidos ─────────────────────────────────────
 expedientes.get('/', async (req, res) => {

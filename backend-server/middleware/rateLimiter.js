@@ -158,6 +158,26 @@ const analyticsEventLimiter = rateLimit({
     }
 });
 
+// F2.2 (Bitácora): POST /usuarios/capture es el ÚNICO endpoint anónimo que agrega la
+// Bitácora — recibe el deep-link de los visores, que son archivos locales sin sesión (un
+// <form> HTML no puede mandar Authorization, y por diseño no se embebe ninguna credencial
+// en un archivo compartible). Sin este límite, cualquiera podría llenar el almacén de
+// borradores en memoria desde internet. 30/5min por IP es el valor del plan (§4.1.1) y
+// alcanza de sobra para el uso real: capturar caso por caso desde un visor son unos pocos
+// clics, y el trabajo en lote va en UN request con todos los seleccionados.
+// ⚠️ El límite de FRECUENCIA no reemplaza al tope de VOLUMEN: los borradores tienen su
+// propio máximo simultáneo y TTL en utils/captureDrafts.js, y el lote su cap de 200 filas.
+const captureLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        console.warn(`⚠️ Rate limit excedido - Captura Bitácora: IP ${req.ip}`);
+        res.status(429).send('Demasiadas capturas seguidas. Esperá unos minutos e intentá de nuevo.');
+    }
+});
+
 module.exports = {
     loginLimiter,
     registerLimiter,
@@ -166,5 +186,6 @@ module.exports = {
     scriptDownloadLimiter,
     adminLimiter,
     generalAuthLimiter,
-    analyticsEventLimiter
+    analyticsEventLimiter,
+    captureLimiter
 };

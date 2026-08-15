@@ -8,7 +8,7 @@ const path = require('path');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { processScripts, getCacheStats, clearCache } = require('./utils/scriptEncryption');
-const { apiLimiter, generalAuthLimiter } = require('./middleware/rateLimiter');
+const { apiLimiter, generalAuthLimiter, captureLimiter } = require('./middleware/rateLimiter');
 const tokenBlacklist = require('./middleware/tokenBlacklist');
 
 const helmet = require('helmet');
@@ -110,6 +110,29 @@ app.use((req, res, next) => {
 app.use(express.json({
     verify: (req, _res, buf) => { req.rawBody = buf; }
 }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  🚨 PUNTO CRÍTICO P2 (Bitácora F2.2) — NO MOVER ESTE BLOQUE
+// ═══════════════════════════════════════════════════════════════════════════
+// Parser propio y acotado para la captura desde los visores. La posición exacta
+// importa por dos razones distintas, ambas necesarias:
+//
+//  1. Va DESPUÉS del `express.json` de arriba — el que lleva el hook `verify` que
+//     captura el `rawBody` con el que `routes/webhooks.js` valida la firma HMAC de
+//     MercadoPago. Meter cualquier parser antes de ese rompería el cobro en silencio:
+//     el webhook llegaría sin rawBody y toda firma daría inválida.
+//  2. Va ANTES del `express.urlencoded` GLOBAL de abajo. La captura llega como
+//     form POST (x-www-form-urlencoded), así que la parsea el urlencoded, no el json.
+//     Si el global corriera primero, rechazaría con 413 a los 100 KB por defecto y
+//     este parser nunca vería el body. Como body-parser saltea si el body ya fue
+//     parseado, el global de abajo no vuelve a tocar estas peticiones.
+//
+// ⚠️ Es path-scoped A PROPÓSITO. Subir el límite del urlencoded GLOBAL a 5 MB fue
+// evaluado y DESCARTADO (§4.1.1 del plan): reabriría el problema que motivó el cap
+// de longitud de POST /tickets (hallazgo C5) — un límite global generoso habilita
+// abuso en todo endpoint que hoy depende de esos 100 KB como techo implícito.
+app.use('/usuarios/capture', express.urlencoded({ extended: false, limit: '5mb' }));
+
 app.use(express.urlencoded({ extended: false })); // Para formularios HTML (reset-password, etc.)
 
 // Trust proxy (importante para rate limiting con reverse proxy)
@@ -389,6 +412,14 @@ app.get('/descargar', (req, res) => {
 //    de routes/bitacora.js antes de modificar este orden.
 app.use('/usuarios/api', generalAuthLimiter, require('./routes/bitacora'));
 app.use('/usuarios/api', generalAuthLimiter, require('./routes/usuarios'));
+
+// Captura desde los visores (Bitácora F2.2). Va ANTES del express.static de
+// /usuarios: los estáticos solo atienden GET y esto es POST, pero el orden
+// explícito evita sorpresas si algún día cambia esa suposición.
+// ⚠️ ÚNICO endpoint anónimo del sistema — su parser de 5 MB se monta arriba
+// (punto crítico P2) y su rate-limit dedicado va acá. Ver routes/capture.js.
+app.use('/usuarios/capture', captureLimiter, require('./routes/capture'));
+
 app.use('/usuarios', express.static(path.join(__dirname, 'public', 'usuarios')));
 app.get('/usuarios', (req, res) => res.sendFile(path.join(__dirname, 'public', 'usuarios', 'index.html')));
 
