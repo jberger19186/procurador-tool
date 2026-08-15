@@ -1791,9 +1791,21 @@ ipcMain.handle('position-left', async () => {
 //      resuelve sin duplicar, ya aceptado en el diseño, §4.2c).
 const BITACORA_TIMEOUT_MS = 3000;
 
+// F2.6: además del gate y la lista de seguidos, se lleva el JWT actual del usuario
+// para que el visor pueda mandarlo en el POST de captura (mismo mecanismo de
+// `openPortalSection()` — token en el FRAGMENTO de la URL, `#sso=`). Un fragmento
+// jamás se transmite al servidor en un request HTTP, así que el endpoint anónimo
+// `/usuarios/capture` (F2.2) NUNCA ve este token — solo lo lee el navegador, que lo
+// reaplica al redirect 303 del servidor (comportamiento estándar, verificado con un
+// server de prueba local antes de implementarlo: el 303 sin fragmento propio hereda
+// el de la request original). Si `authManager` todavía no tiene sesión (edge case:
+// el visor se post-procesa justo cuando la sesión venció a mitad de la corrida),
+// `token` queda `null` y el visor simplemente no manda `#sso=` — cae al mismo
+// flujo sin sesión que ya soporta F2.3 (login manual, el draft sobrevive el ciclo).
 async function fetchBitacoraRuntimeInfo() {
     let enabled = false;
     let seguidos = [];
+    let ssoToken = null;
     try {
         const client = authManager.backendClient.client;
         const [accRes, segRes] = await Promise.allSettled([
@@ -1806,10 +1818,17 @@ async function fetchBitacoraRuntimeInfo() {
         if (segRes.status === 'fulfilled' && Array.isArray(segRes.value?.data?.seguidos)) {
             seguidos = segRes.value.data.seguidos;
         }
+        // Solo si el módulo está habilitado: sin esto, TODO visor de procuración/informe
+        // por lote (se generan siempre, tengan o no el flag) quedaría con un JWT vivo
+        // embebido en el HTML aunque la botonera ni se renderice — exposición sin
+        // ninguna función, para el 100% de las cuentas que hoy no tienen Bitácora.
+        if (enabled) {
+            ssoToken = authManager?.backendClient?.token || null;
+        }
     } catch (_) {
         // fail-closed: sin botonera, el visor se abre igual sin este bloque
     }
-    return { enabled, seguidos };
+    return { enabled, seguidos, ssoToken };
 }
 
 /**

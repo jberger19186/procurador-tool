@@ -467,7 +467,16 @@
   function enviarCaptura(campos) {
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = 'https://api.procuradortool.com/usuarios/capture';
+    // F2.6: si hay sesión activa en la app al momento de generar el visor, se manda
+    // el token en el FRAGMENTO de la URL (nunca en query ni en el body — un fragmento
+    // no se transmite en el request HTTP, así que el endpoint anónimo de captura jamás
+    // lo ve). El navegador reaplica el fragmento de la request original al 303 del
+    // servidor (verificado con un servidor de prueba antes de implementar esto — mismo
+    // "POST binding" que usan SSO/SAML). Mismo mecanismo que `openPortalSection()` en
+    // la app — acá el token viaja embebido porque el visor es un archivo estático, no
+    // hay IPC al que pedírselo en el momento del click.
+    const ssoToken = (DATOS_BATCH.bitacora && DATOS_BATCH.bitacora.ssoToken) || null;
+    form.action = 'https://api.procuradortool.com/usuarios/capture' + (ssoToken ? ('#sso=' + encodeURIComponent(ssoToken)) : '');
     form.target = 'procurador_portal';
     form.style.display = 'none';
     const todos = Object.assign({ goto: 'bitacora-nueva', origen: 'informe' }, campos);

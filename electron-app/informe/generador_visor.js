@@ -119,7 +119,7 @@ function convertirARutaAbsoluta(ruta) {
  * @param {Array} expedientes - Array de expedientes procesados
  * @param {Object} config - Configuración del sistema
  * @param {string} rutaExcel - Ruta al Excel (opcional)
- * @param {{enabled: boolean, seguidos: string[]}} [bitacoraInfo] - F2.1
+ * @param {{enabled: boolean, seguidos: string[], ssoToken: (string|null)}} [bitacoraInfo] - F2.1/F2.6
  * @returns {Object} Objeto con datos formateados
  */
 function prepararDatos(expedientes, config, rutaExcel, bitacoraInfo) {
@@ -158,7 +158,10 @@ function prepararDatos(expedientes, config, rutaExcel, bitacoraInfo) {
         rutaExcel: rutaExcelRelativa,
         bitacora: {
             enabled: bitacoraInfo?.enabled === true,
-            seguidos: Array.isArray(bitacoraInfo?.seguidos) ? bitacoraInfo.seguidos : []
+            seguidos: Array.isArray(bitacoraInfo?.seguidos) ? bitacoraInfo.seguidos : [],
+            // F2.6: SSO en el POST de captura — ver la nota extensa en fetchBitacoraRuntimeInfo()
+            // (main.js). `main.js` ya lo entrega `null` si el módulo no está habilitado.
+            ssoToken: bitacoraInfo?.ssoToken || null
         }
     };
 }

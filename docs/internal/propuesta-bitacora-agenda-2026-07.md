@@ -1377,16 +1377,49 @@ resultado a la vista.
 > limpio (sin `uncaughtException`, mismos mensajes de inicialización de seguridad que toda sesión
 > anterior). **Sin backend tocado, sin deploy, sin release** — mismo patrón que F2.1: el flag sigue en
 > `false` en los 6 planes y esto no es observable para ningún usuario real hasta que se corte un
-> release. **Con esto, quedan 2 sub-bloques de cliente antes del release único de la Fase 2: F2.6**
-> (deep-links con SSO cuando el visor se abre desde la app) **y F2.7** (botón topbar + actualización
-> del tour de onboarding).
+> release.
+>
+> ✅ **F2.6 CÓDIGO LISTO (2026-08-15, Sonnet 5), sin release. El visor deja de exigir un login manual
+> cuando se abre desde la app con sesión activa — el token viaja en el fragmento de la URL, nunca lo
+> ve el servidor.** El diseño original de la propuesta ya apuntaba a esto (§4.1: "el formulario puede
+> llevar además el hash SSO como ya hace `openPortalSection`" — "técnica estándar y de bajo riesgo",
+> comparado explícitamente con el POST binding de SSO/SAML), pero **antes de tocar código se verificó
+> el supuesto en vez de asumirlo:** ¿el fragmento de una request realmente sobrevive un 303 cuyo
+> `Location` no trae fragmento propio? Se armó un servidor Node mínimo (2 endpoints: uno que responde
+> 303 sin fragmento, otro que solo imprime `location.hash` sin ningún JS que lo toque) y se navegó con
+> el Browser pane real — **confirmado**: `http://localhost:5175/target?draft=abc123#sso=TEST_TOKEN_ABC123`,
+> el navegador reaplicó el fragmento original de la request al redirect. Sin este chequeo empírico,
+> el diseño se habría apoyado en un comportamiento de navegador citado de memoria en un plan de julio,
+> nunca antes probado en este proyecto. **Implementación, 4 archivos:** `fetchBitacoraRuntimeInfo()`
+> (main.js, ya existía desde F2.1) gana el JWT actual (`authManager.backendClient.token`, la misma
+> fuente que usa `openPortalSection`) — **gateado en `enabled`, no incondicional:** sin esto, todo
+> visor de procuración/informe por lote (se generan siempre, tengan o no el flag) habría quedado con
+> un JWT vivo embebido en el HTML aunque la botonera ni se renderice, exposición sin ninguna función
+> para el 100% de las cuentas sin Bitácora. `generador_visor.js` propaga `ssoToken` en `DATOS_BATCH.bitacora`
+> (F2.5, el mini-visor del informe individual, lo hereda gratis por compartir el mismo generador). Los
+> 2 templates (`visorModal_template.html`, `visor_informes_template.html`) arman
+> `form.action = '.../usuarios/capture' + (ssoToken ? '#sso='+encodeURIComponent(ssoToken) : '')` —
+> sin token, el `form.action` queda exactamente igual que hoy (sin cambio de comportamiento). **Fallback
+> ya cubierto sin código nuevo:** un token vencido (visor reabierto días después) hace que
+> `loadAccount()` del portal reciba 401 → `doLogout()` limpia el token pero **nunca toca
+> `sessionStorage`** → `pending_capture_draft` (F2.3) sobrevive intacto → el usuario cae en el login
+> normal y, tras loguearse a mano, el draft se consume igual — confirmado leyendo el código real de
+> `doLogout()`/`loadAccount()`/`initDashboard()`, no asumido. **Verificado sin necesitar el PJN real:**
+> el test del fragmento contra un servidor propio (arriba) · una corrida real de `generarVisorHTML()`
+> con `ssoToken` presente y ausente, confirmando por `JSON.parse` sobre `DATOS_BATCH` completo que
+> viaja cuando corresponde y es `null` cuando `bitacoraInfo` falta · `node --check` en los 4 archivos
+> (incluido el JS inline de ambos templates, extraído y validado por separado) · `npm start` con
+> arranque limpio. **Sin backend tocado, sin deploy, sin release** — mismo patrón que F2.1/F2.5: el
+> flag sigue en `false` en los 6 planes, nada de esto es observable para ningún usuario real. **Con
+> esto, queda 1 solo sub-bloque antes del release único de la Fase 2: F2.7** (botón "📔 Bitácora" en
+> el topbar de la app + actualización del tour de onboarding).
 
 1. **(F2.1)** ✅ **CÓDIGO LISTO (2026-08-15), sin release.** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. 🔴 **Prerrequisito: el fix E4-1 del Bloque D** (escape en `visorModal_template.html`) debe estar aplicado y publicado — sin él esta fase amplía el hallazgo XSS; ver el recuadro rojo de §4.1 para el detalle de `esc()` vs `escAttr()`. ✅ **Ya estaba aplicado** (confirmado: `esc()`/`escAttr()` presentes en el template antes de tocarlo). ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan. 🚨 **PUNTO CRÍTICO P3 (§11.0): el post-procesado NUNCA puede cancelar la apertura del visor** — va en `try/catch` que no propaga, con timeout corto en la consulta de seguidos. Si falla, se abre el visor sin botonera. Hoy ese camino no depende de la red y no puede empezar a depender.
 2. **(F2.2)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **P2 verificado con la prueba POSITIVA** (firma HMAC válida sigue siendo aceptada), no solo con el rechazo de una inválida — ver P-F2.2-a. Archivos: `routes/capture.js`, `utils/captureDrafts.js`, + `captureLimiter` en `middleware/rateLimiter.js`. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor. 🚨 **PUNTO CRÍTICO P2 (§11.0): el parser va inmediatamente antes del `express.urlencoded` GLOBAL, NUNCA antes del `express.json` que tiene el hook `verify`** — de ese hook depende la firma HMAC de los webhooks de MercadoPago. **Identificar los parsers por lo que son, no por número de línea** (hoy 113 y 110, pero el archivo se modifica). **Antes de prod: correr `dev-tools/smoke-payments.js` en staging.**
 3. **(F2.3)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** El consumidor del borrador de F2.2 en el portal: dispatcher por `accion` + pantalla de revisión del lote (`#modal-bitacora-lote`) para `entrada-lote`. Detalle completo en el párrafo de estado más abajo (junto a F2.2).
 4. **(F2.4)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** Endpoint `GET /client/bitacora/seguidos` (backend, contrato de array plano de strings) — consumido por el post-procesado de F2.1, que ya traía el link 📁 a la ficha desde fila y modal (ese lado quedó resuelto en F2.1, solo faltaba este endpoint del que dependía). Detalle en el párrafo de estado más abajo.
 5. **(F2.5)** ✅ **CÓDIGO LISTO (2026-08-15), sin release.** Mini-visor del informe individual — reusa `generarVisorHTML()` (el mismo generador del informe por lote, con su botonera de captura ya completa desde F2.1) con un resumen sintético de 1 elemento, en vez de un template nuevo. Gateado en `bitacoraInfo.enabled`: sin el flag no se genera ningún archivo extra, cero cambio de UX para el resto de los usuarios. Detalle en el párrafo de estado más abajo.
-6. **(F2.6)** Deep-links con SSO cuando el visor se abre desde la app.
+6. **(F2.6)** ✅ **CÓDIGO LISTO (2026-08-15), sin release.** Deep-links con SSO cuando el visor se abre desde la app — el token viaja en el **fragmento** de la URL del POST de captura (`#sso=`), nunca en el body ni en la query, así que el endpoint anónimo de captura nunca lo ve. Verificado empíricamente con un servidor de prueba (no asumido) que el fragmento sobrevive intacto al 303 del servidor. Detalle en el párrafo de estado más abajo.
 7. **(F2.7)** Botón "📔 Bitácora" en el **topbar** de la app (una sola aparición, junto a los tabs — no en el sidebar) + actualización del **tour de onboarding** (`onboarding/tour.js`): el paso 2 existente (`target: '.tab-nav'`, "Navegación — tabs principales") se extiende para mencionar el botón nuevo, o se agrega un paso propio inmediatamente después si visualmente queda separado de los tabs — el mecanismo de spotlight multi-elemento (`targets: [...]`, usado hoy para agrupar "Ver tour" + "Asistente IA" en una sola card) permite resolverlo sin duplicar pasos.
 - **Entregable**: el circuito completo F1/F1b/F1c/F2/F3 (§6). **Deploy de backend** (F2.2, F2.4) **+ un release de Electron** (vX.Y.Z) siguiendo el checklist del proyecto — en ese orden, para que el backend esté listo cuando el release empiece a usarlo.
 
@@ -1438,7 +1471,7 @@ resultado a la vista.
 | **F2.3** — Consumo del borrador en el portal (dispatcher por `accion` + pantalla de revisión del lote) | **Sonnet, medio** ✅ | Mediano | ✅ **Ejecutada 2026-08-15.** Solo backend (`perCaso` en `capture-lote`) + portal — no toca templates de visores (eso ya lo hizo F2.1) ni scripts encriptados. |
 | **F2.4** — Marcado de seguidos: `GET /client/bitacora/seguidos` | **Sonnet, medio** ✅ | Chico | ✅ **Ejecutada 2026-08-15.** Solo backend — el consumo (badge 📁, link a la ficha) ya lo había implementado F2.1 sobre un endpoint que todavía no existía; esta sesión lo puso a existir. |
 | **F2.5** — Mini-visor del informe individual | **Sonnet, medio** ✅ | Chico *(bajó: reusa `generarVisorHTML()` en vez de un template nuevo)* | ✅ **Código listo 2026-08-15, sin release.** Cero cambios en `visor_informes_template.html` — la botonera de captura por checkbox ya soporta n=1 sin adaptación. |
-| **F2.6** — Deep-links con SSO cuando el visor se abre desde la app | **Sonnet, medio** | Mediano | Edita **plantillas** de visores (`generador_visor.js` + templates HTML) — ⛔ **nunca los scripts encriptados**. Patrón conocido; el riesgo es el de cualquier release de Electron. |
+| **F2.6** — Deep-links con SSO cuando el visor se abre desde la app | **Sonnet, medio** ✅ | Mediano | ✅ **Código listo 2026-08-15, sin release.** El punto delicado no era la edición de plantillas en sí, sino confirmar el comportamiento del navegador (fragmento a través de un 303) antes de construir sobre un supuesto — se verificó con un servidor local antes de tocar los templates. |
 | **F2.7** — Botón topbar + actualización del tour (`onboarding/tour.js`) | **Sonnet, bajo** | Chico | El tour ya tiene el patrón multi-elemento (`targets:[]`); el paso 2 (`target:'.tab-nav'`) existe y se extiende. *(Verificado 2026-07-19: la estructura que la propuesta asume es correcta.)* |
 | **F2 — Deploy de backend + release Electron** *(aclarado, hallazgo C3)* | **Sonnet, medio** | — | Deploy de F2.2/F2.4 a staging→prod **primero**, después el release de Electron siguiendo el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
 | **F3** — Pulido y palancas (badge, captura del monitor, sugerencias por novedades) | **Opus para las sugerencias automáticas · Sonnet para lo demás** | Variable | Las "sugerencias a partir de novedades del monitor" son el diferencial con lógica no trivial (matching novedad→entrada) → Opus. El resto (badge, captura del monitor) es mecánico → Sonnet. Solo si el uso real de F1/F2 lo valida. |
