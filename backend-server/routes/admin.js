@@ -3606,4 +3606,96 @@ router.put('/invoices/:id/meta', authenticateAdmin, async (req, res) => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  FERIADOS (ABM)  →  /admin/feriados  (F1.8, hallazgo H2 de la propuesta Bitácora)
+// ═══════════════════════════════════════════════════════════════════════════
+// Config GLOBAL del sistema (una sola tabla `feriados`, sin `user_id`) — por
+// eso va acá y no en routes/bitacora.js: auth de admin, SIN el gate de plan
+// (`checkBitacoraPlan`), que es por-usuario y no aplica a config del sistema.
+// Es lo que le da mantenimiento año a año a la calculadora de plazos de F1.3 —
+// el seed de F1.1 cargó el resto de 2026 + todo 2027, salvo la feria de
+// invierno (su fecha la fija la CSJN por acordada cada año, impredecible).
+
+router.get('/feriados', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const year = req.query.year ? parseInt(req.query.year, 10) : null;
+        const { rows } = (year && !Number.isNaN(year))
+            ? await db.query('SELECT id, fecha, motivo FROM feriados WHERE EXTRACT(YEAR FROM fecha) = $1 ORDER BY fecha', [year])
+            : await db.query('SELECT id, fecha, motivo FROM feriados ORDER BY fecha');
+        res.json({ success: true, feriados: rows });
+    } catch (error) {
+        console.error('Error listando feriados (admin):', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+router.post('/feriados', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { fecha, motivo } = req.body || {};
+    if (!fecha || Number.isNaN(new Date(fecha).getTime())) {
+        return res.status(400).json({ error: 'Fecha inválida' });
+    }
+    const motivoTxt = typeof motivo === 'string' ? motivo.trim().slice(0, 200) : null;
+    try {
+        const { rows } = await db.query(
+            'INSERT INTO feriados (fecha, motivo) VALUES ($1, $2) RETURNING id, fecha, motivo',
+            [fecha, motivoTxt || null]
+        );
+        console.log(`Feriado creado por admin ${req.user.id}: ${fecha}`);
+        res.status(201).json({ success: true, feriado: rows[0] });
+    } catch (error) {
+        if (error.code === '23505') return res.status(409).json({ error: 'Ya existe un feriado en esa fecha' });
+        console.error('Error creando feriado:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+router.put('/feriados/:id', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { id } = req.params;
+    const { fecha, motivo } = req.body || {};
+
+    const campos = [];
+    const vals = [];
+    let i = 1;
+    if (fecha !== undefined) {
+        if (!fecha || Number.isNaN(new Date(fecha).getTime())) return res.status(400).json({ error: 'Fecha inválida' });
+        campos.push(`fecha = $${i++}`); vals.push(fecha);
+    }
+    if (motivo !== undefined) {
+        campos.push(`motivo = $${i++}`);
+        vals.push(typeof motivo === 'string' ? motivo.trim().slice(0, 200) || null : null);
+    }
+    if (campos.length === 0) return res.status(400).json({ error: 'Nada para actualizar' });
+
+    vals.push(id);
+    try {
+        const { rows } = await db.query(
+            `UPDATE feriados SET ${campos.join(', ')} WHERE id = $${i} RETURNING id, fecha, motivo`,
+            vals
+        );
+        if (rows.length === 0) return res.status(404).json({ error: 'Feriado no encontrado' });
+        res.json({ success: true, feriado: rows[0] });
+    } catch (error) {
+        if (error.code === '23505') return res.status(409).json({ error: 'Ya existe un feriado en esa fecha' });
+        console.error('Error actualizando feriado:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+router.delete('/feriados/:id', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    const { id } = req.params;
+    try {
+        const { rowCount } = await db.query('DELETE FROM feriados WHERE id = $1', [id]);
+        if (rowCount === 0) return res.status(404).json({ error: 'Feriado no encontrado' });
+        console.log(`Feriado ${id} eliminado por admin ${req.user.id}`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error eliminando feriado:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 module.exports = router;

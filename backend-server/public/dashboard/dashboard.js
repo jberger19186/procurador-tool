@@ -160,6 +160,7 @@ function navigate(page, id, fromHistory) {
         'ticket-detail': 'Detalle de ticket',
         scripts: 'Scripts',
         plans: 'Planes de suscripción',
+        feriados: 'Feriados (Bitácora)',
         metrics: 'Métricas del sistema',
         legal: 'Legal',
         diagnostico: 'Diagnóstico del sistema',
@@ -171,7 +172,7 @@ function navigate(page, id, fromHistory) {
     const content = document.getElementById('content');
     content.innerHTML = '<div class="loading">Cargando...</div>';
 
-    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, metrics: renderMetrics, legal: renderLegal, diagnostico: renderDiagnostico, 'facturacion-admin': renderFacturacionAdmin, 'pagos-admin': renderPagosAdmin };
+    const pages = { overview: renderOverview, users: renderUsers, 'user-detail': () => renderUserDetail(id), 'pending-users': renderPendingUsers, tickets: renderTickets, 'ticket-detail': () => renderTicketDetail(id), scripts: renderScripts, monitor: renderMonitor, plans: renderPlans, feriados: renderFeriados, metrics: renderMetrics, legal: renderLegal, diagnostico: renderDiagnostico, 'facturacion-admin': renderFacturacionAdmin, 'pagos-admin': renderPagosAdmin };
     if (pages[page]) pages[page]();
 
     // Historial del navegador: registrar la navegación entre secciones para que el
@@ -2789,6 +2790,167 @@ window.activatePlan = async function(planId) {
         setTimeout(() => renderPlans(), 1000);
     } catch (e) { alert(e.message); }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FERIADOS (F1.8) — mantenimiento año a año de la calculadora de plazos
+//  del portal (Bitácora, F1.3). Config global del sistema, sin gate de plan.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function _feriadoFmtFecha(iso) {
+    // `fecha` es DATE; pg lo devuelve en UTC medianoche — tomar los componentes
+    // UTC evita el corrimiento de un día que da un new Date(...).toLocaleDateString()
+    // en husos horarios negativos (Argentina, UTC-3).
+    const d = new Date(iso);
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${d.getUTCFullYear()}`;
+}
+
+let _feriadosCache = [];
+let _feriadosYearFiltro = '';
+
+async function renderFeriados() {
+    const content = document.getElementById('content');
+    content.innerHTML = `
+        <div class="card">
+            <div style="padding:18px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+                <div>
+                    <h3 style="margin:0 0 4px">📔 Feriados</h3>
+                    <p style="margin:0;font-size:12.5px;color:#6b7280">
+                        Alimenta la calculadora de plazos (días hábiles) del portal. El seed inicial cargó
+                        el resto de 2026 y todo 2027 — <strong>salvo la feria de invierno</strong>, cuya fecha
+                        fija la CSJN por acordada cada año. Cargala acá cuando se publique.
+                    </p>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input id="feriados-year-filtro" type="number" placeholder="Año" style="width:90px;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" value="${escHtml(_feriadosYearFiltro)}" onchange="_feriadosSetYearFiltro(this.value)">
+                    <button class="btn btn-sm btn-primary" onclick="openFeriadoModal()">＋ Agregar feriado</button>
+                </div>
+            </div>
+            <div id="feriados-alert" style="padding:0 20px"></div>
+            <div id="feriados-list" style="padding:8px 20px 20px">
+                <div class="loading">Cargando...</div>
+            </div>
+        </div>`;
+    await _feriadosCargarYRenderizar();
+}
+
+function _feriadosSetYearFiltro(v) {
+    _feriadosYearFiltro = v ? String(parseInt(v, 10)) : '';
+    _feriadosCargarYRenderizar();
+}
+
+async function _feriadosCargarYRenderizar() {
+    const list = document.getElementById('feriados-list');
+    try {
+        const qs = _feriadosYearFiltro ? `?year=${encodeURIComponent(_feriadosYearFiltro)}` : '';
+        const data = await apiFetch(`/admin/feriados${qs}`);
+        _feriadosCache = data?.feriados || [];
+        _feriadosRenderTabla();
+    } catch (e) {
+        list.innerHTML = `<div class="empty-state">Error cargando feriados: ${escHtml(e.message)}</div>`;
+    }
+}
+
+function _feriadosRenderTabla() {
+    const list = document.getElementById('feriados-list');
+    if (_feriadosCache.length === 0) {
+        list.innerHTML = '<div class="empty-state">No hay feriados cargados para este filtro.</div>';
+        return;
+    }
+    const rows = _feriadosCache.map(f => `
+        <tr>
+            <td style="padding:9px 8px;font-variant-numeric:tabular-nums">${_feriadoFmtFecha(f.fecha)}</td>
+            <td style="padding:9px 8px">${escHtml(f.motivo || '—')}</td>
+            <td style="padding:9px 8px;text-align:right;white-space:nowrap">
+                <button class="btn btn-sm btn-secondary" onclick="openFeriadoModalById(${f.id})">✏️</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteFeriado(${f.id})">🗑️</button>
+            </td>
+        </tr>`).join('');
+    list.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+                <tr style="border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em">
+                    <th style="padding:8px;text-align:left;width:110px">Fecha</th>
+                    <th style="padding:8px;text-align:left">Motivo</th>
+                    <th style="padding:8px;text-align:right;width:90px"></th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+        <p style="margin-top:10px;font-size:12px;color:#9ca3af">${_feriadosCache.length} feriado(s)${_feriadosYearFiltro ? ` en ${escHtml(_feriadosYearFiltro)}` : ''}.</p>`;
+}
+
+function openFeriadoModalById(id) {
+    const feriado = _feriadosCache.find(f => f.id === id);
+    if (feriado) openFeriadoModal(feriado);
+}
+
+function openFeriadoModal(feriado) {
+    const editando = !!feriado?.id;
+    const fechaVal = feriado?.fecha ? new Date(feriado.fecha).toISOString().slice(0, 10) : '';
+    _injectModal(`${_modalHeader(editando ? '✏️ Editar feriado' : '＋ Nuevo feriado')}
+        <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
+            <input type="hidden" id="_fer-id" value="${feriado?.id ?? ''}">
+            <div>
+                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Fecha *</label>
+                <input id="_fer-fecha" type="date" value="${fechaVal}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+            </div>
+            <div>
+                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Motivo</label>
+                <input id="_fer-motivo" type="text" maxlength="200" placeholder="Ej: Feria judicial de invierno" value="${escHtml(feriado?.motivo || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+            </div>
+            <div id="_fer-err" style="color:#991b1b;font-size:12px;display:none"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
+                <button id="_fer-submit" class="btn btn-sm btn-primary" onclick="saveFeriado()">✅ Guardar</button>
+            </div>
+        </div>`);
+}
+
+async function saveFeriado() {
+    const id = document.getElementById('_fer-id').value;
+    const fecha = document.getElementById('_fer-fecha').value;
+    const motivo = document.getElementById('_fer-motivo').value.trim();
+    const errEl = document.getElementById('_fer-err');
+    errEl.style.display = 'none';
+
+    if (!fecha) {
+        errEl.textContent = 'La fecha es obligatoria.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    const btn = document.getElementById('_fer-submit');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+    try {
+        if (id) {
+            await apiFetch(`/admin/feriados/${id}`, 'PUT', { fecha, motivo: motivo || null });
+        } else {
+            await apiFetch('/admin/feriados', 'POST', { fecha, motivo: motivo || null });
+        }
+        closeDynModal();
+        showAlert(document.getElementById('feriados-alert'), id ? 'Feriado actualizado.' : 'Feriado creado.', 'success');
+        await _feriadosCargarYRenderizar();
+    } catch (e) {
+        errEl.textContent = e.message || 'Error al guardar.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '✅ Guardar';
+    }
+}
+
+async function deleteFeriado(id) {
+    if (!confirm('¿Eliminar este feriado? La calculadora de plazos dejará de excluir esa fecha.')) return;
+    try {
+        await apiFetch(`/admin/feriados/${id}`, 'DELETE');
+        showAlert(document.getElementById('feriados-alert'), 'Feriado eliminado.', 'success');
+        await _feriadosCargarYRenderizar();
+    } catch (e) {
+        alert(e.message);
+    }
+}
 
 window.applyUsageAdjustment = async function(userId) {
     const subsystem = document.getElementById('adj-subsystem').value;

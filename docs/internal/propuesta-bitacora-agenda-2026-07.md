@@ -1188,9 +1188,39 @@ resultado a la vista.
 > intacta. Es la prueba más valiosa de la sesión, porque ejercita exactamente el camino que importa.
 > **No-regresión repetida en prod:** las rutas existentes intactas, `pm2-error.log` sin una sola
 > entrada nueva (la última sigue siendo del 30/07), y los 6 planes con el flag en `false`.
-> **Con esto la Fase 1 llega a 7 de 8 sub-bloques** — queda solo **F1.8** (ABM de feriados en el
-> dashboard admin, Sonnet/bajo), que es lo que le da mantenimiento año a año a la calculadora de
-> plazos de F1.3.
+> **Con esto la Fase 1 llegó a 7 de 8 sub-bloques.**
+>
+> ✅ **F1.8 EJECUTADA Y EN PRODUCCIÓN (2026-08-14, misma sesión) — CIERRA LA FASE 1 COMPLETA (8/8).**
+> ABM de feriados en el dashboard admin. **3 endpoints nuevos** en `routes/admin.js` (no en
+> `routes/bitacora.js`: es config **global** del sistema, sin `user_id`, así que va con auth de admin
+> y **sin** el gate de plan): `POST/PUT/DELETE /admin/feriados`, más un `GET` con filtro opcional por
+> año (el `GET` de F1.2 en `routes/bitacora.js` sigue siendo el de lectura para el portal — no se
+> tocó). Nueva sección "📔 Feriados" en el sidebar del dashboard: tabla ordenada por fecha con filtro
+> por año, alta/edición por modal (`_injectModal`, el patrón ya usado en Pagos), borrado con
+> confirmación. **1 detalle de escape corregido antes de desplegar** (no llegó a producción con el
+> bug): la primera versión pasaba el feriado completo como JSON embebido en un atributo `onclick`
+> entre comillas simples — un `motivo` con un apóstrofe (ej. *"Feria de invierno (d'Elia)"*) habría
+> roto el atributo. Se simplificó a pasar solo el `id` y buscar el feriado en la caché en memoria
+> (`_feriadosCache`), que es más simple que escapar JSON dentro de un atributo y elimina la clase de
+> bug entera. **Verificado en staging con datos reales:** alta con un motivo que contiene un
+> apóstrofe (guardado y leído sin corromperse) · duplicado en la misma fecha → 409 · edición →
+> refleja el cambio · filtro `?year=2027` incluye el registro de prueba · fecha inválida → 400 ·
+> borrado → limpio · sin token admin → 401. **No-regresión repetida en staging y prod:**
+> `/admin/plans`, `/admin/users/search`, `/usuarios/api/plans` intactos; el `GET` público de F1.2
+> (con su propio gate de plan) sigue devolviendo 403 para un usuario sin el flag, confirmando que los
+> dos endpoints de lectura (admin y portal) conviven sin pisarse. **Prod arrancó con los 52 feriados
+> exactos del seed de F1.1** (staging quedó igual tras la limpieza de las pruebas), `pm2-error.log`
+> sin una entrada nueva tras el restart. **Nada visible para ningún usuario real** — el ABM es
+> exclusivamente del dashboard admin, y el flag de Bitácora sigue en `false` en los 6 planes.
+>
+> **🎉 Con esto, la Fase 1 completa del plan (F1.1–F1.8, los 8 sub-bloques) queda en producción.**
+> El módulo es operable de punta a punta desde el portal —agenda, expedientes seguidos, backup y
+> restauración, todo gateado por plan y sin ningún cambio visible mientras el flag siga apagado—
+> salvo la captura automática desde los visores de procuración/informe, que es la **Fase 2**
+> (F2.1–F2.7, requiere backend + un release de Electron) y queda pendiente para cuando se decida
+> avanzar. Recordatorio del hallazgo C6 (§11): la Fase 1 sola no tiene el diferencial de la
+> propuesta — no anunciar ni vender la feature todavía; usarla para validación interna encendiendo el
+> flag en un plan de prueba.
 
 1. **(F1.1)** Migraciones (**4 tablas** — `expedientes_seguidos`, `expediente_snapshots`, `bitacora_entries`, `feriados` — + **4 columnas**: `plans.bitacora_enabled`, `users.home_section`, `users.bitacora_prefs`, `users.bitacora_lost_access_at` [agregada 2026-08-12, decisión D2/Q6, ver §8]) **+ la columna `expediente_key` en `expedientes_seguidos`** con `UNIQUE (user_id, expediente_key)` — **sin `jurisdiccion` en la clave** (decisión D1 + corrección 2026-08-13, ver §7) **+ los 4 índices de §7** *(eran 5; `idx_exp_seguidos_user` quedó redundante al corregir la clave única)* + seed de feriados **resto de 2026 + todo 2027** (alcance confirmado 2026-08-12, decisión D4). **Incluye crear `backend-server/utils/expedienteKey.js`** (normalización canónica) **+ el fixture de casos compartido** con Electron — ver la nota "DÓNDE VIVE LA NORMALIZACIÓN" de §7. ⚠️ **Prerrequisito Bloque B.1 (regenerar `schema.sql`): ✅ ya cumplido** (schema regenerado el 28/07, 27 tablas verificadas — ver `revision-bitacora-preimplementacion-2026-08-12.md`).
 2. **(F1.2)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Endpoints CRUD de bitácora/expedientes + avisos + gate de plan (con el carve-out de export, hallazgo H5, §8). *(Los endpoints de `capture` YA NO van acá — se movieron a Fase 2, punto 2, hallazgo C2.)* 🚨 **PUNTO CRÍTICO P1 (§11.0): el gate NO va en `routes/usuarios.js`** — ese archivo tiene 8 rutas vivas del portal que quedarían en 403. **Resuelto así:** `routes/bitacora.js` se monta en `/usuarios/api` (mismo prefijo que `usuarios.js`) pero aplica el gate sobre **sub-paths** (`router.use('/bitacora', auth, gate, …)`), no sobre el router — una petición a `/usuarios/api/profile` entra, no matchea ningún sub-path y cae al router de usuarios **sin tocar el gate**. **Prueba de no-regresión hecha y pasada**, en staging (39/39) y repetida en prod: con el flag apagado, las 8 rutas existentes responden normal (200/400/404, **ninguna 403**) y las 3 de Bitácora dan 403 con mensaje claro. Archivos: `routes/bitacora.js`, `middleware/checkBitacoraPlan.js` (con la opción `conGracia` lista para el export de F1.6).
@@ -1199,7 +1229,7 @@ resultado a la vista.
 5. **(F1.5)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** Píldoras "Establecer como principal" en Mi Plan y Bitácora + `home_section` en el login del portal + checkbox "Incluye Bitácora" en el form de planes del admin. La guarda del hallazgo A4 (`home_section` validado contra `bitacoraEnabled` en el punto de uso, no solo al escribirlo) quedó implementada en `initDashboard()`.
 6. **(F1.6)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** **Exportación** (Excel + JSON, global y por ficha) — el backup del usuario desde el día uno. Queda cumplida la **dependencia dura de F1.7** (hallazgo C4): la salvaguarda de importación (§5.3, "respaldo automático antes de aplicar") va a poder descargar un export real del estado actual.
 7. **(F1.7)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** **Importación/restauración** desde backup JSON (modos reemplazar/combinar, vista previa dry-run, respaldo automático previo, transaccional). Requiere F1.6 completo (ver punto 6) — cumplido. ⚠️ **Ambigüedad de §5.3 resuelta hacia el lado menos destructivo, ver P-F1.7-a en §11.2.**
-8. **(F1.8)** ABM de feriados en el dashboard admin (hallazgo H2) — sin esto, la calculadora de plazos de F1.3 no tiene cómo mantenerse actualizada año a año.
+8. **(F1.8)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-14).** ABM de feriados en el dashboard admin (hallazgo H2) — sin esto, la calculadora de plazos de F1.3 no tiene cómo mantenerse actualizada año a año.
 - **Entregable**: módulo completo operable a mano desde el portal (entrada manual, sin captura desde visores todavía), con backup y restauración, gateado por plan. Deployable a staging→prod sin release de Electron. (Si hiciera falta acortar la fase, F1.7 es el único candidato razonable a diferir — nunca F1.6, del que depende.)
 - **⚠️ Nota de producto (hallazgo C6):** al cerrar esta fase, la Bitácora **no tiene el diferencial** que motiva la propuesta (§1/§14: *"el dato nace de la automatización que ya corre todos los días"*) — sin Fase 2 es una agenda manual sin ventaja sobre papel o Google Calendar. **No anunciar ni vender la feature al cerrar la Fase 1**; usarla para validación interna con el flag `bitacora_enabled` encendido en un plan de prueba únicamente.
 
