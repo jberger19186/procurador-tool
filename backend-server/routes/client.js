@@ -5,6 +5,7 @@ const { scriptDownloadLimiter } = require('../middleware/rateLimiter');
 const { getSignatureCache } = require('../src/security/signatureCache');
 const { getDecryptedScript } = require('../utils/scriptEncryption');
 const authenticateToken = require('../middleware/authenticateToken');
+const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
 
 // A.1 (revisión 2026-07-27, hallazgo E5-1/P-1): whitelist de scripts que el cliente
 // (Electron) realmente descarga y ejecuta. Antes /scripts/download y /scripts/available
@@ -688,6 +689,46 @@ router.get('/account', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error('Error obteniendo cuenta:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BITÁCORA (F2.4) — GET /client/bitacora/seguidos
+// ═══════════════════════════════════════════════════════════════════════════
+// Consumida por `fetchBitacoraRuntimeInfo()` en main.js (F2.1, post-procesado
+// de visores): devuelve la lista de expedientes que el usuario ya tiene en su
+// Bitácora, para pintar el badge "📁 ya seguido" sin depender del backend en
+// cada render — el visor la trae embebida (`window.BITACORA_RUNTIME.seguidos`)
+// y compara client-side con `claveLigera()` (aproximación cosmética, no
+// autoritativa — la deduplicación real la hace POST /usuarios/capture con
+// `expedienteKey()`, decisión ya documentada en F2.1/P-F2.1-b).
+//
+// Contrato exacto que espera el visor (visorModal_template.html /
+// visor_informes_template.html): un ARRAY PLANO de strings — el campo
+// `expediente` tal cual está guardado, sin envolver en objetos — porque el
+// cliente hace `.map(claveLigera)` directo sobre cada elemento.
+//
+// Gate de plan estricto (mismo `checkBitacoraPlan()` que el resto del módulo,
+// sin la variante `conGracia`): main.js llama este endpoint en paralelo con
+// `/client/account` vía `Promise.allSettled` y trata CUALQUIER rechazo (403
+// incluido) como "seguidos: []" — un usuario sin el flag ya no ve la botonera
+// en absoluto (por `enabled:false` de la otra llamada), así que este 403 nunca
+// llega a importar en la práctica; se aplica igual por consistencia con el
+// resto de `/bitacora/*` y para no filtrar la lista de expedientes de un
+// usuario a un plan que no debería verla.
+router.get('/bitacora/seguidos', authenticateToken, checkBitacoraPlan(), async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+
+    try {
+        const { rows } = await db.query(
+            'SELECT expediente FROM expedientes_seguidos WHERE user_id = $1',
+            [userId]
+        );
+        res.json({ success: true, seguidos: rows.map(r => r.expediente) });
+    } catch (error) {
+        console.error('Error obteniendo expedientes seguidos (Bitácora):', error);
         res.status(500).json({ error: 'Error del servidor' });
     }
 });
