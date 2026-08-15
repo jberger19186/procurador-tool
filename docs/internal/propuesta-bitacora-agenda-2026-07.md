@@ -1454,11 +1454,41 @@ resultado a la vista.
 7. **(F2.7)** ✅ **CÓDIGO LISTO (2026-08-15), sin release. CIERRA LA FASE 2 COMPLETA (7/7 sub-bloques).** Botón "📔 Bitácora" en el **topbar** de la app + actualización del tour de onboarding. Detalle en el párrafo de estado más abajo.
 - **Entregable**: el circuito completo F1/F1b/F1c/F2/F3 (§6). **Deploy de backend** (F2.2, F2.4, ya en producción) **+ un release de Electron** (vX.Y.Z, único, siguiendo el checklist del proyecto) — pendiente, es lo único que falta para que F2.1/F2.3/F2.5/F2.6/F2.7 (todos con "código listo, sin release") lleguen a un usuario real.
 
-### Fase 3 — Pulido y palancas
-1. Badge de pendientes en la app (conteo al abrir).
-2. Visor del monitor con captura (si el uso de fases 1-2 lo valida).
-3. Sugerencias automáticas a partir de novedades del monitor (bandeja de aceptar/descartar) — el diferencial mayor, pero recién cuando el hábito de uso exista.
-4. Tipos de entrada personalizados, export .ics — **solo si hay demanda real**.
+### Fase 3 — Validación y palancas
+
+> **Renumerada y formalizada el 2026-08-15**, al cerrar la Fase 2 con el release `electron-v2.7.48`.
+> Los 4 ítems originales pasan a ser **F3.1–F3.4** y se antepone un **F3.0** que antes no existía como
+> sub-bloque, aunque el propio plan ya lo exigía implícitamente: dos de los ítems estaban condicionados
+> a *"si el uso de fases 1-2 lo valida"* y *"recién cuando el hábito de uso exista"* — sin un tramo que
+> produzca esa validación y ese uso, esas condiciones no se pueden evaluar nunca.
+
+0. **(F3.0)** 🔴 **Validación interna con el flag encendido — plan de pruebas end-to-end.**
+   **Prerrequisito duro de F3.1–F3.4.** 📄 Documento propio: **`plan-pruebas-bitacora-2026-08.md`**
+   (8 bloques, 55 casos). **Por qué es un sub-bloque y no un trámite:** los 15 sub-bloques de F1/F2
+   están en producción, pero **cada uno se verificó solo dentro de su propio tramo** — harness HTTP
+   para el backend, `node --check` y revisión de código para todo el frontend (portal y visores),
+   corridas aisladas de `generarVisorHTML()`. **Con el flag en `false` en los 6 planes era imposible
+   ejercitar el módulo de punta a punta**, así que hay caminos enteros que nunca corrieron: el JS del
+   portal jamás se ejecutó en un navegador contra estos endpoints, ninguna botonera de visor se
+   clickeó nunca, y el sistema **no tiene una sola fila real** en `expedientes_seguidos`,
+   `bitacora_entries` ni `expediente_snapshots` (medido en prod el 2026-08-15). Cierra además 4
+   pendientes de §11.2 que estaban esperando exactamente esto — entre ellos **P-F1.7-b**, el bloque
+   de restauración de snapshots que no se podía ejercitar hasta que algo generara snapshots reales.
+1. **(F3.1)** Badge de pendientes en la app (conteo al abrir) — sobre el botón del topbar que ya
+   construyó F2.7. 🚨 Hereda el **punto crítico P3**: agrega otra consulta de red al arranque de la
+   app, que hoy no depende de la red; va con el mismo `try/catch` que nunca propaga y timeout corto.
+2. **(F3.2)** Visor del monitor con captura — **gateado en F3.0**: el plan siempre dijo *"si el uso de
+   fases 1-2 lo valida"*, y B4 del plan de pruebas **es** esa validación. ✅ **Buena noticia
+   verificada:** `generarVisorMonitoreo` vive en `main.js` y ya escapa correctamente los datos del PJN
+   (contraste positivo del hallazgo E4/P-2), así que este visor usa el mecanismo **fácil** de
+   inyección — `main.js` controla su payload directamente, como el visor de informe por lote, **sin**
+   el post-procesado que F2.1 necesitó para los 3 visores de procuración.
+3. **(F3.3)** Sugerencias automáticas a partir de novedades del monitor (bandeja de aceptar/descartar)
+   — **el diferencial mayor**, pero **gateado en el uso real**, no solo en F3.0: la propuesta siempre
+   dijo *"recién cuando el hábito de uso exista"*. Dejar el flag encendido tras F3.0 es lo que produce
+   ese hábito; **no debería arrancar el mismo día que termina F3.0**.
+4. **(F3.4)** Tipos de entrada personalizados, export .ics — **solo si hay demanda real**. Acá también
+   entraría la vista "Semana" que F1.3 recortó a propósito (pendiente P-F1.3-a).
 
 **Dependencias con el roadmap vigente:** no pisa B3 (MP producción) ni los flecos del plan de pruebas (U9.3). La fase 1 es solo backend+portal (deploy estándar, sin release de Electron); la fase 2 requiere deploy de backend **y** release de app (ver nota arriba).
 
@@ -1479,13 +1509,14 @@ resultado a la vista.
 | Fase | Modelo predominante | Tramos que exigen Opus | Esfuerzo total | Deploy que produce |
 |---|---|---|---|---|
 | **Fase 1** — núcleo backend + portal | **Sonnet** (5 de 8 sub-bloques) | **3**: F1.1 (esquema), F1.2 (gate + carve-out), **F1.7 (importación destructiva — el más delicado de todo el plan)** | ~9–14 sesiones | Deploy de backend + portal. **Sin release de Electron.** |
-| **Fase 2** — captura desde los visores | **Sonnet** (4 de 5 sub-bloques) | **1**: F2.2 (único endpoint anónimo del sistema) | ~4–6 sesiones + 1 release | **Dos despliegues:** backend primero, después release de Electron |
-| **Fase 3** — pulido y palancas | **Sonnet**, salvo un tramo | **1**: sugerencias automáticas por novedades del monitor (matching no trivial) | Variable | Según lo que se decida hacer |
+| **Fase 2** — captura desde los visores | **Sonnet** (6 de 7 sub-bloques) | **1**: F2.2 (único endpoint anónimo del sistema) | ✅ **Real: 7 sesiones + 1 release** (estimado: ~4–6) | **Dos despliegues:** backend primero, después release de Electron |
+| **Fase 3** — validación y palancas | **Sonnet** (4 de 5 sub-bloques) | **1**: F3.3, sugerencias automáticas por novedades del monitor (matching no trivial) | F3.0: 2–3 sesiones · el resto, variable | **F3.0 no despliega nada** (solo enciende el flag). F3.1/F3.2 requieren release de Electron |
 
-> **Lectura rápida:** el plan es **mayormente Sonnet** — 9 de las 14 filas de la tabla de abajo, unas
-> 2 de cada 3. Opus se reserva para **5 tramos puntuales** (F1.1, F1.2, F1.7, F2.2 y las sugerencias
-> de F3), y de esos el que más importa es **F1.7** — es el único que puede destruir datos reales de
-> un usuario.
+> **Lectura rápida:** el plan es **mayormente Sonnet** — 16 de las 21 filas de la tabla de abajo, unas
+> 3 de cada 4. Opus se reserva para **5 tramos puntuales** (F1.1, F1.2, F1.7, F2.2 y **F3.3**, las
+> sugerencias automáticas), y de esos el que más importa es **F1.7** — es el único que puede destruir
+> datos reales de un usuario. *(Actualizado 2026-08-15 al abrir la Fase 3 en F3.0–F3.4: la tabla pasó
+> de 14 a 21 filas y los tramos Opus siguen siendo exactamente 5.)*
 
 | Sub-bloque | Modelo | Esfuerzo | Por qué |
 |---|---|---|---|
@@ -1505,7 +1536,11 @@ resultado a la vista.
 | **F2.6** — Deep-links con SSO cuando el visor se abre desde la app | **Sonnet, medio** ✅ | Mediano | ✅ **Código listo 2026-08-15, sin release.** El punto delicado no era la edición de plantillas en sí, sino confirmar el comportamiento del navegador (fragmento a través de un 303) antes de construir sobre un supuesto — se verificó con un servidor local antes de tocar los templates. |
 | **F2.7** — Botón topbar + actualización del tour (`onboarding/tour.js`) | **Sonnet, bajo** ✅ | Chico | ✅ **Código listo 2026-08-15, sin release.** El tour ya tenía el patrón multi-elemento (`targets:[]`); el paso 2 (`target:'.tab-nav'`) existe y se extendió, exactamente como preveía esta fila. |
 | **F2 — Deploy de backend + release Electron** *(aclarado, hallazgo C3)* | **Sonnet, medio** | — | Deploy de F2.2/F2.4 a staging→prod **primero**, después el release de Electron siguiendo el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
-| **F3** — Pulido y palancas (badge, captura del monitor, sugerencias por novedades) | **Opus para las sugerencias automáticas · Sonnet para lo demás** | Variable | Las "sugerencias a partir de novedades del monitor" son el diferencial con lógica no trivial (matching novedad→entrada) → Opus. El resto (badge, captura del monitor) es mecánico → Sonnet. Solo si el uso real de F1/F2 lo valida. |
+| **F3.0** — 🔴 Validación interna con el flag encendido (plan de pruebas E2E) *(nuevo 2026-08-15)* | **Sonnet, medio** — ⚠️ salvo el bloque B6 | **Grande** (2–3 sesiones) | **Prerrequisito duro de F3.1–F3.4.** Ejecución mecánica sobre un guion (`plan-pruebas-bitacora-2026-08.md`, 55 casos), mismo perfil que el Bloque R del plan de pruebas integral — que con Sonnet/medio rindió 13 hallazgos reales. ⚠️ **Excepción B6:** ejercita `modo=reemplazar` de F1.7, el **único camino del módulo que destruye datos** (su propia fila de acá abajo está marcada Opus/alto); si se separa a una sesión Opus aparte, es una decisión razonable. El bloque más largo es B4 (corridas reales contra el PJN). |
+| **F3.1** — Badge de pendientes en la app | **Sonnet, bajo** | Chico | El botón del topbar ya existe (F2.7) y el patrón de badge también (`badge-novedades` del ítem Monitor). 🚨 Lo único que exige criterio es **no repetir el error que P3 previene**: agrega una consulta de red al arranque de la app, camino que hoy es puramente local. Mismo `try/catch` + timeout corto de F2.1. |
+| **F3.2** — Visor del monitor con captura | **Sonnet, medio** | Chico-mediano *(más bajo de lo que parecía)* | **Gateado en F3.0** (el plan siempre dijo "si el uso de fases 1-2 lo valida"). ✅ **Verificado:** `generarVisorMonitoreo` vive en `main.js` y ya escapa los datos del PJN → usa el mecanismo **fácil** (payload controlado directamente, como el informe por lote), **sin** el post-procesado que encareció F2.1. Requiere release de Electron. |
+| **F3.3** — Sugerencias automáticas desde novedades del monitor (bandeja aceptar/descartar) | **Opus, alto** | **Grande** | **El diferencial mayor de toda la propuesta.** Es el único tramo de la Fase 3 con diseño de datos y lógica no trivial: el **matching novedad→entrada sugerida** (¿qué movimiento del PJN merece un vencimiento? ¿con qué fecha?), un estado nuevo para entradas sugeridas-no-confirmadas, y una bandeja de revisión. **Gateado en el uso real, no solo en F3.0** — arrancarlo sin hábito de uso es diseñar el matching a ciegas. |
+| **F3.4** — Tipos de entrada personalizados · export `.ics` · vista "Semana" (P-F1.3-a) | **Sonnet, bajo-medio** | Variable | **Solo si hay demanda real.** Nada acá es estructural; son las palancas que se agregan cuando un usuario las pide, no antes. |
 
 > **Regla transversal (crítica para no romper nada):** cada sub-bloque se valida en **staging** antes de prod, y el flag `bitacora_enabled` nace en `false` en **todos** los planes → aunque algo salga mal, ningún usuario ve la Bitácora hasta encender el flag en un plan de prueba. La Fase 1 completa se prueba y publica **sin emitir ningún release de Electron**. Ver también §11 "Nota de producto" (hallazgo C6): la Fase 1 sola no debe anunciarse ni venderse — es para validación interna.
 
@@ -1516,6 +1551,16 @@ resultado a la vista.
 > Decisiones tomadas **al ejecutar** un sub-bloque que dejan algo pendiente para más
 > adelante. No son bugs ni deuda técnica urgente — son cabos sueltos conscientes, anotados acá
 > para que no se pierdan entre sesiones. Se van agregando a medida que cada fase se ejecuta.
+>
+> 🎯 **Actualización 2026-08-15 — 4 de estos los cierra F3.0** (el plan de pruebas con el flag
+> encendido, `plan-pruebas-bitacora-2026-08.md`), que es justamente lo que estaban esperando:
+> **P-F1.7-b** (el bloque de restauración de snapshots no se podía ejercitar porque nada generaba
+> snapshots → los genera el bloque B4, y B6.5 los restaura) · **P-F2.1-a** (el contrato del form POST
+> se ejercita de punta a punta por primera vez en B4) · **P-F2.1-b** (si el falso negativo de
+> `claveLigera()` aparece con datos reales, se ve en B4.10/B4.11) · **P-F1.1-a** (la feria judicial de
+> julio se carga desde el ABM en B8.2, si la CSJN ya la publicó). Los otros —P-F1.3-a/b, P-F1.7-a,
+> P-F2.2-a/b— **no** los cierra: son recortes de alcance o hallazgos informativos, no verificaciones
+> pendientes.
 
 | # | Pendiente | Surgió en | Cuándo se cierra | Estado |
 |---|---|---|---|---|
