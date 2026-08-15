@@ -1343,16 +1343,49 @@ resultado a la vista.
 > nuevas atribuibles al deploy, los 6 planes con `bitacora_enabled=false` sin excepción, `/client/bitacora/seguidos`
 > sin token → 401 confirmado en vivo. **Nada visible para ningún usuario real** — el flag sigue
 > apagado y el endpoint solo lo llama el post-procesado de un visor que todavía no llegó a ningún
-> usuario (sin release). **Con esto, el backend de la Fase 2 queda completo** (F2.2 + F2.4) — faltan
-> solo los 3 sub-bloques de cliente Electron: **F2.5** (mini-visor del informe individual), **F2.6**
-> (deep-links con SSO) y **F2.7** (botón topbar + tour), antes de poder cortar el release único que
-> pone todo el circuito en manos de un usuario real.
+> usuario (sin release). **Con esto, el backend de la Fase 2 queda completo** (F2.2 + F2.4).
+>
+> ✅ **F2.5 CÓDIGO LISTO (2026-08-15, Sonnet 5), sin release. El informe individual gana su mini-visor
+> — reusando el generador del informe por lote, no un template nuevo.** El informe individual nunca
+> generó HTML (solo abre el PDF), así que no había dónde exponer la botonera de captura para ese
+> flujo. En vez de escribir un template propio, se llama `generarVisorHTML()` (el mismo generador que
+> ya usa el informe por lote desde F2.1, con la botonera de checkbox+barra de acciones completa) con
+> un resumen sintético de **1 solo elemento** — misma pantalla, un solo renglón. **`generarVisorHTML()`
+> gana un 5º parámetro opcional `nombrePrefijo` (default `'informe-lote'`, retrocompatible con el call
+> site del batch sin tocarlo):** sin esto, el mini-visor individual se habría llamado
+> `informe-lote_visor_*.html`, un nombre engañoso para un solo expediente — ahora usa
+> `informe-individual_visor_<ISO>.html`, coherente con la convención de nombres de v2.7.33.
+> **Cero cambios en `visor_informes_template.html`:** la botonera del informe por lote ya funciona por
+> checkbox-y-barra-flotante disparando acciones `-lote` (`ficha-lote`/`snapshot-lote`/`entrada-lote`)
+> — con un solo checkbox tildado, un lote de 1 elemento es exactamente el mismo camino que ya
+> verificaron 24/24 el harness de F2.3 y las 36 del harness de F2.2; no hacía falta un botón "individual"
+> aparte. **Gateado en `bitacoraInfo.enabled`, no solo en `result.success`:** sin el flag no se escribe
+> ningún archivo nuevo en cada corrida de informe — el PDF se sigue abriendo exactamente igual que
+> hoy, sin ningún cambio de comportamiento para los usuarios sin el módulo (mismo criterio que ya
+> aplicaron F2.1/F2.4 para no introducir trabajo o archivos invisibles-pero-presentes en el disco de
+> cuentas sin el flag). **Reusa `fetchBitacoraRuntimeInfo()` de F2.1 tal cual** (mismo fail-safe:
+> `try/catch` que nunca propaga, timeout de 3s, `Promise.allSettled` con `/client/bitacora/seguidos`
+> de F2.4) — si la consulta de red falla, simplemente no se genera el mini-visor esa corrida, el PDF
+> se abre igual. **3 archivos tocados:** `informe/generador_visor.js` (parámetro nuevo, retrocompatible)
+> · `main.js` (el bloque nuevo en `runInformeLogic()`, modo individual, justo después de abrir el PDF)
+> · `preload.js`/`renderer.js` (bridge + auto-apertura `onInformeIndividualVisorReady`, mismo criterio
+> `config.visor.abrirAutomaticamente` que ya usa el informe por lote). **Verificado sin necesitar el
+> PJN real:** una corrida real de `generarVisorHTML()` con un resumen sintético de 1 expediente y
+> `bitacoraInfo` real — confirma el nombre de archivo (`informe-individual_visor_*`), el contenido de
+> `DATOS_BATCH` (1 expediente, `bitacora.enabled:true`, `seguidos` con el valor pasado) reparseado con
+> `JSON.parse` sobre el bloque completo · `node --check` en los 4 archivos · `npm start` con arranque
+> limpio (sin `uncaughtException`, mismos mensajes de inicialización de seguridad que toda sesión
+> anterior). **Sin backend tocado, sin deploy, sin release** — mismo patrón que F2.1: el flag sigue en
+> `false` en los 6 planes y esto no es observable para ningún usuario real hasta que se corte un
+> release. **Con esto, quedan 2 sub-bloques de cliente antes del release único de la Fase 2: F2.6**
+> (deep-links con SSO cuando el visor se abre desde la app) **y F2.7** (botón topbar + actualización
+> del tour de onboarding).
 
 1. **(F2.1)** ✅ **CÓDIGO LISTO (2026-08-15), sin release.** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. 🔴 **Prerrequisito: el fix E4-1 del Bloque D** (escape en `visorModal_template.html`) debe estar aplicado y publicado — sin él esta fase amplía el hallazgo XSS; ver el recuadro rojo de §4.1 para el detalle de `esc()` vs `escAttr()`. ✅ **Ya estaba aplicado** (confirmado: `esc()`/`escAttr()` presentes en el template antes de tocarlo). ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan. 🚨 **PUNTO CRÍTICO P3 (§11.0): el post-procesado NUNCA puede cancelar la apertura del visor** — va en `try/catch` que no propaga, con timeout corto en la consulta de seguidos. Si falla, se abre el visor sin botonera. Hoy ese camino no depende de la red y no puede empezar a depender.
 2. **(F2.2)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **P2 verificado con la prueba POSITIVA** (firma HMAC válida sigue siendo aceptada), no solo con el rechazo de una inválida — ver P-F2.2-a. Archivos: `routes/capture.js`, `utils/captureDrafts.js`, + `captureLimiter` en `middleware/rateLimiter.js`. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor. 🚨 **PUNTO CRÍTICO P2 (§11.0): el parser va inmediatamente antes del `express.urlencoded` GLOBAL, NUNCA antes del `express.json` que tiene el hook `verify`** — de ese hook depende la firma HMAC de los webhooks de MercadoPago. **Identificar los parsers por lo que son, no por número de línea** (hoy 113 y 110, pero el archivo se modifica). **Antes de prod: correr `dev-tools/smoke-payments.js` en staging.**
 3. **(F2.3)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** El consumidor del borrador de F2.2 en el portal: dispatcher por `accion` + pantalla de revisión del lote (`#modal-bitacora-lote`) para `entrada-lote`. Detalle completo en el párrafo de estado más abajo (junto a F2.2).
 4. **(F2.4)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** Endpoint `GET /client/bitacora/seguidos` (backend, contrato de array plano de strings) — consumido por el post-procesado de F2.1, que ya traía el link 📁 a la ficha desde fila y modal (ese lado quedó resuelto en F2.1, solo faltaba este endpoint del que dependía). Detalle en el párrafo de estado más abajo.
-5. **(F2.5)** **Mini-visor del informe individual** (nuevo, desde `main.js`, sin tocar scripts encriptados — el informe individual no genera visor hoy).
+5. **(F2.5)** ✅ **CÓDIGO LISTO (2026-08-15), sin release.** Mini-visor del informe individual — reusa `generarVisorHTML()` (el mismo generador del informe por lote, con su botonera de captura ya completa desde F2.1) con un resumen sintético de 1 elemento, en vez de un template nuevo. Gateado en `bitacoraInfo.enabled`: sin el flag no se genera ningún archivo extra, cero cambio de UX para el resto de los usuarios. Detalle en el párrafo de estado más abajo.
 6. **(F2.6)** Deep-links con SSO cuando el visor se abre desde la app.
 7. **(F2.7)** Botón "📔 Bitácora" en el **topbar** de la app (una sola aparición, junto a los tabs — no en el sidebar) + actualización del **tour de onboarding** (`onboarding/tour.js`): el paso 2 existente (`target: '.tab-nav'`, "Navegación — tabs principales") se extiende para mencionar el botón nuevo, o se agrega un paso propio inmediatamente después si visualmente queda separado de los tabs — el mecanismo de spotlight multi-elemento (`targets: [...]`, usado hoy para agrupar "Ver tour" + "Asistente IA" en una sola card) permite resolverlo sin duplicar pasos.
 - **Entregable**: el circuito completo F1/F1b/F1c/F2/F3 (§6). **Deploy de backend** (F2.2, F2.4) **+ un release de Electron** (vX.Y.Z) siguiendo el checklist del proyecto — en ese orden, para que el backend esté listo cuando el release empiece a usarlo.
@@ -1404,7 +1437,8 @@ resultado a la vista.
 | **F2.2** — Backend: endpoints de `capture` (PRG, tope 200 filas H3, parser 5MB) *(movido desde F1.2, hallazgo C2)* | **Opus, medio** ✅ | Mediano | ✅ **Ejecutada 2026-08-15.** Es el único endpoint anónimo de todo el sistema (§4.1.1) — el PRG, el upsert idempotente y las 5 protecciones del borrador-anónimo quieren el mismo cuidado que ya tenían en la F1.2 original. |
 | **F2.3** — Consumo del borrador en el portal (dispatcher por `accion` + pantalla de revisión del lote) | **Sonnet, medio** ✅ | Mediano | ✅ **Ejecutada 2026-08-15.** Solo backend (`perCaso` en `capture-lote`) + portal — no toca templates de visores (eso ya lo hizo F2.1) ni scripts encriptados. |
 | **F2.4** — Marcado de seguidos: `GET /client/bitacora/seguidos` | **Sonnet, medio** ✅ | Chico | ✅ **Ejecutada 2026-08-15.** Solo backend — el consumo (badge 📁, link a la ficha) ya lo había implementado F2.1 sobre un endpoint que todavía no existía; esta sesión lo puso a existir. |
-| **F2.5–F2.6** — Mini-visor informe, deep-links SSO | **Sonnet, medio** | Mediano | Edita **plantillas** de visores (`generador_visor.js` + templates HTML) — ⛔ **nunca los scripts encriptados**. El mini-visor del informe se genera desde `main.js`. Patrón conocido; el riesgo es el de cualquier release de Electron. |
+| **F2.5** — Mini-visor del informe individual | **Sonnet, medio** ✅ | Chico *(bajó: reusa `generarVisorHTML()` en vez de un template nuevo)* | ✅ **Código listo 2026-08-15, sin release.** Cero cambios en `visor_informes_template.html` — la botonera de captura por checkbox ya soporta n=1 sin adaptación. |
+| **F2.6** — Deep-links con SSO cuando el visor se abre desde la app | **Sonnet, medio** | Mediano | Edita **plantillas** de visores (`generador_visor.js` + templates HTML) — ⛔ **nunca los scripts encriptados**. Patrón conocido; el riesgo es el de cualquier release de Electron. |
 | **F2.7** — Botón topbar + actualización del tour (`onboarding/tour.js`) | **Sonnet, bajo** | Chico | El tour ya tiene el patrón multi-elemento (`targets:[]`); el paso 2 (`target:'.tab-nav'`) existe y se extiende. *(Verificado 2026-07-19: la estructura que la propuesta asume es correcta.)* |
 | **F2 — Deploy de backend + release Electron** *(aclarado, hallazgo C3)* | **Sonnet, medio** | — | Deploy de F2.2/F2.4 a staging→prod **primero**, después el release de Electron siguiendo el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
 | **F3** — Pulido y palancas (badge, captura del monitor, sugerencias por novedades) | **Opus para las sugerencias automáticas · Sonnet para lo demás** | Variable | Las "sugerencias a partir de novedades del monitor" son el diferencial con lógica no trivial (matching novedad→entrada) → Opus. El resto (badge, captura del monitor) es mecánico → Sonnet. Solo si el uso real de F1/F2 lo valida. |

@@ -1465,6 +1465,25 @@ function setupProcessListeners() {
         }
     });
 
+    // F2.5 (Bitácora): mini-visor del informe individual — solo se emite si el
+    // usuario tiene el módulo habilitado (ver main.js). Mismo criterio de
+    // auto-apertura que el visor de informe por lote (config.visor.abrirAutomaticamente).
+    window.electronAPI.onInformeIndividualVisorReady(async (data) => {
+        const { rutaHTML } = data || {};
+        if (!rutaHTML) return;
+        addLog('info', `🌐 Visor de informe generado: ${rutaHTML}`);
+        if (currentConfig?.visor?.abrirAutomaticamente) {
+            setTimeout(async () => {
+                try {
+                    await window.electronAPI.openFile(rutaHTML);
+                    addLog('info', '🌐 Visor de informe abierto automáticamente');
+                } catch (e) {
+                    addLog('warning', `⚠️ Error al abrir visor de informe: ${e.message}`);
+                }
+            }, 1500);
+        }
+    });
+
     window.electronAPI.onProcessFinished((result) => {
         // Remover alerta de login manual si quedó visible
         const manualAlert = document.getElementById('__psc_manual_alert');

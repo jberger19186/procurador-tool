@@ -110,6 +110,11 @@ try {
         onInformeBatchComplete: (callback) => {
             ipcRenderer.on('informe-batch-complete', (_, data) => callback(data));
         },
+        // F2.5 (Bitácora): mini-visor del informe individual, solo se emite si el
+        // usuario tiene el módulo habilitado (ver main.js, runInformeLogic).
+        onInformeIndividualVisorReady: (callback) => {
+            ipcRenderer.on('informe-individual-visor-ready', (_, data) => callback(data));
+        },
 
         // ============ CUENTA Y TICKETS ============
         getLocalUser: () => ipcRenderer.invoke('get-local-user'),

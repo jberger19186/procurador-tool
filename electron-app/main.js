@@ -2046,6 +2046,34 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
                 }
             }
 
+            // F2.5: mini-visor del informe individual — el informe individual nunca
+            // generó un visor HTML (a diferencia del batch), así que hoy no hay dónde
+            // mostrar la botonera de captura de Bitácora en este flujo. En vez de un
+            // template nuevo, se reusa `generarVisorHTML()` (el mismo generador del
+            // informe por lote, ya con la botonera completa) con un resumen sintético
+            // de 1 solo elemento — la misma pantalla, un solo renglón. Gateado en
+            // `bitacoraInfo.enabled`: sin el módulo habilitado no hay razón de escribir
+            // un archivo extra en cada corrida (el PDF ya se abrió arriba, sin cambios
+            // para ningún usuario que no tenga el flag).
+            if (result.success) {
+                try {
+                    const bitacoraInfo = await fetchBitacoraRuntimeInfo();
+                    if (bitacoraInfo.enabled) {
+                        const descargasPath = path.join(getUserDataDir(cuit), 'descargas');
+                        const informeDir = path.join(__dirname, 'informe');
+                        const resumenPath = path.join(descargasPath, `resumen_informe_individual_${Date.now()}.json`);
+                        fs.writeFileSync(resumenPath, JSON.stringify([{ expediente, ok: true, exitCode: 0 }], null, 2), 'utf8');
+                        const { generarVisorHTML } = require(path.join(informeDir, 'generador_visor.js'));
+                        const configProceso = { rutas: { descargas: descargasPath } };
+                        const rutaHTML = await generarVisorHTML(resumenPath, configProceso, null, bitacoraInfo, 'informe-individual');
+                        try { fs.unlinkSync(resumenPath); } catch {}
+                        mainWindow.webContents.send('informe-individual-visor-ready', { rutaHTML });
+                    }
+                } catch (miniVisorError) {
+                    console.error('Bitácora: no se pudo generar el mini-visor del informe individual (no crítico):', miniVisorError.message);
+                }
+            }
+
             mainWindow.webContents.send('batch-progress', { done: true });
             updateRunStats('informes', result.success);
             mainWindow.webContents.send('process-finished', { code: result.success ? 0 : 1, success: result.success, isInformeBatch: false, isInforme: true });

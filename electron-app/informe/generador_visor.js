@@ -17,9 +17,13 @@ const { buscarPdfExpediente } = require('./buscarPdfExpediente');
  *   diferencia de los visores de procuración, que van por post-procesado — ver H1 del
  *   plan de Bitácora). Si no viene (o falló su obtención), se inyecta deshabilitada —
  *   nunca bloquea la generación del visor (mismo espíritu del punto crítico P3).
+ * @param {string} [nombrePrefijo='informe-lote'] - F2.5: prefijo del archivo de salida.
+ *   El informe individual reusa esta misma función con `resumenPath` de 1 solo elemento
+ *   (mini-visor, sin tocar scripts encriptados) — pasa `'informe-individual'` para no
+ *   generar un `informe-lote_visor_*.html` engañoso cuando en realidad es 1 expediente.
  * @returns {Promise<string>} Ruta del HTML generado
  */
-async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null, bitacoraInfo = null) {
+async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null, bitacoraInfo = null, nombrePrefijo = 'informe-lote') {
     try {
         console.log('\n🌐 Iniciando generación de visor HTML...');
 
@@ -69,7 +73,7 @@ async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null, bitac
 
         // 6. Guardar HTML generado
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-        const nombreArchivo = `informe-lote_visor_${timestamp}.html`;
+        const nombreArchivo = `${nombrePrefijo}_visor_${timestamp}.html`;
         const carpetaDescargas = config.rutas?.descargas || 'descargas';
         const rutaHTML = path.join(carpetaDescargas, nombreArchivo);
 
