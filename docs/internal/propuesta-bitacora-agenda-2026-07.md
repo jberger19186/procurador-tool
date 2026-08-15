@@ -1477,9 +1477,21 @@ resultado a la vista.
    **nunca se construyó** — corregido el estado de ese pendiente. **1 hallazgo cosmético sin
    corregir a propósito:** el contador `snapshotsCreados` del resumen de import no distingue
    creado de reprocesado (P-F3.0-b, bajo, no afecta integridad de datos).
-1. **(F3.1)** Badge de pendientes en la app (conteo al abrir) — sobre el botón del topbar que ya
-   construyó F2.7. 🚨 Hereda el **punto crítico P3**: agrega otra consulta de red al arranque de la
-   app, que hoy no depende de la red; va con el mismo `try/catch` que nunca propaga y timeout corto.
+1. **(F3.1)** ✅ **CÓDIGO LISTO (2026-08-15), backend ya en producción, cliente sin release.**
+   Badge de pendientes en la app (conteo al abrir) — sobre el botón del topbar que ya construyó
+   F2.7. `GET /client/bitacora/pendientes` (gateado por `checkBitacoraPlan()`) cuenta
+   `bitacora_entries` con `due_at < NOW()` y `done_at IS NULL`; verificado con un harness de 8
+   aserciones en staging y confirmado en vivo contra producción con datos reales (usuario 250,
+   count=2). Hereda el **punto crítico P3** tal como estaba previsto: el IPC handler nuevo
+   (`get-bitacora-pendientes-count`) reusa el mismo `BITACORA_TIMEOUT_MS`/`try-catch` que nunca
+   propaga de F2.1/F2.5/F2.6, y solo se dispara desde `updateUserChip()` cuando
+   `bitacoraEnabled===true`. El badge (`.badge-novedad-topbar`) reusa el patrón visual ya probado
+   en producción de `.badge-novedad` del sidebar. `node --check` en los 4 JS tocados + `npm start`
+   con arranque limpio. **La confirmación visual del badge quedó bloqueada por una limitación del
+   entorno de esta sesión** (aislamiento de sesión de Windows entre el proceso que lanza la app y
+   la sesión que ve la herramienta de control remoto — no una duda sobre el código, que sigue el
+   mismo patrón ya verificado visualmente en producción para F2.7) — pendiente de una confirmación
+   visual liviana en una sesión futura, no bloqueante para seguir con F3.2.
 2. **(F3.2)** Visor del monitor con captura — **gateado en F3.0**: el plan siempre dijo *"si el uso de
    fases 1-2 lo valida"*, y B4 del plan de pruebas **es** esa validación. ✅ **Buena noticia
    verificada:** `generarVisorMonitoreo` vive en `main.js` y ya escapa correctamente los datos del PJN
@@ -1540,7 +1552,7 @@ resultado a la vista.
 | **F2.7** — Botón topbar + actualización del tour (`onboarding/tour.js`) | **Sonnet, bajo** ✅ | Chico | ✅ **Código listo 2026-08-15, sin release.** El tour ya tenía el patrón multi-elemento (`targets:[]`); el paso 2 (`target:'.tab-nav'`) existe y se extendió, exactamente como preveía esta fila. |
 | **F2 — Deploy de backend + release Electron** *(aclarado, hallazgo C3)* | **Sonnet, medio** | — | Deploy de F2.2/F2.4 a staging→prod **primero**, después el release de Electron siguiendo el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
 | **F3.0** — Validación interna con el flag encendido (plan de pruebas E2E) | **Sonnet, medio** ✅ | **Grande** — ✅ **1 sesión** (más rápido de lo estimado: 2–3) | ✅ **Ejecutado 2026-08-15, 55/55 casos.** 3 bugs reales de timezone encontrados y corregidos en vivo (misma causa raíz), incluido el paso por `modo=reemplazar` de F1.7 (el único camino destructivo del módulo) con backup fresco previo — salió limpio, sin necesitar una sesión Opus aparte. |
-| **F3.1** — Badge de pendientes en la app | **Sonnet, bajo** | Chico | El botón del topbar ya existe (F2.7) y el patrón de badge también (`badge-novedades` del ítem Monitor). 🚨 Lo único que exige criterio es **no repetir el error que P3 previene**: agrega una consulta de red al arranque de la app, camino que hoy es puramente local. Mismo `try/catch` + timeout corto de F2.1. |
+| **F3.1** — Badge de pendientes en la app | **Sonnet, bajo** | Chico | ✅ **Código listo (2026-08-15).** Backend ya en producción; cliente pendiente de release. Ver detalle arriba. |
 | **F3.2** — Visor del monitor con captura | **Sonnet, medio** | Chico-mediano *(más bajo de lo que parecía)* | **Gateado en F3.0** (el plan siempre dijo "si el uso de fases 1-2 lo valida"). ✅ **Verificado:** `generarVisorMonitoreo` vive en `main.js` y ya escapa los datos del PJN → usa el mecanismo **fácil** (payload controlado directamente, como el informe por lote), **sin** el post-procesado que encareció F2.1. Requiere release de Electron. |
 | **F3.3** — Sugerencias automáticas desde novedades del monitor (bandeja aceptar/descartar) | **Opus, alto** | **Grande** | **El diferencial mayor de toda la propuesta.** Es el único tramo de la Fase 3 con diseño de datos y lógica no trivial: el **matching novedad→entrada sugerida** (¿qué movimiento del PJN merece un vencimiento? ¿con qué fecha?), un estado nuevo para entradas sugeridas-no-confirmadas, y una bandeja de revisión. **Gateado en el uso real, no solo en F3.0** — arrancarlo sin hábito de uso es diseñar el matching a ciegas. |
 | **F3.4** — Tipos de entrada personalizados · export `.ics` · vista "Semana" (P-F1.3-a) | **Sonnet, bajo-medio** | Variable | **Solo si hay demanda real.** Nada acá es estructural; son las palancas que se agregan cuando un usuario las pide, no antes. |
