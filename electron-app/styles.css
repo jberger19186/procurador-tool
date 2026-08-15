@@ -194,8 +194,19 @@ body {
   color: var(--accent-dark);
   background: var(--accent-muted);
   margin-left: 4px;
+  position: relative; /* ancla el badge de pendientes (F3.1) */
 }
 .bitacora-topbar-btn:hover { background: var(--accent-dark); color: #fff; }
+
+/* F3.1: variante del badge de novedades para un botón compacto del topbar —
+   ancla arriba a la derecha en vez de "margin-left:auto" (pensado para filas
+   del sidebar, no aplica acá). */
+.badge-novedad-topbar {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  margin-left: 0;
+}
 
 .topbar-spacer { flex: 1; }
 

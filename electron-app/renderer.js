@@ -516,8 +516,39 @@ async function updateUserChip() {
         // se decide mostrarlo, una vez por carga de la app.
         const btnBitacora = document.getElementById('btnTopbarBitacora');
         if (btnBitacora) btnBitacora.style.display = a.bitacoraEnabled === true ? '' : 'none';
+
+        // F3.1: badge de pendientes — SOLO se pide si el módulo está habilitado.
+        // Sin esto, el 100% de las cuentas sin el flag dispararía una consulta de
+        // red extra al abrir la app, sin ningún dato que mostrar (mismo criterio
+        // de no generar tráfico sin función que ya aplicó F2.1 con el ssoToken).
+        if (a.bitacoraEnabled === true) {
+            cargarBitacoraPendientesCount();
+        }
     } catch (_) {
         // Silencioso — el chip queda con los defaults del HTML
+    }
+}
+
+// F3.1 (Bitácora): conteo de "vencidos sin confirmar" para el badge del botón
+// del topbar. Hereda el punto crítico P3 (F2.1): agrega una consulta de red al
+// arranque de la app, camino que hoy no depende de la red — mismo criterio de
+// seguridad: nunca bloquea nada, nunca lanza, el badge simplemente no aparece
+// si algo falla (main.js ya hace el try/catch con timeout corto del lado IPC;
+// acá solo queda no dejar que un error de la propia llamada rompa el arranque).
+async function cargarBitacoraPendientesCount() {
+    try {
+        const res = await window.electronAPI.getBitacoraPendientesCount();
+        const badge = document.getElementById('badge-bitacora-topbar');
+        if (!badge) return;
+        const count = res?.success ? (res.count || 0) : 0;
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.style.display = '';
+        } else {
+            badge.style.display = 'none';
+        }
+    } catch (_) {
+        // Silencioso — sin badge, como si no hubiera pendientes
     }
 }
 

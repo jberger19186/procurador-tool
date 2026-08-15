@@ -119,6 +119,7 @@ try {
         // ============ CUENTA Y TICKETS ============
         getLocalUser: () => ipcRenderer.invoke('get-local-user'),
         getAccount: () => ipcRenderer.invoke('get-account'),
+        getBitacoraPendientesCount: () => ipcRenderer.invoke('get-bitacora-pendientes-count'),
         getBatchLimits: () => ipcRenderer.invoke('get-batch-limits'),
         getTickets: () => ipcRenderer.invoke('get-tickets'),
         getTicketDetail: (id) => ipcRenderer.invoke('get-ticket-detail', id),

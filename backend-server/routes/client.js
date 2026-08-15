@@ -733,6 +733,39 @@ router.get('/bitacora/seguidos', authenticateToken, checkBitacoraPlan(), async (
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  BITÁCORA (F3.1) — GET /client/bitacora/pendientes
+// ═══════════════════════════════════════════════════════════════════════════
+// Cuenta rápida para el badge del botón "📔 Bitácora" del topbar de la app —
+// consultada UNA vez al abrir, no en cada render. Deliberadamente NO reusa
+// `/usuarios/api/bitacora/avisos` (F1.2): ese endpoint trae las filas completas
+// de vencidos+próximos con JOIN a `expedientes_seguidos`, pensado para el
+// banner del portal — acá solo hace falta un número, así que es una query
+// mínima propia. Mismo criterio que "vencidos sin confirmar" del banner: sin
+// límite de ventana hacia atrás, para que el badge refleje el total real
+// pendiente de confirmar, no solo los últimos 7 días.
+//
+// Mismo gate estricto que el resto de `/bitacora/*`. Igual que F2.4, el 403
+// nunca importa en la práctica: `cargarBitacoraPendientesCount()` en el
+// renderer solo la llama si `account.bitacoraEnabled` ya vino `true`.
+router.get('/bitacora/pendientes', authenticateToken, checkBitacoraPlan(), async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+
+    try {
+        const { rows: [{ total }] } = await db.query(
+            `SELECT count(*)::int AS total FROM bitacora_entries
+              WHERE user_id = $1 AND done_at IS NULL
+                AND due_at IS NOT NULL AND due_at < NOW()`,
+            [userId]
+        );
+        res.json({ success: true, count: total });
+    } catch (error) {
+        console.error('Error obteniendo pendientes de Bitácora:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 // Consultar límites de batch antes de ejecutar (sin consumir uso)
 router.get('/batch-limits', authenticateToken, async (req, res) => {
     const db = req.app.get('db');

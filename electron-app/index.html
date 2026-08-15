@@ -117,6 +117,9 @@
     <button class="tab-btn bitacora-topbar-btn" id="btnTopbarBitacora" style="display:none" title="Abrir tu Bitácora en el portal">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h8.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3.5z"/><path d="M3 12h9.5"/><path d="M6 5.5h4M6 8h4"/></svg>
         Bitácora
+        <!-- F3.1: conteo de pendientes (vencidos sin confirmar), cargado una vez al
+             abrir la app — ver cargarBitacoraPendientesCount() en renderer.js. -->
+        <span id="badge-bitacora-topbar" class="badge-novedad badge-novedad-topbar" style="display:none">0</span>
     </button>
 
     <div class="topbar-spacer"></div>

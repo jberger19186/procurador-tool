@@ -2308,6 +2308,23 @@ ipcMain.handle('get-account', async () => {
     }
 });
 
+// F3.1: conteo de pendientes de Bitácora para el badge del botón del topbar
+// (F2.7). Mismo criterio de seguridad que `fetchBitacoraRuntimeInfo()`
+// (F2.1/P3): timeout corto explícito, nunca propaga — el renderer solo la
+// llama si ya sabe por `account.bitacoraEnabled` que el módulo está activo,
+// así que un 403 del gate acá jamás debería ocurrir en la práctica, pero se
+// trata igual que cualquier otro fallo de red: badge oculto, sin romper nada.
+ipcMain.handle('get-bitacora-pendientes-count', async () => {
+    try {
+        const client = authManager.backendClient.client;
+        const res = await client.get('/client/bitacora/pendientes', { timeout: BITACORA_TIMEOUT_MS });
+        const count = Number.isInteger(res?.data?.count) ? res.data.count : 0;
+        return { success: true, count };
+    } catch (_) {
+        return { success: false, count: 0 };
+    }
+});
+
 ipcMain.handle('get-batch-limits', async () => {
     try {
         return await authManager.backendClient.getBatchLimits();
