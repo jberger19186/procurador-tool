@@ -252,12 +252,71 @@
     .modal-content { width: 96%; max-height: 95vh; }
     .search-box { width: 100%; }
   }
+
+  /* ── Bitácora (F2.1) ── */
+  .bit-sel-cell { width: 30px; text-align: center; }
+  .bit-checkbox { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+  .bit-bar {
+    display: none; align-items: center; gap: 8px;
+    padding: 9px 22px; background: var(--accent-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .bit-bar.active { display: flex; }
+  .bit-bar-count { font-size: 12px; font-weight: 700; color: var(--accent-dark); white-space: nowrap; }
+  .bit-btn {
+    height: 27px; padding: 0 11px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--bg-surface);
+    color: var(--text-2); font-size: 11.5px; font-family: var(--font); font-weight: 500;
+    cursor: pointer; white-space: nowrap; transition: 0.12s;
+  }
+  .bit-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .bit-btn-ghost { background: transparent; border: none; color: var(--text-3); font-size: 11px; cursor: pointer; }
+  .bit-btn-ghost:hover { color: var(--error); }
+  .bit-row-cell { width: 44px; text-align: center; position: relative; }
+  .bit-plus-btn {
+    height: 24px; width: 24px; border-radius: 6px; border: 1px solid var(--border-strong);
+    background: transparent; color: var(--accent-dark); font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; transition: 0.12s;
+  }
+  .bit-plus-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .bit-ficha-link {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 10.5px; color: var(--accent-dark); text-decoration: none; font-weight: 600;
+    padding: 3px 7px; border-radius: 6px; background: var(--accent-muted);
+  }
+  .bit-ficha-link:hover { text-decoration: underline; }
+  .bit-menu {
+    display: none; position: absolute; right: 0; top: 28px; z-index: 50;
+    background: var(--bg-surface); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+    min-width: 190px; padding: 5px; text-align: left;
+  }
+  .bit-menu.open { display: block; }
+  .bit-menu-item {
+    display: block; width: 100%; padding: 7px 10px; border: none; background: none;
+    text-align: left; font-size: 12px; font-family: var(--font); color: var(--text-1);
+    cursor: pointer; border-radius: 5px; white-space: nowrap;
+  }
+  .bit-menu-item:hover { background: var(--bg-hover); }
+  .bit-menu-sep { height: 1px; background: var(--border); margin: 5px 2px; }
+  .bit-modal-actions {
+    display: flex; gap: 6px; flex-wrap: wrap; padding-top: 14px; margin-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .bit-footer {
+    text-align: center; padding: 14px 22px; font-size: 11.5px; color: var(--text-3);
+    border-top: 1px solid var(--border); background: var(--bg-surface);
+  }
+  .bit-footer a { color: var(--accent-dark); text-decoration: none; font-weight: 600; }
+  .bit-footer a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
   <div id="resumen" style="display:none;"></div>
   <div id="filtros"  style="display:none;"></div>
+  <div id="bit-bar" class="bit-bar"></div>
   <div id="tabla-container" style="display:none;"></div>
+  <div id="bit-footer"></div>
 
   <!-- MODAL -->
   <div id="modal" class="modal">
@@ -283,6 +342,7 @@
   </div>
 
   <!-- DATOS_EMBEBIDOS -->
+  <!-- BITACORA_RUNTIME -->
 
   <script>
     let datosCompletos = null;
@@ -378,6 +438,7 @@
           (exp.dependencia || '').toLowerCase().includes(busqueda)
         );
       }
+      if (typeof bitOnFilterChange === 'function') bitOnFilterChange();
       mostrarTabla(expedientesFiltrados);
     }
 
@@ -392,8 +453,10 @@
         return;
       }
 
+      const bitCol = (typeof bitColHeader === 'function') ? bitColHeader() : '';
       let html = `<div class="table-wrapper"><table>
         <thead><tr>
+          ${bitCol}
           <th>Expediente</th><th>Carátula</th><th>Dependencia</th>
           <th>Situación</th><th>Últ. Act.</th><th>Estado</th><th>Movs.</th><th></th>
         </tr></thead><tbody>`;
@@ -408,7 +471,9 @@
         const ultimaAct   = exp.ultimaAct   || '—';
         const caratulaCorta = caratula.length > 45    ? caratula.substring(0,45)    + '…' : caratula;
         const depCorta      = dependencia.length > 28 ? dependencia.substring(0,28) + '…' : dependencia;
+        const bitCell = (typeof bitRowCell === 'function') ? bitRowCell(exp, index) : '';
         html += `<tr>
+          ${bitCell}
           <td class="mono">${expediente}</td>
           <td title="${escAttr(caratula)}" style="color:var(--text-1);font-weight:500">${esc(caratulaCorta)}</td>
           <td title="${escAttr(dependencia)}">${esc(depCorta)}</td>
@@ -422,6 +487,7 @@
 
       html += `</tbody></table></div>`;
       container.innerHTML = html;
+      if (typeof bitAfterRenderTabla === 'function') bitAfterRenderTabla();
     }
 
     function abrirModal(index) {
@@ -461,7 +527,9 @@
         bodyHTML = `<div class="no-data">No hay movimientos para este expediente</div>`;
       }
 
+      if (typeof bitModalActionsHtml === 'function') bodyHTML += bitModalActionsHtml(exp);
       document.getElementById('modal-body').innerHTML = bodyHTML;
+      if (typeof bitWireModalActions === 'function') bitWireModalActions(exp);
       document.getElementById('modal-contador').textContent = `${index + 1} de ${expedientesFiltrados.length}`;
       document.getElementById('btn-anterior').disabled = (index === 0);
       document.getElementById('btn-siguiente').disabled = (index === expedientesFiltrados.length - 1);
@@ -483,6 +551,169 @@
         else if (e.key === 'ArrowRight') navegarExpediente(1);
       }
     });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // BITÁCORA (F2.1) — botonera de captura desde el visor de procuración
+    // ═══════════════════════════════════════════════════════════════════════
+    // `window.BITACORA_RUNTIME` lo inyecta `main.js` REEMPLAZANDO el marcador
+    // <!-- BITACORA_RUNTIME --> de arriba, una sola vez, al terminar la corrida
+    // (post-procesado — ver decisión D11 y el punto crítico P3 del plan). Si el
+    // visor nunca fue post-procesado (falló la red, o es un archivo viejo abierto
+    // con una versión anterior de la app), la variable no existe y acá se asume
+    // el default seguro: sin botonera, como si el plan no incluyera Bitácora.
+    var BITACORA_RUNTIME = window.BITACORA_RUNTIME || { enabled: false, seguidos: [] };
+
+    if (BITACORA_RUNTIME.enabled) {
+      (function () {
+        var seleccionados = new Set();     // índices (sobre expedientesFiltrados) tildados
+        // Set de claves de "ya seguidos" — SOLO para el badge visual 📁, no autoritativo.
+        // La deduplicación real la hace el backend (POST /usuarios/capture, F2.2) con la
+        // misma normalización que expedienteKey.js — acá alcanza una aproximación liviana.
+        var seguidosSet = new Set((BITACORA_RUNTIME.seguidos || []).map(claveLigera));
+
+        function claveLigera(s) {
+          return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+        function yaSeguido(exp) {
+          return seguidosSet.has(claveLigera(exp.expediente));
+        }
+
+        // ── Formulario POST oculto → /usuarios/capture (F2.2, endpoint aún no
+        // desplegado — el botón ya queda listo, el 404 hasta entonces es esperado). ──
+        // Contrato asumido por este sub-bloque (F2.1), a confirmar al implementar F2.2:
+        //   accion: 'ficha' | 'snapshot' | 'entrada' | 'ficha-lote' | 'snapshot-lote' | 'entrada-lote'
+        //   tipo:   'vencimiento'|'audiencia'|'tarea'|'nota'  (solo si accion incluye 'entrada')
+        //   individual: exp, jur, dep, car, sit, fproc, movs (JSON)
+        //   lote:       lote (JSON de [{exp,jur,dep,car,sit,movs}, ...])
+        function enviarCaptura(campos) {
+          var form = document.createElement('form');
+          form.method = 'POST';
+          form.action = 'https://api.procuradortool.com/usuarios/capture';
+          form.target = 'procurador_portal';
+          form.style.display = 'none';
+          var todos = Object.assign({ goto: 'bitacora-nueva', origen: 'procuracion' }, campos);
+          Object.keys(todos).forEach(function (k) {
+            if (todos[k] === undefined || todos[k] === null) return;
+            var input = document.createElement('input');
+            input.name = k;
+            input.value = String(todos[k]);   // value de <input> vía DOM: sin riesgo de inyección de atributo
+            form.appendChild(input);
+          });
+          document.body.appendChild(form);
+          form.submit();
+          setTimeout(function () { form.remove(); }, 500);
+        }
+
+        function campoDeCaso(exp) {
+          return {
+            exp: exp.expediente || '',
+            jur: '', dep: exp.dependencia || '', car: exp.caratula || '',
+            sit: exp.situacion || '',
+            fproc: (datosCompletos && datosCompletos.fechaEjecucion) || '',
+            movs: JSON.stringify(exp.movimientos || [])
+          };
+        }
+
+        function guardarCaso(exp)       { enviarCaptura(Object.assign({ accion: 'ficha' },    campoDeCaso(exp))); }
+        function guardarProcuracion(exp){ enviarCaptura(Object.assign({ accion: 'snapshot' }, campoDeCaso(exp))); }
+        function crearEntrada(exp, tipo){ enviarCaptura(Object.assign({ accion: 'entrada', tipo: tipo }, campoDeCaso(exp))); }
+
+        function loteSeleccionado() {
+          return Array.from(seleccionados).map(function (i) { return campoDeCaso(expedientesFiltrados[i]); });
+        }
+        function accionLote(accion, tipo) {
+          if (seleccionados.size === 0) return;
+          enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(loteSeleccionado()) });
+        }
+
+        // ── Columna de selección (tabla general) ──
+        // El índice es la posición dentro de `expedientesFiltrados` en el momento del
+        // render — es lo mismo que usa `abrirModal(index)` en el botón "Ver →" de la fila,
+        // así que no hace falta un identificador propio del expediente.
+        window.bitColHeader = function () { return '<th class="bit-sel-cell"></th>'; };
+        window.bitRowCell = function (exp, index) {
+          if (yaSeguido(exp)) {
+            return '<td class="bit-sel-cell"><a class="bit-ficha-link" href="https://api.procuradortool.com/usuarios/?goto=expediente" target="procurador_portal" title="Ya seguido en tu Bitácora">📁</a></td>';
+          }
+          return '<td class="bit-sel-cell"><input type="checkbox" class="bit-checkbox" data-bit-idx="' + index + '"' + (seleccionados.has(index) ? ' checked' : '') + '></td>';
+        };
+        // La búsqueda reemplaza `expedientesFiltrados` por completo — los índices tildados
+        // dejarían de corresponder a las filas que el usuario realmente vio y marcó. Más
+        // seguro limpiar la selección al cambiar el filtro que arrastrar una selección
+        // "fantasma" sobre expedientes distintos a los tildados.
+        window.bitOnFilterChange = function () { seleccionados.clear(); };
+
+        window.bitAfterRenderTabla = function () {
+          document.querySelectorAll('.bit-checkbox').forEach(function (chk) {
+            chk.addEventListener('change', function () {
+              var idx = parseInt(chk.dataset.bitIdx, 10);
+              if (chk.checked) seleccionados.add(idx); else seleccionados.delete(idx);
+              renderBarra();
+            });
+          });
+          renderBarra();
+        };
+
+        function renderBarra() {
+          var bar = document.getElementById('bit-bar');
+          if (!bar) return;
+          if (seleccionados.size === 0) { bar.classList.remove('active'); bar.innerHTML = ''; return; }
+          bar.classList.add('active');
+          bar.innerHTML =
+            '<span class="bit-bar-count">☑ ' + seleccionados.size + ' seleccionado' + (seleccionados.size !== 1 ? 's' : '') + '</span>' +
+            '<button class="bit-btn" id="bit-bar-casos">📌 Guardar casos</button>' +
+            '<button class="bit-btn" id="bit-bar-proc">💾 Guardar procuración</button>' +
+            '<button class="bit-btn" id="bit-bar-entradas">＋ Crear entradas…</button>' +
+            '<button class="bit-btn-ghost" id="bit-bar-limpiar" style="margin-left:auto">✕ limpiar</button>';
+          document.getElementById('bit-bar-casos').onclick     = function () { accionLote('ficha-lote'); };
+          document.getElementById('bit-bar-proc').onclick      = function () { accionLote('snapshot-lote'); };
+          document.getElementById('bit-bar-entradas').onclick  = function () {
+            var tipo = prompt('Tipo de entrada para los ' + seleccionados.size + ' casos seleccionados:\n\n1 = Vencimiento\n2 = Tarea\n3 = Nota', '1');
+            var mapa = { '1': 'vencimiento', '2': 'tarea', '3': 'nota' };
+            if (mapa[tipo]) accionLote('entrada-lote', mapa[tipo]);
+          };
+          document.getElementById('bit-bar-limpiar').onclick   = function () {
+            seleccionados.clear();
+            document.querySelectorAll('.bit-checkbox').forEach(function (c) { c.checked = false; });
+            renderBarra();
+          };
+        }
+
+        // ── Mini-menú del modal de movimientos (📔+ por caso) ──
+        window.bitModalActionsHtml = function (exp) {
+          if (yaSeguido(exp)) {
+            return '<div class="bit-modal-actions"><a class="bit-ficha-link" href="https://api.procuradortool.com/usuarios/?goto=expediente" target="procurador_portal">📁 Este caso está en tu Bitácora — Ver ficha</a></div>';
+          }
+          return '<div class="bit-modal-actions">' +
+            '<button class="bit-btn" data-bit-act="venc">＋ Vencimiento</button>' +
+            '<button class="bit-btn" data-bit-act="tarea">＋ Tarea</button>' +
+            '<button class="bit-btn" data-bit-act="nota">＋ Nota</button>' +
+            '<button class="bit-btn" data-bit-act="caso">📌 Guardar caso</button>' +
+            '<button class="bit-btn" data-bit-act="proc">💾 Guardar procuración</button>' +
+            '</div>';
+        };
+        window.bitWireModalActions = function (exp) {
+          var actions = document.querySelector('.bit-modal-actions');
+          if (!actions) return;
+          actions.querySelectorAll('[data-bit-act]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var a = btn.dataset.bitAct;
+              if (a === 'venc')  crearEntrada(exp, 'vencimiento');
+              else if (a === 'tarea') crearEntrada(exp, 'tarea');
+              else if (a === 'nota')  crearEntrada(exp, 'nota');
+              else if (a === 'caso')  guardarCaso(exp);
+              else if (a === 'proc')  guardarProcuracion(exp);
+            });
+          });
+        };
+
+        // ── Pie de descubrimiento ──
+        var pie = document.getElementById('bit-footer');
+        if (pie) {
+          pie.innerHTML = '<div class="bit-footer">📔 <a href="https://api.procuradortool.com/usuarios/?goto=bitacora" target="procurador_portal">Bitácora</a> — tus vencimientos y casos seguidos, en el portal</div>';
+        }
+      })();
+    }
   </script>
 </body>
 </html>

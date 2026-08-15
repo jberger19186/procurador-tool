@@ -1131,6 +1131,15 @@ async function runProcessLogic(options = {}) {
         }
         mainWindow?.webContents.send('batch-progress', { done: true });
 
+        // F2.1: post-procesado del visor (botonera de Bitácora) — solo si el proceso
+        // generó uno de verdad. Fail-safe completo, nunca bloquea process-finished.
+        if (result.success) {
+            try {
+                const latestVisor = findLatestVisorProcuracion(cuit);
+                if (latestVisor) await postProcesarVisorProcuracion(latestVisor.full);
+            } catch (_) { /* ver postProcesarVisorProcuracion: ya no debería llegar acá */ }
+        }
+
         updateRunStats('procuracion', result.success);
         mainWindow?.webContents.send('process-finished', {
             code: result.success ? 0 : 1,
@@ -1231,6 +1240,15 @@ ipcMain.handle('run-process-custom-date', async (event, fecha) => {
         }
 
         mainWindow.webContents.send('batch-progress', { done: true });
+
+        // F2.1: post-procesado del visor (botonera de Bitácora), ver runProcessLogic arriba.
+        if (result.success) {
+            try {
+                const latestVisor = findLatestVisorProcuracion(cuit);
+                if (latestVisor) await postProcesarVisorProcuracion(latestVisor.full);
+            } catch (_) {}
+        }
+
         updateRunStats('procuracion', result.success);
         mainWindow.webContents.send('process-finished', { code: result.success ? 0 : 1, success: result.success });
         return result;
@@ -1338,6 +1356,15 @@ ipcMain.handle('run-process-custom', async (event, { lines, fechaLimite }) => {
         }
 
         mainWindow.webContents.send('batch-progress', { done: true });
+
+        // F2.1: post-procesado del visor (botonera de Bitácora), ver runProcessLogic arriba.
+        if (result.success) {
+            try {
+                const latestVisor = findLatestVisorProcuracion(cuit);
+                if (latestVisor) await postProcesarVisorProcuracion(latestVisor.full);
+            } catch (_) {}
+        }
+
         updateRunStats('batch', result.success);
         mainWindow.webContents.send('process-finished', { code: result.success ? 0 : 1, success: result.success, isInformeBatch: false });
         return result;
@@ -1745,6 +1772,77 @@ ipcMain.handle('position-left', async () => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  BITÁCORA (F2.1) — botonera de captura en los visores
+// ═══════════════════════════════════════════════════════════════════════════
+// Punto crítico P3 del plan: este bloque agrega una consulta de red entre "el
+// script terminó" y "se abre el visor", un camino que hoy es puramente de disco
+// y nunca falla por conexión. Las 3 reglas que sostienen eso:
+//   1. Todo en try/catch que NUNCA propaga — si algo falla, el visor se abre
+//      igual, sin botonera (como si el plan no incluyera Bitácora).
+//   2. Timeout corto y explícito (3s) en cada llamada — no el default de 30s
+//      del cliente HTTP, que es exactamente lo que causó el problema real
+//      documentado en la sesión del 2026-08-12 (degradación de red, timeouts
+//      de 30s contra nuestro propio backend).
+//   3. Las dos llamadas (cuenta + seguidos) van en paralelo (Promise.allSettled)
+//      y son independientes: si "seguidos" falla pero "cuenta" no, el flag
+//      igual se respeta y la botonera aparece con la lista de seguidos vacía
+//      (peor caso: un 📔+ en un caso ya seguido — el upsert del backend lo
+//      resuelve sin duplicar, ya aceptado en el diseño, §4.2c).
+const BITACORA_TIMEOUT_MS = 3000;
+
+async function fetchBitacoraRuntimeInfo() {
+    let enabled = false;
+    let seguidos = [];
+    try {
+        const client = authManager.backendClient.client;
+        const [accRes, segRes] = await Promise.allSettled([
+            client.get('/client/account', { timeout: BITACORA_TIMEOUT_MS }),
+            client.get('/client/bitacora/seguidos', { timeout: BITACORA_TIMEOUT_MS }),
+        ]);
+        if (accRes.status === 'fulfilled') {
+            enabled = accRes.value?.data?.account?.bitacoraEnabled === true;
+        }
+        if (segRes.status === 'fulfilled' && Array.isArray(segRes.value?.data?.seguidos)) {
+            seguidos = segRes.value.data.seguidos;
+        }
+    } catch (_) {
+        // fail-closed: sin botonera, el visor se abre igual sin este bloque
+    }
+    return { enabled, seguidos };
+}
+
+/**
+ * Post-procesa UN visor de procuración ya escrito en disco: reemplaza el
+ * marcador `<!-- BITACORA_RUNTIME -->` por `window.BITACORA_RUNTIME = {...}`.
+ * Decisión D11 del plan: se llama UNA SOLA VEZ, al terminar la corrida —
+ * nunca desde `get-visor-path` (que también reabre visores viejos vía "Ver
+ * resultados", días después; enganchar la red ahí reescribiría archivos
+ * históricos en cada apertura). REEMPLAZO por String.replace, nunca `append`
+ * — si por algún motivo el mismo archivo se post-procesara más de una vez,
+ * no debe quedar el script duplicado.
+ */
+async function postProcesarVisorProcuracion(visorPath) {
+    try {
+        if (!visorPath || !fs.existsSync(visorPath)) return;
+        const marcador = '<!-- BITACORA_RUNTIME -->';
+        let html = fs.readFileSync(visorPath, 'utf8');
+        if (!html.includes(marcador)) return; // versión vieja del template, sin marcador
+        const runtimeInfo = await fetchBitacoraRuntimeInfo();
+        const runtimeScript = `<script>window.BITACORA_RUNTIME = ${JSON.stringify(runtimeInfo)};</script>`;
+        html = html.replace(marcador, runtimeScript);
+        fs.writeFileSync(visorPath, html, 'utf8');
+    } catch (error) {
+        console.error('Bitácora: post-procesado del visor falló (no crítico, el visor se abre igual):', error.message);
+    }
+}
+
+/** Localiza el visor de procuración recién generado para este CUIT (mismo filtro que get-visor-path). */
+function findLatestVisorProcuracion(cuit) {
+    const descargas = path.join(getUserDataDir(cuit), 'descargas');
+    return latestFileBy(descargas, f => f.startsWith('procurar-') && f.includes('visor') && f.endsWith('.html'));
+}
+
 /**
  * Devuelve el archivo más reciente de `descargas` que cumpla el filtro,
  * ordenando por fecha de modificación real (mtime) — NO por nombre.
@@ -2086,7 +2184,11 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
 
                 mainWindow.webContents.send('process-log', { type: 'info', text: '🌐 Generando visor HTML...' });
                 const { generarVisorHTML } = require(path.join(informeDir, 'generador_visor.js'));
-                const rutaHTML = await generarVisorHTML(resumenPath, configProceso, rutaExcel);
+                // F2.1: acá main.js SÍ controla el payload del visor directamente (a diferencia
+                // de los de procuración, que van por post-procesado — ver H1 del plan). El fetch
+                // ya es fail-safe por construcción (fetchBitacoraRuntimeInfo nunca lanza).
+                const bitacoraInfo = await fetchBitacoraRuntimeInfo();
+                const rutaHTML = await generarVisorHTML(resumenPath, configProceso, rutaExcel, bitacoraInfo);
 
                 const exitosos = batchResults.filter(r => r.ok).length;
                 mainWindow.webContents.send('informe-batch-complete', {

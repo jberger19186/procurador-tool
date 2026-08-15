@@ -12,9 +12,14 @@ const { buscarPdfExpediente } = require('./buscarPdfExpediente');
  * @param {string} rutaResumenJSON - Ruta al resumen_orquestador_{timestamp}.json
  * @param {Object} config - Configuración del sistema
  * @param {string} rutaExcel - Ruta al Excel generado (opcional)
+ * @param {{enabled: boolean, seguidos: string[]}} [bitacoraInfo] - F2.1: gating + casos ya
+ *   seguidos para la botonera de captura. `main.js` la controla directamente acá (a
+ *   diferencia de los visores de procuración, que van por post-procesado — ver H1 del
+ *   plan de Bitácora). Si no viene (o falló su obtención), se inyecta deshabilitada —
+ *   nunca bloquea la generación del visor (mismo espíritu del punto crítico P3).
  * @returns {Promise<string>} Ruta del HTML generado
  */
-async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null) {
+async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null, bitacoraInfo = null) {
     try {
         console.log('\n🌐 Iniciando generación de visor HTML...');
 
@@ -42,16 +47,10 @@ async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null) {
         let htmlTemplate = fs.readFileSync(templatePath, 'utf-8');
 
         // 4. Preparar datos para inyectar
-        const datosParaInyectar = prepararDatos(expedientes, config, rutaExcel);
+        const datosParaInyectar = prepararDatos(expedientes, config, rutaExcel, bitacoraInfo);
 
         // 5. CORRECCIÓN: Inyectar datos en el template
         // Buscar el bloque exacto y reemplazarlo completamente
-        const placeholder = `const DATOS_BATCH = {
-            fechaEjecucion: '2025-12-02 03:00:00',
-            expedientes: [],
-            rutaExcel: ''
-        };`;
-
         const datosInyectados = `const DATOS_BATCH = ${JSON.stringify(datosParaInyectar, null, 12)};`;
 
         // Verificar que el placeholder existe
@@ -59,9 +58,12 @@ async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null) {
             throw new Error('El template no contiene el marcador de datos esperado');
         }
 
-        // Reemplazar usando un patrón más robusto
+        // F2.1: el placeholder ahora incluye un objeto anidado (`bitacora: {...}`), así que
+        // el patrón original ([^}]*) —que no tolera llaves internas— cortaba en la primera
+        // '}' que encontraba (la del objeto anidado) y dejaba basura sintáctica detrás.
+        // Este patrón tolera UN nivel de anidamiento, que es lo único que el placeholder usa.
         htmlTemplate = htmlTemplate.replace(
-            /const DATOS_BATCH = \{[^}]*\};/s,
+            /const DATOS_BATCH = \{(?:[^{}]|\{[^{}]*\})*\};/s,
             datosInyectados
         );
 
@@ -113,9 +115,10 @@ function convertirARutaAbsoluta(ruta) {
  * @param {Array} expedientes - Array de expedientes procesados
  * @param {Object} config - Configuración del sistema
  * @param {string} rutaExcel - Ruta al Excel (opcional)
+ * @param {{enabled: boolean, seguidos: string[]}} [bitacoraInfo] - F2.1
  * @returns {Object} Objeto con datos formateados
  */
-function prepararDatos(expedientes, config, rutaExcel) {
+function prepararDatos(expedientes, config, rutaExcel, bitacoraInfo) {
     const carpetaDescargas = config.rutas?.descargas || 'descargas';
     // Soportar rutas absolutas además de relativas
     const rutaBase = path.isAbsolute(carpetaDescargas)
@@ -148,7 +151,11 @@ function prepararDatos(expedientes, config, rutaExcel) {
     return {
         fechaEjecucion: new Date().toLocaleString('es-AR'),
         expedientes: expedientesEnriquecidos,
-        rutaExcel: rutaExcelRelativa
+        rutaExcel: rutaExcelRelativa,
+        bitacora: {
+            enabled: bitacoraInfo?.enabled === true,
+            seguidos: Array.isArray(bitacoraInfo?.seguidos) ? bitacoraInfo.seguidos : []
+        }
     };
 }
 
