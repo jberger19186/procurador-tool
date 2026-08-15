@@ -2755,6 +2755,38 @@ function bitLocalYmd(dateInput) {
     return `${y}-${m}-${day}`;
 }
 
+// Bug real encontrado en F3.0 (2026-08-15): `bitLocalYmd()` está bien para `due_at`
+// (timestamptz guardado a MEDIODÍA local vía `bitToIsoMidday` — leer en hora local
+// recupera el día correcto). Pero las columnas DATE puras (`feriados.fecha`,
+// `expedientes_seguidos.situacion_fecha`) el backend las serializa como medianoche
+// UTC (`'2026-08-17T00:00:00.000Z'`), sin componente horario real — pasarlas por
+// `bitLocalYmd()` las corre un día hacia atrás en husos negativos (Argentina, UTC-3):
+// esa medianoche UTC es 2026-08-16 21:00 -03:00, y `bitLocalYmd()` lee el día LOCAL.
+// Confirmado en vivo: el feriado real del 17/08 se cacheaba como 16/08, y la
+// calculadora de plazos NUNCA excluía el feriado real. `bitUtcYmd()` lee los
+// componentes UTC en vez de los locales — correcto para una fecha-sin-hora.
+function bitUtcYmd(dateInput) {
+    const d = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+    if (Number.isNaN(d.getTime())) return null;
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+// Segundo hallazgo de F3.0, mismo root cause: `formatDate()` (usado en TODO el
+// portal, ~usos con timestamptz reales) también lee en hora LOCAL — mismo bug para
+// una columna DATE. Confirmado en vivo: `situacion_fecha` guardado como 10/08 se
+// mostraba como "09/08/2026" en la ficha del expediente. NO se toca `formatDate()`
+// (es de uso general, correcto para timestamptz); este helper es específico para
+// las columnas DATE de Bitácora (`situacion_fecha`, `run_date` de snapshots).
+function bitFormatUtcDate(dateInput) {
+    const ymd = bitUtcYmd(dateInput);
+    if (!ymd) return '';
+    const [y, m, d] = ymd.split('-');
+    return `${d}/${m}/${y}`;
+}
+
 function bitParseLocalDate(ymd) {
     if (!ymd) return null;
     const [y, m, d] = ymd.split('-').map(Number);
@@ -2783,7 +2815,7 @@ async function bitEnsureFeriados(years) {
             const res = await apiFetch(`/usuarios/api/feriados?year=${y}`);
             if (res && res.ok) {
                 const data = await res.json();
-                (data.feriados || []).forEach(f => state.bitacora.feriados.add(bitLocalYmd(f.fecha)));
+                (data.feriados || []).forEach(f => state.bitacora.feriados.add(bitUtcYmd(f.fecha)));
             }
             state.bitacora._feriadosYears.add(y);
         } catch (e) {
@@ -3416,7 +3448,7 @@ function mexpHistorialBloqueHtml(snapshots, kind, label) {
     }
     const filas = deEsteKind.slice(0, 2).map((s, i) => `
         <div class="mexp-historial-item">
-            <span>${i === 0 ? 'Última' : 'Anteúltima'} — ${formatDate(s.run_date)}${s.situacion ? ` · ${escapeHtml(s.situacion)}` : ''}</span>
+            <span>${i === 0 ? 'Última' : 'Anteúltima'} — ${bitFormatUtcDate(s.run_date)}${s.situacion ? ` · ${escapeHtml(s.situacion)}` : ''}</span>
             <button type="button" class="btn btn-outline btn-sm" onclick="verMexpSnapshot(${s.id})">👁 Ver</button>
         </div>
     `).join('');
@@ -3434,7 +3466,7 @@ function renderMexpFicha() {
 
     const subPartes = [x.jurisdiccion, x.dependencia].filter(Boolean).join(' · ');
     const situacionTxt = x.situacion_actual
-        ? `Situación actual: ${escapeHtml(x.situacion_actual)}${x.situacion_fecha ? ` (${formatDate(x.situacion_fecha)})` : ''}`
+        ? `Situación actual: ${escapeHtml(x.situacion_actual)}${x.situacion_fecha ? ` (${bitFormatUtcDate(x.situacion_fecha)})` : ''}`
         : '';
     const proximo = mexpProximoVencimiento(entradas);
     const proximoHtml = proximo
@@ -3500,7 +3532,7 @@ function openMexpEditarFicha() {
     document.getElementById('mexp-dependencia').value = x.dependencia || '';
     document.getElementById('mexp-caratula').value = x.caratula || '';
     document.getElementById('mexp-situacion').value = x.situacion_actual || '';
-    document.getElementById('mexp-situacion-fecha').value = x.situacion_fecha ? bitLocalYmd(x.situacion_fecha) : '';
+    document.getElementById('mexp-situacion-fecha').value = x.situacion_fecha ? bitUtcYmd(x.situacion_fecha) : '';
     document.getElementById('mexp-notas').value = x.notas || '';
     document.getElementById('modal-mexp-ficha').classList.remove('hidden');
 }
@@ -3620,11 +3652,11 @@ async function verMexpSnapshot(snapshotId) {
 }
 
 function renderMexpSnapshot(s, titleEl, body) {
-    titleEl.textContent = (s.kind === 'procuracion' ? 'Procuración' : 'Informe') + ' — ' + formatDate(s.run_date);
+    titleEl.textContent = (s.kind === 'procuracion' ? 'Procuración' : 'Informe') + ' — ' + bitFormatUtcDate(s.run_date);
 
     const movimientos = Array.isArray(s.data?.movimientos) ? s.data.movimientos : [];
     let html = `<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
-        Corrida del ${formatDate(s.run_date)}${s.situacion ? ` · Situación registrada: ${escapeHtml(s.situacion)}` : ''}
+        Corrida del ${bitFormatUtcDate(s.run_date)}${s.situacion ? ` · Situación registrada: ${escapeHtml(s.situacion)}` : ''}
     </p>`;
 
     if (movimientos.length === 0) {
