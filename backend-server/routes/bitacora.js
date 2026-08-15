@@ -1047,6 +1047,11 @@ expedientes.post('/capture-lote', async (req, res) => {
     const conSnapshot = accion === 'snapshot-lote';
     const client = await db.connect();
     const resumen = { creados: 0, actualizados: 0, snapshots: 0, omitidos: 0 };
+    // F2.3: además del resumen agregado, se devuelve el id resultante de CADA caso —
+    // lo necesita el portal para vincular las entradas de bitácora que arma después
+    // de esta llamada (accion='entrada'/'entrada-lote') a la ficha correcta, sin
+    // depender de un segundo round-trip por caso.
+    const perCaso = [];
 
     try {
         await client.query('BEGIN');
@@ -1080,6 +1085,7 @@ expedientes.post('/capture-lote', async (req, res) => {
             );
             const fichaId = rows[0].id;
             if (rows[0].creado) resumen.creados++; else resumen.actualizados++;
+            perCaso.push({ expediente: exp, expediente_id: fichaId, creado: rows[0].creado });
 
             if (conSnapshot) {
                 const kind = c?.origen === 'informe' ? 'informe' : 'procuracion';
@@ -1111,7 +1117,7 @@ expedientes.post('/capture-lote', async (req, res) => {
         }
 
         await client.query('COMMIT');
-        res.json({ success: true, accion, resumen });
+        res.json({ success: true, accion, resumen, perCaso });
     } catch (error) {
         await client.query('ROLLBACK').catch(() => {});
         console.error('Error en captura por lote de expedientes:', error);

@@ -40,6 +40,7 @@ const state = {
         fichaId: null,       // id de la ficha abierta (null = vista listado)
         ficha: null,         // { expediente, entradas, snapshots } de la ficha abierta
     },
+    captureLote: null,      // { casos, origen, tipo } — pantalla de revisión del lote (F2.3)
 };
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
@@ -342,6 +343,27 @@ async function initDashboard() {
             if (container) container.prepend(banner);
             setTimeout(() => banner.remove(), 8000);
         }, 500);
+        return;
+    }
+
+    // Deep-link de captura desde un visor (F2.2/F2.3) — prioridad sobre pending_goto
+    // (que en este caso también valdría 'bitacora', pero el draft dice además qué
+    // modal/pantalla abrir). Sin SSO en el form (eso es F2.6): si no había sesión, el
+    // usuario ya pasó por el login normal y esto se consume recién acá.
+    const pendingDraftId = sessionStorage.getItem('pending_capture_draft');
+    const pendingCapturaError = sessionStorage.getItem('pending_capture_error');
+    sessionStorage.removeItem('pending_capture_draft');
+    sessionStorage.removeItem('pending_capture_error');
+    if (pendingDraftId) {
+        sessionStorage.removeItem('pending_goto');
+        navigateTo('bitacora');
+        procesarCaptureDraft(pendingDraftId);
+        return;
+    }
+    if (pendingCapturaError) {
+        sessionStorage.removeItem('pending_goto');
+        navigateTo('bitacora');
+        showToast(mensajeCapturaError(pendingCapturaError), 'error');
         return;
     }
 
@@ -2588,6 +2610,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         sessionStorage.setItem('pending_goto', incomingGoto);
     }
 
+    // Deep-link de captura desde un visor (F2.2/F2.3): POST /usuarios/capture redirige
+    // acá con ?goto=bitacora&draft=<id>. El id se persiste igual que pending_goto —
+    // sobrevive al ciclo de login si el usuario no tenía sesión activa en la pestaña
+    // "procurador_portal" (el visor no manda SSO, eso es F2.6, todavía no implementado).
+    const incomingDraft = urlParams.get('draft');
+    if (incomingDraft) {
+        sessionStorage.setItem('pending_capture_draft', incomingDraft);
+    }
+    // Motivo de rechazo server-side sin draft (acción inválida, lote>200 filas) — solo
+    // para mostrar un toast claro, no hay nada que reclamar.
+    const incomingCapturaError = urlParams.get('captura');
+    if (incomingCapturaError && incomingCapturaError !== 'ok') {
+        sessionStorage.setItem('pending_capture_error', incomingCapturaError);
+    }
+
     // Detectar retorno desde checkout de MercadoPago
     // Caso 1: MP redirigió con ?pago=ok (flujo ideal)
     if (urlParams.get('pago') === 'ok') {
@@ -2629,8 +2666,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Si solo había ?goto= sin SSO, limpiar la URL (el pending_goto ya está en sessionStorage)
-    if (incomingGoto && !hash.startsWith('#sso=')) {
+    // Si solo había ?goto=/draft=/captura= sin SSO, limpiar la URL (ya están en sessionStorage)
+    if ((incomingGoto || incomingDraft || incomingCapturaError) && !hash.startsWith('#sso=')) {
         history.replaceState(null, '', window.location.pathname);
     }
 
@@ -3112,13 +3149,20 @@ function bitTogglePlazoBlock() {
     if (block) block.style.display = kind === 'vencimiento' ? 'block' : 'none';
 }
 
-function openBitacoraModal(presetExpedienteId) {
+// `overrides` (F2.3): {kind, title, description} — precarga adicional para cuando la
+// entrada nace de una captura desde el visor (kind=tipo elegido en el mini-menú,
+// title/description sugeridos a partir del movimiento). Opcional; sin overrides se
+// comporta exactamente igual que antes (F1.3/F1.4).
+function openBitacoraModal(presetExpedienteId, overrides) {
     document.getElementById('bitacora-entrada-form').reset();
     document.getElementById('bit-id').value = '';
     document.getElementById('bitacora-modal-title').textContent = 'Nueva entrada';
     document.getElementById('bitacora-modal-alert').classList.remove('visible');
     document.getElementById('bit-due').value = state.bitacora.selectedDay || bitLocalYmd(new Date());
     if (presetExpedienteId) document.getElementById('bit-expediente').value = presetExpedienteId;
+    if (overrides?.kind) document.getElementById('bit-kind').value = overrides.kind;
+    if (overrides?.title) document.getElementById('bit-title').value = overrides.title;
+    if (overrides?.description) document.getElementById('bit-description').value = overrides.description;
     bitTogglePlazoBlock();
     document.getElementById('modal-bitacora-entrada').classList.remove('hidden');
 }
@@ -3891,6 +3935,229 @@ async function descargarExportBitacora() {
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
         closeExportModal();
         showToast('Exportación descargada.', 'success');
+    } catch (e) {
+        showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+}
+
+// =============================================================================
+//  CAPTURA DESDE LOS VISORES — reclamo del borrador y aplicación (F2.3)
+// =============================================================================
+// Consume lo que F2.2 dejó armado: el visor posteó anónimo a /usuarios/capture,
+// el borrador quedó en un buffer efímero, y acá —ya autenticados, con el gate de
+// plan del endpoint— se reclama y se decide qué hacer según `accion`.
+
+function mensajeCapturaError(code) {
+    if (code === 'lote_grande') return 'La selección tenía demasiados casos para capturar de una vez (máximo 200). Probá con una selección más chica.';
+    return 'No se pudo procesar la captura desde el visor. Volvé al visor y probá de nuevo.';
+}
+
+async function procesarCaptureDraft(draftId) {
+    try {
+        const res = await apiFetch(`/usuarios/api/capture-draft/${draftId}`);
+        if (!res) return;
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            showToast(data.error || 'El borrador de captura no existe o expiró. Volvé al visor y probá de nuevo.', 'error');
+            return;
+        }
+        const data = await res.json();
+        await aplicarCaptureDraft(data.draft);
+    } catch (e) {
+        showToast('Error de conexión al procesar la captura.', 'error');
+    }
+}
+
+async function aplicarCaptureDraft(draft) {
+    const { accion, tipo, origen, casos } = draft || {};
+    if (!Array.isArray(casos) || casos.length === 0) {
+        showToast('El borrador de captura llegó vacío.', 'error');
+        return;
+    }
+    if (accion === 'ficha' || accion === 'ficha-lote') {
+        await guardarFichasDesdeDraft(casos, origen, 'ficha-lote');
+    } else if (accion === 'snapshot' || accion === 'snapshot-lote') {
+        await guardarFichasDesdeDraft(casos, origen, 'snapshot-lote');
+    } else if (accion === 'entrada') {
+        await abrirEntradaIndividualDesdeDraft(casos[0], origen, tipo);
+    } else if (accion === 'entrada-lote') {
+        abrirRevisionLoteDesdeDraft(casos, origen, tipo);
+    } else {
+        showToast('Acción de captura desconocida.', 'error');
+    }
+}
+
+async function refrescarTrasCaptura() {
+    if (state.currentSection === 'mis-expedientes') {
+        mexpShowLista();
+        await loadMexpList();
+    } else {
+        await loadBitacoraExpedientes();
+        loadBitacoraAvisos();
+        bitacoraLoadAndRenderView();
+    }
+}
+
+function tituloSugeridoDesdeCaso(caso, tipo) {
+    const mov = (caso?.movimientos || [])[0];
+    if (mov?.detalle) {
+        return mov.detalle.length > 80 ? mov.detalle.slice(0, 80) + '…' : mov.detalle;
+    }
+    const etiquetas = { vencimiento: 'Vencimiento', audiencia: 'Audiencia', tarea: 'Tarea', nota: 'Nota' };
+    return `${etiquetas[tipo] || 'Entrada'} — ${caso?.expediente || ''}`;
+}
+
+// "📌 Guardar caso(s)" / "💾 Guardar procuración/informe (de seleccionados)": no hay
+// nada que revisar, se aplica directo contra el endpoint de F2.2 y se avisa por toast.
+async function guardarFichasDesdeDraft(casos, origen, accionBackend) {
+    try {
+        const res = await apiFetch('/usuarios/api/expedientes/capture-lote', {
+            method: 'POST',
+            body: { accion: accionBackend, casos: casos.map(c => Object.assign({}, c, { origen })) }
+        });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'No se pudo guardar la captura.', 'error'); return; }
+        const r = data.resumen || {};
+        const total = (r.creados || 0) + (r.actualizados || 0);
+        showToast(
+            accionBackend === 'snapshot-lote'
+                ? `Guardado: ${total} caso(s), ${r.snapshots || 0} con historial adjunto.`
+                : `Guardado: ${total} caso(s).`,
+            'success'
+        );
+        await refrescarTrasCaptura();
+    } catch (e) {
+        showToast('Error de conexión al guardar la captura.', 'error');
+    }
+}
+
+// "＋ Vencimiento/Tarea/Nota" desde el mini-menú de UN caso: primero se asegura la
+// ficha (+ snapshot, "capturar una entrada ya implica guardar la procuración/informe
+// de ese momento" — §4.2 del plan), y con el id real ya resuelto se abre el modal de
+// F1.3/F1.4 pre-cargado — el usuario todavía puede editar todo antes de confirmar.
+async function abrirEntradaIndividualDesdeDraft(caso, origen, tipo) {
+    try {
+        const res = await apiFetch('/usuarios/api/expedientes/capture-lote', {
+            method: 'POST',
+            body: { accion: 'snapshot-lote', casos: [Object.assign({}, caso, { origen })] }
+        });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok || !data.perCaso?.[0]) {
+            showToast(data.error || 'No se pudo preparar la captura.', 'error');
+            return;
+        }
+        const fichaId = data.perCaso[0].expediente_id;
+        await loadBitacoraExpedientes(); // para que el <select> del modal ya tenga esta ficha
+        openBitacoraModal(fichaId, {
+            kind: tipo,
+            title: tituloSugeridoDesdeCaso(caso, tipo),
+            description: (caso.movimientos || [])[0]?.detalle || '',
+        });
+    } catch (e) {
+        showToast('Error de conexión al procesar la captura.', 'error');
+    }
+}
+
+// "＋ Crear entradas…" sobre una selección múltiple: pantalla de revisión (§4.2a del
+// plan) — una fila editable por caso, con calculadora de fecha aplicable a todos.
+function abrirRevisionLoteDesdeDraft(casos, origen, tipo) {
+    state.captureLote = { casos, origen, tipo };
+    document.getElementById('lote-modal-title').textContent = `Crear entradas — ${casos.length} caso${casos.length !== 1 ? 's' : ''}`;
+    document.getElementById('lote-modal-alert').classList.remove('visible');
+    document.getElementById('lote-fecha-todos').value = bitLocalYmd(new Date());
+    renderFilasLote();
+    document.getElementById('modal-bitacora-lote').classList.remove('hidden');
+}
+
+function renderFilasLote() {
+    const cont = document.getElementById('lote-filas-container');
+    const { casos, tipo } = state.captureLote;
+    const hoy = bitLocalYmd(new Date());
+    cont.innerHTML = casos.map((c, i) => `
+        <div class="lote-fila" data-idx="${i}">
+            <input type="checkbox" class="lote-fila-check" checked onchange="this.closest('.lote-fila').classList.toggle('excluida', !this.checked)">
+            <div class="lote-fila-exp">${escapeHtml(c.expediente)}</div>
+            <div class="lote-fila-campos">
+                <input type="text" class="lote-titulo" value="${escapeHtml(tituloSugeridoDesdeCaso(c, tipo))}" maxlength="300">
+                <input type="date" class="lote-fecha" value="${hoy}">
+            </div>
+        </div>
+    `).join('');
+}
+
+function closeLoteModal() {
+    document.getElementById('modal-bitacora-lote').classList.add('hidden');
+    state.captureLote = null;
+}
+
+function aplicarFechaATodoElLote() {
+    const val = document.getElementById('lote-fecha-todos').value;
+    if (!val) return;
+    document.querySelectorAll('#lote-filas-container .lote-fecha').forEach(inp => { inp.value = val; });
+}
+
+async function guardarLoteEntradas() {
+    const alertEl = document.getElementById('lote-modal-alert');
+    const { casos, origen, tipo } = state.captureLote || {};
+    if (!casos) return;
+
+    const filas = Array.from(document.querySelectorAll('#lote-filas-container .lote-fila'));
+    const incluidas = filas.filter(f => f.querySelector('.lote-fila-check').checked);
+    if (incluidas.length === 0) { showAlert(alertEl, 'error', 'Marcá al menos un caso.'); return; }
+
+    const btn = document.getElementById('btn-lote-guardar');
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.innerHTML = '<span class="spinner"></span> Guardando fichas...';
+
+    try {
+        // 1) upsert de fichas + snapshot de TODOS los casos incluidos, en un solo POST.
+        const casosIncluidos = incluidas.map(f => casos[parseInt(f.dataset.idx, 10)]);
+        const resFichas = await apiFetch('/usuarios/api/expedientes/capture-lote', {
+            method: 'POST',
+            body: { accion: 'snapshot-lote', casos: casosIncluidos.map(c => Object.assign({}, c, { origen })) }
+        });
+        if (!resFichas) return;
+        const dataFichas = await resFichas.json();
+        if (!resFichas.ok) { showAlert(alertEl, 'error', dataFichas.error || 'No se pudieron guardar los casos.'); return; }
+
+        const idPorExpediente = new Map((dataFichas.perCaso || []).map(p => [p.expediente, p.expediente_id]));
+
+        // 2) una entrada por fila incluida, con el título/fecha que el usuario dejó en la revisión.
+        // Secuencial (no Promise.all): son como máximo unas pocas decenas de filas —una revisión
+        // manual, no un hot path— y así un fallo puntual no aborta las que ya se crearon.
+        btn.innerHTML = '<span class="spinner"></span> Creando entradas...';
+        let creadas = 0, fallidas = 0;
+        for (const fila of incluidas) {
+            const idx = parseInt(fila.dataset.idx, 10);
+            const caso = casos[idx];
+            const expedienteId = idPorExpediente.get(caso.expediente) || null;
+            const titulo = fila.querySelector('.lote-titulo').value.trim() || tituloSugeridoDesdeCaso(caso, tipo);
+            const fecha = fila.querySelector('.lote-fecha').value;
+            const res = await apiFetch('/usuarios/api/bitacora', {
+                method: 'POST',
+                body: {
+                    kind: tipo,
+                    title: titulo,
+                    description: (caso.movimientos || [])[0]?.detalle || '',
+                    due_at: fecha ? bitToIsoMidday(fecha) : null,
+                    expediente_id: expedienteId,
+                }
+            });
+            if (res && res.ok) creadas++; else fallidas++;
+        }
+
+        closeLoteModal();
+        showToast(
+            fallidas === 0 ? `${creadas} entrada(s) creada(s).` : `${creadas} entrada(s) creada(s), ${fallidas} fallaron.`,
+            fallidas === 0 ? 'success' : 'error'
+        );
+        await refrescarTrasCaptura();
     } catch (e) {
         showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
     } finally {

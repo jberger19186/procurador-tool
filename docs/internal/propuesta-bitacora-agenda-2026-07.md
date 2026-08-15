@@ -1281,12 +1281,49 @@ resultado a la vista.
 > en el log de prod atribuibles al deploy** — la única entrada del día es la de ese propio control,
 > con timestamp anterior al restart. **Nada visible para ningún usuario real:** el flag sigue en
 > `false` en los 6 planes, y el endpoint anónimo solo se alcanza desde un visor con la botonera, que
-> requiere un release que todavía no se cortó. **Sigue F2.3** (selección múltiple en los visores +
-> pantalla de revisión del lote en el portal, que es quien consume el borrador).
+> requiere un release que todavía no se cortó.
+>
+> ✅ **F2.3 EJECUTADA Y EN PRODUCCIÓN (2026-08-15, Sonnet 5).** El consumidor del borrador de F2.2:
+> el portal reclama `GET /capture-draft/:id` y despacha por `accion` a 3 tratamientos distintos —
+> aplicar-y-avisar para `ficha`/`snapshot`(-lote), modal precargado para `entrada` individual, y una
+> **pantalla nueva de revisión del lote** (`#modal-bitacora-lote`) para `entrada-lote`: una fila
+> editable por caso (checkbox de inclusión, expediente de solo lectura, título y fecha editables) más
+> un campo "aplicar fecha a todos". **1 pieza de contrato nueva, del lado del backend, que F2.2 no
+> había necesitado todavía:** `POST /usuarios/api/expedientes/capture-lote` ahora devuelve, además
+> del `resumen` agregado que ya tenía, un array `perCaso: [{expediente, expediente_id, creado}]` —
+> el portal lo necesita para saber el `expediente_id` REAL de cada caso (tras el upsert por
+> `expediente_key`, que puede pisar una ficha ya existente) y así vincular las `bitacora_entries` que
+> crea después a la ficha correcta, sin un segundo round-trip por caso. **Guardado del lote en 2
+> fases, no N:** primero un único `POST .../capture-lote` (accion='snapshot-lote') sobre todos los
+> casos incluidos, para obtener el mapa de ids; después un loop **secuencial** (no `Promise.all`)
+> creando una entrada por fila vía `POST /usuarios/api/bitacora` — secuencial a propósito: son como
+> mucho unas pocas decenas de filas (revisión manual, no un hot path) y así un fallo puntual no aborta
+> las que ya se crearon. **`openBitacoraModal()` extendida de forma retrocompatible:** gana un segundo
+> parámetro opcional `overrides` (`{kind, title, description}`) — todos los call sites existentes de
+> F1.3/F1.4 (un solo argumento) siguen funcionando sin cambios; solo el flujo de captura individual
+> lo usa, con un título sugerido a partir del primer movimiento del caso (`tituloSugeridoDesdeCaso()`,
+> corta a 80 chars, o cae a "{Tipo} — {expediente}" si no hay movimientos). **El deep-link sobrevive
+> al login igual que `pending_goto`:** un nuevo par `pending_capture_draft`/`pending_capture_error`
+> en `sessionStorage`, capturado del `?draft=`/`?captura=` de la URL y consumido en `initDashboard()`
+> — necesario porque el form del visor todavía no manda SSO (eso es F2.6, sin implementar), así que
+> si el usuario no tenía sesión abierta en la pestaña `procurador_portal`, el draft debe sobrevivir el
+> ciclo de login normal. **Verificado con un harness de 24 aserciones en staging — 24/24 PASS:** el
+> `perCaso` trae ids numéricos correctos y coincide con las fichas reales de la base · una segunda
+> captura del mismo expediente da `creado:false` con el mismo id (no duplica) · el ciclo completo
+> `accion=entrada` (form→draft→reclamo→upsert→entrada vinculada) · el ciclo completo
+> `accion=entrada-lote` con 2 casos, confirmando que las entradas quedan vinculadas al caso correcto
+> y no cruzadas entre sí · no-regresión de `/usuarios/api/plans`, el estático del portal y
+> `/usuarios/api/subscription/current` (P1 de F1.2 sigue intacto). **No-regresión repetida en
+> producción:** `pm2-error.log` sin entradas nuevas atribuibles al deploy (la única del día es de
+> horas antes, ya documentada como P-F2.2-b) y los 6 planes con `bitacora_enabled=false` sin
+> excepción. **Nada visible para ningún usuario real** — igual que F2.1/F2.2, esto solo se alcanza
+> desde un visor con la botonera, que requiere el release de Electron que todavía no se cortó.
+> **Sigue F2.4** (`GET /client/bitacora/seguidos`, consumido por el post-procesado de F2.1 para el
+> badge "ya seguido").
 
 1. **(F2.1)** ✅ **CÓDIGO LISTO (2026-08-15), sin release.** Botonera `📔+` (mini-menú) + pie de descubrimiento en los 4 visores. 🔴 **Prerrequisito: el fix E4-1 del Bloque D** (escape en `visorModal_template.html`) debe estar aplicado y publicado — sin él esta fase amplía el hallazgo XSS; ver el recuadro rojo de §4.1 para el detalle de `esc()` vs `escAttr()`. ✅ **Ya estaba aplicado** (confirmado: `esc()`/`escAttr()` presentes en el template antes de tocarlo). ⚠️ **Dos mecanismos distintos** (hallazgo H1, ver §4.4 corregido): en el visor de informe batch se edita `generador_visor.js` + template (`main.js` controla `DATOS_BATCH` directamente); en los 3 visores de procuración se edita `visorModal_template.html` (la botonera) **y además** `main.js` debe post-procesar el HTML ya generado por el script encriptado para inyectar los datos por usuario (`bitacoraEnabled`, casos ya seguidos) — sin tocar los scripts encriptados, pero es un paso de implementación adicional respecto de lo que decía la versión anterior de este plan. 🚨 **PUNTO CRÍTICO P3 (§11.0): el post-procesado NUNCA puede cancelar la apertura del visor** — va en `try/catch` que no propaga, con timeout corto en la consulta de seguidos. Si falla, se abre el visor sin botonera. Hoy ese camino no depende de la red y no puede empezar a depender.
 2. **(F2.2)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** Backend: endpoints de `capture` (`POST /usuarios/capture`, `GET /usuarios/api/capture-draft/:id`, `POST /usuarios/api/expedientes/capture-lote` con el tope de 200 casos/request del hallazgo H3) + el parser específico de 5MB montado antes del router (§4.1.1) + PRG. **P2 verificado con la prueba POSITIVA** (firma HMAC válida sigue siendo aceptada), no solo con el rechazo de una inválida — ver P-F2.2-a. Archivos: `routes/capture.js`, `utils/captureDrafts.js`, + `captureLimiter` en `middleware/rateLimiter.js`. **Movido acá desde Fase 1** (hallazgo C2) — se construye junto a su único consumidor. 🚨 **PUNTO CRÍTICO P2 (§11.0): el parser va inmediatamente antes del `express.urlencoded` GLOBAL, NUNCA antes del `express.json` que tiene el hook `verify`** — de ese hook depende la firma HMAC de los webhooks de MercadoPago. **Identificar los parsers por lo que son, no por número de línea** (hoy 113 y 110, pero el archivo se modifica). **Antes de prod: correr `dev-tools/smoke-payments.js` en staging.**
-3. **(F2.3)** **Selección múltiple** en la tabla de los visores (checkboxes + barra de acciones "Guardar casos" / "Crear entradas…") + pantalla de revisión del lote en el portal, contra el endpoint de F2.2.
+3. **(F2.3)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** El consumidor del borrador de F2.2 en el portal: dispatcher por `accion` + pantalla de revisión del lote (`#modal-bitacora-lote`) para `entrada-lote`. Detalle completo en el párrafo de estado más abajo (junto a F2.2).
 4. **(F2.4)** **Marcado de casos ya seguidos**: endpoint `GET /client/bitacora/seguidos` (backend) + consumido por el post-procesado de F2.1 + link 📁 a la ficha desde fila y modal.
 5. **(F2.5)** **Mini-visor del informe individual** (nuevo, desde `main.js`, sin tocar scripts encriptados — el informe individual no genera visor hoy).
 6. **(F2.6)** Deep-links con SSO cuando el visor se abre desde la app.
@@ -1338,7 +1375,8 @@ resultado a la vista.
 | **F1.8** — ABM de feriados (dashboard admin) *(nuevo, hallazgo H2)* | **Sonnet, bajo** | Chico | CRUD simple (fecha + motivo) con patrón ya usado en el admin. Sin esto, F1.3 (calculadora de plazos) queda sin forma de mantenerse año a año. |
 | **F2.1** — Botonera en los 4 visores + post-procesado de `main.js` para procuración *(hallazgo H1, esfuerzo corregido)* | **Sonnet, medio** ✅ | Mediano *(subió: incluye el post-procesado, no solo templates)* | ✅ **Ejecutada 2026-08-15.** Dos mecanismos distintos por visor (§4.4): templates estáticos (bajo riesgo, patrón conocido) + un paso nuevo de post-procesado de HTML en `main.js` para los 3 visores de procuración, que no estaba contemplado en la estimación original. Sigue sin tocar scripts encriptados. |
 | **F2.2** — Backend: endpoints de `capture` (PRG, tope 200 filas H3, parser 5MB) *(movido desde F1.2, hallazgo C2)* | **Opus, medio** ✅ | Mediano | ✅ **Ejecutada 2026-08-15.** Es el único endpoint anónimo de todo el sistema (§4.1.1) — el PRG, el upsert idempotente y las 5 protecciones del borrador-anónimo quieren el mismo cuidado que ya tenían en la F1.2 original. |
-| **F2.3–F2.6** — Selección múltiple, marcado de seguidos, mini-visor informe, deep-links SSO | **Sonnet, medio** | Mediano | Edita **plantillas** de visores (`generador_visor.js` + templates HTML) — ⛔ **nunca los scripts encriptados**. El mini-visor del informe se genera desde `main.js`. Patrón conocido; el riesgo es el de cualquier release de Electron. |
+| **F2.3** — Consumo del borrador en el portal (dispatcher por `accion` + pantalla de revisión del lote) | **Sonnet, medio** ✅ | Mediano | ✅ **Ejecutada 2026-08-15.** Solo backend (`perCaso` en `capture-lote`) + portal — no toca templates de visores (eso ya lo hizo F2.1) ni scripts encriptados. |
+| **F2.4–F2.6** — Marcado de seguidos, mini-visor informe, deep-links SSO | **Sonnet, medio** | Mediano | Edita **plantillas** de visores (`generador_visor.js` + templates HTML) — ⛔ **nunca los scripts encriptados**. El mini-visor del informe se genera desde `main.js`. Patrón conocido; el riesgo es el de cualquier release de Electron. |
 | **F2.7** — Botón topbar + actualización del tour (`onboarding/tour.js`) | **Sonnet, bajo** | Chico | El tour ya tiene el patrón multi-elemento (`targets:[]`); el paso 2 (`target:'.tab-nav'`) existe y se extiende. *(Verificado 2026-07-19: la estructura que la propuesta asume es correcta.)* |
 | **F2 — Deploy de backend + release Electron** *(aclarado, hallazgo C3)* | **Sonnet, medio** | — | Deploy de F2.2/F2.4 a staging→prod **primero**, después el release de Electron siguiendo el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
 | **F3** — Pulido y palancas (badge, captura del monitor, sugerencias por novedades) | **Opus para las sugerencias automáticas · Sonnet para lo demás** | Variable | Las "sugerencias a partir de novedades del monitor" son el diferencial con lógica no trivial (matching novedad→entrada) → Opus. El resto (badge, captura del monitor) es mecánico → Sonnet. Solo si el uso real de F1/F2 lo valida. |

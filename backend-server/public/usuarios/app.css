@@ -1666,6 +1666,31 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
 .home-pill.active:hover { border-color: var(--accent); }
 
 /* =============================================
+   Revisión del lote de captura (F2.3)
+   ============================================= */
+.lote-fila {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--border);
+}
+.lote-fila:last-child { border-bottom: none; }
+.lote-fila-check { margin-top: 10px; flex-shrink: 0; }
+.lote-fila-exp {
+    flex: 0 0 130px;
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-dark);
+    padding-top: 9px;
+}
+.lote-fila-campos { flex: 1; display: flex; gap: 8px; }
+.lote-fila-campos input[type="text"] { flex: 1; }
+.lote-fila-campos input[type="date"] { flex: 0 0 155px; }
+.lote-fila.excluida { opacity: .45; }
+
+/* =============================================
    Restaurar backup (F1.7)
    ============================================= */
 .import-modo-opt {
