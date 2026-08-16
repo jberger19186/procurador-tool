@@ -1619,13 +1619,19 @@ resultado a la vista.
 > #### 📋 Resumen a simple vista (actualizado 2026-08-16, tras cerrar F3.0–F3.3 y publicar el release electron-v2.7.49)
 >
 > **🔵 El grande, con nombre y ya conocido — F3.4.** No es un bug ni un cabo suelto: es la
-> **última fase del plan, deliberadamente sin arrancar** — el criterio del propio plan es *"solo
-> si hay demanda real"*, y el 2026-08-16 el operador lo confirmó explícitamente al elegir no
-> tocarla al cortar el release de F3.1/F3.2. Agrupa 3 cosas sin diseño cerrado (ver la fila F3.4
-> de §11.1 y P-F1.3-a más abajo): **tipos de entrada personalizados** (hoy fijos:
+> **última fase del plan**. Agrupa 3 cosas sin diseño cerrado en la propuesta original (ver la fila
+> F3.4 de §11.1 y P-F1.3-a más abajo): **tipos de entrada personalizados** (hoy fijos:
 > vencimiento/audiencia/tarea/nota) · **export `.ics`** (agenda de Bitácora → Google
 > Calendar/Outlook) · **vista "Semana"** del calendario (F1.3 la recortó a propósito). Nada acá
-> es estructural — son palancas que se agregan cuando alguien las pide, no antes.
+> es estructural.
+>
+> 📄 **2 de los 3 ítems ya tienen plan de implementación escrito:
+> `docs/internal/plan-f3-4-semana-e-ics-2026-08.md`** (2026-08-16, diseñado con Opus, sin código).
+> Cubre **vista "Semana"** (Bloque A, Sonnet/bajo — cierra P-F1.3-a) y **export `.ics`** (Bloque B,
+> Sonnet/medio), con los puntos de enganche exactos y, sobre todo, **las 6 trampas del `.ics`**:
+> es una feature 100% de serialización de fechas en el módulo que produjo los 3 bugs de timezone de
+> P-F3.0-a. **Los tipos de entrada personalizados quedan explícitamente afuera** de ese plan — es el
+> único de los tres que toca el modelo de datos (`kind` tiene un CHECK) y no tiene pedido concreto.
 >
 > **🟡 Reales pero bajos, con dueño y condición de cierre clara** (detalle completo en la tabla
 > de abajo, buscar por `#`):
