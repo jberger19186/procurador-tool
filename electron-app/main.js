@@ -2394,7 +2394,25 @@ ipcMain.handle('ai-chat', async (event, message) => {
 // ============ MONITOR DE PARTES ============
 
 // ─── Generador de visor HTML para resultados del monitor ──────────────────────
-function generarVisorMonitoreo(modo, resultados) {
+// F3.2 (Bitácora): botonera de captura desde el visor del Monitor. A diferencia de los 3
+// visores de procuración (F2.1, post-procesados en disco porque main.js no controla el HTML
+// generado por los scripts encriptados), este visor lo arma main.js directamente — mismo
+// mecanismo "fácil" que el informe por lote: `bitacoraInfo` ya está disponible de forma
+// síncrona antes de construir el HTML, así que `window.BITACORA_RUNTIME` se embebe como
+// literal desde el arranque, sin marcador ni post-procesado.
+//
+// Deliberadamente NO se ofrece "💾 Guardar procuración" (snapshot) desde acá: la columna
+// `expediente_snapshots.kind` tiene un CHECK que solo admite 'procuracion'|'informe' (ver
+// migración 20260814_bitacora_f1_1.sql) y el Monitor nunca trae `movimientos` (solo
+// carátula/dependencia/situación) — un snapshot "de monitor" quedaría con `data.movimientos`
+// vacío siempre, engañoso si se mira después junto a un snapshot real de procuración/informe.
+// Solo se ofrecen las acciones que no dependen de esa columna: ficha (📌 Guardar caso) y
+// entrada (＋ Vencimiento/Tarea/Nota).
+function claveLigeraBit(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+function generarVisorMonitoreo(modo, resultados, bitacoraInfo = null) {
+    const bit = bitacoraInfo || { enabled: false, seguidos: [], ssoToken: null };
+    const bitSeguidosSet = new Set((bit.seguidos || []).map(claveLigeraBit));
     const ahora  = new Date();
     const fecha  = ahora.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' })
                  + ' ' + ahora.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
@@ -2420,6 +2438,7 @@ function generarVisorMonitoreo(modo, resultados) {
     </div>`;
 
     function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function escAttr(s) { return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
     const seccionesHTML = resultados.map((r, idx) => {
         const exps  = r.expedientes || [];
@@ -2427,10 +2446,24 @@ function generarVisorMonitoreo(modo, resultados) {
             ? 'Error: ' + esc(r.error)
             : (modo === 'novedades' ? 'Sin novedades para esta parte' : 'Sin expedientes encontrados');
 
+        const bitColspan = bit.enabled ? 6 : 5;
+        const bitTh = bit.enabled ? '<th class="bit-sel-cell"></th>' : '';
+        const bitTd = (e) => {
+            if (!bit.enabled) return '';
+            if (bitSeguidosSet.has(claveLigeraBit(e.numero_expediente))) {
+                return '<td class="bit-sel-cell"><a class="bit-ficha-link" href="https://api.procuradortool.com/usuarios/?goto=expediente" target="procurador_portal" title="Ya seguido en tu Bitácora">📁</a></td>';
+            }
+            return `<td class="bit-sel-cell"><input type="checkbox" class="bit-checkbox"
+                data-bit-exp="${escAttr(e.numero_expediente)}" data-bit-jur="${escAttr(r.jurisdiccion_sigla)}"
+                data-bit-dep="${escAttr(e.dependencia)}" data-bit-car="${escAttr(e.caratula)}"
+                data-bit-sit="${escAttr(e.situacion)}"></td>`;
+        };
+
         const filas = exps.length === 0
-            ? `<tr><td colspan="5" class="empty-row">${emptyMsg}</td></tr>`
+            ? `<tr><td colspan="${bitColspan}" class="empty-row">${emptyMsg}</td></tr>`
             : exps.map(e => `
                 <tr>
+                    ${bitTd(e)}
                     <td class="exp-num">${esc(e.numero_expediente)}</td>
                     <td>${esc(e.dependencia)}</td>
                     <td class="caratula" title="${esc(e.caratula)}">${esc(e.caratula)}</td>
@@ -2458,6 +2491,7 @@ function generarVisorMonitoreo(modo, resultados) {
                 <table>
                     <thead>
                         <tr>
+                            ${bitTh}
                             <th>Expediente</th>
                             <th>Dependencia</th>
                             <th>Car&aacute;tula</th>
@@ -2527,6 +2561,38 @@ function generarVisorMonitoreo(modo, resultados) {
     .situacion-badge { font-size:11px; background:var(--bg-elevated); border:1px solid var(--border); padding:1px 7px; border-radius:4px; white-space:nowrap; }
     .fecha-col { white-space:nowrap; color:var(--text-3); font-size:11.5px; font-family:var(--font-mono); }
     .empty-row { text-align:center; color:var(--text-3); padding:20px; font-style:italic; }
+
+    /* ── Bitácora (F3.2) ── */
+    .bit-sel-cell { width:30px; text-align:center; }
+    .bit-checkbox { width:15px; height:15px; cursor:pointer; accent-color:var(--accent); }
+    .bit-bar {
+        display:none; align-items:center; gap:8px;
+        padding:9px 22px; background:var(--accent-muted);
+        border-bottom:1px solid var(--border);
+    }
+    .bit-bar.active { display:flex; }
+    .bit-bar-count { font-size:12px; font-weight:700; color:var(--accent-dark); white-space:nowrap; }
+    .bit-btn {
+        height:27px; padding:0 11px; border-radius:var(--radius-sm);
+        border:1px solid var(--border-strong); background:var(--bg-surface);
+        color:var(--text-2); font-size:11.5px; font-family:var(--font); font-weight:500;
+        cursor:pointer; white-space:nowrap; transition:0.12s;
+    }
+    .bit-btn:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .bit-btn-ghost { background:transparent; border:none; color:var(--text-3); font-size:11px; cursor:pointer; }
+    .bit-btn-ghost:hover { color:var(--error); }
+    .bit-ficha-link {
+        display:inline-flex; align-items:center; gap:3px;
+        font-size:10.5px; color:var(--accent-dark); text-decoration:none; font-weight:600;
+        padding:3px 7px; border-radius:6px; background:var(--accent-muted);
+    }
+    .bit-ficha-link:hover { text-decoration:underline; }
+    .bit-footer {
+        text-align:center; padding:14px 22px; font-size:11.5px; color:var(--text-3);
+        border-top:1px solid var(--border); background:var(--bg-surface);
+    }
+    .bit-footer a { color:var(--accent-dark); text-decoration:none; font-weight:600; }
+    .bit-footer a:hover { text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -2538,8 +2604,12 @@ function generarVisorMonitoreo(modo, resultados) {
         </div>
     </div>
     ${statsHTML}
+    <div id="bit-bar" class="bit-bar"></div>
     <div class="cards-wrapper">${seccionesHTML}</div>
+    <div id="bit-footer"></div>
 <script>
+    window.BITACORA_RUNTIME = ${JSON.stringify(bit)};
+
     function toggleCard(idx) {
         var tabla  = document.getElementById('tabla-'  + idx);
         var arrow  = document.getElementById('arrow-'  + idx);
@@ -2548,6 +2618,93 @@ function generarVisorMonitoreo(modo, resultados) {
         tabla.style.display  = open ? '' : 'none';
         arrow.classList.toggle('open',  open);
         header.classList.toggle('open', open);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // BITÁCORA (F3.2) — botonera de captura desde el visor del Monitor.
+    // window.BITACORA_RUNTIME lo embebe main.js directamente al generar este
+    // HTML (mecanismo "fácil": main.js controla el payload, sin post-procesado
+    // ni marcador — a diferencia de los 3 visores de procuración de F2.1).
+    // La columna de checkbox/badge "ya seguido" ya viene renderizada del lado
+    // servidor (main.js conoce la lista de seguidos de forma síncrona); acá
+    // solo se cablean los clicks y el envío del formulario.
+    // ═══════════════════════════════════════════════════════════════════════
+    if (window.BITACORA_RUNTIME && window.BITACORA_RUNTIME.enabled) {
+        (function () {
+            var seleccionados = new Map(); // "exp|jur" -> campos del caso
+
+            function enviarCaptura(campos) {
+                var form = document.createElement('form');
+                form.method = 'POST';
+                var ssoToken = window.BITACORA_RUNTIME.ssoToken || null;
+                form.action = 'https://api.procuradortool.com/usuarios/capture' + (ssoToken ? ('#sso=' + encodeURIComponent(ssoToken)) : '');
+                form.target = 'procurador_portal';
+                form.style.display = 'none';
+                var todos = Object.assign({ goto: 'bitacora-nueva', origen: 'monitor' }, campos);
+                Object.keys(todos).forEach(function (k) {
+                    if (todos[k] === undefined || todos[k] === null) return;
+                    var input = document.createElement('input');
+                    input.name = k;
+                    input.value = String(todos[k]);
+                    form.appendChild(input);
+                });
+                document.body.appendChild(form);
+                form.submit();
+                setTimeout(function () { form.remove(); }, 500);
+            }
+
+            function campoDeCasoEl(chk) {
+                var d = chk.dataset;
+                return {
+                    exp: d.bitExp || '', jur: d.bitJur || '', dep: d.bitDep || '',
+                    car: d.bitCar || '', sit: d.bitSit || '',
+                    fproc: ${JSON.stringify(fecha)}, movs: '[]'
+                };
+            }
+
+            function loteSeleccionado() { return Array.from(seleccionados.values()); }
+            function accionLote(accion, tipo) {
+                if (seleccionados.size === 0) return;
+                enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(loteSeleccionado()) });
+            }
+
+            document.querySelectorAll('.bit-checkbox').forEach(function (chk) {
+                chk.addEventListener('change', function () {
+                    var campos = campoDeCasoEl(chk);
+                    var key = campos.exp + '|' + campos.jur;
+                    if (chk.checked) seleccionados.set(key, campos); else seleccionados.delete(key);
+                    renderBarra();
+                });
+            });
+
+            function renderBarra() {
+                var bar = document.getElementById('bit-bar');
+                if (!bar) return;
+                if (seleccionados.size === 0) { bar.classList.remove('active'); bar.innerHTML = ''; return; }
+                bar.classList.add('active');
+                bar.innerHTML =
+                    '<span class="bit-bar-count">☑ ' + seleccionados.size + ' seleccionado' + (seleccionados.size !== 1 ? 's' : '') + '</span>' +
+                    '<button class="bit-btn" id="bit-bar-casos">📌 Guardar casos</button>' +
+                    '<button class="bit-btn" id="bit-bar-entradas">＋ Crear entradas…</button>' +
+                    '<button class="bit-btn-ghost" id="bit-bar-limpiar" style="margin-left:auto">✕ limpiar</button>';
+                document.getElementById('bit-bar-casos').onclick = function () { accionLote('ficha-lote'); };
+                document.getElementById('bit-bar-entradas').onclick = function () {
+                    var tipo = prompt('Tipo de entrada para los ' + seleccionados.size + ' casos seleccionados:\\n\\n1 = Vencimiento\\n2 = Tarea\\n3 = Nota', '1');
+                    var mapa = { '1': 'vencimiento', '2': 'tarea', '3': 'nota' };
+                    if (mapa[tipo]) accionLote('entrada-lote', mapa[tipo]);
+                };
+                document.getElementById('bit-bar-limpiar').onclick = function () {
+                    seleccionados.clear();
+                    document.querySelectorAll('.bit-checkbox').forEach(function (c) { c.checked = false; });
+                    renderBarra();
+                };
+            }
+
+            var pie = document.getElementById('bit-footer');
+            if (pie) {
+                pie.innerHTML = '<div class="bit-footer">📔 <a href="https://api.procuradortool.com/usuarios/?goto=bitacora" target="procurador_portal">Bitácora</a> — tus vencimientos y casos seguidos, en el portal</div>';
+            }
+        })();
     }
 </script>
 </body>
@@ -2621,7 +2778,10 @@ ipcMain.handle('run-monitoreo', async (event, { modo, partes }) => {
         const resultados = parsedResult?.resultados || [];
         if (resultados.length > 0) {
             try {
-                const visorHtml = generarVisorMonitoreo(modo, resultados);
+                // F3.2: mismo criterio de seguridad que fetchBitacoraRuntimeInfo() en
+                // los demás puntos de enganche — fail-safe, nunca aborta la apertura del visor.
+                const bitacoraInfo = await fetchBitacoraRuntimeInfo();
+                const visorHtml = generarVisorMonitoreo(modo, resultados, bitacoraInfo);
                 const descDir   = path.join(getUserDataDir(cuit), 'descargas');
                 if (!fs.existsSync(descDir)) fs.mkdirSync(descDir, { recursive: true });
                 const monitorTs = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
@@ -2817,7 +2977,8 @@ ipcMain.handle('monitor-generar-visor-guardado', async (event, tipo) => {
             }));
         }
 
-        const visorHtml = generarVisorMonitoreo(tipo === 'novedades' ? 'novedades' : 'inicial', resultados);
+        const bitacoraInfo = await fetchBitacoraRuntimeInfo();
+        const visorHtml = generarVisorMonitoreo(tipo === 'novedades' ? 'novedades' : 'inicial', resultados, bitacoraInfo);
         const descDir   = await resolveUserDescargasDir();
         if (!fs.existsSync(descDir)) fs.mkdirSync(descDir, { recursive: true });
         const fname     = tipo === 'novedades' ? 'monitor-guardado-novedades.html' : 'monitor-guardado-expedientes.html';

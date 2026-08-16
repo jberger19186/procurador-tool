@@ -37,7 +37,7 @@ const router = express.Router();
 
 const ACCIONES = ['ficha', 'snapshot', 'entrada', 'ficha-lote', 'snapshot-lote', 'entrada-lote'];
 const TIPOS_ENTRADA = ['vencimiento', 'audiencia', 'tarea', 'nota'];
-const ORIGENES = ['procuracion', 'informe'];
+const ORIGENES = ['procuracion', 'informe', 'monitor'];
 
 const MAX_CASOS_LOTE = 200;   // hallazgo H3 del plan — tope de FILAS, independiente del de bytes
 const MAX_MOVS_CASO  = 500;   // cota defensiva (el tope real de la app es maxMovimientos=15)
