@@ -443,6 +443,11 @@
     .feat-grid {
       display:grid; grid-template-columns:repeat(2,1fr); gap:24px;
     }
+    /* Con un número impar de tarjetas, la última queda sola en su fila —
+       centrarla en vez de dejarla pegada a la columna izquierda. */
+    .feat-grid .feat-card:last-child:nth-child(odd) {
+      grid-column:1 / -1; max-width:calc(50% - 12px); margin:0 auto;
+    }
     .feat-card {
       background:var(--bg); border:1px solid var(--border-md);
       border-radius:var(--r-lg); padding:28px; position:relative; overflow:hidden;
@@ -707,6 +712,7 @@
       .problema-grid { grid-template-columns:1fr; gap:40px; }
       .priv-grid { grid-template-columns:1fr 1fr; }
       .feat-grid { grid-template-columns:1fr; }
+      .feat-grid .feat-card:last-child:nth-child(odd) { max-width:none; margin:0; }
       .feat-card-wide .feat-wide-inner { grid-template-columns:1fr; }
       .planes-grid { grid-template-columns:1fr; max-width:420px; }
       .future-grid { grid-template-columns:1fr; }
