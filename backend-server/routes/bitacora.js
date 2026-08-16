@@ -1422,11 +1422,202 @@ feriados.get('/', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  SUGERENCIAS (F3.3) — bandeja de aceptar/descartar
+// ═══════════════════════════════════════════════════════════════════════════
+// Las FILAS las escribe routes/monitor.js, en el momento en que el Monitor
+// detecta una novedad (único instante en que ese evento existe — ver el
+// encabezado de la migración 20260815_bitacora_f3_3.sql). Acá solo se leen y
+// se resuelven.
+//
+// La bandeja NO duplica la de novedades del Monitor: aquella responde "¿este
+// expediente es realmente de mi parte?" (mantenimiento de la línea base), esta
+// responde "¿lo quiero en mi agenda?". El usuario puede querer una sin la otra.
+const sugerencias = express.Router();
+
+// ─── GET / — bandeja de pendientes ─────────────────────────────────────────
+sugerencias.get('/', async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const { rows } = await db.query(
+            `SELECT id, expediente, caratula, dependencia, situacion,
+                    nombre_parte, jurisdiccion_sigla, created_at
+               FROM bitacora_sugerencias
+              WHERE user_id = $1 AND status = 'pendiente'
+              ORDER BY created_at DESC, id DESC
+              LIMIT $2`,
+            [req.user.id, LIMITE_LISTADO]
+        );
+        res.json({ success: true, sugerencias: rows, total: rows.length });
+    } catch (error) {
+        console.error('Error listando sugerencias:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── GET /count — solo el número, para el badge ────────────────────────────
+sugerencias.get('/count', async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const { rows } = await db.query(
+            `SELECT COUNT(*)::int AS count FROM bitacora_sugerencias
+              WHERE user_id = $1 AND status = 'pendiente'`,
+            [req.user.id]
+        );
+        res.json({ success: true, count: rows[0].count });
+    } catch (error) {
+        console.error('Error contando sugerencias:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── POST /:id/aceptar — crea la ficha del caso ────────────────────────────
+// Acepta opcionalmente `conEntrada: true` para dejar además una tarea de
+// revisión. Todo en UNA transacción: si la entrada falla, la sugerencia no
+// queda marcada como aceptada apuntando a una ficha a medias.
+sugerencias.post('/:id/aceptar', async (req, res) => {
+    const db = req.app.get('db');
+    const userId = req.user.id;
+    const sugId = entero(req.params.id, null, 1, 2147483647);
+    if (!sugId) return res.status(400).json({ error: 'Id inválido.' });
+
+    const conEntrada = req.body?.conEntrada === true;
+    const client = await db.connect();
+    try {
+        await client.query('BEGIN');
+
+        // El WHERE lleva user_id: una sugerencia ajena da 404 sin confirmar que exista
+        // (mismo criterio de IDOR que el resto del archivo). FOR UPDATE evita que dos
+        // clicks simultáneos en "Aceptar" creen la ficha dos veces.
+        const { rows: sugRows } = await client.query(
+            `SELECT * FROM bitacora_sugerencias
+              WHERE id = $1 AND user_id = $2 AND status = 'pendiente'
+              FOR UPDATE`,
+            [sugId, userId]
+        );
+        if (sugRows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Sugerencia no encontrada o ya resuelta.' });
+        }
+        const s = sugRows[0];
+
+        // Mismo upsert que la captura desde los visores (F2.2): si el caso ya
+        // existe por otro camino, se enriquece en vez de duplicar.
+        const { rows: fichaRows } = await client.query(
+            `INSERT INTO expedientes_seguidos
+               (user_id, expediente, expediente_key, jurisdiccion, dependencia, caratula, situacion_actual, situacion_fecha)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+             ON CONFLICT (user_id, expediente_key) DO UPDATE SET
+               jurisdiccion     = COALESCE(EXCLUDED.jurisdiccion,     expedientes_seguidos.jurisdiccion),
+               dependencia      = COALESCE(EXCLUDED.dependencia,      expedientes_seguidos.dependencia),
+               caratula         = COALESCE(EXCLUDED.caratula,         expedientes_seguidos.caratula),
+               situacion_actual = COALESCE(EXCLUDED.situacion_actual, expedientes_seguidos.situacion_actual),
+               situacion_fecha  = EXCLUDED.situacion_fecha,
+               updated_at       = NOW()
+             RETURNING id, (xmax = 0) AS creado`,
+            [
+                userId, s.expediente, s.expediente_key,
+                texto(s.jurisdiccion_sigla, MAX_TEXTO_CORTO),
+                texto(s.dependencia, MAX_TEXTO_CORTO),
+                texto(s.caratula, MAX_CARATULA),
+                texto(s.situacion, MAX_TEXTO_CORTO),
+            ]
+        );
+        const fichaId = fichaRows[0].id;
+
+        let entradaId = null;
+        if (conEntrada) {
+            // Tarea SIN fecha de vencimiento a propósito: el Monitor informa que
+            // apareció un caso nuevo, no cuándo vence nada. Inventar un plazo sería
+            // exactamente la heurística legal que este módulo no debe adivinar.
+            const titulo = texto(`Revisar caso nuevo — ${s.expediente}`, MAX_TITLE);
+            const { rows: entRows } = await client.query(
+                `INSERT INTO bitacora_entries
+                   (user_id, expediente_id, kind, title, description, source)
+                 VALUES ($1,$2,'tarea',$3,$4,'manual')
+                 RETURNING id`,
+                [
+                    userId, fichaId, titulo,
+                    texto(
+                        `Detectado por el Monitor de Partes${s.nombre_parte ? ` (parte: ${s.nombre_parte})` : ''}.` +
+                        `${s.caratula ? `\n${s.caratula}` : ''}`,
+                        MAX_DESCRIPTION
+                    ),
+                ]
+            );
+            entradaId = entRows[0].id;
+        }
+
+        await client.query(
+            `UPDATE bitacora_sugerencias
+                SET status = 'aceptada', expediente_id = $1, resolved_at = NOW()
+              WHERE id = $2`,
+            [fichaId, sugId]
+        );
+
+        await client.query('COMMIT');
+        res.json({
+            success: true,
+            expediente_id: fichaId,
+            creado: fichaRows[0].creado,
+            entrada_id: entradaId,
+        });
+    } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error('Error aceptando sugerencia:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    } finally {
+        client.release();
+    }
+});
+
+// ─── POST /:id/descartar ───────────────────────────────────────────────────
+sugerencias.post('/:id/descartar', async (req, res) => {
+    const db = req.app.get('db');
+    const sugId = entero(req.params.id, null, 1, 2147483647);
+    if (!sugId) return res.status(400).json({ error: 'Id inválido.' });
+
+    try {
+        const { rows } = await db.query(
+            `UPDATE bitacora_sugerencias
+                SET status = 'descartada', resolved_at = NOW()
+              WHERE id = $1 AND user_id = $2 AND status = 'pendiente'
+              RETURNING id`,
+            [sugId, req.user.id]
+        );
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Sugerencia no encontrada o ya resuelta.' });
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error descartando sugerencia:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ─── POST /descartar-todas ─────────────────────────────────────────────────
+sugerencias.post('/descartar-todas', async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const { rowCount } = await db.query(
+            `UPDATE bitacora_sugerencias
+                SET status = 'descartada', resolved_at = NOW()
+              WHERE user_id = $1 AND status = 'pendiente'`,
+            [req.user.id]
+        );
+        res.json({ success: true, descartadas: rowCount });
+    } catch (error) {
+        console.error('Error descartando todas las sugerencias:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  MONTAJE — ver el recuadro P1 del encabezado antes de tocar esto
 // ═══════════════════════════════════════════════════════════════════════════
 // El gate va acá, sobre cada sub-path. NUNCA sobre el router.
 router.use('/bitacora',    authenticateToken, checkBitacoraPlan(), entradas);
 router.use('/expedientes', authenticateToken, checkBitacoraPlan(), expedientes);
 router.use('/feriados',    authenticateToken, checkBitacoraPlan(), feriados);
+router.use('/sugerencias', authenticateToken, checkBitacoraPlan(), sugerencias);
 
 module.exports = router;

@@ -2859,6 +2859,7 @@ async function renderBitacora() {
     // invalidar la caché de una sección desde la otra.
     await loadBitacoraExpedientes();
     loadBitacoraAvisos();
+    loadBitacoraSugerencias();   // F3.3 — casos nuevos detectados por el Monitor
     bitacoraApplyViewToggle();
     bitacoraLoadAndRenderView();
 }
@@ -2974,6 +2975,111 @@ function renderBitacoraAvisos(data) {
     html += '</div>';
     cont.innerHTML = html;
     cont.style.display = 'block';
+}
+
+// ─── Bandeja de sugerencias del Monitor (F3.3) ─────────────────────────────
+// Las filas las genera el backend cuando el Monitor de Partes detecta un caso
+// NUEVO en el que figura una parte del usuario. No duplica la bandeja de
+// novedades que el Monitor ya tiene en la app: aquella decide "¿este expediente
+// es de mi parte?", esta decide "¿lo quiero en mi agenda?".
+async function loadBitacoraSugerencias() {
+    const cont = document.getElementById('bitacora-sugerencias');
+    if (!cont) return;
+    try {
+        const res = await apiFetch('/usuarios/api/sugerencias');
+        if (!res || !res.ok) { cont.style.display = 'none'; return; }
+        const data = await res.json();
+        renderBitacoraSugerencias(data.sugerencias || []);
+    } catch (e) {
+        console.error('Error cargando sugerencias:', e);
+        cont.style.display = 'none';
+    }
+}
+
+function renderBitacoraSugerencias(sugerencias) {
+    const cont = document.getElementById('bitacora-sugerencias');
+    if (!cont) return;
+    if (sugerencias.length === 0) {
+        cont.style.display = 'none';
+        cont.innerHTML = '';
+        return;
+    }
+
+    const fila = (s) => {
+        const parte = s.nombre_parte
+            ? `Parte: ${escapeHtml(s.nombre_parte)}` : '';
+        const dep = s.dependencia ? escapeHtml(s.dependencia) : '';
+        const meta = [parte, dep, s.situacion ? escapeHtml(s.situacion) : '']
+            .filter(Boolean).join(' · ');
+        return `<div class="bitacora-sug-row">
+            <div class="bitacora-sug-info">
+                <div class="bitacora-sug-exp">${escapeHtml(s.expediente)}</div>
+                ${s.caratula ? `<div class="bitacora-sug-caratula">${escapeHtml(s.caratula)}</div>` : ''}
+                ${meta ? `<div class="bitacora-sug-meta">${meta}</div>` : ''}
+            </div>
+            <div class="bitacora-sug-actions">
+                <button type="button" class="btn btn-primary btn-sm" onclick="aceptarSugerencia(${s.id}, false)">📌 Seguir</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="aceptarSugerencia(${s.id}, true)" title="Crea la ficha y además una tarea de revisión">📌 Seguir + tarea</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="descartarSugerencia(${s.id})">✕</button>
+            </div>
+        </div>`;
+    };
+
+    const plural = sugerencias.length !== 1;
+    cont.innerHTML = `<div class="bitacora-sug-banner">
+        <div class="bitacora-sug-header">
+            <span>🔎 El Monitor encontró ${sugerencias.length} caso${plural ? 's' : ''} nuevo${plural ? 's' : ''} de tus partes</span>
+            <button type="button" class="btn btn-outline btn-sm" onclick="descartarTodasSugerencias()">Descartar todas</button>
+        </div>
+        ${sugerencias.map(fila).join('')}
+    </div>`;
+    cont.style.display = 'block';
+}
+
+async function aceptarSugerencia(id, conEntrada) {
+    try {
+        const res = await apiFetch(`/usuarios/api/sugerencias/${id}/aceptar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conEntrada: !!conEntrada }),
+        });
+        if (!res || !res.ok) { showToast('No se pudo agregar el caso', 'error'); return; }
+        const data = await res.json();
+        showToast(conEntrada
+            ? 'Caso agregado a tu Bitácora, con una tarea de revisión'
+            : 'Caso agregado a tu Bitácora', 'success');
+        // Repinta la bandeja y el resto de la sección: la ficha nueva tiene que
+        // aparecer en el filtro de expedientes y (si se creó) la tarea en la vista.
+        await loadBitacoraSugerencias();
+        await loadBitacoraExpedientes();
+        if (data.entrada_id) bitacoraRefreshCurrentContext();
+    } catch (e) {
+        console.error('Error aceptando sugerencia:', e);
+        showToast('No se pudo agregar el caso', 'error');
+    }
+}
+
+async function descartarSugerencia(id) {
+    try {
+        const res = await apiFetch(`/usuarios/api/sugerencias/${id}/descartar`, { method: 'POST' });
+        if (!res || !res.ok) { showToast('No se pudo descartar', 'error'); return; }
+        await loadBitacoraSugerencias();
+    } catch (e) {
+        console.error('Error descartando sugerencia:', e);
+        showToast('No se pudo descartar', 'error');
+    }
+}
+
+async function descartarTodasSugerencias() {
+    if (!(await showConfirm('¿Descartar todas las sugerencias pendientes? Los casos no se van a agregar a tu Bitácora.'))) return;
+    try {
+        const res = await apiFetch('/usuarios/api/sugerencias/descartar-todas', { method: 'POST' });
+        if (!res || !res.ok) { showToast('No se pudieron descartar', 'error'); return; }
+        await loadBitacoraSugerencias();
+    } catch (e) {
+        console.error('Error descartando sugerencias:', e);
+        showToast('No se pudieron descartar', 'error');
+    }
 }
 
 // ─── Item de entrada (reutilizado por el panel del día y la vista Lista) ───

@@ -1,9 +1,83 @@
 const express = require('express');
 const router  = express.Router();
 const authenticateToken = require('../middleware/authenticateToken');
+const { expedienteKey } = require('../utils/expedienteKey');
 
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);
+
+// ─── Bitácora F3.3 — sugerencias a partir de novedades del Monitor ───────────
+/**
+ * Crea una sugerencia de Bitácora por cada novedad recién detectada.
+ *
+ * Se llama desde POST /monitor/expedientes/bulk, en el único instante en que el
+ * evento "esto es una novedad" existe: apenas después de insertarla. No se puede
+ * derivar después, porque el estado es transitorio — confirmar la novedad la
+ * funde con la línea base (`es_linea_base=true`) y rechazarla borra la fila.
+ * Ver el encabezado de database/migrations/20260815_bitacora_f3_3.sql.
+ *
+ * Nunca lanza hacia el llamador con algo que deba abortar el monitoreo: el
+ * try/catch del call site lo garantiza, y acá se falla en silencio por caso.
+ */
+async function crearSugerenciasBitacora(db, userId, parteId, novedades) {
+    // Gate de plan. Mismo criterio que checkBitacoraPlan (LEFT JOIN → NULL = sin
+    // acceso), aplicado inline porque esto NO es un endpoint de Bitácora: no puede
+    // devolver 403, solo decidir si genera o no la sugerencia.
+    const { rows: planRows } = await db.query(
+        `SELECT p.bitacora_enabled
+           FROM users u
+           LEFT JOIN subscriptions s ON s.user_id = u.id
+           LEFT JOIN plans p         ON p.id      = s.plan_id
+          WHERE u.id = $1`,
+        [userId]
+    );
+    if (!(planRows.length > 0 && planRows[0].bitacora_enabled === true)) return;
+
+    const { rows: parteRows } = await db.query(
+        `SELECT nombre_parte, jurisdiccion_sigla FROM monitor_partes WHERE id = $1`,
+        [parteId]
+    );
+    const parte = parteRows[0] || {};
+
+    for (const { id: monitorExpId, exp } of novedades) {
+        try {
+            const numero = exp.numero_expediente || '';
+            const key    = expedienteKey(numero);
+            // Un expediente cuyo número no se puede normalizar no sirve para nada
+            // aguas abajo (no se podría deduplicar ni vincular a una ficha).
+            if (!key) continue;
+
+            // No sugerir un caso que el usuario YA sigue. El anti-join usa la misma
+            // clave canónica de ambos lados, que es lo que hace que "FCR 034000485/2010"
+            // del Monitor matchee con "FCR 34000485/2010" tipeado a mano.
+            const { rows: yaEs } = await db.query(
+                `SELECT 1 FROM expedientes_seguidos WHERE user_id = $1 AND expediente_key = $2`,
+                [userId, key]
+            );
+            if (yaEs.length > 0) continue;
+
+            // ON CONFLICT sobre el índice parcial: si ya hay una sugerencia PENDIENTE
+            // del mismo caso, no se duplica. Una descartada no bloquea: si el Monitor
+            // vuelve a detectarlo más adelante, se vuelve a ofrecer.
+            await db.query(
+                `INSERT INTO bitacora_sugerencias
+                     (user_id, origen, monitor_expediente_id, expediente, expediente_key,
+                      caratula, dependencia, situacion, nombre_parte, jurisdiccion_sigla)
+                 VALUES ($1, 'monitor', $2, $3, $4, $5, $6, $7, $8, $9)
+                 ON CONFLICT (user_id, expediente_key) WHERE status = 'pendiente' DO NOTHING`,
+                [
+                    userId, monitorExpId, numero, key,
+                    exp.caratula || null, exp.dependencia || null, exp.situacion || null,
+                    parte.nombre_parte || null, parte.jurisdiccion_sigla || null,
+                ]
+            );
+        } catch (e) {
+            // Una novedad problemática no debe frenar a las demás (misma lección que
+            // el hallazgo E3-1: aislar cada iteración del batch).
+            console.error(`[Bitácora F3.3] Sugerencia omitida para "${exp?.numero_expediente}":`, e.message);
+        }
+    }
+}
 
 // ─── Límites por plan (fallback hardcodeado para retrocompatibilidad) ─────────
 const LIMITES_PLAN_FALLBACK = {
@@ -488,15 +562,24 @@ router.post('/expedientes/bulk', async (req, res) => {
 
         let insertados = 0;
         let duplicados = 0;
+        // F3.3: filas realmente NUEVAS y que son novedad (no línea base). Solo estas
+        // generan sugerencia de Bitácora. Se junta acá y se procesa DESPUÉS del loop,
+        // fuera del camino crítico del Monitor.
+        const novedadesInsertadas = [];
 
         for (const exp of expedientes) {
             try {
-                await db.query(
+                // `RETURNING id` distingue un INSERT real de un ON CONFLICT DO NOTHING.
+                // Sin esto no hay forma de saber si la fila se creó (el DO NOTHING no
+                // lanza), que es exactamente lo que F3.3 necesita para no sugerir dos
+                // veces el mismo caso en corridas sucesivas.
+                const ins = await db.query(
                     `INSERT INTO monitor_expedientes
                          (parte_id, numero_expediente, caratula, dependencia, situacion,
                           ultima_actuacion, es_linea_base, confirmado, fecha_confirmacion)
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                     ON CONFLICT (parte_id, numero_expediente) DO NOTHING`,
+                     ON CONFLICT (parte_id, numero_expediente) DO NOTHING
+                     RETURNING id`,
                     [
                         parte_id,
                         exp.numero_expediente,
@@ -509,9 +592,33 @@ router.post('/expedientes/bulk', async (req, res) => {
                         es_linea_base ? new Date() : null,
                     ]
                 );
-                insertados++;
+                if (ins.rows.length > 0) {
+                    insertados++;
+                    if (!es_linea_base) {
+                        novedadesInsertadas.push({ id: ins.rows[0].id, exp });
+                    }
+                } else {
+                    // El expediente ya estaba: ON CONFLICT DO NOTHING. Antes esto se
+                    // contaba como "insertado" (el contador subía igual porque el
+                    // DO NOTHING no lanza) — ahora `insertados`/`duplicados` reflejan
+                    // lo que realmente pasó.
+                    duplicados++;
+                }
             } catch (e) {
                 if (e.code === '23505') { duplicados++; } else { throw e; }
+            }
+        }
+
+        // F3.3 — sugerencias de Bitácora a partir de las novedades recién detectadas.
+        // ⚠️ Envuelto entero en try/catch que NUNCA propaga: el Monitor es un
+        // subsistema que el usuario paga y que ya hizo su trabajo cuando llega acá.
+        // Un fallo del módulo Bitácora (tabla ausente, plan no resoluble, lo que sea)
+        // no puede hacer fracasar una corrida de monitoreo real contra el PJN.
+        if (novedadesInsertadas.length > 0) {
+            try {
+                await crearSugerenciasBitacora(db, userId, parte_id, novedadesInsertadas);
+            } catch (e) {
+                console.error('[Bitácora F3.3] No se pudieron crear sugerencias (no crítico):', e.message);
             }
         }
 
