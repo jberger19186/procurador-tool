@@ -2602,6 +2602,56 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('login-email').focus();
     });
 
+    // ─── Bitácora: wiring de la sección (F1.3) ─────────────────────────────
+    // ⚠️ Este bloque (y los 2 que le siguen, Mis Expedientes y Exportación) TIENE
+    // que ir acá — antes de cualquier branching de login/SSO — y no más abajo,
+    // junto al resto de la lógica de arranque. El auto-login por SSO (más abajo)
+    // hace `return` apenas termina `initDashboard()`, así que cualquier wiring
+    // colocado DESPUÉS de ese punto nunca se ejecutaba al entrar desde la app
+    // Electron (`openPortalSection('bitacora')`, token en `#sso=`) — los botones
+    // de esta sección quedaban sin `addEventListener`, y solo empezaban a andar
+    // tras un F5 manual (que recarga sin el hash `#sso=` y sí llega hasta acá).
+    // Esta wiring no depende de si hay sesión — son elementos estáticos del HTML,
+    // igual que el resto de los listeners de arriba — así que no hay razón para
+    // que dependiera del resultado del branching de login.
+    document.getElementById('btn-bitacora-nueva')?.addEventListener('click', () => openBitacoraModal());
+    document.getElementById('bitacora-entrada-form')?.addEventListener('submit', saveBitacoraEntrada);
+    document.getElementById('bit-kind')?.addEventListener('change', bitTogglePlazoBlock);
+    document.getElementById('bit-plazo-calcular')?.addEventListener('click', calcularPlazoBitacora);
+
+    document.querySelectorAll('.bitacora-view-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.bitacora.view = btn.dataset.view;
+            bitacoraApplyViewToggle();
+            bitacoraLoadAndRenderView();
+        });
+    });
+    document.querySelectorAll('.bitacora-chip').forEach(chip => {
+        chip.addEventListener('click', () => bitacoraSetTipoFilter(chip.dataset.tipo || ''));
+    });
+    document.getElementById('bitacora-filtro-estado')?.addEventListener('change', (e) => {
+        state.bitacora.estado = e.target.value;
+        bitacoraLoadAndRenderView();
+    });
+    document.getElementById('bitacora-filtro-expediente')?.addEventListener('change', (e) => {
+        state.bitacora.expedienteId = e.target.value;
+        bitacoraLoadAndRenderView();
+    });
+    document.getElementById('bitacora-search')?.addEventListener('input', (e) => bitacoraOnSearchInput(e.target.value));
+    document.getElementById('bitacora-mes-prev')?.addEventListener('click', () => bitacoraMonthNav(-1));
+    document.getElementById('bitacora-mes-next')?.addEventListener('click', () => bitacoraMonthNav(1));
+
+    // ─── Mis Expedientes: wiring de la sección (F1.4) ──────────────────────
+    document.getElementById('btn-mexp-nueva')?.addEventListener('click', openMexpNuevaFicha);
+    document.getElementById('mexp-ficha-form')?.addEventListener('submit', saveMexpFicha);
+    document.getElementById('mexp-search')?.addEventListener('input', (e) => mexpOnSearchInput(e.target.value));
+    document.getElementById('btn-mexp-volver')?.addEventListener('click', closeMexpFicha);
+
+    // ─── Exportación: wiring del modal (F1.6) ───────────────────────────────
+    document.querySelectorAll('input[name="export-alcance"]').forEach(r => {
+        r.addEventListener('change', exportUpdateSubfields);
+    });
+
     // Capturar ?goto= de la URL (de links externos como emails) antes de cualquier flujo
     // Se persiste en sessionStorage para sobrevivir al ciclo de login normal
     const urlParams = new URLSearchParams(window.location.search);
@@ -2680,45 +2730,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('login-page').style.display = 'flex';
         renderRememberedUsers();
     }
-
-    // ─── Bitácora: wiring de la sección (F1.3) ─────────────────────────────
-    document.getElementById('btn-bitacora-nueva')?.addEventListener('click', () => openBitacoraModal());
-    document.getElementById('bitacora-entrada-form')?.addEventListener('submit', saveBitacoraEntrada);
-    document.getElementById('bit-kind')?.addEventListener('change', bitTogglePlazoBlock);
-    document.getElementById('bit-plazo-calcular')?.addEventListener('click', calcularPlazoBitacora);
-
-    document.querySelectorAll('.bitacora-view-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            state.bitacora.view = btn.dataset.view;
-            bitacoraApplyViewToggle();
-            bitacoraLoadAndRenderView();
-        });
-    });
-    document.querySelectorAll('.bitacora-chip').forEach(chip => {
-        chip.addEventListener('click', () => bitacoraSetTipoFilter(chip.dataset.tipo || ''));
-    });
-    document.getElementById('bitacora-filtro-estado')?.addEventListener('change', (e) => {
-        state.bitacora.estado = e.target.value;
-        bitacoraLoadAndRenderView();
-    });
-    document.getElementById('bitacora-filtro-expediente')?.addEventListener('change', (e) => {
-        state.bitacora.expedienteId = e.target.value;
-        bitacoraLoadAndRenderView();
-    });
-    document.getElementById('bitacora-search')?.addEventListener('input', (e) => bitacoraOnSearchInput(e.target.value));
-    document.getElementById('bitacora-mes-prev')?.addEventListener('click', () => bitacoraMonthNav(-1));
-    document.getElementById('bitacora-mes-next')?.addEventListener('click', () => bitacoraMonthNav(1));
-
-    // ─── Mis Expedientes: wiring de la sección (F1.4) ──────────────────────
-    document.getElementById('btn-mexp-nueva')?.addEventListener('click', openMexpNuevaFicha);
-    document.getElementById('mexp-ficha-form')?.addEventListener('submit', saveMexpFicha);
-    document.getElementById('mexp-search')?.addEventListener('input', (e) => mexpOnSearchInput(e.target.value));
-    document.getElementById('btn-mexp-volver')?.addEventListener('click', closeMexpFicha);
-
-    // ─── Exportación: wiring del modal (F1.6) ───────────────────────────────
-    document.querySelectorAll('input[name="export-alcance"]').forEach(r => {
-        r.addEventListener('change', exportUpdateSubfields);
-    });
 });
 
 // =============================================================================
