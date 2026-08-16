@@ -1616,6 +1616,42 @@ resultado a la vista.
 > adelante. No son bugs ni deuda técnica urgente — son cabos sueltos conscientes, anotados acá
 > para que no se pierdan entre sesiones. Se van agregando a medida que cada fase se ejecuta.
 >
+> #### 📋 Resumen a simple vista (actualizado 2026-08-16, tras cerrar F3.0–F3.3 y publicar el release electron-v2.7.49)
+>
+> **🔵 El grande, con nombre y ya conocido — F3.4.** No es un bug ni un cabo suelto: es la
+> **última fase del plan, deliberadamente sin arrancar** — el criterio del propio plan es *"solo
+> si hay demanda real"*, y el 2026-08-16 el operador lo confirmó explícitamente al elegir no
+> tocarla al cortar el release de F3.1/F3.2. Agrupa 3 cosas sin diseño cerrado (ver la fila F3.4
+> de §11.1 y P-F1.3-a más abajo): **tipos de entrada personalizados** (hoy fijos:
+> vencimiento/audiencia/tarea/nota) · **export `.ics`** (agenda de Bitácora → Google
+> Calendar/Outlook) · **vista "Semana"** del calendario (F1.3 la recortó a propósito). Nada acá
+> es estructural — son palancas que se agregan cuando alguien las pide, no antes.
+>
+> **🟡 Reales pero bajos, con dueño y condición de cierre clara** (detalle completo en la tabla
+> de abajo, buscar por `#`):
+>
+> | # | Qué es, en una línea | Se cierra cuando |
+> |---|---|---|
+> | **P-F1.1-a** | El disclaimer condicional de la feria judicial de julio (cuando la CSJN publica la acordada) nunca se construyó — la calculadora de plazos solo tiene el texto genérico fijo. | El admin carga la feria de julio vía F1.8 → agregar la lógica condicional del disclaimer. |
+> | **P-F1.3-a** | Vista "Semana" — mismo ítem que agrupa F3.4. | Si el uso real muestra que hace falta. |
+> | **P-F1.3-b** | Búsqueda de texto y filtro "Hechos" se resuelven client-side, no hay `q=` server-side. Funciona bien hoy (tope 500 filas protege). | Si algún día escala mal, agregar el parámetro al backend. |
+> | **P-F3.0-b** | El contador `snapshotsCreados` del resumen de import no distingue "creado" de "ya existía" — cosmético, no afecta integridad (verificado por SQL). | Deliberadamente no corregido junto con F1.7 (el único camino destructivo) — merece su propia sesión. |
+> | **P-F1.1-b** | El test de Electron extrae `tokenizar()` del código fuente con regex en vez de importarla — más frágil que un `require`. | La próxima vez que haya otra razón para tocar `buscarPdfExpediente.js`. |
+>
+> **🟢 Informativos, sin acción prevista** (documentados a propósito para que nadie los "corrija"
+> sin querer, no son deuda real): **P-F2.2-a** (un `req.rawBody` que nadie lee en el webhook de
+> MercadoPago — el comentario del código es engañoso pero el comportamiento real es correcto, no
+> se toca código de cobro para "limpiar" esto) · **P-F2.2-b** (un body que excede el límite del
+> parser da 500 en vez de 413 — preexistente, no introducido por F2.2) · **P-F1.7-a** y
+> **P-F2.1-b** (ambigüedades de diseño ya resueltas y cerradas por decisión explícita).
+>
+> **Fuera de esta tabla — no es un hallazgo del producto:** la confirmación **visual** del badge
+> de F3.1 (pendientes en el topbar) quedó bloqueada en la sesión que lo implementó por una
+> limitación de sesión de Windows del entorno de control remoto, no por una duda sobre el código
+> (que sigue el mismo patrón ya verificado en pantalla para F2.7). Con el release `electron-v2.7.49`
+> ya publicado, es trivial de mirar la próxima vez que se abra la app real — no tiene entrada `P-`
+> propia porque no es un cabo suelto de diseño, es solo "falta mirarlo una vez".
+>
 > 🎯 **Actualización 2026-08-15 — 4 de estos los cierra F3.0** (el plan de pruebas con el flag
 > encendido, `plan-pruebas-bitacora-2026-08.md`), que es justamente lo que estaban esperando:
 > **P-F1.7-b** (el bloque de restauración de snapshots no se podía ejercitar porque nada generaba
