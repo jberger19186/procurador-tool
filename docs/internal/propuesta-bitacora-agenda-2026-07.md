@@ -1492,12 +1492,27 @@ resultado a la vista.
    la sesión que ve la herramienta de control remoto — no una duda sobre el código, que sigue el
    mismo patrón ya verificado visualmente en producción para F2.7) — pendiente de una confirmación
    visual liviana en una sesión futura, no bloqueante para seguir con F3.2.
-2. **(F3.2)** Visor del monitor con captura — **gateado en F3.0**: el plan siempre dijo *"si el uso de
-   fases 1-2 lo valida"*, y B4 del plan de pruebas **es** esa validación. ✅ **Buena noticia
-   verificada:** `generarVisorMonitoreo` vive en `main.js` y ya escapa correctamente los datos del PJN
-   (contraste positivo del hallazgo E4/P-2), así que este visor usa el mecanismo **fácil** de
-   inyección — `main.js` controla su payload directamente, como el visor de informe por lote, **sin**
-   el post-procesado que F2.1 necesitó para los 3 visores de procuración.
+2. **(F3.2)** ✅ **CÓDIGO LISTO (2026-08-15).** Visor del monitor con captura — **gateado en F3.0**:
+   el plan siempre dijo *"si el uso de fases 1-2 lo valida"*, y B4 del plan de pruebas fue esa
+   validación. Usa el mecanismo **fácil** confirmado en el diseño: `generarVisorMonitoreo` vive en
+   `main.js`, que ya conoce `bitacoraInfo` de forma síncrona (`fetchBitacoraRuntimeInfo()`, F2.1)
+   antes de construir el HTML → `window.BITACORA_RUNTIME` se embebe directo, sin post-procesado ni
+   marcador. Cada expediente de cada parte gana columna de checkbox/badge "ya seguido"; una barra
+   de selección global ofrece "📌 Guardar casos" y "＋ Crear entradas…". **Deliberadamente sin
+   "💾 Guardar procuración"**: `expediente_snapshots.kind` tiene un CHECK que solo admite
+   `'procuracion'|'informe'`, y el Monitor nunca trae `movimientos` — un snapshot desde acá quedaría
+   siempre con `data.movimientos` vacío. Al no ofrecer ese botón, el flujo nunca dispara
+   `accion=snapshot-lote` desde este origen, así que el CHECK ni se ejercita. Agregado `'monitor'` a
+   `ORIGENES` en `routes/capture.js` (antes caía en silencio a `'procuracion'`). Verificado con un
+   harness de 10 aserciones en staging y confirmado en vivo contra producción con datos reales
+   (usuario 250, COMBO_PROMO): POST captura → draft → reclamo trae `origen="monitor"` → segundo
+   reclamo da 404 (uso único) → 0 filas nuevas en `expedientes_seguidos` (el draft nunca se
+   confirmó desde el portal, solo se probó el endpoint anónimo). Validado también con un test
+   standalone de `generarVisorMonitoreo()`: la columna se omite completamente si
+   `bitacoraInfo.enabled=false` (cero cambio visual para cuentas sin el módulo) y el escape de
+   atributos (comillas en carátulas) funciona igual que en los demás visores. `node --check` +
+   `npm start` con arranque limpio. **Requiere release de Electron** para llegar a usuarios reales
+   (el backend ya está en producción, el cliente todavía no viajó).
 3. **(F3.3)** Sugerencias automáticas a partir de novedades del monitor (bandeja de aceptar/descartar)
    — **el diferencial mayor**, pero **gateado en el uso real**, no solo en F3.0: la propuesta siempre
    dijo *"recién cuando el hábito de uso exista"*. Dejar el flag encendido tras F3.0 es lo que produce
@@ -1553,7 +1568,7 @@ resultado a la vista.
 | **F2 — Deploy de backend + release Electron** *(aclarado, hallazgo C3)* | **Sonnet, medio** | — | Deploy de F2.2/F2.4 a staging→prod **primero**, después el release de Electron siguiendo el checklist del proyecto (probar `npm start` → bump → tag → `npm run release` → 5 lugares de versión visible → deploy portal/landing). |
 | **F3.0** — Validación interna con el flag encendido (plan de pruebas E2E) | **Sonnet, medio** ✅ | **Grande** — ✅ **1 sesión** (más rápido de lo estimado: 2–3) | ✅ **Ejecutado 2026-08-15, 55/55 casos.** 3 bugs reales de timezone encontrados y corregidos en vivo (misma causa raíz), incluido el paso por `modo=reemplazar` de F1.7 (el único camino destructivo del módulo) con backup fresco previo — salió limpio, sin necesitar una sesión Opus aparte. |
 | **F3.1** — Badge de pendientes en la app | **Sonnet, bajo** | Chico | ✅ **Código listo (2026-08-15).** Backend ya en producción; cliente pendiente de release. Ver detalle arriba. |
-| **F3.2** — Visor del monitor con captura | **Sonnet, medio** | Chico-mediano *(más bajo de lo que parecía)* | **Gateado en F3.0** (el plan siempre dijo "si el uso de fases 1-2 lo valida"). ✅ **Verificado:** `generarVisorMonitoreo` vive en `main.js` y ya escapa los datos del PJN → usa el mecanismo **fácil** (payload controlado directamente, como el informe por lote), **sin** el post-procesado que encareció F2.1. Requiere release de Electron. |
+| **F3.2** — Visor del monitor con captura | **Sonnet, medio** | Chico-mediano *(más bajo de lo que parecía)* | ✅ **Código listo (2026-08-15).** Backend (`origen='monitor'`) ya en producción; cliente pendiente de release. Ver detalle arriba. |
 | **F3.3** — Sugerencias automáticas desde novedades del monitor (bandeja aceptar/descartar) | **Opus, alto** | **Grande** | **El diferencial mayor de toda la propuesta.** Es el único tramo de la Fase 3 con diseño de datos y lógica no trivial: el **matching novedad→entrada sugerida** (¿qué movimiento del PJN merece un vencimiento? ¿con qué fecha?), un estado nuevo para entradas sugeridas-no-confirmadas, y una bandeja de revisión. **Gateado en el uso real, no solo en F3.0** — arrancarlo sin hábito de uso es diseñar el matching a ciegas. |
 | **F3.4** — Tipos de entrada personalizados · export `.ics` · vista "Semana" (P-F1.3-a) | **Sonnet, bajo-medio** | Variable | **Solo si hay demanda real.** Nada acá es estructural; son las palancas que se agregan cuando un usuario las pide, no antes. |
 
