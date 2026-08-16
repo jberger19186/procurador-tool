@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict s8mm4LcoK11aIPGuxoaat8x9TWkaASZqCjZeNbOGdgwHh7HmYw1AFpB5TVxizxR
+\restrict IkbNfLm6fzWH34eHWJL7pb8qzJtFKbMfiTclC6cXKeRBpyig9HBnA9vkfKEX8JT
 
 -- Dumped from database version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
 -- Dumped by pg_dump version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
@@ -287,6 +287,55 @@ ALTER TABLE public.bitacora_entries_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.bitacora_entries_id_seq OWNED BY public.bitacora_entries.id;
+
+
+--
+-- Name: bitacora_sugerencias; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.bitacora_sugerencias (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    origen character varying(20) DEFAULT 'monitor'::character varying NOT NULL,
+    monitor_expediente_id integer,
+    expediente character varying(60) NOT NULL,
+    expediente_key character varying(60) NOT NULL,
+    caratula text,
+    dependencia text,
+    situacion character varying(200),
+    nombre_parte character varying(255),
+    jurisdiccion_sigla character varying(20),
+    status character varying(15) DEFAULT 'pendiente'::character varying NOT NULL,
+    expediente_id integer,
+    created_at timestamp with time zone DEFAULT now(),
+    resolved_at timestamp with time zone,
+    CONSTRAINT bitacora_sugerencias_origen_chk CHECK (((origen)::text = 'monitor'::text)),
+    CONSTRAINT bitacora_sugerencias_status_chk CHECK (((status)::text = ANY ((ARRAY['pendiente'::character varying, 'aceptada'::character varying, 'descartada'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.bitacora_sugerencias OWNER TO postgres;
+
+--
+-- Name: bitacora_sugerencias_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.bitacora_sugerencias_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.bitacora_sugerencias_id_seq OWNER TO postgres;
+
+--
+-- Name: bitacora_sugerencias_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.bitacora_sugerencias_id_seq OWNED BY public.bitacora_sugerencias.id;
 
 
 --
@@ -1609,6 +1658,13 @@ ALTER TABLE ONLY public.bitacora_entries ALTER COLUMN id SET DEFAULT nextval('pu
 
 
 --
+-- Name: bitacora_sugerencias id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_sugerencias ALTER COLUMN id SET DEFAULT nextval('public.bitacora_sugerencias_id_seq'::regclass);
+
+
+--
 -- Name: commercial_benefits id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -1822,6 +1878,14 @@ ALTER TABLE ONLY public.app_settings
 
 ALTER TABLE ONLY public.bitacora_entries
     ADD CONSTRAINT bitacora_entries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bitacora_sugerencias bitacora_sugerencias_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_sugerencias
+    ADD CONSTRAINT bitacora_sugerencias_pkey PRIMARY KEY (id);
 
 
 --
@@ -2458,6 +2522,20 @@ CREATE INDEX idx_subscription_user ON public.subscriptions USING btree (user_id)
 
 
 --
+-- Name: idx_sugerencias_pendiente_unica; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX idx_sugerencias_pendiente_unica ON public.bitacora_sugerencias USING btree (user_id, expediente_key) WHERE ((status)::text = 'pendiente'::text);
+
+
+--
+-- Name: idx_sugerencias_user_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_sugerencias_user_status ON public.bitacora_sugerencias USING btree (user_id, status, created_at DESC);
+
+
+--
 -- Name: idx_tickets_category; Type: INDEX; Schema: public; Owner: procurador_user
 --
 
@@ -2694,6 +2772,30 @@ ALTER TABLE ONLY public.bitacora_entries
 
 ALTER TABLE ONLY public.bitacora_entries
     ADD CONSTRAINT bitacora_entries_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: bitacora_sugerencias bitacora_sugerencias_expediente_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_sugerencias
+    ADD CONSTRAINT bitacora_sugerencias_expediente_id_fkey FOREIGN KEY (expediente_id) REFERENCES public.expedientes_seguidos(id) ON DELETE SET NULL;
+
+
+--
+-- Name: bitacora_sugerencias bitacora_sugerencias_monitor_expediente_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_sugerencias
+    ADD CONSTRAINT bitacora_sugerencias_monitor_expediente_id_fkey FOREIGN KEY (monitor_expediente_id) REFERENCES public.monitor_expedientes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: bitacora_sugerencias bitacora_sugerencias_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bitacora_sugerencias
+    ADD CONSTRAINT bitacora_sugerencias_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -3032,6 +3134,20 @@ GRANT ALL ON SEQUENCE public.bitacora_entries_id_seq TO procurador_user;
 
 
 --
+-- Name: TABLE bitacora_sugerencias; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.bitacora_sugerencias TO procurador_user;
+
+
+--
+-- Name: SEQUENCE bitacora_sugerencias_id_seq; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON SEQUENCE public.bitacora_sugerencias_id_seq TO procurador_user;
+
+
+--
 -- Name: TABLE commercial_benefits; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -3231,5 +3347,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict s8mm4LcoK11aIPGuxoaat8x9TWkaASZqCjZeNbOGdgwHh7HmYw1AFpB5TVxizxR
+\unrestrict IkbNfLm6fzWH34eHWJL7pb8qzJtFKbMfiTclC6cXKeRBpyig9HBnA9vkfKEX8JT
 

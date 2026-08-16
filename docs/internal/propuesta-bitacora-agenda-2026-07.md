@@ -1513,10 +1513,42 @@ resultado a la vista.
    atributos (comillas en carátulas) funciona igual que en los demás visores. `node --check` +
    `npm start` con arranque limpio. **Requiere release de Electron** para llegar a usuarios reales
    (el backend ya está en producción, el cliente todavía no viajó).
-3. **(F3.3)** Sugerencias automáticas a partir de novedades del monitor (bandeja de aceptar/descartar)
-   — **el diferencial mayor**, pero **gateado en el uso real**, no solo en F3.0: la propuesta siempre
-   dijo *"recién cuando el hábito de uso exista"*. Dejar el flag encendido tras F3.0 es lo que produce
-   ese hábito; **no debería arrancar el mismo día que termina F3.0**.
+3. **(F3.3)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** Sugerencias automáticas a partir de
+   novedades del monitor (bandeja de aceptar/descartar) — el diferencial mayor del módulo.
+
+   **⚠️ El hallazgo que cambió el diseño, medido en producción antes de escribir código:** el gate
+   *"esperar al uso real"* resultó estar mal formulado. No era falta de hábito — **19 corridas reales
+   de novedades sobre 2.433 expedientes en 2 semanas habían producido CERO novedades**, el cruce que
+   §7 diseñó (fichas × monitoreados) daba **0 filas** porque los dos conjuntos eran disjuntos, y el
+   Monitor **descarta por diseño** los cambios de `situacion`/`ultima_actuacion` de un caso que ya
+   conoce (`ON CONFLICT DO NOTHING` en `routes/monitor.js`), así que tampoco había señal alternativa.
+   El bloque se destrabó con una técnica de verificación aportada por el operador: **borrar 1-2 filas
+   de la línea base hace que la próxima corrida real las redetecte como novedades**, con datos
+   genuinos del PJN.
+
+   **El matching resultó mucho más simple de lo que §11.1 temía.** Esa tabla anticipaba heurística
+   legal (*"¿qué movimiento merece un vencimiento? ¿con qué fecha?"*). El Monitor **no emite
+   movimientos**: emite "apareció un caso nuevo de tu cliente" — evento de significado único y **sin
+   ninguna fecha que inferir**. Por eso la tarea opcional se crea **sin `due_at`**: inventar un plazo
+   sería exactamente la adivinanza que este módulo no debe hacer.
+
+   **Decisión de diseño principal — tabla, no vista derivada:** el estado "novedad" es **transitorio
+   por diseño** (confirmar la funde con la línea base, rechazar borra la fila), así que una bandeja
+   derivada se vaciaría sola por una acción del usuario en la app, antes de que abriera el portal.
+   La sugerencia se persiste en el instante de la detección. Migración `20260815_bitacora_f3_3.sql`
+   (1 tabla, 100% aditiva) con índice único **parcial** sobre `(user_id, expediente_key) WHERE
+   status='pendiente'` (un caso descartado puede volver a sugerirse si el Monitor lo redetecta) y FK
+   `ON DELETE CASCADE` a `monitor_expedientes` por semántica: si el usuario rechaza la novedad en el
+   Monitor ("no es mi parte"), sugerir seguirla sería un bug de producto.
+
+   **No duplica la bandeja de novedades que el Monitor ya tiene:** aquella responde "¿este expediente
+   es realmente de mi parte?" (mantenimiento de la línea base), esta responde "¿lo quiero en mi
+   agenda?". Son dos decisiones distintas sobre el mismo evento.
+
+   **Verificado:** 34/34 en staging · UI en navegador real (render, escape, clicks, estado vacío) ·
+   **cadena completa en producción con datos reales**: corrida real contra el PJN (115 expedientes)
+   → 2 novedades (las primeras de la historia del proyecto) → 2 sugerencias → aceptar creó ficha +
+   tarea sin `due_at`, descartar no creó nada → **15/15**. Estado restaurado exacto, 0 errores nuevos.
 4. **(F3.4)** Tipos de entrada personalizados, export .ics — **solo si hay demanda real**. Acá también
    entraría la vista "Semana" que F1.3 recortó a propósito (pendiente P-F1.3-a).
 
@@ -1569,7 +1601,7 @@ resultado a la vista.
 | **F3.0** — Validación interna con el flag encendido (plan de pruebas E2E) | **Sonnet, medio** ✅ | **Grande** — ✅ **1 sesión** (más rápido de lo estimado: 2–3) | ✅ **Ejecutado 2026-08-15, 55/55 casos.** 3 bugs reales de timezone encontrados y corregidos en vivo (misma causa raíz), incluido el paso por `modo=reemplazar` de F1.7 (el único camino destructivo del módulo) con backup fresco previo — salió limpio, sin necesitar una sesión Opus aparte. |
 | **F3.1** — Badge de pendientes en la app | **Sonnet, bajo** | Chico | ✅ **Código listo (2026-08-15).** Backend ya en producción; cliente pendiente de release. Ver detalle arriba. |
 | **F3.2** — Visor del monitor con captura | **Sonnet, medio** | Chico-mediano *(más bajo de lo que parecía)* | ✅ **Código listo (2026-08-15).** Backend (`origen='monitor'`) ya en producción; cliente pendiente de release. Ver detalle arriba. |
-| **F3.3** — Sugerencias automáticas desde novedades del monitor (bandeja aceptar/descartar) | **Opus, alto** | **Grande** | **El diferencial mayor de toda la propuesta.** Es el único tramo de la Fase 3 con diseño de datos y lógica no trivial: el **matching novedad→entrada sugerida** (¿qué movimiento del PJN merece un vencimiento? ¿con qué fecha?), un estado nuevo para entradas sugeridas-no-confirmadas, y una bandeja de revisión. **Gateado en el uso real, no solo en F3.0** — arrancarlo sin hábito de uso es diseñar el matching a ciegas. |
+| **F3.3** — Sugerencias automáticas desde novedades del monitor (bandeja aceptar/descartar) | **Opus, alto** | **Grande** | ✅ **Ejecutada y en producción (2026-08-15).** El diferencial mayor. ⚠️ La premisa de esta fila resultó equivocada: el matching **no** requería heurística legal ("qué movimiento merece un vencimiento") porque el Monitor no emite movimientos sino casos nuevos — evento de significado único, sin fecha que inferir. Lo genuinamente difícil fue otra cosa: descubrir que **el input nunca había ocurrido** (0 novedades en 19 corridas reales) y que el estado "novedad" es **transitorio**, lo que obliga a persistir la sugerencia en la detección. Ver detalle arriba. |
 | **F3.4** — Tipos de entrada personalizados · export `.ics` · vista "Semana" (P-F1.3-a) | **Sonnet, bajo-medio** | Variable | **Solo si hay demanda real.** Nada acá es estructural; son las palancas que se agregan cuando un usuario las pide, no antes. |
 
 > **Regla transversal (crítica para no romper nada):** cada sub-bloque se valida en **staging** antes de prod, y el flag `bitacora_enabled` nace en `false` en **todos** los planes → aunque algo salga mal, ningún usuario ve la Bitácora hasta encender el flag en un plan de prueba. La Fase 1 completa se prueba y publica **sin emitir ningún release de Electron**. Ver también §11 "Nota de producto" (hallazgo C6): la Fase 1 sola no debe anunciarse ni venderse — es para validación interna.
