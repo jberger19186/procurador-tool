@@ -1491,7 +1491,9 @@ resultado a la vista.
    entorno de esta sesión** (aislamiento de sesión de Windows entre el proceso que lanza la app y
    la sesión que ve la herramienta de control remoto — no una duda sobre el código, que sigue el
    mismo patrón ya verificado visualmente en producción para F2.7) — pendiente de una confirmación
-   visual liviana en una sesión futura, no bloqueante para seguir con F3.2.
+   visual liviana en una sesión futura, no bloqueante para seguir con F3.2. **✅ Release
+   `electron-v2.7.49` publicado (2026-08-16) — el badge llega ahora a cualquier usuario con el
+   auto-update.**
 2. **(F3.2)** ✅ **CÓDIGO LISTO (2026-08-15).** Visor del monitor con captura — **gateado en F3.0**:
    el plan siempre dijo *"si el uso de fases 1-2 lo valida"*, y B4 del plan de pruebas fue esa
    validación. Usa el mecanismo **fácil** confirmado en el diseño: `generarVisorMonitoreo` vive en
@@ -1511,8 +1513,8 @@ resultado a la vista.
    standalone de `generarVisorMonitoreo()`: la columna se omite completamente si
    `bitacoraInfo.enabled=false` (cero cambio visual para cuentas sin el módulo) y el escape de
    atributos (comillas en carátulas) funciona igual que en los demás visores. `node --check` +
-   `npm start` con arranque limpio. **Requiere release de Electron** para llegar a usuarios reales
-   (el backend ya está en producción, el cliente todavía no viajó).
+   `npm start` con arranque limpio. **✅ Release `electron-v2.7.49` publicado (2026-08-16)** — la
+   botonera llega ahora a cualquier usuario con el auto-update.
 3. **(F3.3)** ✅ **EJECUTADA Y EN PRODUCCIÓN (2026-08-15).** Sugerencias automáticas a partir de
    novedades del monitor (bandeja de aceptar/descartar) — el diferencial mayor del módulo.
 
@@ -1572,7 +1574,7 @@ resultado a la vista.
 |---|---|---|---|---|
 | **Fase 1** — núcleo backend + portal | **Sonnet** (5 de 8 sub-bloques) | **3**: F1.1 (esquema), F1.2 (gate + carve-out), **F1.7 (importación destructiva — el más delicado de todo el plan)** | ~9–14 sesiones | Deploy de backend + portal. **Sin release de Electron.** |
 | **Fase 2** — captura desde los visores | **Sonnet** (6 de 7 sub-bloques) | **1**: F2.2 (único endpoint anónimo del sistema) | ✅ **Real: 7 sesiones + 1 release** (estimado: ~4–6) | **Dos despliegues:** backend primero, después release de Electron |
-| **Fase 3** — validación y palancas | **Sonnet** (4 de 5 sub-bloques) | **1**: F3.3, sugerencias automáticas por novedades del monitor (matching no trivial) | F3.0: 2–3 sesiones · el resto, variable | **F3.0 no despliega nada** (solo enciende el flag). F3.1/F3.2 requieren release de Electron |
+| **Fase 3** — validación y palancas | **Sonnet** (4 de 5 sub-bloques) | **1**: F3.3, sugerencias automáticas por novedades del monitor | F3.0: 2–3 sesiones · el resto, variable | ✅ **F3.0–F3.3 completas y en producción** (release `electron-v2.7.49` del 2026-08-16 completó F3.1/F3.2 en el cliente). Solo resta F3.4, sin arrancar por decisión explícita del operador (sin demanda real). |
 
 > **Lectura rápida:** el plan es **mayormente Sonnet** — 16 de las 21 filas de la tabla de abajo, unas
 > 3 de cada 4. Opus se reserva para **5 tramos puntuales** (F1.1, F1.2, F1.7, F2.2 y **F3.3**, las
