@@ -1665,9 +1665,13 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    padding: 10px 0;
+    padding: 10px 20px;
+    margin: 0 -20px;
     border-bottom: 1px solid var(--border);
+    border-radius: 6px;
+    transition: background .12s;
 }
+.bitacora-entry:hover { background: rgba(0,0,0,.035); }
 .bitacora-entry:last-child { border-bottom: none; }
 .bitacora-entry.hecho { opacity: .5; }
 .bitacora-entry.hecho .bitacora-entry-title { text-decoration: line-through; }
