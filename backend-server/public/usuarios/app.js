@@ -2652,6 +2652,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         r.addEventListener('change', exportUpdateSubfields);
     });
 
+    // ─── Restaurar: selector de archivo estilizado ─────────────────────────
+    document.getElementById('import-file')?.addEventListener('change', (e) => {
+        const nombre = e.target.files?.[0]?.name || 'Sin archivo seleccionado';
+        document.getElementById('import-file-name').textContent = nombre;
+    });
+
     // Capturar ?goto= de la URL (de links externos como emails) antes de cualquier flujo
     // Se persiste en sessionStorage para sobrevivir al ciclo de login normal
     const urlParams = new URLSearchParams(window.location.search);
@@ -3848,6 +3854,7 @@ function closeExportModal() {
 function openImportModal() {
     document.getElementById('import-modal-alert').classList.remove('visible');
     document.getElementById('import-file').value = '';
+    document.getElementById('import-file-name').textContent = 'Sin archivo seleccionado';
     const combinar = document.querySelector('input[name="import-modo"][value="combinar"]');
     if (combinar) combinar.checked = true;
     volverPasoArchivoImport();

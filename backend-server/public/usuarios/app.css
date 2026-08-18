@@ -449,7 +449,13 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     color: var(--text);
 }
 
-.form-group input,
+/* :not([type="radio"]):not([type="checkbox"]) — sin esto, esta regla también
+   estiraba los radio/checkbox a 100% del ancho de su fila (heredan `input` como
+   cualquier otro campo de un .form-group), separando el círculo del texto que
+   lo acompaña. Confirmado en vivo: los radios de "Qué exportar"/"Formato" y los
+   de "Cómo restaurar" (import-modo-opt) medían >300px en vez de los ~13px de un
+   radio normal. */
+.form-group input:not([type="radio"]):not([type="checkbox"]),
 .form-group select,
 .form-group textarea {
     width: 100%;
@@ -472,6 +478,15 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
 }
 
 .form-group textarea { resize: vertical; min-height: 90px; }
+
+/* Selector de archivo con el estilo de la app — el input[type=file] nativo no se
+   puede re-estilar (el botón "Seleccionar archivo" lo dibuja el sistema operativo,
+   ignorando el CSS de la app). Patrón estándar: el input real queda oculto y un
+   <label for="import-file"> hace de disparador — un label asociado abre el picker
+   nativo sin JS, incluso con el input en display:none. */
+.file-picker { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.file-picker-name { font-size: 13px; color: var(--text-muted); }
+.file-picker-input { display: none; }
 
 .form-group input.error,
 .form-group select.error,

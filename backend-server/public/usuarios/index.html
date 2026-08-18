@@ -790,7 +790,11 @@
             <div id="import-paso-archivo">
                 <div class="form-group">
                     <label for="import-file">Archivo de backup</label>
-                    <input type="file" id="import-file" accept="application/json,.json">
+                    <div class="file-picker">
+                        <label for="import-file" class="btn btn-outline btn-sm">📎 Seleccionar archivo</label>
+                        <span id="import-file-name" class="file-picker-name">Sin archivo seleccionado</span>
+                    </div>
+                    <input type="file" id="import-file" accept="application/json,.json" class="file-picker-input">
                     <p style="font-size:12px;color:var(--text-muted);margin-top:6px">
                         Tiene que ser el archivo <strong>.json</strong> que descargaste desde “⬇ Exportar”.
                         El Excel sirve para leer, no para restaurar.
