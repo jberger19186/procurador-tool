@@ -32,6 +32,7 @@ const state = {
         feriados: new Set(),    // 'YYYY-MM-DD' del año(s) cargado(s), para el cálculo de plazos
         _cache: new Map(),       // id → entrada, alimentado por cada fetch (avisos/mes/lista)
         _feriadosYears: new Set(),
+        _lastDoneAction: null,   // { id, done } — el último toggle, para deshacer con Ctrl+Z
     },
     miExp: {
         loaded: false,
@@ -2658,6 +2659,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('import-file-name').textContent = nombre;
     });
 
+    // ─── Bitácora: deshacer con Ctrl+Z el último "marcar hecho/pendiente" ──
+    // Se ignora si el foco está en un campo editable (input/textarea/select o
+    // contenteditable) — ahí Ctrl+Z debe ser el undo nativo de edición de texto,
+    // no el de la bitácora. Ctrl (Windows/Linux) o Cmd (Mac, e.metaKey).
+    document.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() !== 'z' || (!e.ctrlKey && !e.metaKey)) return;
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.activeElement?.isContentEditable) return;
+        if (!state.bitacora._lastDoneAction) return;
+        e.preventDefault();
+        bitacoraUndoLastDone();
+    });
+
     // Capturar ?goto= de la URL (de links externos como emails) antes de cualquier flujo
     // Se persiste en sessionStorage para sobrevivir al ciclo de login normal
     const urlParams = new URLSearchParams(window.location.search);
@@ -3407,14 +3421,34 @@ function bitacoraRefreshCurrentContext() {
     bitacoraLoadAndRenderView();
 }
 
-async function toggleBitacoraDone(id, done) {
+// `sinToast` lo usa bitacoraUndoLastDone() — deshacer no debe mostrar a su vez
+// "podés deshacer con Ctrl+Z", porque eso re-armaría _lastDoneAction con la
+// acción inversa y el usuario podría rebotar entre los dos estados sin darse
+// cuenta de que ya deshizo lo que quería.
+async function toggleBitacoraDone(id, done, sinToast) {
     try {
         const res = await apiFetch(`/usuarios/api/bitacora/${id}/done`, { method: 'POST', body: { done } });
         if (!res || !res.ok) { showToast('No se pudo actualizar la entrada.', 'error'); return; }
+        state.bitacora._lastDoneAction = sinToast ? null : { id, done };
+        if (!sinToast) {
+            showToast(done ? 'Marcada como hecha — Ctrl+Z para deshacer' : 'Marcada como pendiente — Ctrl+Z para deshacer', 'success');
+        }
         bitacoraRefreshCurrentContext();
     } catch (e) {
         showToast('Error de conexión.', 'error');
     }
+}
+
+// Deshace el último toggle (marcar hecho/pendiente), disparado por Ctrl+Z.
+// Un solo nivel de historial a propósito: es un atajo de "me equivoqué recién",
+// no un historial de cambios — encadenar niveles agregaría complejidad sin un
+// caso de uso real detrás.
+function bitacoraUndoLastDone() {
+    const last = state.bitacora._lastDoneAction;
+    if (!last) return;
+    state.bitacora._lastDoneAction = null;
+    toggleBitacoraDone(last.id, !last.done, true);
+    showToast('Deshecho', 'success');
 }
 
 async function deleteBitacoraEntrada(id) {
@@ -3810,7 +3844,7 @@ function closeMexpSnapshotModal() {
 function openExportModal(presetAlcance, presetExpedienteId) {
     document.getElementById('export-modal-alert').classList.remove('visible');
     document.getElementById('export-alcance-todo').checked = true;
-    document.getElementById('export-formato-xlsx').checked = true;
+    document.getElementById('export-formato-json').checked = true;
     document.getElementById('export-desde').value = '';
     document.getElementById('export-hasta').value = '';
 
