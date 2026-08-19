@@ -638,13 +638,20 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 
 ---
 
-### 🟠 Staging y Rollback (prerequisito antes del análisis de seguridad)
+### 🟠 Staging y Rollback — ✅ TABLA DESACTUALIZADA, EL TRABAJO YA ESTÁ HECHO
+
+> ⚠️ **Corrección de documentación (2026-08-19):** esta tabla marcaba ST-1/2/3 como pendientes,
+> pero **el plan de staging completo se ejecutó y cerró el 2026-06-01** (ver "Staging Fase A-D" más
+> abajo en el histórico) y **se usa activamente desde entonces** — literalmente en esta misma sesión
+> se desplegó a `procurador-staging` decenas de veces para verificar F3.1/F3.2/F3.3 antes de tocar
+> producción. Nadie había vuelto a tachar esta tabla. Detalle completo en
+> `docs/internal/flujo-staging-rollback.md` y `docs/internal/runbook-comandos.md`.
 
 | # | Tarea | Detalle |
 |---|---|---|
-| **ST-1** | **Entorno staging** | Segunda instancia del backend (mismo servidor, puerto 3444, PM2 proceso `procurador-staging`) apuntando a DB `procurador_db_staging`. Nginx: `staging-api.procuradortool.com` |
-| **ST-2** | **Mecanismo de rollback definido** | Documentar y validar el proceso: (1) git tags por release `v*` en producción, (2) `pm2 rollback procurador-api` para rollback de proceso, (3) scripts de migración DB reversibles (`migrations/XXX_rollback.sql`), (4) checklist de validación post-deploy |
-| **ST-3** | **Aprobación del procedimiento** | Ejecutar un rollback de prueba completo en staging antes de usar en producción |
+| ~~**ST-1**~~ | ~~**Entorno staging**~~ | ✅ Vivo desde 2026-06-01: `procurador-staging` (PM2, puerto 3444) → `procurador_db_staging`, expuesto en `staging-api.procuradortool.com` (basic auth). |
+| ~~**ST-2**~~ | ~~**Mecanismo de rollback definido**~~ | ✅ Documentado: tags `electron-v*`/`v*`, `ops/restore-db.sh`, `ops/backup-now.sh`, checklist de deploy en `runbook-comandos.md`. |
+| ~~**ST-3**~~ | ~~**Aprobación del procedimiento**~~ | ✅ Simulacros reales corridos y verificados (`ops/drill-rollback.sh`, `ops/drill-code-rollback.sh`) — restore en 3s, prod intacta en ambos casos. |
 
 ---
 
