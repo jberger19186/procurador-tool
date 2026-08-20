@@ -213,15 +213,24 @@ function renderRememberedUsers() {
         form.style.display = 'block';
     }
 
+    // `<button>` no puede contener otro `<button>` (contenido interactivo dentro
+    // de contenido interactivo, inválido por spec) — con eso, el navegador
+    // "arreglaba" el HTML cerrando el <button> exterior antes del interior, y la
+    // ✕ terminaba como hermano suelto DESPUÉS de la card en el DOM real, no como
+    // hijo del flex row → por eso aparecía debajo en vez de alineada a la derecha
+    // adentro. El exterior pasa a ser un <div role="button"> (mismo onclick,
+    // + manejo de Enter/Espacio para no perder accesibilidad de teclado).
     list.innerHTML = users.map(u => `
-        <button type="button" class="remembered-user-btn" onclick="selectRememberedUser('${escapeHtml(u.email)}', '${u.pw}')">
+        <div class="remembered-user-btn" role="button" tabindex="0"
+             onclick="selectRememberedUser('${escapeHtml(u.email)}', '${u.pw}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
             <div class="remembered-user-avatar">${escapeHtml(u.email[0].toUpperCase())}</div>
             <div class="remembered-user-info">
                 <div class="remembered-user-email">${escapeHtml(u.email)}</div>
                 <div class="remembered-user-hint">Toca para ingresar</div>
             </div>
             <button type="button" class="remembered-user-remove" onclick="event.stopPropagation(); removeRememberedUser('${escapeHtml(u.email)}')" title="Olvidar cuenta">✕</button>
-        </button>
+        </div>
     `).join('');
 }
 
@@ -705,6 +714,25 @@ function closeSidebarMobile() {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebar-overlay').classList.remove('visible');
 }
+
+// ─── SIDEBAR DESKTOP (colapsar a solo íconos, mismo patrón que el dashboard admin) ─
+function toggleSidebarDesktop() {
+    const collapsed = document.body.classList.toggle('sidebar-collapsed');
+    try { localStorage.setItem('portal_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+}
+
+function _applyPortalSidebarState() {
+    // Default: expandido (a diferencia del admin, que arranca colapsado) —
+    // preserva la primera impresión actual del portal para usuarios nuevos.
+    let collapsed = false;
+    try {
+        const v = localStorage.getItem('portal_sidebar_collapsed');
+        if (v !== null) collapsed = v === '1';
+    } catch (_) {}
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+}
+if (document.readyState !== 'loading') _applyPortalSidebarState();
+else document.addEventListener('DOMContentLoaded', _applyPortalSidebarState);
 
 // ─── SECTION: PERFIL ──────────────────────────────────────────────────────────
 async function renderPerfil() {
@@ -2566,8 +2594,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Chat send button
     document.getElementById('btn-chat-send').addEventListener('click', sendChatMessage);
 
-    // Hamburger
-    document.getElementById('btn-hamburger').addEventListener('click', toggleSidebarMobile);
+    // Hamburger — un mismo botón para 2 comportamientos distintos según el
+    // ancho de pantalla: en desktop colapsa/expande el menú a solo íconos
+    // (mismo patrón que el dashboard de administración); en mobile abre/cierra
+    // el panel superpuesto (comportamiento que ya existía).
+    document.getElementById('btn-hamburger').addEventListener('click', () => {
+        if (window.matchMedia('(max-width: 768px)').matches) toggleSidebarMobile();
+        else toggleSidebarDesktop();
+    });
 
     // Sidebar overlay
     document.getElementById('sidebar-overlay').addEventListener('click', closeSidebarMobile);

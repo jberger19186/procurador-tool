@@ -6,6 +6,7 @@
 
 :root {
     --sidebar-w: 230px;
+    --sidebar-w-collapsed: 64px;
     --header-h: 56px;
     --bg: #f1f5f9;
     --sidebar-bg: #0f172a;
@@ -337,15 +338,41 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     gap: 10px;
 }
 
+/* Mismo botón sirve para las 2 cosas, según el ancho de pantalla (ver el
+   listener en app.js): en desktop colapsa/expande el menú a solo íconos
+   (igual que el dashboard de administración); en mobile (<=768px, la media
+   query de más abajo) abre/cierra el panel superpuesto — comportamiento que
+   ya existía. */
 #btn-hamburger {
-    display: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
     background: none;
-    border: none;
-    font-size: 20px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 17px;
+    line-height: 1;
     cursor: pointer;
-    color: var(--text);
-    padding: 4px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: background .15s, color .15s, border-color .15s;
 }
+#btn-hamburger:hover { background: var(--bg); color: var(--text); border-color: var(--accent); }
+
+#sidebar, #main { transition: width .18s ease, margin-left .18s ease; }
+
+body.sidebar-collapsed #sidebar { width: var(--sidebar-w-collapsed); }
+body.sidebar-collapsed #main { margin-left: var(--sidebar-w-collapsed); }
+body.sidebar-collapsed .sidebar-logo { padding: 16px 0; text-align: center; }
+body.sidebar-collapsed .sidebar-logo-row { justify-content: center; gap: 0; margin-bottom: 0; }
+body.sidebar-collapsed .sidebar-logo-text,
+body.sidebar-collapsed .sidebar-logo small,
+body.sidebar-collapsed .sidebar-footer { display: none; }
+body.sidebar-collapsed .nav-item { justify-content: center; gap: 0; padding: 11px 0; font-size: 0; }
+body.sidebar-collapsed .nav-item .nav-icon { font-size: 16px; width: auto; }
+body.sidebar-collapsed .nav-item #nav-notif-badge { right: 2px; top: 2px; transform: none; }
 
 #topbar h2 {
     font-size: 16px;
@@ -1243,6 +1270,18 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     #main { margin-left: 0; }
 
     #btn-hamburger { display: flex; }
+
+    /* El colapso a solo-íconos es un concepto de escritorio — en mobile el
+       sidebar siempre debe abrir a ancho completo, sin importar si quedó
+       "colapsado" de una sesión de escritorio previa (persistido en
+       localStorage). */
+    body.sidebar-collapsed #sidebar { width: var(--sidebar-w); }
+    body.sidebar-collapsed .sidebar-logo { padding: 20px 18px 16px; text-align: left; }
+    body.sidebar-collapsed .sidebar-logo-text,
+    body.sidebar-collapsed .sidebar-logo small,
+    body.sidebar-collapsed .sidebar-footer { display: block; }
+    body.sidebar-collapsed .sidebar-logo-row { justify-content: flex-start; gap: 10px; }
+    body.sidebar-collapsed .nav-item { justify-content: flex-start; gap: 10px; padding: 11px 18px; font-size: 14px; }
 
     #content { padding: 16px; }
 
