@@ -294,7 +294,19 @@ validaciones de entrada, rate limiters, y los caminos de error que el frontend n
 
 ---
 
-### V4 — Electron sin PJN 🟡
+### V4 — Electron sin PJN 🟡 ⛔ INTENTADO Y BLOQUEADO (2026-08-24)
+
+> **No se pudo ejecutar: computer-use no ve la app en este entorno.** `request_access` devolvió
+> `notInstalled` para "Procurador SCW" en 3 intentos — incluso con la app **ya abierta por el
+> operador** y tras confirmar por shell que la instalación existe
+> (`%LOCALAPPDATA%\Programs\Procurador SCW\`) y que el acceso directo del menú Inicio se llama
+> exactamente así (`…\Start Menu\Programs\Procurador SCW.lnk`). Pedir "Procurador" a secas devolvió
+> como única sugerencia **"SnoreToast"** (el proceso de notificaciones que la app usa, no la app).
+> Es el mismo aislamiento de sesiones de Windows ya documentado en `CLAUDE.md` (sesión de F3.1,
+> 2026-08-15): los procesos de la sesión visible del operador y los que ve computer-use viven en
+> sesiones distintas. **No es un defecto del producto** — es una limitación del entorno de esta
+> sesión. Para desbloquearlo hace falta una sesión con acceso de escritorio real, como las de la
+> "prueba diaria" que sí funcionaron en julio/agosto.
 
 Todo lo que no lanza Puppeteer: login (y sus estados bloqueantes), Mi Cuenta, Estadísticas,
 banners de cuota/gracia/cancelación, modales de configuración, tabs del topbar, botón 📔 Bitácora,
@@ -322,7 +334,16 @@ advertencia de correr `Consulta Inicial` antes de `Buscar Novedades`.
 
 ---
 
-### V6 — Extensión Chrome 🔴
+### V6 — Extensión Chrome 🔴 ⛔ INTENTADO Y BLOQUEADO (2026-08-24)
+
+> **Lo digo explícitamente, como pide el propio bloque más abajo: sigue trabado.**
+> `list_connected_browsers` devolvió `[]` — no hay ninguna instancia de Chrome conectada por la
+> extensión Claude for Chrome, así que no hay forma de conducir el navegador real donde está
+> cargada la extensión del PJN. computer-use tampoco sirve acá, por el mismo aislamiento de sesión
+> que bloqueó V4. **R9.1/R9.2 siguen abiertos desde julio, ahora con la causa acotada:** no es
+> falta de tiempo ni de prioridad, es que este entorno no tiene un camino a un Chrome real.
+> Para desbloquearlo: conectar la extensión Claude for Chrome en el Chrome del operador (el que
+> tiene cargada la extensión PJN), o ejecutarlo de forma manual guiada.
 
 R9.1/R9.2, abiertos desde julio. Los 5 flujos (Consulta SCW, Escritos 1, Escritos 2, Notificaciones,
 DEOX) contra los portales reales, más el login del popup y el click del logo con y sin sesión.
@@ -335,7 +356,30 @@ otro trimestre.
 
 ---
 
-### V7 — Cobranza / MercadoPago 🔴
+### V7 — Cobranza / MercadoPago 🔴 ✅ EJECUTADO (2026-08-24)
+
+> Informe completo: `docs/internal/verify-V7-2026-08-24.md`. **40/40 aserciones. 1 hallazgo real de
+> configuración, sin corregir.** Harness `backend-server/dev-tools/verify-v7-cobranza.js` corrido en
+> el servidor contra staging, con **regla de seguridad central: ninguna aserción puede alcanzar un
+> camino que ESCRIBA en MercadoPago** — sostenida por 3 mecanismos (solo casos negativos de
+> `/checkout/init`, fixture con `external_subscription_id` placeholder `pay-*` verificado por una
+> aserción propia antes de cada cancel/reactivate, y webhooks con ids de pago inexistentes que solo
+> disparan lecturas). **Comprobado después, no asumido:** 0 preapprovals en los 3 estados vivos de
+> MP — el harness no creó ni tocó nada. **Cubierto:** gate de activación del checkout (403 en
+> `pending_activation`/`pending_email`) · **guard B3** de mismatch de plan (400 antes de crear el
+> preapproval) · firma HMAC del webhook en 5 variantes, **incluida la prueba positiva que el smoke
+> oficial no hace** (cierra P-F2.2-a) · idempotencia de `webhook_events` · **fix B1** (`expires_at`
+> avanza en `applyTrialBonus` y `applyRenewal` — el bug crítico que bloqueaba a un cliente al día) ·
+> **fix B2** (plan fuera de `PLAN_LIMITS` ya no lanza dentro de la transacción del webhook → ya no
+> pierde el pago) · `cancelSubscription` incluido su fallback defensivo B1 · los 3 guards de
+> `reactivateSubscription` · y la selección de los 2 crons de corte, con la doble protección que
+> evita cancelarle la cuenta a quien acaba de pagar. **⚠️ Hallazgo:** `.env.staging` y la `.env` de
+> producción tienen el **mismo** token de MP (byte-idéntico, misma cuenta sandbox), pese a que
+> `CLAUDE.md` documenta el de staging como independiente — inocuo hoy (prod también es sandbox,
+> B3 pendiente), pero sin ningún mecanismo que lo mantenga separado cuando B3 cargue credenciales
+> reales. **No cubierto, explícito en el informe:** el camino feliz de un pago real end-to-end, la
+> transacción atómica de `handlePaymentEvent` (M4), `markPaymentConfigured`/`reconcileClaimedCheckout`
+> y `updatePreapprovalAmount` — todos exigen escrituras a MP o una persona completando un checkout.
 
 Checkout, upgrade/downgrade, cancelar/reactivar, pago rechazado → gracia → suspensión → recuperación.
 **Sandbox únicamente.** Va último por radio de impacto.
