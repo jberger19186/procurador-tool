@@ -49,24 +49,46 @@ Los 4 comparten un rasgo: **ninguno era visible leyendo el código**. El #1 y el
 dos `submit` reales; el #3, medir geometría en un viewport real; el #4, comparar dos archivos que
 viven solo en el servidor. Es exactamente el eje que la campaña decía cubrir.
 
-### Hallazgos abiertos (no corregidos, a decisión del operador)
+### Hallazgos abiertos — 3 de 5 corregidos el 2026-08-24, quedan 2 a decisión del operador
 
-Ninguno rompe un camino feliz. Se dejan documentados con su origen para que no se pierdan:
+Ninguno rompía un camino feliz. Se dejan documentados con su origen para que no se pierdan:
 
 1. **`submitAddUser()` usa un `alert()` nativo en el éxito** (V2a) — inconsistente con el
    `showAlert()` inline del resto del dashboard, y traba cualquier automatización que no lo maneje.
-   Fix sugerido en el informe de V2a.
-2. **`deleteMonitorParte()` usa `confirm()` nativo** en vez del `showConfirm()` custom que adoptó el
-   resto del portal (V1b), más 2 `alert()` cercanos y `resendVerification()`.
+   ⏳ **Sin corregir** — queda absorbido dentro del #3 (mismo patrón, mismo archivo).
+2. ✅ **CORREGIDO (2026-08-24).** `deleteMonitorParte()` usaba `confirm()` nativo en vez del
+   `showConfirm()` custom que adoptó el resto del portal (V1b), más 2 `alert()` cercanos y
+   `resendVerification()`. **Al ir a corregirlo, el conteo real resultó menor al documentado**: 1
+   `confirm()` + 4 `alert()`, no 3+5 — 2 de las menciones originales eran comentarios de código, no
+   llamadas reales. Los 4 sitios reales migrados a `showConfirm`/`showToast` (primitivas ya
+   existentes en el portal). Verificado en Playwright: los 2 caminos de `deleteMonitorParte`
+   (cancelar preserva, confirmar borra) sin disparar un solo diálogo nativo.
 3. **El dashboard admin depende de diálogos nativos en casi toda acción con efecto** (V2a/V2b) —
    confirmado empíricamente en 3 corridas seguidas (9 `confirm()` distintos solo en V2a, más
    `deleteFeriado`, `legalPublish`, `legalDelete`, `clearCache`, `reencryptScripts` en V2b; por
-   lectura de código, `rejectUserBlock` usa además un `prompt()`). Es **sistémico**: si se decide
-   corregirlo, necesita alcance explícito, no un fix puntual.
-4. **`#main` del dashboard admin desborda ~26px en mobile** (visto al corregir el bug #3) —
-   preexistente y sin relación con el sidebar, quedó fuera del alcance de ese fix.
-5. **Escape no cierra ningún modal del portal** (V1a) — no hay listener en todo `app.js`; ninguna de
-   las ~10 pantallas lo tiene. No es una regresión.
+   lectura de código, `rejectUserBlock` usa además un `prompt()`). **Medido con precisión al evaluar
+   el fix: 71 sitios** (33 `confirm` + 35 `alert` + 3 `prompt`), y **el dashboard no tiene ninguna
+   primitiva de reemplazo** — a diferencia del portal, que ya tenía `showConfirm`/`showToast`
+   probados. ⏳ **Sin corregir** — es sistémico: portar 2 primitivas, construir una tercera (modal
+   con input, para los `prompt()`) y migrar 71 llamadores es un proyecto de 2-3 sesiones, no un fix
+   puntual. Mismo patrón que el hallazgo histórico U9.3.
+4. ✅ **CORREGIDO (2026-08-24).** `#main` del dashboard admin desbordaba ~26px en mobile (visto al
+   corregir el bug del sidebar). **Causa real, diagnosticada antes de tocar código:** `#main` es un
+   flex item con `flex:1` pero `min-width:auto` (el default) — con `flex-basis:0` el navegador igual
+   nunca lo encoge por debajo del `min-content` de sus hijos. Confirmado bajando por el árbol con
+   Playwright: `#main`/`#topbar`/`#content` medían los 3 exactamente 386,7px mientras sus hijos
+   (`.page-header`, `.stats-grid`, `.card`) medían 339px — la prueba de que `#main` desbordaba a su
+   propio padre (`<body>`, flex), no que un hijo lo desbordara a él. Fix de 1 línea: `min-width: 0`
+   en `#main`. Verificado sin regresión: desktop sin overflow (1280px, `#main`=1060px con el sidebar
+   expandido), y una tabla de 858px a 375px de viewport sigue scrolleando dentro de su propio
+   `.table-wrapper` en vez de estirar la página.
+5. ✅ **CORREGIDO (2026-08-24).** Escape no cerraba ningún modal del portal (V1a) — no había
+   listener en todo `app.js`. Fix: listener global con **mapeo explícito id→función de cierre** para
+   los 9 modales `.modal-overlay`, no un `hidden` genérico — cada `close*()` real hace su propia
+   limpieza de estado (ej. `closeMexpFichaModal` no toca `state.miExp`) y un cierre genérico habría
+   duplicado esa lógica. Verificado en 3 modales distintos, incluido con foco en un `<textarea>` con
+   contenido — cierra igual, sin guardas de foco (a diferencia del Ctrl+Z ya existente, Escape no
+   colisiona con ningún atajo nativo de edición de texto).
 
 **Documentado como comportamiento correcto, no como bug** (para que nadie los vuelva a "arreglar"):
 `legalPreview` ejecuta el `html_content` de un documento legal dentro de un `<iframe srcdoc>` — el
