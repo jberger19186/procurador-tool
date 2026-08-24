@@ -177,11 +177,13 @@ pantallas con estado compartido, y con esfuerzo medio se va a conducir el camino
 
 ### V1b — Portal: las otras 8 secciones 🟢 ✅ EJECUTADO (2026-08-24)
 
-> Informe completo: `docs/internal/verify-V1b-2026-08-24.md`. **2 hallazgos, sin corregir:**
-> (1) `submitNewTicket()` tiene el mismo gap de doble submit que `354fbcc` ya arregló en
-> Bitácora/Mis Expedientes — confirmado con el mismo probe (2 tickets duplicados creados). Por
-> lectura de código, el mismo gap está en `saveProfile`, `savePassword` y `doLogin` (no
-> reproducido ahí para no diluir el bloque, mismo fix aplicable). (2) `deleteMonitorParte()` en
+> Informe completo: `docs/internal/verify-V1b-2026-08-24.md`. **Hallazgo #1 CORREGIDO Y DESPLEGADO
+> el mismo día (commit `f5d1348`):** `submitNewTicket()` tenía el mismo gap de doble submit que
+> `354fbcc` ya había arreglado en Bitácora/Mis Expedientes — confirmado con el mismo probe (2
+> tickets duplicados creados). Por lectura de código el mismo gap estaba también en
+> `saveProfile`, `savePassword` y `doLogin` — **los 4 arreglados y verificados** (reproduciendo el
+> probe en cada uno con la página recargada entre pasos). **Hallazgo #2, sin corregir:**
+> `deleteMonitorParte()` en
 > Mi Plan usa `confirm()` **nativo** en vez del `showConfirm()` custom del resto de la app — anda
 > bien, pero es la clase de diálogo que trabó la automatización en el hallazgo histórico U9.3;
 > mismo patrón en 2 `alert()` cercanos. **El deep-link SSO (`a71987b`) verificado sano** en los 2
