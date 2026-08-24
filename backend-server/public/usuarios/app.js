@@ -253,6 +253,8 @@ async function doLogin(email, password) {
     const errEl = document.getElementById('login-error');
     errEl.style.display = 'none';
     const btn = document.getElementById('btn-login');
+    // Mismo guard que saveBitacoraEntrada (354fbcc) — ver el comentario ahí.
+    if (btn.disabled) return;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Ingresando...';
 
@@ -816,6 +818,8 @@ async function saveProfile(e) {
     e.preventDefault();
     const alertEl = document.getElementById('profile-alert');
     const btn = document.getElementById('btn-save-profile');
+    // Mismo guard que saveBitacoraEntrada (354fbcc) — ver el comentario ahí.
+    if (btn.disabled) return;
 
     const nombre = document.getElementById('profile-nombre').value.trim();
     const apellido = document.getElementById('profile-apellido').value.trim();
@@ -879,6 +883,8 @@ async function savePassword(e) {
     e.preventDefault();
     const alertEl = document.getElementById('password-alert');
     const btn = document.getElementById('btn-save-password');
+    // Mismo guard que saveBitacoraEntrada (354fbcc) — ver el comentario ahí.
+    if (btn.disabled) return;
 
     const currentPassword = document.getElementById('current-password').value;
     const newPassword = document.getElementById('new-password').value;
@@ -1535,6 +1541,8 @@ async function submitNewTicket(e) {
     e.preventDefault();
     const alertEl = document.getElementById('ticket-alert');
     const btn = document.getElementById('btn-submit-ticket');
+    // Mismo guard que saveBitacoraEntrada (354fbcc) — ver el comentario ahí.
+    if (btn.disabled) return;
 
     const category = document.getElementById('ticket-category').value;
     const title = document.getElementById('ticket-title').value.trim();
