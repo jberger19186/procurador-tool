@@ -5080,9 +5080,35 @@ async function submitInvoiceEdit(invoiceId) {
 // SIDEBAR COLAPSABLE (hamburger) + navegación cruzada pago↔factura
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Colapsado, los labels quedan en `font-size:0` y el nav son 12 emojis sin
+// nombre: el `title` nativo dice qué es cada uno. Mismo criterio que
+// `_applyNavTooltips()` del portal de usuarios, con las 2 correcciones que le
+// faltaban a la versión anterior de acá:
+//   · el label se arma con los nodos de TEXTO del <a>, así el emoji del
+//     <span class="icon"> deja de meterse dentro del propio tooltip (antes
+//     `a.textContent.trim()` producía "📊 Resumen" en vez de "Resumen");
+//   · se quita al expandir — antes se ponía una sola vez al cargar y quedaba
+//     puesto siempre, duplicando en un tooltip el texto que ya se lee al lado
+//     del ícono.
+// A diferencia del portal, acá NO hace falta un listener de matchMedia: el
+// @media de ≤768px oculta el sidebar entero (`display:none`), así que no
+// existe el estado "colapsado pero con los labels visibles" que allá hay que
+// mantener sincronizado al cruzar el breakpoint.
+function _applyAdminNavTooltips() {
+    const soloIconos = document.body.classList.contains('sidebar-collapsed');
+    document.querySelectorAll('#sidebar nav a').forEach(a => {
+        if (!soloIconos) { a.removeAttribute('title'); return; }
+        const label = [...a.childNodes]
+            .filter(n => n.nodeType === Node.TEXT_NODE)
+            .map(n => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
+        if (label) a.title = label;
+    });
+}
+
 function toggleSidebar() {
     const collapsed = document.body.classList.toggle('sidebar-collapsed');
     try { localStorage.setItem('admin_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+    _applyAdminNavTooltips();
 }
 function _applySidebarState() {
     // Por defecto el menú arranca COLAPSADO (solo íconos). Si el usuario lo expande
@@ -5090,8 +5116,7 @@ function _applySidebarState() {
     let collapsed = true;
     try { const v = localStorage.getItem('admin_sidebar_collapsed'); if (v !== null) collapsed = v === '1'; } catch (_) {}
     document.body.classList.toggle('sidebar-collapsed', collapsed);
-    // Tooltips: con el menú colapsado solo se ven los íconos → el title muestra la sección
-    document.querySelectorAll('#sidebar nav a').forEach(a => { if (!a.title) a.title = a.textContent.trim(); });
+    _applyAdminNavTooltips();
 }
 if (document.readyState !== 'loading') _applySidebarState();
 else document.addEventListener('DOMContentLoaded', _applySidebarState);
