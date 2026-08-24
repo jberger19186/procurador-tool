@@ -96,7 +96,12 @@ si la app ni siquiera abre bien). `V7` último siempre.
 
 ---
 
-### V0 — Andamio (hacer una vez, antes que nada)
+### V0 — Andamio (hacer una vez, antes que nada) ✅ EJECUTADO (2026-08-24)
+
+> `backend-server/dev-tools/stub-portal.js` + `stub-dashboard.js` + `.claude/skills/verify/SKILL.md`,
+> commit `aa4621a`. Verificado conduciendo ambos stubs con Playwright (login end-to-end, 9 secciones
+> del portal + 12 del dashboard, 0 errores de consola). Ver la entrada de sesión 2026-08-24 en
+> `CLAUDE.md` para el detalle completo. **Siguiente bloque: V1a.**
 
 **Por qué primero.** Hoy no existe `.claude/skills/verify/SKILL.md`. La corrida del 2026-08-23
 arrancó en frío y perdió tiempo descubriendo a los golpes las trampas del entorno. Sin persistirlas,
