@@ -49,13 +49,14 @@ Los 4 comparten un rasgo: **ninguno era visible leyendo el código**. El #1 y el
 dos `submit` reales; el #3, medir geometría en un viewport real; el #4, comparar dos archivos que
 viven solo en el servidor. Es exactamente el eje que la campaña decía cubrir.
 
-### Hallazgos abiertos — 3 de 5 corregidos el 2026-08-24, quedan 2 a decisión del operador
+### Hallazgos abiertos — 5 de 5 corregidos (los últimos 2, el 2026-08-24 en una sesión aparte)
 
 Ninguno rompía un camino feliz. Se dejan documentados con su origen para que no se pierdan:
 
-1. **`submitAddUser()` usa un `alert()` nativo en el éxito** (V2a) — inconsistente con el
-   `showAlert()` inline del resto del dashboard, y traba cualquier automatización que no lo maneje.
-   ⏳ **Sin corregir** — queda absorbido dentro del #3 (mismo patrón, mismo archivo).
+1. ✅ **CORREGIDO (2026-08-24, junto con el #3).** `submitAddUser()` usaba un `alert()` nativo en el
+   éxito (V2a) — inconsistente con el `showAlert()` inline del resto del dashboard, y trababa
+   cualquier automatización que no lo manejara. Migrado a `showToast` al mismo tiempo que el #3
+   (mismo patrón, mismo archivo — no tenía sentido separarlos).
 2. ✅ **CORREGIDO (2026-08-24).** `deleteMonitorParte()` usaba `confirm()` nativo en vez del
    `showConfirm()` custom que adoptó el resto del portal (V1b), más 2 `alert()` cercanos y
    `resendVerification()`. **Al ir a corregirlo, el conteo real resultó menor al documentado**: 1
@@ -63,15 +64,31 @@ Ninguno rompía un camino feliz. Se dejan documentados con su origen para que no
    llamadas reales. Los 4 sitios reales migrados a `showConfirm`/`showToast` (primitivas ya
    existentes en el portal). Verificado en Playwright: los 2 caminos de `deleteMonitorParte`
    (cancelar preserva, confirmar borra) sin disparar un solo diálogo nativo.
-3. **El dashboard admin depende de diálogos nativos en casi toda acción con efecto** (V2a/V2b) —
+3. ✅ **CORREGIDO (2026-08-24, sesión aparte de VF-2/4/5 — como anticipaba el análisis original).**
+   El dashboard admin dependía de diálogos nativos en casi toda acción con efecto (V2a/V2b) —
    confirmado empíricamente en 3 corridas seguidas (9 `confirm()` distintos solo en V2a, más
    `deleteFeriado`, `legalPublish`, `legalDelete`, `clearCache`, `reencryptScripts` en V2b; por
-   lectura de código, `rejectUserBlock` usa además un `prompt()`). **Medido con precisión al evaluar
-   el fix: 71 sitios** (33 `confirm` + 35 `alert` + 3 `prompt`), y **el dashboard no tiene ninguna
-   primitiva de reemplazo** — a diferencia del portal, que ya tenía `showConfirm`/`showToast`
-   probados. ⏳ **Sin corregir** — es sistémico: portar 2 primitivas, construir una tercera (modal
-   con input, para los `prompt()`) y migrar 71 llamadores es un proyecto de 2-3 sesiones, no un fix
-   puntual. Mismo patrón que el hallazgo histórico U9.3.
+   lectura de código, `rejectUserBlock` usaba además un `prompt()`). **El conteo exacto al armar el
+   fix: 71 sitios** (33 `confirm` + 35 `alert` + 3 `prompt`) en 30 funciones distintas, y el
+   dashboard **no tenía ninguna primitiva de reemplazo** — a diferencia del portal, que ya tenía
+   `showConfirm`/`showToast` probados. **Fix:** se portaron esas 2 primitivas (con el estilo/z-index
+   del dashboard, 3000 — por encima de cualquier modal existente, ya que varios sitios disparan
+   desde dentro de un modal ya abierto) + se construyó una tercera, `showPrompt` (modal con
+   `<textarea>`, mismo contrato que `prompt()` nativo: `null` si se cancela), para los 3 `prompt()`.
+   Los 71 sitios migrados función por función — **las 30 funciones eran `async` sin excepción**
+   (verificado antes de tocar código, mapeando cada sitio a su función contenedora), así que ningún
+   caller necesitó convertirse; el único riesgo real (`await` faltante que dejaría un `confirm()`
+   convertido en no-op que sigue de largo) no se materializó en ninguno. **Verificado**: 0 sitios
+   nativos restantes (confirmado por script, no por lectura) · las 12 secciones navegadas sin
+   errores de consola · el camino más riesgoso (`rejectUserBlock`: `showPrompt` → validación →
+   `showConfirm` encadenado) probado en sus 4 ramas (cancelar el prompt, aceptar vacío → toast sin
+   avanzar, motivo real → confirm → POST real, verificado que `registration_status` pasa a
+   `rejected`) · `deleteFeriado`/`deactivatePlan` (confirm→toast, confirm→confirm) en sus 2 caminos
+   cada uno · el toast de éxito de `submitAddUser` no bloqueó el click (evidencia indirecta pero
+   sólida: un `alert()` real habría colgado el `click` de Playwright, como pasó con un `confirm()`
+   sin manejar en la sesión de V2b). Mismo patrón que el hallazgo histórico U9.3, ahora cerrado.
+   Desplegado staging→prod, md5 coincide, health/landing/portal/dashboard 200, `pm2-error.log` sin
+   entradas del día.
 4. ✅ **CORREGIDO (2026-08-24).** `#main` del dashboard admin desbordaba ~26px en mobile (visto al
    corregir el bug del sidebar). **Causa real, diagnosticada antes de tocar código:** `#main` es un
    flex item con `flex:1` pero `min-width:auto` (el default) — con `flex-basis:0` el navegador igual
