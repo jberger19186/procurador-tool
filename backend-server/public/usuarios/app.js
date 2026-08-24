@@ -453,11 +453,11 @@ async function resendVerification() {
             btn.disabled = false;
             btn.textContent = 'Reenviar email de verificación';
         }, 5000);
-        if (data.message) alert(data.message);
+        if (data.message) showToast(data.message, 'success');
     } catch (e) {
         btn.disabled = false;
         btn.textContent = 'Reenviar email de verificación';
-        alert('Error de conexión. Intentá de nuevo.');
+        showToast('Error de conexión. Intentá de nuevo.', 'error');
     }
 }
 
@@ -972,7 +972,8 @@ function renderMonitorPartes(partes, limite, usadas) {
 }
 
 async function deleteMonitorParte(id, nombre) {
-    if (!confirm(`¿Eliminar la parte "${nombre}" y todos sus expedientes asociados? Esta acción no se puede deshacer.`)) return;
+    const ok = await showConfirm(`¿Eliminar la parte "${nombre}" y todos sus expedientes asociados? Esta acción no se puede deshacer.`);
+    if (!ok) return;
     try {
         await apiFetch(`/monitor/partes/${id}`, { method: 'DELETE' });
         const row = document.getElementById(`parte-row-${id}`);
@@ -980,7 +981,7 @@ async function deleteMonitorParte(id, nombre) {
         // Actualizar contador
         await loadMonitorPartes();
     } catch (e) {
-        alert('Error al eliminar la parte. Intentá de nuevo.');
+        showToast('Error al eliminar la parte. Intentá de nuevo.', 'error');
     }
 }
 
@@ -1215,7 +1216,7 @@ async function downloadElectron(btn) {
         window.location.href = `/api/extension/electron-download?token=${token}`;
         if (btn) { btn.textContent = original; setTimeout(() => { btn.disabled = false; }, 3000); }
     } catch (e) {
-        alert(e.message || 'Error al descargar. Intentá de nuevo.');
+        showToast(e.message || 'Error al descargar. Intentá de nuevo.', 'error');
         if (btn) { btn.disabled = false; btn.textContent = original; }
     }
 }
@@ -2748,6 +2749,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!state.bitacora._lastDoneAction) return;
         e.preventDefault();
         bitacoraUndoLastDone();
+    });
+
+    // ─── Escape cierra el modal visible (VF-5, hallazgo de la campaña /verify) ──
+    // Ninguna de las ~10 pantallas del portal lo tenía. Mapeo explícito id→close(),
+    // no un `classList.add('hidden')` genérico: cada close() hace además su propia
+    // limpieza de estado (closeMexpFichaModal, por ejemplo, no toca state.miExp —
+    // esa es tarea de closeMexpFicha, una función distinta para la VISTA de ficha,
+    // no para este modal) y usar el cierre real evita duplicar esa lógica acá.
+    const ESCAPE_MODAL_CLOSERS = {
+        'modal-plan':             closePlanModal,
+        'modal-ticket':           closeNewTicketModal,
+        'modal-bitacora-entrada': closeBitacoraModal,
+        'modal-bitacora-export':  closeExportModal,
+        'modal-bitacora-lote':    closeLoteModal,
+        'modal-bitacora-import':  closeImportModal,
+        'modal-mexp-ficha':       closeMexpFichaModal,
+        'modal-mexp-eliminar':    closeMexpEliminarModal,
+        'modal-mexp-snapshot':    closeMexpSnapshotModal,
+    };
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        for (const [id, closer] of Object.entries(ESCAPE_MODAL_CLOSERS)) {
+            const el = document.getElementById(id);
+            if (el && !el.classList.contains('hidden')) { closer(); return; }
+        }
     });
 
     // Capturar ?goto= de la URL (de links externos como emails) antes de cualquier flujo

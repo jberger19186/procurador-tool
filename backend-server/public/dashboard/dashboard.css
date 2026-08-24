@@ -84,6 +84,13 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; display: fl
 #main {
     margin-left: var(--sidebar-w);
     flex: 1;
+    /* min-width:auto es el default de un flex item — con flex-basis:0 el
+       navegador igual nunca lo encoge por debajo del min-content de sus hijos
+       (VF-4, hallazgo de la campaña /verify: 386px de contenido en un
+       viewport de 375px). #main es el único hijo flex de <body> con el
+       sidebar oculto en mobile, así que sin esto ignora flex-grow:1 y
+       desborda el propio <body>. */
+    min-width: 0;
     display: flex;
     flex-direction: column;
     min-height: 100vh;
