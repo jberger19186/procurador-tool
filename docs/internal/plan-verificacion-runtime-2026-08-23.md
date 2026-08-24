@@ -219,6 +219,31 @@ pantallas con estado compartido, y con esfuerzo medio se va a conducir el camino
 > plan aplicado y quitado. `stub-dashboard.js` ganó almacén en memoria para
 > Usuarios/Tickets/Planes — reusable para V2b. **Siguiente bloque: V2b.**
 
+### V2b — Pagos, Facturación, Feriados, Monitor, Legal, Métricas, Diagnóstico, Scripts 🟢 ✅ EJECUTADO (2026-08-24)
+
+> Informe completo: `docs/internal/verify-V2b-2026-08-24.md`. **1 hallazgo nuevo, real, sin
+> corregir: regresión de responsive en el sidebar admin.** `showApp()` fija
+> `sidebar.style.display='flex'` inline en cada login/restauración de sesión, sin mirar el ancho de
+> pantalla — como es inline, le gana a la media query `@media(max-width:768px){#sidebar{display:
+> none}}` que el fix `86351c4` (2026-08-23) asumía vigente. Confirmado a 375px: el sidebar completo
+> (230px, 12 ítems) queda visible y el documento mide 744px de ancho — overflow horizontal real en
+> las 12 secciones del panel (es el shell, no una sección puntual), más severo que el "64px
+> desperdiciados" que corrigió esa sesión. **Confirmación extensa (3ra corrida seguida) del patrón
+> de diálogos nativos** ya señalado en V1b/V2a: `deleteFeriado`, `legalPublish`, `legalDelete`,
+> `clearCache`, `reencryptScripts` — todos funcionan, ninguno es la excepción. **1 hallazgo curioso,
+> no un bug:** `legalPreview` renderiza `html_content` sin escapar dentro de un `<iframe srcdoc>` —
+> un `<script>alert(1)</script>` en el contenido de un documento legal se ejecuta de verdad
+> (confirmado, disparó el alert real) — por diseño: el contenido lo escribe siempre un admin
+> autenticado, es un editor de HTML crudo para T&C/PyP, no un campo de usuario. El resto del
+> bloque, sano: Pagos (alta manual, factura desde pago con subida real de PDF, cross-links
+> pago↔factura con `_flashRow`), Feriados (ABM completo por primera vez en el proyecto, con 409 por
+> fecha duplicada y escape de `<img onerror>` confirmado), Monitor (stats + tabla), Legal (alta,
+> auto-incremento de versión, publicar con intercambio atómico de `is_current`, estadísticas —
+> corrigió el shape del propio stub para matchear `routes/legal.js` real), Métricas (overview +
+> analytics de la landing), Diagnóstico (corrida real del smoke de API), Scripts (toggle). `stub-
+> dashboard.js` queda con las 12 secciones completas del dashboard admin. **Con esto, V2a+V2b
+> (dashboard admin) quedan cerrados. Siguiente bloque: V3.**
+
 314 KB, 12 secciones, y la única verificación en navegador que tuvo fue el fix XSS-1 y el botón de
 PDF de facturas (C1).
 
