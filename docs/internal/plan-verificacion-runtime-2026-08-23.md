@@ -221,8 +221,8 @@ pantallas con estado compartido, y con esfuerzo medio se va a conducir el camino
 
 ### V2b — Pagos, Facturación, Feriados, Monitor, Legal, Métricas, Diagnóstico, Scripts 🟢 ✅ EJECUTADO (2026-08-24)
 
-> Informe completo: `docs/internal/verify-V2b-2026-08-24.md`. **1 hallazgo nuevo, real, sin
-> corregir: regresión de responsive en el sidebar admin.** `showApp()` fija
+> Informe completo: `docs/internal/verify-V2b-2026-08-24.md`. **1 hallazgo nuevo, real, CORREGIDO Y
+> DESPLEGADO el mismo día: regresión de responsive en el sidebar admin.** `showApp()` fijaba
 > `sidebar.style.display='flex'` inline en cada login/restauración de sesión, sin mirar el ancho de
 > pantalla — como es inline, le gana a la media query `@media(max-width:768px){#sidebar{display:
 > none}}` que el fix `86351c4` (2026-08-23) asumía vigente. Confirmado a 375px: el sidebar completo
