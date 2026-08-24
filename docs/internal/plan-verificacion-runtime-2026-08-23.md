@@ -261,7 +261,26 @@ un backend de verdad, **solo staging**, y con backup previo.
 
 ---
 
-### V3 — API backend + gates por plan 🟡
+### V3 — API backend + gates por plan 🟡 ✅ EJECUTADO (2026-08-24)
+
+> Informe completo: `docs/internal/verify-V3-2026-08-24.md`. **29/29 aserciones, sin hallazgos
+> nuevos.** Harness Node (`backend-server/dev-tools/verify-v3-bitacora-api.js`) corrido en el
+> servidor contra `https://localhost:3444` (bypassa nginx/basic-auth). Cubrió `checkBitacoraPlan`
+> con/sin flag en los 4 sub-paths gateados (`/bitacora`,`/expedientes`,`/feriados`,`/sugerencias`) ·
+> **P1 confirmado en vivo**: `/plans` y `/subscription/current` (router `usuarios.js`, mismo
+> prefijo) nunca reciben el 403 del gate de Bitácora, incluso sin el flag · las 3 ramas de la
+> ventana de gracia de 90 días en `/bitacora/export` (sin `lost_access_at` → 403 duro · 10 días →
+> 200 · 100 días → 403 vencida) + confirmado que la gracia **no se filtra** al resto del módulo ·
+> **4 combinaciones de IDOR** (`PUT`/`DELETE` de entrada, `GET` de ficha y de snapshot) con un
+> usuario B efímero real (mismo plan que A, para que el bloqueo sea por el filtro `user_id` de la
+> query y no por el gate) → 404 en las 4, con la confirmación positiva de que A sigue pudiendo
+> editar/borrar lo suyo · 4 validaciones de entrada (`kind`/`title`/`repeat_rule`/`due_at`
+> inválidos → 400) · 1 hallazgo de comportamiento, no un bug: `description` de 6000 chars da
+> **201** (se trunca a 5000, no rechaza) — así está diseñado (`texto()`), documentado para que no
+> se confunda con un bug de validación faltante. **Regla dura respetada**: guard de `DB_NAME` en
+> el propio script + limpieza automática al final, verificada por consulta directa — staging quedó
+> exactamente como antes de la corrida (3 usuarios, flag apagado, 0 filas de fixture). **Siguiente
+> bloque: V4** (Electron sin PJN).
 
 La superficie es el socket. Conducir con HTTP real contra **staging**: gates de
 `checkBitacoraPlan` (con y sin flag, y las 3 ramas de la gracia de 90 días), IDOR entre usuarios,
