@@ -135,7 +135,17 @@ arrancó en frío y perdió tiempo descubriendo a los golpes las trampas del ent
 
 ---
 
-### V1a — Portal: Bitácora + Mis Expedientes 🟢
+### V1a — Portal: Bitácora + Mis Expedientes 🟢 ✅ EJECUTADO (2026-08-24)
+
+> Informe completo: `docs/internal/verify-V1a-2026-08-24.md`. **1 bug real confirmado, sin
+> corregir**: `saveBitacoraEntrada()` no tiene bandera de "ya está guardando" — un doble `submit`
+> antes de que el primer `POST` resuelva crea 2 entradas duplicadas (el botón `disabled` bloquea
+> un segundo click de mouse, pero no un segundo `submit` disparado por Enter/programático). Mismo
+> patrón de código en `saveMexpFicha`, no confirmado ahí. **1 hallazgo de UX**: Escape no cierra
+> ningún modal del portal. El resto del bloque (CRUD, vistas, calculadora de plazos cruzando un
+> feriado, export 3×2, import dry-run sin confirmar `reemplazar`, F3.3, borrado 3 vías) — sano.
+> `backend-server/dev-tools/stub-portal.js` quedó con estado real en memoria (commit `f4a0cf3`).
+> **Siguiente bloque: V1b.**
 
 **Por qué separado del resto:** son las 2 secciones más nuevas, más grandes y con **4 de los 5 bugs
 de agosto**. Es el bloque de mayor rendimiento esperado de toda la campaña.
