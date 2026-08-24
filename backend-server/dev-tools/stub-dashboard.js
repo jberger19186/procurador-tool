@@ -105,6 +105,85 @@ const EXTRAS = {};      // userId -> [{id, extra_uses, reason, created_at, assig
 const BENEFITS = {};    // userId -> [{id, benefit_type, benefit_value, ticket_id, created_at, applied_by_email}]
 const ADJUSTMENTS = {}; // userId -> [{id, subsystem, amount, reason, admin_email, created_at}]
 
+// ─── V2b: Pagos, Facturación, Feriados, Monitor, Legal, Métricas, Scripts ──────
+let nextPaymentId = 1;
+let nextInvoiceId = 1;
+let nextFeriadoId = 1;
+let nextLegalId = 1;
+
+const PAYMENTS = [
+    { id: nextPaymentId++, user_id: 1, email: 'usuario.seed@test.local', nombre: 'Usuario', apellido: 'Seed',
+      created_at: '2026-08-01T10:00:00.000Z', amount: 15000, currency: 'ARS', status: 'approved',
+      payment_method: 'mercadopago', plan: 'COMBO_PROMO', external_payment_id: 'MP-SEED-001',
+      invoice_id: null, invoice_pdf: null, invoice_numero: null },
+];
+
+const INVOICES = [];
+
+const FERIADOS = [
+    { id: nextFeriadoId++, fecha: '2026-12-08T00:00:00.000Z', motivo: 'Inmaculada Concepción (seed)' },
+    { id: nextFeriadoId++, fecha: '2027-01-01T00:00:00.000Z', motivo: 'Año Nuevo (seed)' },
+];
+
+const MONITOR_PARTES = [
+    { user_email: 'usuario.seed@test.local', jurisdiccion_sigla: 'FCR', nombre_parte: 'DON COCHO',
+      tiene_linea_base: true, exp_confirmados: 12, novedades_pendientes: 2, fecha_creacion: '2026-08-01T10:00:00.000Z' },
+    { user_email: 'usuario.seed@test.local', jurisdiccion_sigla: 'FCR', nombre_parte: 'LA TOSTADORA MODERNA',
+      tiene_linea_base: false, exp_confirmados: 0, novedades_pendientes: 0, fecha_creacion: '2026-08-20T10:00:00.000Z' },
+];
+
+const LEGAL_DOCS = [
+    { id: nextLegalId++, type: 'tyc', version: '1.0', title: 'Términos y Condiciones',
+      html_content: '<p>Contenido de seed de T&amp;C.</p>', summary_of_changes: '', effective_date: '2026-06-01',
+      requires_acceptance: true, is_current: true, acceptance_count: 3, created_at: '2026-06-01T10:00:00.000Z' },
+    { id: nextLegalId++, type: 'pyp', version: '1.0', title: 'Política de Privacidad',
+      html_content: '<p>Contenido de seed de PyP.</p>', summary_of_changes: '', effective_date: '2026-06-01',
+      requires_acceptance: true, is_current: true, acceptance_count: 3, created_at: '2026-06-01T10:00:00.000Z' },
+];
+
+const SCRIPTS = [
+    { script_name: 'consultarscwpjn.js', version: 3, active: true, hash: 'abc123def456abc123def456abc123def456abc1', updated_at: '2026-08-01T10:00:00.000Z' },
+    { script_name: 'informequickscwpjn.js', version: 5, active: true, hash: 'def456abc123def456abc123def456abc123def4', updated_at: '2026-08-01T10:00:00.000Z' },
+    { script_name: 'procesarMonitoreo.js', version: 2, active: true, hash: '123abc456def123abc456def123abc456def123a', updated_at: '2026-08-01T10:00:00.000Z' },
+];
+
+function paymentById(id) { return PAYMENTS.find((x) => x.id === Number(id)); }
+function invoiceById(id) { return INVOICES.find((x) => x.id === Number(id)); }
+function feriadoById(id) { return FERIADOS.find((x) => x.id === Number(id)); }
+function legalById(id) { return LEGAL_DOCS.find((x) => x.id === Number(id)); }
+
+// Parser multipart mínimo: alcanza para leer campos de texto + saber si vino un
+// archivo "pdf" (nombre y tamaño), sin necesitar procesar el binario real.
+function parseMultipart(buf, contentType) {
+    const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || '');
+    const boundary = m ? (m[1] || m[2]) : null;
+    const fields = {}; let file = null;
+    if (!boundary) return { fields, file };
+    const parts = buf.toString('binary').split(`--${boundary}`);
+    for (const part of parts) {
+        if (!part || part === '--\r\n' || part === '--') continue;
+        const headerEnd = part.indexOf('\r\n\r\n');
+        if (headerEnd === -1) continue;
+        const header = part.slice(0, headerEnd);
+        let body = part.slice(headerEnd + 4);
+        if (body.endsWith('\r\n')) body = body.slice(0, -2);
+        const nameMatch = /name="([^"]+)"/.exec(header);
+        if (!nameMatch) continue;
+        const name = nameMatch[1];
+        const fileMatch = /filename="([^"]*)"/.exec(header);
+        if (fileMatch && fileMatch[1]) {
+            file = { fieldname: name, filename: fileMatch[1], size: Buffer.byteLength(body, 'binary') };
+        } else {
+            fields[name] = body;
+        }
+    }
+    return { fields, file };
+}
+async function readMultipart(req) {
+    const buf = await readBody(req);
+    return parseMultipart(buf, req.headers['content-type']);
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const MIME = {
     '.html': 'text/html; charset=utf-8',
@@ -157,8 +236,25 @@ http.createServer(async (req, res) => {
             return json(res, { success: true, token: FAKE_TOKEN, user: { id: 1, email: 'admin@stub.local', role: 'admin' } });
         }
 
-        if (p === '/admin/stats/overview')
-            return json(res, { success: true, users: USERS.length, activeSubscriptions: USERS.filter((x) => x.status === 'active').length, openTickets: TICKETS.filter((t) => t.status === 'open').length });
+        if (p === '/admin/stats/overview') {
+            const st = {
+                totalUsers: USERS.length,
+                activeUsers: USERS.filter((x) => x.registration_status === 'active').length,
+                pendingUsers: USERS.filter((x) => x.registration_status === 'pending_activation').length,
+                suspendedUsers: USERS.filter((x) => x.registration_status === 'suspended_admin').length,
+                expiredUsers: USERS.filter((x) => x.registration_status === 'suspended_plan_expired').length,
+                cancelledUsers: USERS.filter((x) => x.registration_status === 'cancelled').length,
+                rejectedUsers: USERS.filter((x) => x.registration_status === 'rejected').length,
+                pendingEmailUsers: USERS.filter((x) => x.registration_status === 'pending_email').length,
+                activeSubscriptions: USERS.filter((x) => x.status === 'active').length,
+                openTickets: TICKETS.filter((t) => t.status === 'open').length,
+                activeScripts: SCRIPTS.filter((s) => s.active).length,
+                executionsToday: 7,
+                successRate: { successful: 6, failed: 1 },
+                topScripts: [{ script_name: 'consultarscwpjn.js', executions: 5 }, { script_name: 'informequickscwpjn.js', executions: 2 }],
+            };
+            return json(res, { success: true, stats: st });
+        }
 
         // ── Usuarios: búsqueda (para el selector de Pagos/Facturas y el picker) ──
         if (p === '/admin/users/search') {
@@ -334,14 +430,14 @@ http.createServer(async (req, res) => {
             }
         }
 
-        // ── Pagos / facturas del usuario (listas — V2b las expande) ──
+        // ── Pagos / facturas del usuario (desde la ficha) ──
         {
             const m = p.match(/^\/admin\/users\/(\d+)\/payments$/);
-            if (m && req.method === 'GET') return json(res, { success: true, payments: [] });
+            if (m && req.method === 'GET') return json(res, { success: true, payments: PAYMENTS.filter((x) => x.user_id === Number(m[1])) });
         }
         {
             const m = p.match(/^\/admin\/users\/(\d+)\/invoices$/);
-            if (m && req.method === 'GET') return json(res, { success: true, invoices: [] });
+            if (m && req.method === 'GET') return json(res, { success: true, invoices: INVOICES.filter((x) => x.user_id === Number(m[1])) });
         }
 
         // ── Suscripciones ──
@@ -400,7 +496,9 @@ http.createServer(async (req, res) => {
             const userId = q.get('userId');
             let rows = TICKETS.slice();
             if (userId) rows = rows.filter((t) => t.user_id === Number(userId));
-            return json(res, { success: true, tickets: rows });
+            const status = q.get('status');
+            if (status) rows = rows.filter((t) => t.status === status);
+            return json(res, { success: true, tickets: rows, count: rows.length });
         }
         {
             const m = p.match(/^\/admin\/tickets\/(\d+)$/);
@@ -489,10 +587,310 @@ http.createServer(async (req, res) => {
             }
         }
 
+        // ── Pagos ──
+        if (p === '/admin/payments' && req.method === 'GET') {
+            const search = (q.get('search') || '').toLowerCase();
+            const status = q.get('status') || '';
+            let rows = PAYMENTS.slice();
+            if (search) rows = rows.filter((x) => (x.email || '').toLowerCase().includes(search) || (x.nombre || '').toLowerCase().includes(search) || (x.apellido || '').toLowerCase().includes(search) || (x.cuit || '').includes(search));
+            if (status) rows = rows.filter((x) => x.status === status);
+            return json(res, { success: true, payments: rows });
+        }
+        if (p === '/admin/payments/manual' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            const user = userById(body.user_id);
+            const row = {
+                id: nextPaymentId++, user_id: Number(body.user_id), email: user ? user.email : '',
+                nombre: user ? (user.nombre || '') : '', apellido: user ? (user.apellido || '') : '',
+                created_at: body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString(),
+                amount: Number(body.amount), currency: body.currency || 'ARS', status: body.status || 'approved',
+                payment_method: body.payment_method || 'manual', plan: body.plan || null,
+                external_payment_id: body.external_payment_id || null, invoice_id: null, invoice_pdf: null, invoice_numero: null,
+            };
+            PAYMENTS.unshift(row);
+            return json(res, { success: true, payment: row });
+        }
+        {
+            const m = p.match(/^\/admin\/payments\/(\d+)$/);
+            if (m && req.method === 'PUT') {
+                const body = await readJsonBody(req); const pay = paymentById(m[1]);
+                if (!pay) return json(res, { success: false, error: 'No encontrado' }, 404);
+                if (pay.payment_method !== 'manual' && body.payment_method === undefined) {
+                    // no-op, el pago real ya trae payment_method
+                }
+                Object.assign(pay, {
+                    amount: Number(body.amount), currency: body.currency || 'ARS', status: body.status || pay.status,
+                    payment_method: body.payment_method || pay.payment_method, plan: body.plan ?? pay.plan,
+                    external_payment_id: body.external_payment_id ?? pay.external_payment_id,
+                    created_at: body.created_at ? new Date(body.created_at).toISOString() : pay.created_at,
+                });
+                return json(res, { success: true, payment: pay });
+            }
+        }
+        {
+            const m = p.match(/^\/admin\/payments\/(\d+)\/link-invoice$/);
+            if (m && req.method === 'POST') {
+                const body = await readJsonBody(req); const pay = paymentById(m[1]); const inv = invoiceById(body.invoice_id);
+                if (!inv) return json(res, { success: false, error: 'Factura no encontrada' }, 404);
+                if (inv.payment_id) return json(res, { success: false, error: 'Esa factura ya está asociada a otro pago' }, 400);
+                inv.payment_id = pay.id;
+                pay.invoice_id = inv.id; pay.invoice_pdf = inv.pdf_url; pay.invoice_numero = inv.numero;
+                return json(res, { success: true });
+            }
+        }
+
+        // ── Facturas ──
+        if (p === '/admin/invoices/pending' && req.method === 'GET') {
+            const search = (q.get('search') || '').toLowerCase();
+            let rows = PAYMENTS.filter((x) => !x.invoice_id && x.status === 'approved');
+            if (search) rows = rows.filter((x) => (x.email || '').toLowerCase().includes(search) || (x.nombre || '').toLowerCase().includes(search));
+            const pending = rows.map((x) => {
+                const user = userById(x.user_id) || {};
+                return { payment_id: x.id, invoice_id: null, payment_date: x.created_at, amount: x.amount, plan: x.plan,
+                    nombre: x.nombre, apellido: x.apellido, email: x.email, cuit: user.cuit || null, domicilio: user.domicilio || {} };
+            });
+            return json(res, { success: true, pending });
+        }
+        if (p === '/admin/invoices' && req.method === 'GET') {
+            const search = (q.get('search') || '').toLowerCase();
+            const includeNoPdf = q.get('include_no_pdf') === '1';
+            let rows = INVOICES.slice();
+            if (!includeNoPdf) rows = rows; // el listado de Emitidas ya solo contiene lo creado (con o sin PDF, el include_no_pdf es para el selector de asociar)
+            if (search) rows = rows.filter((x) => (x.email || '').toLowerCase().includes(search) || (x.nombre || '').toLowerCase().includes(search) || (x.cuit || '').includes(search));
+            return json(res, { success: true, invoices: rows });
+        }
+        if (p === '/admin/invoices/manual' && req.method === 'POST') {
+            const { fields, file } = await readMultipart(req);
+            const user = userById(fields.user_id);
+            if (!file) return json(res, { success: false, error: 'Falta el PDF' }, 400);
+            const row = {
+                id: nextInvoiceId++, payment_id: null, user_id: Number(fields.user_id),
+                email: user ? user.email : '', nombre: user ? (user.nombre || '') : '', apellido: user ? (user.apellido || '') : '',
+                cuit: user ? user.cuit : null, amount: Number(fields.amount), invoice_type: fields.invoice_type || 'C',
+                numero: fields.numero || null, cae: fields.cae || null,
+                issued_at: fields.issued_at ? new Date(fields.issued_at).toISOString() : new Date().toISOString(),
+                created_at: new Date().toISOString(), pdf_url: `/stub-invoices/${file.filename}`, plan: fields.plan || null,
+            };
+            INVOICES.unshift(row);
+            return json(res, { success: true, invoice: row });
+        }
+        {
+            const m = p.match(/^\/admin\/invoices\/from-payment\/(\d+)$/);
+            if (m && req.method === 'POST') {
+                const { fields, file } = await readMultipart(req); const pay = paymentById(m[1]);
+                if (!pay) return json(res, { success: false, error: 'Pago no encontrado' }, 404);
+                if (!file) return json(res, { success: false, error: 'Falta el PDF' }, 400);
+                const user = userById(pay.user_id);
+                const row = {
+                    id: nextInvoiceId++, payment_id: pay.id, user_id: pay.user_id, email: pay.email,
+                    nombre: pay.nombre, apellido: pay.apellido, cuit: user ? user.cuit : null, amount: pay.amount,
+                    invoice_type: fields.invoice_type || 'C', numero: fields.numero || null, cae: fields.cae || null,
+                    issued_at: new Date().toISOString(), created_at: new Date().toISOString(),
+                    pdf_url: `/stub-invoices/${file.filename}`, plan: pay.plan,
+                };
+                INVOICES.unshift(row);
+                pay.invoice_id = row.id; pay.invoice_pdf = row.pdf_url; pay.invoice_numero = row.numero;
+                return json(res, { success: true, invoice: row });
+            }
+        }
+        {
+            const m = p.match(/^\/admin\/invoices\/(\d+)\/upload$/);
+            if (m && req.method === 'POST') {
+                const { fields, file } = await readMultipart(req); const inv = invoiceById(m[1]);
+                if (!inv) return json(res, { success: false, error: 'Factura no encontrada' }, 404);
+                if (!file) return json(res, { success: false, error: 'Falta el PDF' }, 400);
+                Object.assign(inv, {
+                    numero: fields.numero || inv.numero, invoice_type: fields.invoice_type || inv.invoice_type,
+                    cae: fields.cae || inv.cae, pdf_url: `/stub-invoices/${file.filename}`,
+                });
+                const pay = PAYMENTS.find((x) => x.invoice_id === inv.id);
+                if (pay) { pay.invoice_pdf = inv.pdf_url; pay.invoice_numero = inv.numero; }
+                return json(res, { success: true, invoice: inv });
+            }
+        }
+        {
+            const m = p.match(/^\/admin\/invoices\/(\d+)\/meta$/);
+            if (m && req.method === 'PUT') {
+                const body = await readJsonBody(req); const inv = invoiceById(m[1]);
+                if (!inv) return json(res, { success: false, error: 'No encontrada' }, 404);
+                Object.assign(inv, {
+                    amount: body.amount != null ? Number(body.amount) : inv.amount,
+                    numero: body.numero ?? inv.numero, invoice_type: body.invoice_type ?? inv.invoice_type,
+                    cae: body.cae ?? inv.cae, issued_at: body.issued_at ? new Date(body.issued_at).toISOString() : inv.issued_at,
+                });
+                return json(res, { success: true, invoice: inv });
+            }
+        }
+        {
+            const m = p.match(/^\/admin\/invoices\/(\d+)\/link-payment$/);
+            if (m && req.method === 'POST') {
+                const body = await readJsonBody(req); const inv = invoiceById(m[1]); const pay = paymentById(body.payment_id);
+                if (!pay) return json(res, { success: false, error: 'Pago no encontrado' }, 404);
+                if (pay.invoice_id) return json(res, { success: false, error: 'Ese pago ya tiene una factura asociada' }, 400);
+                inv.payment_id = pay.id; pay.invoice_id = inv.id; pay.invoice_pdf = inv.pdf_url; pay.invoice_numero = inv.numero;
+                return json(res, { success: true });
+            }
+        }
+        {
+            const m = p.match(/^\/admin\/invoices\/(\d+)\/unlink-payment$/);
+            if (m && req.method === 'POST') {
+                const inv = invoiceById(m[1]);
+                if (inv) { const pay = paymentById(inv.payment_id); inv.payment_id = null; if (pay) { pay.invoice_id = null; pay.invoice_pdf = null; pay.invoice_numero = null; } }
+                return json(res, { success: true });
+            }
+        }
+        {
+            const m = p.match(/^\/admin\/invoices\/(\d+)\/pdf$/);
+            if (m && req.method === 'GET') {
+                const inv = invoiceById(m[1]);
+                if (!inv || !inv.pdf_url) return json(res, { success: false, error: 'Sin PDF' }, 404);
+                const fakePdf = Buffer.from('%PDF-1.4 stub invoice pdf\n%%EOF');
+                res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': fakePdf.length });
+                return res.end(fakePdf);
+            }
+        }
+
+        // ── Feriados ──
+        if (p === '/admin/feriados' && req.method === 'GET') {
+            const year = q.get('year');
+            let rows = FERIADOS.slice();
+            if (year) rows = rows.filter((f) => new Date(f.fecha).getUTCFullYear() === Number(year));
+            rows.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+            return json(res, { success: true, feriados: rows });
+        }
+        if (p === '/admin/feriados' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            const dup = FERIADOS.find((f) => f.fecha.slice(0, 10) === body.fecha);
+            if (dup) return json(res, { success: false, error: 'Ya existe un feriado en esa fecha' }, 409);
+            const row = { id: nextFeriadoId++, fecha: new Date(body.fecha).toISOString(), motivo: body.motivo || null };
+            FERIADOS.push(row);
+            return json(res, { success: true, feriado: row });
+        }
+        {
+            const m = p.match(/^\/admin\/feriados\/(\d+)$/);
+            if (m && req.method === 'PUT') {
+                const body = await readJsonBody(req); const f = feriadoById(m[1]);
+                if (!f) return json(res, { success: false, error: 'No encontrado' }, 404);
+                const dup = FERIADOS.find((x) => x.id !== f.id && x.fecha.slice(0, 10) === body.fecha);
+                if (dup) return json(res, { success: false, error: 'Ya existe un feriado en esa fecha' }, 409);
+                f.fecha = new Date(body.fecha).toISOString(); f.motivo = body.motivo || null;
+                return json(res, { success: true, feriado: f });
+            }
+            if (m && req.method === 'DELETE') {
+                const idx = FERIADOS.findIndex((x) => x.id === Number(m[1]));
+                if (idx >= 0) FERIADOS.splice(idx, 1);
+                return json(res, { success: true });
+            }
+        }
+
+        // ── Monitor ──
+        if (p === '/admin/monitor/stats' && req.method === 'GET') {
+            return json(res, { success: true, stats: {
+                partes_activas: MONITOR_PARTES.length,
+                expedientes_confirmados: MONITOR_PARTES.reduce((a, x) => a + x.exp_confirmados, 0),
+                novedades_pendientes: MONITOR_PARTES.reduce((a, x) => a + x.novedades_pendientes, 0),
+                consultas_este_mes: 34,
+            } });
+        }
+        if (p === '/admin/monitor/partes' && req.method === 'GET') return json(res, { success: true, partes: MONITOR_PARTES });
+
+        // ── Legal ──
+        if (p === '/legal/admin/documents' && req.method === 'GET') return json(res, { success: true, documents: LEGAL_DOCS });
+        if (p === '/legal/admin/documents' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            const row = { id: nextLegalId++, type: body.type, version: body.version, title: body.title,
+                html_content: body.html_content || '', summary_of_changes: body.summary_of_changes || '',
+                effective_date: body.effective_date || null, requires_acceptance: !!body.requires_acceptance,
+                is_current: false, acceptance_count: 0, created_at: new Date().toISOString() };
+            LEGAL_DOCS.push(row);
+            return json(res, { success: true, document: row });
+        }
+        {
+            const m = p.match(/^\/legal\/admin\/documents\/(\d+)$/);
+            if (m && req.method === 'GET') {
+                const d = legalById(m[1]);
+                if (!d) return json(res, { success: false, error: 'No encontrado' }, 404);
+                return json(res, { success: true, document: d });
+            }
+            if (m && req.method === 'PUT') {
+                const body = await readJsonBody(req); const d = legalById(m[1]);
+                if (!d) return json(res, { success: false, error: 'No encontrado' }, 404);
+                Object.assign(d, { version: body.version, title: body.title, html_content: body.html_content,
+                    summary_of_changes: body.summary_of_changes, effective_date: body.effective_date,
+                    requires_acceptance: !!body.requires_acceptance });
+                return json(res, { success: true, document: d });
+            }
+            if (m && req.method === 'DELETE') {
+                const idx = LEGAL_DOCS.findIndex((x) => x.id === Number(m[1]));
+                if (idx >= 0) {
+                    if (LEGAL_DOCS[idx].is_current) return json(res, { success: false, error: 'No se puede eliminar un documento publicado' }, 400);
+                    LEGAL_DOCS.splice(idx, 1);
+                }
+                return json(res, { success: true });
+            }
+        }
+        {
+            const m = p.match(/^\/legal\/admin\/documents\/(\d+)\/publish$/);
+            if (m && req.method === 'PUT') {
+                const d = legalById(m[1]);
+                if (!d) return json(res, { success: false, error: 'No encontrado' }, 404);
+                LEGAL_DOCS.filter((x) => x.type === d.type && x.id !== d.id).forEach((x) => { x.is_current = false; });
+                d.is_current = true;
+                return json(res, { success: true, notified: USERS.filter((u) => u.registration_status === 'active').length });
+            }
+        }
+        {
+            const m = p.match(/^\/legal\/admin\/documents\/(\d+)\/stats$/);
+            if (m && req.method === 'GET') {
+                const d = legalById(m[1]);
+                const total = d ? d.acceptance_count : 0;
+                return json(res, { success: true, total_users: total + 1, accepted_count: total,
+                    acceptances: USERS.slice(0, total).map((u) => ({ email: u.email, nombre: u.nombre || '', accepted_at: d ? d.effective_date : null })) });
+            }
+        }
+
+        // ── Métricas / Analytics ──
+        if (p === '/analytics/data' && req.method === 'GET') {
+            return json(res, { success: true,
+                summary: { sessions: 120, events: 340, total_cta_clicks: 28, registros: 6 },
+                funnel: { total_sessions: 120, vio_planes: 80, click_plan: 28, registros: 6 },
+                byLabel: [{ label: 'COMBO_PROMO', total: 18 }, { label: 'EXTENSION_PROMO', total: 10 }],
+                referrers: [{ fuente: 'directo', sessions: 70 }, { fuente: 'instagram', sessions: 50 }],
+            });
+        }
+
+        // ── Diagnóstico ──
+        if (p === '/admin/smoke-tests/latest' && req.method === 'GET') return json(res, { success: true, results: { api: null, pjn: null, extension: null } });
+        if (p === '/admin/smoke-tests/run-api' && req.method === 'POST') {
+            await readBody(req);
+            const result = { ok: true, passed: 8, total: 8, timestamp: new Date().toISOString(), duration: 1200,
+                logs: ['[stub] ▶ Corriendo checks...', '✅ health', '✅ landing', '✅ portal', '[stub] RESULTADO: 8/8'] };
+            return json(res, { success: true, result });
+        }
+        if (p === '/admin/diagnostics/verification/latest' && req.method === 'GET') return json(res, { success: true, latest: null, history: [] });
+
+        // ── Scripts ──
+        if (p === '/admin/scripts' && req.method === 'GET') return json(res, { success: true, scripts: SCRIPTS });
+        {
+            const m = p.match(/^\/admin\/scripts\/([\w.-]+)\/toggle$/);
+            if (m && req.method === 'PUT') {
+                const body = await readJsonBody(req); const s = SCRIPTS.find((x) => x.script_name === m[1]);
+                if (s) s.active = !!body.active;
+                return json(res, { success: true });
+            }
+        }
+        if (p === '/admin/cache/warmup' && req.method === 'POST') { await readBody(req); return json(res, { success: true }); }
+        if (p === '/admin/cache/clear' && req.method === 'POST') { await readBody(req); return json(res, { success: true }); }
+        if (p === '/admin/scripts/reencrypt' && req.method === 'POST') {
+            await readBody(req);
+            SCRIPTS.forEach((s) => { s.updated_at = new Date().toISOString(); });
+            return json(res, { success: true });
+        }
+
         // ── Catch-all: cualquier otro /admin/* (y /legal/admin/*) devuelve un
-        //    shape "vacío pero completo" — V2b (Pagos, Facturación, Feriados,
-        //    Monitor, Legal, Métricas, Diagnóstico, Scripts) todavía no tiene
-        //    estado propio acá. ──
+        //    shape "vacío pero completo" — cualquier ruta que no haya sido
+        //    mapeada arriba (por ejemplo /admin/users/:id/payments|invoices,
+        //    que V2a dejó sin estado propio a propósito). ──
         if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
             await readBody(req);
             return json(res, { success: true });
