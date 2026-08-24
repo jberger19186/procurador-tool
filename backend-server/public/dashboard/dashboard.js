@@ -85,7 +85,13 @@ function doLogout(expired = false) {
 
 function showApp() {
     document.getElementById('login-page').style.display = 'none';
-    document.getElementById('sidebar').style.display    = 'flex';
+    // No fijar 'flex' acá: es un estilo inline y le ganaría siempre a la media
+    // query `@media(max-width:768px){#sidebar{display:none}}` — con eso el
+    // sidebar completo quedaba visible en mobile pese a esa regla. Se quita
+    // la propiedad (el `display:none` que trae de doLogout()) para que la
+    // cascada decida: `#sidebar{display:flex}` de la hoja base en desktop,
+    // la media query en mobile.
+    document.getElementById('sidebar').style.removeProperty('display');
     document.getElementById('main').style.display       = 'flex';
     document.getElementById('admin-email').textContent  = localStorage.getItem('admin_email') || 'Admin';
 }
