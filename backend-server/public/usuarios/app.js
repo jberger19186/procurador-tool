@@ -220,10 +220,18 @@ function renderRememberedUsers() {
     // hijo del flex row → por eso aparecía debajo en vez de alineada a la derecha
     // adentro. El exterior pasa a ser un <div role="button"> (mismo onclick,
     // + manejo de Enter/Espacio para no perder accesibilidad de teclado).
+    //
+    // El `event.target === this` del onkeydown NO es opcional: el keydown de la ✕
+    // burbujea hasta acá, y sin ese filtro un Enter/Espacio sobre "Olvidar cuenta"
+    // hacía dos cosas mal a la vez — el preventDefault() anulaba la activación
+    // nativa del <button> (no borraba la cuenta) y el this.click() disparaba el
+    // onclick de la card (logueaba al usuario en la cuenta que quería olvidar).
+    // Con el filtro, el keydown de la ✕ sigue de largo y el navegador le da su
+    // click nativo, que es lo que ejecuta removeRememberedUser().
     list.innerHTML = users.map(u => `
         <div class="remembered-user-btn" role="button" tabindex="0"
              onclick="selectRememberedUser('${escapeHtml(u.email)}', '${u.pw}')"
-             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
+             onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();this.click();}">
             <div class="remembered-user-avatar">${escapeHtml(u.email[0].toUpperCase())}</div>
             <div class="remembered-user-info">
                 <div class="remembered-user-email">${escapeHtml(u.email)}</div>
