@@ -377,7 +377,11 @@ otro trimestre.
 > producción tienen el **mismo** token de MP (byte-idéntico, misma cuenta sandbox), pese a que
 > `CLAUDE.md` documenta el de staging como independiente — inocuo hoy (prod también es sandbox,
 > B3 pendiente), pero sin ningún mecanismo que lo mantenga separado cuando B3 cargue credenciales
-> reales. **No cubierto, explícito en el informe:** el camino feliz de un pago real end-to-end, la
+> reales. ✅ **CORREGIDO Y DESPLEGADO el mismo día:** `MP_ENV=sandbox` en ambos `.env` + un guard en
+> `utils/mercadopago.js` que **anula el token** si la base es de staging y falta ese marcador —
+> vaciando `process.env`, no solo la config del SDK, porque hay 3 lecturas crudas que lo esquivarían
+> (una de ellas un `PUT`). Fail-closed pero proporcionado (staging sigue levantando sin poder
+> cobrar), y verificado en las dos direcciones. **No cubierto, explícito en el informe:** el camino feliz de un pago real end-to-end, la
 > transacción atómica de `handlePaymentEvent` (M4), `markPaymentConfigured`/`reconcileClaimedCheckout`
 > y `updatePreapprovalAmount` — todos exigen escrituras a MP o una persona completando un checkout.
 
