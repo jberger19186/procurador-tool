@@ -175,16 +175,29 @@ pantallas con estado compartido, y con esfuerzo medio se va a conducir el camino
 
 ---
 
-### V1b — Portal: las otras 8 secciones 🟢
+### V1b — Portal: las otras 8 secciones 🟢 ✅ EJECUTADO (2026-08-24)
 
-Perfil, Mi Plan, Facturación, Soporte, Notificaciones, Asistente IA, Ayuda, y el estado
-`reactivacion`. Más: login (cuentas guardadas, "usar otra cuenta", mostrar/ocultar contraseña,
-banner de email sin verificar), logout, y el **deep-link por SSO** (`?goto=<seccion>#sso=<token>`),
-que es el camino por el que entra todo usuario de Electron y el que rompió `a71987b`.
-
-Incluye el **responsive** (375 / 768 / 1280) — Bloque R12, nunca ejecutado.
-
-**Modelo/esfuerzo:** Sonnet 5 · **medio**. Secciones más chicas y de solo lectura en su mayoría.
+> Informe completo: `docs/internal/verify-V1b-2026-08-24.md`. **2 hallazgos, sin corregir:**
+> (1) `submitNewTicket()` tiene el mismo gap de doble submit que `354fbcc` ya arregló en
+> Bitácora/Mis Expedientes — confirmado con el mismo probe (2 tickets duplicados creados). Por
+> lectura de código, el mismo gap está en `saveProfile`, `savePassword` y `doLogin` (no
+> reproducido ahí para no diluir el bloque, mismo fix aplicable). (2) `deleteMonitorParte()` en
+> Mi Plan usa `confirm()` **nativo** en vez del `showConfirm()` custom del resto de la app — anda
+> bien, pero es la clase de diálogo que trabó la automatización en el hallazgo histórico U9.3;
+> mismo patrón en 2 `alert()` cercanos. **El deep-link SSO (`a71987b`) verificado sano** en los 2
+> casos (`goto` simple y `nuevo-ticket`, que además abre el modal). Cancelar/reactivar suscripción,
+> reactivación de cuenta suspendida (con escape de HTML confirmado en el motivo), notificaciones,
+> Shift+Enter vs Enter en el chat, y el responsive 375/768/1280 — todo sano.
+>
+> Perfil, Mi Plan, Facturación, Soporte, Notificaciones, Asistente IA, Ayuda, y el estado
+> `reactivacion`. Más: login (cuentas guardadas, "usar otra cuenta", mostrar/ocultar contraseña,
+> banner de email sin verificar), logout, y el **deep-link por SSO** (`?goto=<seccion>#sso=<token>`),
+> que es el camino por el que entra todo usuario de Electron y el que rompió `a71987b`.
+>
+> Incluye el **responsive** (375 / 768 / 1280) — Bloque R12, nunca ejecutado.
+>
+> **Modelo/esfuerzo:** Sonnet 5 · **medio**. Secciones más chicas y de solo lectura en su mayoría.
+> **Siguiente bloque: V2a.**
 
 ---
 
