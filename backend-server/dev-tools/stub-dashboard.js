@@ -236,6 +236,15 @@ http.createServer(async (req, res) => {
             return json(res, { success: true, token: FAKE_TOKEN, user: { id: 1, email: 'admin@stub.local', role: 'admin' } });
         }
 
+        // ── Usuarios pendientes (VF-3: para ejercitar rejectUserBlock/rejectUserKeepTrial/
+        //    approveReactivation/rejectReactivation, que usan showPrompt) ──
+        if (p === '/admin/users/pending' && req.method === 'GET') {
+            return json(res, { success: true, users: USERS.filter((x) => ['pending_activation', 'pending_email'].includes(x.registration_status)) });
+        }
+        if (p === '/admin/users/reactivation-requests' && req.method === 'GET') {
+            return json(res, { success: true, requests: USERS.filter((x) => x.reactivation_requested).map((x) => ({ id: x.id, nombre: x.nombre || '', email: x.email, suspension_reason: x.suspension_reason || '', suspended_at: x.updated_at || x.created_at, user_message: x.reactivation_message || '' })) });
+        }
+
         if (p === '/admin/stats/overview') {
             const st = {
                 totalUsers: USERS.length,

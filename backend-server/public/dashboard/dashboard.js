@@ -241,6 +241,91 @@ function showAlert(container, msg, type = 'error') {
     setTimeout(() => el.remove(), 4000);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  VF-3 (campaña /verify, 2026-08-24) — reemplazo de confirm()/alert()/prompt()
+//  nativos. El dashboard admin no tenía ninguna primitiva propia (a diferencia
+//  del portal, que ya usaba showToast/showConfirm desde antes) — estas 3 son
+//  las que reemplazan los 71 sitios migrados. z-index:3000, por encima de
+//  cualquier modal existente (el más alto hasta ahora es 1200, el picker de
+//  usuario), porque muchos de los sitios migrados disparan desde DENTRO de un
+//  modal ya abierto (ej. confirmar un pago editado, un plan, una factura).
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ensureToastContainer() {
+    let c = document.getElementById('_toast-container');
+    if (!c) {
+        c = document.createElement('div');
+        c.id = '_toast-container';
+        c.style.cssText = 'position:fixed;top:20px;right:20px;z-index:3000;display:flex;flex-direction:column;gap:8px;max-width:360px';
+        document.body.appendChild(c);
+    }
+    return c;
+}
+
+// Reemplaza alert() no bloqueante. type: 'success' | 'error' | 'info'.
+function showToast(message, type = 'info') {
+    const colors = {
+        success: { bg: '#ecfdf5', border: '#10b981', text: '#065f46', icon: '✅' },
+        error:   { bg: '#fef2f2', border: '#ef4444', text: '#991b1b', icon: '❌' },
+        info:    { bg: '#eff6ff', border: '#1e40af', text: '#1e3a8a', icon: 'ℹ️' },
+    };
+    const c = colors[type] || colors.info;
+    const container = ensureToastContainer();
+    const el = document.createElement('div');
+    el.style.cssText = `background:${c.bg};border:1px solid ${c.border};color:${c.text};padding:12px 16px;border-radius:10px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.15);display:flex;align-items:flex-start;gap:10px;white-space:pre-line;line-height:1.4`;
+    el.innerHTML = `<span style="flex-shrink:0">${c.icon}</span><span style="flex:1">${escHtml(message)}</span><span style="cursor:pointer;opacity:.6;flex-shrink:0" onclick="this.parentElement.remove()">✕</span>`;
+    container.appendChild(el);
+    const autoDismissMs = type === 'error' ? 7000 : 5000;
+    setTimeout(() => el.remove(), autoDismissMs);
+}
+
+// Reemplaza confirm() bloqueante. Devuelve Promise<boolean> — usar con await.
+function showConfirm(message, { confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' } = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px';
+        overlay.innerHTML = `
+            <div style="background:#fff;border-radius:12px;padding:24px;max-width:440px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+                <p style="font-size:14px;color:#1f2937;line-height:1.5;white-space:pre-line;margin:0 0 20px">${escHtml(message)}</p>
+                <div style="display:flex;justify-content:flex-end;gap:8px">
+                    <button class="btn btn-sm btn-secondary" data-role="cancel">${escHtml(cancelLabel)}</button>
+                    <button class="btn btn-sm btn-primary" data-role="confirm">${escHtml(confirmLabel)}</button>
+                </div>
+            </div>`;
+        const close = (result) => { overlay.remove(); resolve(result); };
+        overlay.querySelector('[data-role="confirm"]').onclick = () => close(true);
+        overlay.querySelector('[data-role="cancel"]').onclick = () => close(false);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(false); });
+        document.body.appendChild(overlay);
+    });
+}
+
+// Reemplaza prompt() bloqueante. Devuelve Promise<string|null> — null si se
+// cancela (mismo contrato que prompt() nativo: los callers ya hacen su propio
+// .trim() y su propio chequeo de "obligatorio", no se duplica acá).
+function showPrompt(message, { confirmLabel = 'Aceptar', cancelLabel = 'Cancelar', placeholder = '' } = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px';
+        overlay.innerHTML = `
+            <div style="background:#fff;border-radius:12px;padding:24px;max-width:440px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+                <p style="font-size:14px;color:#1f2937;line-height:1.5;white-space:pre-line;margin:0 0 14px">${escHtml(message)}</p>
+                <textarea data-role="input" rows="3" placeholder="${escAttr(placeholder)}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+                    <button class="btn btn-sm btn-secondary" data-role="cancel">${escHtml(cancelLabel)}</button>
+                    <button class="btn btn-sm btn-primary" data-role="confirm">${escHtml(confirmLabel)}</button>
+                </div>
+            </div>`;
+        const input = overlay.querySelector('[data-role="input"]');
+        const close = (result) => { overlay.remove(); resolve(result); };
+        overlay.querySelector('[data-role="confirm"]').onclick = () => close(input.value);
+        overlay.querySelector('[data-role="cancel"]').onclick = () => close(null);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+        document.body.appendChild(overlay);
+        setTimeout(() => input.focus(), 50);
+    });
+}
+
 // ───── OVERVIEW ─────
 async function renderOverview() {
     try {
@@ -307,7 +392,7 @@ window.toggleRegister = async function() {
     if (!btn) return;
     const currentlyEnabled = btn.textContent.trim().startsWith('✅');
     const newValue = !currentlyEnabled;
-    if (!confirm(`¿${newValue ? 'Habilitar' : 'Deshabilitar'} el registro público?`)) return;
+    if (!(await showConfirm(`¿${newValue ? 'Habilitar' : 'Deshabilitar'} el registro público?`))) return;
     try {
         btn.disabled = true;
         btn.textContent = 'Guardando...';
@@ -317,7 +402,7 @@ window.toggleRegister = async function() {
         const hint = btn.nextElementSibling;
         if (hint) hint.textContent = newValue ? 'Nuevos usuarios pueden registrarse' : 'El formulario de registro está bloqueado';
     } catch (e) {
-        alert('Error al cambiar el estado: ' + e.message);
+        showToast('Error al cambiar el estado: ' + e.message, 'error');
         btn.textContent = currentlyEnabled ? '✅ Habilitado' : '🔴 Deshabilitado';
     } finally {
         btn.disabled = false;
@@ -455,7 +540,7 @@ window.submitAddUser = async function() {
         const r = await apiFetch('/admin/users', 'POST', body);
         closeDynModal();
         renderUsers();
-        alert(r.message || 'Usuario creado.');
+        showToast(r.message || 'Usuario creado.', 'success');
     } catch (e) {
         if (err) { err.textContent = e.message; err.style.display = 'block'; }
         if (btn) { btn.disabled = false; btn.textContent = '✅ Crear usuario'; }
@@ -841,7 +926,7 @@ async function renderUserDetail(userId) {
 
 // User detail actions
 window.unbindHardware = async function(id) {
-    if (!confirm('¿Desvincular hardware de este usuario?')) return;
+    if (!(await showConfirm('¿Desvincular hardware de este usuario?'))) return;
     try {
         await apiFetch(`/admin/users/${id}/unbind-hardware`, 'POST');
         showAlert(document.getElementById('ud-alert'), 'Hardware desvinculado.', 'success');
@@ -850,7 +935,7 @@ window.unbindHardware = async function(id) {
 };
 window.toggleRole = async function(id, currentRole) {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
-    if (!confirm(`¿Cambiar rol a "${newRole}"?`)) return;
+    if (!(await showConfirm(`¿Cambiar rol a "${newRole}"?`))) return;
     try {
         await apiFetch(`/admin/users/${id}/role`, 'PUT', { role: newRole });
         showAlert(document.getElementById('ud-alert'), `Rol actualizado a ${newRole}.`, 'success');
@@ -869,12 +954,12 @@ window.updateSub = async function(id) {
     const planId = parseInt(sel.value);
     const planLabel = sel.options[sel.selectedIndex]?.text || '';
     const durationDays = parseInt(document.getElementById('days-input').value) || 30;
-    if (!confirm(
+    if (!(await showConfirm(
         `¿Aplicar el plan "${planLabel}"?\n\n` +
         `• Upgrade (plan más caro): se aplica de inmediato; el campo "días" fija el período de acceso.\n` +
         `• Downgrade (más barato): se programa para el fin del ciclo actual (el usuario conserva sus límites hasta entonces); el campo "días" no aplica.\n` +
         `• Si paga por MercadoPago: el nuevo monto rige desde el próximo cobro (no se cobra diferencia ahora ni se reembolsa el período actual).`
-    )) return;
+    ))) return;
     try {
         // El backend devuelve el mensaje exacto según lo que hizo (upgrade inmediato /
         // downgrade programado / trial), así que lo mostramos tal cual en vez de asumir.
@@ -978,7 +1063,7 @@ window.doAdminSuspend = async function(userId) {
 };
 
 window.reactivateSub = async function(id) {
-    if (!confirm('¿Reactivar esta cuenta? El estado pasará a "Activo".')) return;
+    if (!(await showConfirm('¿Reactivar esta cuenta? El estado pasará a "Activo".'))) return;
     try {
         await apiFetch(`/admin/users/${id}/reactivation-request/approve`, 'POST');
         showAlert(document.getElementById('ud-alert'), '✅ Cuenta reactivada correctamente.', 'success');
@@ -986,7 +1071,7 @@ window.reactivateSub = async function(id) {
     } catch (e) { showAlert(document.getElementById('ud-alert'), e.message); }
 };
 window.resetUsage = async function(id) {
-    if (!confirm('¿Resetear contador de uso?')) return;
+    if (!(await showConfirm('¿Resetear contador de uso?'))) return;
     try {
         await apiFetch(`/admin/subscriptions/${id}/reset-usage`, 'POST');
         showAlert(document.getElementById('ud-alert'), 'Contador reseteado.', 'success');
@@ -997,7 +1082,7 @@ window.resetUsage = async function(id) {
 // Cancela la suscripción al fin del ciclo (pausa el cobro en MP, acceso hasta cancel_at).
 // Reversible con "Deshacer cancelación" mientras no venza. Queda en el historial de la cuenta.
 window.adminCancelSub = async function(id) {
-    if (!confirm('¿Cancelar la suscripción al finalizar el período actual?\n\nSe pausa el cobro en MercadoPago (no se cobra la renovación) y el usuario mantiene el acceso hasta el fin del período pago. Es reversible hasta esa fecha.')) return;
+    if (!(await showConfirm('¿Cancelar la suscripción al finalizar el período actual?\n\nSe pausa el cobro en MercadoPago (no se cobra la renovación) y el usuario mantiene el acceso hasta el fin del período pago. Es reversible hasta esa fecha.'))) return;
     try {
         const r = await apiFetch(`/admin/subscriptions/${id}/cancel`, 'POST');
         showAlert(document.getElementById('ud-alert'), r.message || 'Cancelación programada.', 'success');
@@ -1007,7 +1092,7 @@ window.adminCancelSub = async function(id) {
 
 // Deshace una cancelación programada (reanuda el preapproval en MP, sin cobro nuevo).
 window.adminReactivateCancel = async function(id) {
-    if (!confirm('¿Deshacer la cancelación programada?\n\nLa suscripción sigue activa y se renueva en la fecha original, sin generar un cobro nuevo.')) return;
+    if (!(await showConfirm('¿Deshacer la cancelación programada?\n\nLa suscripción sigue activa y se renueva en la fecha original, sin generar un cobro nuevo.'))) return;
     try {
         const r = await apiFetch(`/admin/subscriptions/${id}/reactivate-cancel`, 'POST');
         showAlert(document.getElementById('ud-alert'), r.message || 'Cancelación revertida.', 'success');
@@ -1293,7 +1378,7 @@ window.deleteMonitorParteBtn = function(btn) {
     deleteMonitorParte(Number(btn.dataset.parteId), btn.dataset.parteNombre, Number(btn.dataset.userId));
 };
 window.deleteMonitorParte = async function(parteId, nombre, userId) {
-    if (!confirm(`¿Eliminar la parte "${nombre}" y todos sus expedientes asociados? Esta acción no se puede deshacer.`)) return;
+    if (!(await showConfirm(`¿Eliminar la parte "${nombre}" y todos sus expedientes asociados? Esta acción no se puede deshacer.`))) return;
     try {
         await apiFetch(`/admin/monitor/partes/${parteId}`, 'DELETE');
         showAlert(document.getElementById('ud-alert'), `Parte "${nombre}" eliminada correctamente.`, 'success');
@@ -1627,18 +1712,18 @@ window.applyTicketUsageAdjustment = async function(userId, ticketId) {
     const sub    = document.getElementById('tk-adj-sub').value;
     const amount = parseInt(document.getElementById('tk-adj-amount').value);
     const reason = document.getElementById('tk-adj-reason').value.trim();
-    if (!amount || isNaN(amount)) { alert('Cantidad inválida'); return; }
-    if (!reason) { alert('El motivo es obligatorio'); return; }
-    if (!confirm(`¿Aplicar ajuste de ${amount > 0 ? '+' : ''}${amount} usos en ${sub}?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`)) return;
+    if (!amount || isNaN(amount)) { showToast('Cantidad inválida', 'error'); return; }
+    if (!reason) { showToast('El motivo es obligatorio', 'error'); return; }
+    if (!(await showConfirm(`¿Aplicar ajuste de ${amount > 0 ? '+' : ''}${amount} usos en ${sub}?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`))) return;
     try {
         await apiFetch(`/admin/subscriptions/${userId}/adjust`, 'POST', {
             subsystem: sub, amount, reason, ticket_id: ticketId
         });
         document.getElementById('tk-adj-reason').value = '';
         loadTicketAdjustmentHistory(userId);
-        alert('Ajuste aplicado correctamente.');
+        showToast('Ajuste aplicado correctamente.', 'success');
     } catch (e) {
-        alert('Error: ' + e.message);
+        showToast('Error: ' + e.message, 'error');
     }
 };
 
@@ -1646,19 +1731,19 @@ window.applyTicketUsageAdjustment = async function(userId, ticketId) {
 window.applyTicketCourtesy = async function(userId, ticketId) {
     const qty       = parseInt(document.getElementById('tk-courtesy-qty').value, 10);
     const reason    = document.getElementById('tk-courtesy-reason').value.trim();
-    if (!Number.isInteger(qty) || qty === 0 || qty < -1000 || qty > 1000) { alert('La cantidad debe ser un entero entre -1000 y 1000 (distinto de 0).'); return; }
-    if (!reason) { alert('El motivo es obligatorio'); return; }
+    if (!Number.isInteger(qty) || qty === 0 || qty < -1000 || qty > 1000) { showToast('La cantidad debe ser un entero entre -1000 y 1000 (distinto de 0).', 'error'); return; }
+    if (!reason) { showToast('El motivo es obligatorio', 'error'); return; }
     const accion = qty > 0 ? `sumar ${qty}` : `restar ${Math.abs(qty)}`;
-    if (!confirm(`¿${accion} usos de cortesía?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`)) return;
+    if (!(await showConfirm(`¿${accion} usos de cortesía?\nMotivo: ${reason}\nQuedará vinculado a este ticket (#${ticketId}).`))) return;
     try {
         await apiFetch(`/admin/users/${userId}/extra-usage`, 'POST', {
             extra_uses: qty, reason, ticket_id: ticketId
         });
         document.getElementById('tk-courtesy-reason').value = '';
         loadTicketCourtesyHistory(userId);
-        alert(`🎁 Cortesía aplicada correctamente (${qty > 0 ? '+' : ''}${qty}).`);
+        showToast(`🎁 Cortesía aplicada correctamente (${qty > 0 ? '+' : ''}${qty}).`, 'success');
     } catch (e) {
-        alert('Error: ' + e.message);
+        showToast('Error: ' + e.message, 'error');
     }
 };
 
@@ -1753,7 +1838,7 @@ window.aiSuggestReply = async function(ticketId) {
             textarea.focus();
         }
     } catch (e) {
-        alert('Error generando sugerencia: ' + e.message);
+        showToast('Error generando sugerencia: ' + e.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
@@ -1834,7 +1919,7 @@ window.updateTicketMeta = async function(id) {
 window.applyBenefit = async function(id, userId) {
     const benefit_type  = document.getElementById('benefit-type').value;
     const benefit_value = document.getElementById('benefit-value').value;
-    if (!confirm(`¿Aplicar beneficio "${benefitLabel(benefit_type)}"? El efecto es inmediato y no cambia el estado del ticket.`)) return;
+    if (!(await showConfirm(`¿Aplicar beneficio "${benefitLabel(benefit_type)}"? El efecto es inmediato y no cambia el estado del ticket.`))) return;
     try {
         await apiFetch(`/admin/tickets/${id}/apply-benefit`, 'POST', { benefit_type, benefit_value });
         showAlert(document.getElementById('td-alert'), 'Beneficio aplicado correctamente.', 'success');
@@ -1903,18 +1988,18 @@ window.toggleScript = async function(name, active) {
     try {
         await apiFetch(`/admin/scripts/${name}/toggle`, 'PUT', { active });
         renderScripts();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
 };
 window.warmupCache = async function() {
-    try { await apiFetch('/admin/cache/warmup', 'POST'); alert('Caché precalentado.'); } catch (e) { alert(e.message); }
+    try { await apiFetch('/admin/cache/warmup', 'POST'); showToast('Caché precalentado.', 'success'); } catch (e) { showToast(e.message, 'error'); }
 };
 window.clearCache = async function() {
-    if (!confirm('¿Limpiar caché?')) return;
-    try { await apiFetch('/admin/cache/clear', 'POST'); alert('Caché limpiado.'); } catch (e) { alert(e.message); }
+    if (!(await showConfirm('¿Limpiar caché?'))) return;
+    try { await apiFetch('/admin/cache/clear', 'POST'); showToast('Caché limpiado.', 'success'); } catch (e) { showToast(e.message, 'error'); }
 };
 window.reencryptScripts = async function() {
-    if (!confirm('¿Re-encriptar todos los scripts? Tardará unos segundos.')) return;
-    try { await apiFetch('/admin/scripts/reencrypt', 'POST'); alert('Scripts re-encriptados.'); } catch (e) { alert(e.message); }
+    if (!(await showConfirm('¿Re-encriptar todos los scripts? Tardará unos segundos.'))) return;
+    try { await apiFetch('/admin/scripts/reencrypt', 'POST'); showToast('Scripts re-encriptados.', 'success'); } catch (e) { showToast(e.message, 'error'); }
 };
 
 // ───── MONITOR ─────
@@ -2010,7 +2095,7 @@ async function openInvoicePdf(invoiceId, btn) {
         });
         if (!res.ok) {
             if (win) win.close();
-            alert(res.status === 404 ? 'La factura no tiene PDF disponible.' : 'No se pudo abrir la factura.');
+            showToast(res.status === 404 ? 'La factura no tiene PDF disponible.' : 'No se pudo abrir la factura.', 'error');
             return;
         }
         const blobUrl = URL.createObjectURL(await res.blob());
@@ -2024,7 +2109,7 @@ async function openInvoicePdf(invoiceId, btn) {
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } catch (e) {
         if (win) win.close();
-        alert('Error de conexión al abrir la factura.');
+        showToast('Error de conexión al abrir la factura.', 'error');
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = prevText; }
     }
@@ -2274,7 +2359,7 @@ async function renderPendingUsers() {
 }
 
 window.verifyEmailManual = async function(userId) {
-    if (!confirm('¿Marcar el email de este usuario como verificado manualmente?')) return;
+    if (!(await showConfirm('¿Marcar el email de este usuario como verificado manualmente?'))) return;
     const alertEl = document.getElementById('ud-alert');
     try {
         await apiFetch(`/admin/users/${userId}/verify-email`, 'POST', {});
@@ -2287,7 +2372,7 @@ window.verifyEmailManual = async function(userId) {
 };
 
 window.resendVerification = async function(userId, email) {
-    if (!confirm(`¿Reenviar el email de verificación a ${email}?`)) return;
+    if (!(await showConfirm(`¿Reenviar el email de verificación a ${email}?`))) return;
     const alertEl = document.getElementById('ud-alert');
     try {
         const data = await apiFetch(`/admin/users/${userId}/resend-verification`, 'POST', {});
@@ -2298,7 +2383,7 @@ window.resendVerification = async function(userId, email) {
 };
 
 window.sendPasswordReset = async function(userId, email) {
-    if (!confirm(`¿Enviar email de restablecimiento de contraseña a ${email}?`)) return;
+    if (!(await showConfirm(`¿Enviar email de restablecimiento de contraseña a ${email}?`))) return;
     const alertEl = document.getElementById('ud-alert');
     try {
         const data = await apiFetch('/auth/admin/send-password-reset', 'POST', { userId });
@@ -2337,9 +2422,9 @@ window.saveRegistroData = async function(userId) {
     const initialStatus = statusEl.dataset.initial || '';
     // Confirmaciones para transiciones con efectos (no es un flip cosmético).
     if (newStatus === 'active' && initialStatus !== 'active') {
-        if (!confirm('Vas a ACTIVAR la cuenta: la suscripción pasa a activa, se le envía el email de bienvenida y la notificación. ¿Continuar?')) return;
+        if (!(await showConfirm('Vas a ACTIVAR la cuenta: la suscripción pasa a activa, se le envía el email de bienvenida y la notificación. ¿Continuar?'))) return;
     } else if (newStatus === 'pending_activation' && initialStatus !== 'pending_activation') {
-        if (!confirm('Vas a reiniciar el TRIAL: el cupo vuelve a 20 usos (contadores a 0) y la suscripción queda suspendida. ¿Continuar?')) return;
+        if (!(await showConfirm('Vas a reiniciar el TRIAL: el cupo vuelve a 20 usos (contadores a 0) y la suscripción queda suspendida. ¿Continuar?'))) return;
     }
     try {
         const r = await apiFetch(`/admin/users/${userId}/registro`, 'PUT', {
@@ -2367,7 +2452,7 @@ window.saveRegistroData = async function(userId) {
 
 window.resendVerification = async function(userId) {
     const alertEl = document.getElementById('ud-alert');
-    if (!confirm('¿Reenviar el email de verificación a este usuario?')) return;
+    if (!(await showConfirm('¿Reenviar el email de verificación a este usuario?'))) return;
     try {
         const r = await apiFetch(`/admin/users/${userId}/resend-verification`, 'POST');
         showAlert(alertEl, (r && r.message) || '✅ Email de verificación reenviado', 'success');
@@ -2396,7 +2481,7 @@ window.saveUserEmail = async function(userId) {
     const alertEl = document.getElementById('ud-alert');
     const newEmail = (inp?.value || '').trim();
     if (!newEmail) { showAlert(alertEl, 'Ingresá un email', 'error'); return; }
-    if (!confirm(`¿Cambiar el email del usuario a "${newEmail}"?\n\nLa cuenta se SUSPENDERÁ hasta que el usuario verifique el nuevo correo. Se le envía un email de verificación al nuevo correo + una notificación. Al verificar, la cuenta vuelve sola al estado actual (sin re-activación del admin).`)) return;
+    if (!(await showConfirm(`¿Cambiar el email del usuario a "${newEmail}"?\n\nLa cuenta se SUSPENDERÁ hasta que el usuario verifique el nuevo correo. Se le envía un email de verificación al nuevo correo + una notificación. Al verificar, la cuenta vuelve sola al estado actual (sin re-activación del admin).`))) return;
     try {
         await apiFetch(`/admin/users/${userId}/change-email`, 'POST', { email: newEmail });
         showAlert(alertEl, '✅ Email actualizado. Se envió la verificación al nuevo correo; la cuenta quedó suspendida hasta que el usuario verifique.', 'success');
@@ -2407,7 +2492,7 @@ window.saveUserEmail = async function(userId) {
 };
 
 window.activateUser = async function(userId, email) {
-    if (!confirm(`¿Activar la cuenta de ${email}? Se le asignarán 30 días con los límites de su plan.`)) return;
+    if (!(await showConfirm(`¿Activar la cuenta de ${email}? Se le asignarán 30 días con los límites de su plan.`))) return;
     try {
         await apiFetch(`/admin/users/${userId}/activate`, 'POST', { expires_days: 30 });
         const alertEl = document.getElementById('pending-alert');
@@ -2420,10 +2505,10 @@ window.activateUser = async function(userId, email) {
 };
 
 window.rejectUserBlock = async function(userId, email) {
-    const reason = prompt(`Rechazar y BLOQUEAR a ${email}\n\nMotivo (obligatorio):`);
+    const reason = await showPrompt(`Rechazar y BLOQUEAR a ${email}\n\nMotivo (obligatorio):`);
     if (reason === null) return;
-    if (!reason.trim()) { alert('El motivo es obligatorio.'); return; }
-    if (!confirm(`¿Rechazar y bloquear a ${email}? Esta acción impide el acceso. ¿Confirmar?`)) return;
+    if (!reason.trim()) { showToast('El motivo es obligatorio.', 'error'); return; }
+    if (!(await showConfirm(`¿Rechazar y bloquear a ${email}? Esta acción impide el acceso. ¿Confirmar?`))) return;
     try {
         await apiFetch(`/admin/users/${userId}/reject`, 'POST', { mode: 'block', reason: reason.trim() });
         const alertEl = document.getElementById('pending-alert');
@@ -2436,9 +2521,9 @@ window.rejectUserBlock = async function(userId, email) {
 };
 
 window.rejectUserKeepTrial = async function(userId, email) {
-    const reason = prompt(`Rechazar y mantener trial a ${email}\n\nMotivo (opcional):`);
+    const reason = await showPrompt(`Rechazar y mantener trial a ${email}\n\nMotivo (opcional):`);
     if (reason === null) return;
-    if (!confirm(`¿Rechazar la solicitud de ${email} pero mantener su acceso de trial hasta que se agote?`)) return;
+    if (!(await showConfirm(`¿Rechazar la solicitud de ${email} pero mantener su acceso de trial hasta que se agote?`))) return;
     try {
         await apiFetch(`/admin/users/${userId}/reject`, 'POST', { mode: 'keep_trial', reason: (reason || '').trim() });
         const alertEl = document.getElementById('pending-alert');
@@ -2451,7 +2536,7 @@ window.rejectUserKeepTrial = async function(userId, email) {
 };
 
 window.approveReactivation = async function(userId, email) {
-    if (!confirm(`¿Aprobar la solicitud de reactivación de ${email}?`)) return;
+    if (!(await showConfirm(`¿Aprobar la solicitud de reactivación de ${email}?`))) return;
     try {
         await apiFetch(`/admin/users/${userId}/reactivation-request/approve`, 'POST');
         const alertEl = document.getElementById('pending-alert');
@@ -2464,9 +2549,9 @@ window.approveReactivation = async function(userId, email) {
 };
 
 window.rejectReactivation = async function(userId, email) {
-    const reason = prompt(`Rechazar solicitud de reactivación de ${email}\n\nMotivo (obligatorio):`);
+    const reason = await showPrompt(`Rechazar solicitud de reactivación de ${email}\n\nMotivo (obligatorio):`);
     if (reason === null) return;
-    if (!reason.trim()) { alert('El motivo es obligatorio.'); return; }
+    if (!reason.trim()) { showToast('El motivo es obligatorio.', 'error'); return; }
     try {
         await apiFetch(`/admin/users/${userId}/reactivation-request/reject`, 'POST', { reason: reason.trim() });
         const alertEl = document.getElementById('pending-alert');
@@ -2551,7 +2636,7 @@ window.showPlanForm = async function(planId) {
         try {
             const data = await apiFetch('/admin/plans');
             plan = data.plans.find(p => p.id === planId);
-        } catch (e) { alert(e.message); return; }
+        } catch (e) { showToast(e.message, 'error'); return; }
     }
 
     const formContainer = document.getElementById('plan-form-container');
@@ -2728,7 +2813,7 @@ window.savePlanExpiry = async function(planId, clear) {
     const msg = clear
         ? '¿Quitar el vencimiento de este plan? Las cuentas dejan de tener fecha de corte.'
         : '¿Aplicar este vencimiento? SUSPENDERÁ a las cuentas ACTIVAS de este plan en esa fecha (no cancela el cobro de MercadoPago). ¿Continuar?';
-    if (!confirm(msg)) return;
+    if (!(await showConfirm(msg))) return;
     try {
         await apiFetch(`/admin/plans/${planId}/expiry`, 'PUT', { plan_expiry_date: val });
         showAlert(document.getElementById('plan-alert'), clear ? 'Vencimiento del plan quitado.' : 'Vencimiento del plan guardado y propagado a las cuentas activas.', 'success');
@@ -2780,21 +2865,21 @@ window.savePlanForm = async function(planId) {
 };
 
 window.deactivatePlan = async function(planId) {
-    if (!confirm('¿Desactivar este plan? Los usuarios con este plan no perderán su suscripción actual.')) return;
+    if (!(await showConfirm('¿Desactivar este plan? Los usuarios con este plan no perderán su suscripción actual.'))) return;
     try {
         await apiFetch(`/admin/plans/${planId}`, 'DELETE');
         showAlert(document.getElementById('plan-alert') || document.getElementById('content'), 'Plan desactivado.', 'success');
         setTimeout(() => renderPlans(), 1000);
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
 };
 
 window.activatePlan = async function(planId) {
-    if (!confirm('¿Activar este plan? Quedará disponible para asignarlo a usuarios.')) return;
+    if (!(await showConfirm('¿Activar este plan? Quedará disponible para asignarlo a usuarios.'))) return;
     try {
         await apiFetch(`/admin/plans/${planId}/activate`, 'PATCH');
         showAlert(document.getElementById('plan-alert') || document.getElementById('content'), 'Plan activado.', 'success');
         setTimeout(() => renderPlans(), 1000);
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2948,13 +3033,13 @@ async function saveFeriado() {
 }
 
 async function deleteFeriado(id) {
-    if (!confirm('¿Eliminar este feriado? La calculadora de plazos dejará de excluir esa fecha.')) return;
+    if (!(await showConfirm('¿Eliminar este feriado? La calculadora de plazos dejará de excluir esa fecha.'))) return;
     try {
         await apiFetch(`/admin/feriados/${id}`, 'DELETE');
         showAlert(document.getElementById('feriados-alert'), 'Feriado eliminado.', 'success');
         await _feriadosCargarYRenderizar();
     } catch (e) {
-        alert(e.message);
+        showToast(e.message, 'error');
     }
 }
 
@@ -2964,7 +3049,7 @@ window.applyUsageAdjustment = async function(userId) {
     const reason    = document.getElementById('adj-reason').value.trim();
     const ticketId  = document.getElementById('adj-ticket').value || null;
 
-    if (!amount || isNaN(amount)) { alert('Cantidad inválida'); return; }
+    if (!amount || isNaN(amount)) { showToast('Cantidad inválida', 'error'); return; }
 
     try {
         const result = await apiFetch(`/admin/subscriptions/${userId}/adjust`, 'POST', {
@@ -3614,23 +3699,23 @@ a{color:#3b82f6}blockquote{border-left:3px solid #e5e7eb;margin:1em 0;padding-le
 }
 
 async function legalPublish(id) {
-    if (!confirm('¿Publicar este documento?\n\nTodos los usuarios activos que no lo hayan aceptado recibirán una notificación in-app y un email.\nEsta acción no se puede deshacer.')) return;
+    if (!(await showConfirm('¿Publicar este documento?\n\nTodos los usuarios activos que no lo hayan aceptado recibirán una notificación in-app y un email.\nEsta acción no se puede deshacer.'))) return;
     try {
         const data = await apiFetch(`/legal/admin/documents/${id}/publish`, 'PUT');
-        alert(`✅ Publicado correctamente.\n${data.notified} usuario(s) notificado(s).`);
+        showToast(`✅ Publicado correctamente.\n${data.notified} usuario(s) notificado(s).`, 'success');
         renderLegal();
     } catch (e) {
-        alert('Error al publicar: ' + e.message);
+        showToast('Error al publicar: ' + e.message, 'error');
     }
 }
 
 async function legalDelete(id) {
-    if (!confirm('¿Eliminar este borrador?\n\nEsta acción no se puede deshacer.')) return;
+    if (!(await showConfirm('¿Eliminar este borrador?\n\nEsta acción no se puede deshacer.'))) return;
     try {
         await apiFetch(`/legal/admin/documents/${id}`, 'DELETE');
         renderLegal();
     } catch (e) {
-        alert('Error al eliminar: ' + e.message);
+        showToast('Error al eliminar: ' + e.message, 'error');
     }
 }
 
@@ -3934,7 +4019,7 @@ window.runAiPrioritize = async function() {
     if (!btn) return;
     const originalText = btn.innerHTML;
 
-    if (!confirm('¿Procesar tickets pendientes con IA?\n\nSe enviará a Claude Haiku para clasificar prioridad de todos los tickets sin override manual (incluye los marcados \'ai\' para refrescar).\n\nLímite: 100 tickets/hora por admin.')) return;
+    if (!(await showConfirm('¿Procesar tickets pendientes con IA?\n\nSe enviará a Claude Haiku para clasificar prioridad de todos los tickets sin override manual (incluye los marcados \'ai\' para refrescar).\n\nLímite: 100 tickets/hora por admin.'))) return;
 
     btn.disabled = true;
     btn.innerHTML = '⏳ Procesando con IA...';
@@ -3951,10 +4036,10 @@ window.runAiPrioritize = async function() {
         if (result.processed === 0 && result.failed === 0) {
             msg = 'No hay tickets para procesar (todos tienen prioridad manual o no hay tickets abiertos).';
         }
-        alert(msg);
+        showToast(msg, result.failed > 0 ? 'error' : 'success');
         renderTickets(); // Refrescar tabla
     } catch (e) {
-        alert('Error: ' + e.message);
+        showToast('Error: ' + e.message, 'error');
         btn.disabled = false;
         btn.innerHTML = originalText;
     }
@@ -4251,7 +4336,7 @@ async function uploadInvoicePdf(paymentId, invoiceId) {
     const numeroInput = document.getElementById(`numero-${paymentId}`);
     const tipoSelect = document.getElementById(`tipo-${paymentId}`);
     const caeInput   = document.getElementById(`cae-${paymentId}`);
-    if (!fileInput?.files[0]) { alert('Seleccioná un archivo PDF'); return; }
+    if (!fileInput?.files[0]) { showToast('Seleccioná un archivo PDF', 'error'); return; }
 
     const endpoint = invoiceId
         ? `/admin/invoices/${invoiceId}/upload`
@@ -4278,7 +4363,7 @@ async function uploadInvoicePdf(paymentId, invoiceId) {
         // Refrescar después de 1.5s para que salga de la lista de pendientes
         setTimeout(loadPendingInvoices, 1500);
     } catch (e) {
-        alert('Error: ' + e.message);
+        showToast('Error: ' + e.message, 'error');
     }
 }
 
@@ -4686,11 +4771,11 @@ async function confirmLinkInvoice(paymentId) {
     }
 }
 async function unlinkInvoiceFromPayment(invoiceId, refresh) {
-    if (!confirm('¿Quitar la asociación pago↔factura?')) return;
+    if (!(await showConfirm('¿Quitar la asociación pago↔factura?'))) return;
     try {
         await apiFetch(`/admin/invoices/${invoiceId}/unlink-payment`, 'POST', {});
         if (refresh === 'facturas') loadIssuedInvoices(); else loadPaymentsAdmin();
-    } catch (e) { alert('Error: ' + e.message); }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 // ── Asociar PAGO a una factura (desde Facturación → Emitidas) ──────────────────
