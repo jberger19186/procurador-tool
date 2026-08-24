@@ -724,9 +724,36 @@ function closeSidebarMobile() {
 }
 
 // ─── SIDEBAR DESKTOP (colapsar a solo íconos, mismo patrón que el dashboard admin) ─
+const _portalMobileMQ = window.matchMedia('(max-width: 768px)');
+
+// Colapsado, los labels quedan en `font-size:0` y cada nav-item es solo un
+// emoji — sin esto son 10 íconos sin nombre. Se usa el `title` nativo y no un
+// tooltip por CSS porque `#sidebar` tiene `overflow-y:auto`, y eso fuerza
+// `overflow-x` a `auto`: cualquier `::after` que saliera de los 64px de ancho
+// quedaría recortado. El nativo se dibuja fuera del elemento, sin recorte.
+function _applyNavTooltips() {
+    // "Solo íconos" es colapsado Y desktop: bajo el breakpoint mobile el reset
+    // del @media devuelve el sidebar a ancho completo con los labels visibles,
+    // y ahí el title sobraría (duplicaría el texto que ya se lee).
+    const soloIconos = document.body.classList.contains('sidebar-collapsed') && !_portalMobileMQ.matches;
+    document.querySelectorAll('#sidebar .nav-item').forEach(item => {
+        if (!soloIconos) { item.removeAttribute('title'); return; }
+        // El label es texto suelto dentro del <button>: se toman solo los nodos
+        // de texto para dejar afuera el <span> del ícono y el del badge.
+        const label = [...item.childNodes]
+            .filter(n => n.nodeType === Node.TEXT_NODE)
+            .map(n => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
+        if (label) item.title = label;
+    });
+}
+// Al cruzar el breakpoint el estado "solo íconos" cambia sin que nadie haga
+// click (basta redimensionar la ventana), así que los títulos se recalculan.
+_portalMobileMQ.addEventListener('change', _applyNavTooltips);
+
 function toggleSidebarDesktop() {
     const collapsed = document.body.classList.toggle('sidebar-collapsed');
     try { localStorage.setItem('portal_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+    _applyNavTooltips();
 }
 
 function _applyPortalSidebarState() {
@@ -738,6 +765,7 @@ function _applyPortalSidebarState() {
         if (v !== null) collapsed = v === '1';
     } catch (_) {}
     document.body.classList.toggle('sidebar-collapsed', collapsed);
+    _applyNavTooltips();
 }
 if (document.readyState !== 'loading') _applyPortalSidebarState();
 else document.addEventListener('DOMContentLoaded', _applyPortalSidebarState);

@@ -253,7 +253,12 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
     top: 0; left: 0; bottom: 0;
     z-index: 100;
     overflow-y: auto;
-    transition: transform .3s ease;
+    /* `transform` anima el panel off-canvas en mobile; `width`, el colapso a
+       solo íconos en desktop. Van juntas en la MISMA declaración a propósito:
+       `transition` es shorthand, así que una segunda regla de igual
+       especificidad más abajo en el archivo pisa a ésta entera en vez de
+       sumarse — y ahí el drawer mobile deja de deslizarse y aparece de golpe. */
+    transition: transform .3s ease, width .18s ease;
 }
 
 .sidebar-logo {
@@ -361,7 +366,9 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
 }
 #btn-hamburger:hover { background: var(--bg); color: var(--text); border-color: var(--accent); }
 
-#sidebar, #main { transition: width .18s ease, margin-left .18s ease; }
+/* El sidebar declara su propia transición arriba (transform + width juntos) —
+   acá solo va #main, que lo único que anima es el margen. */
+#main { transition: margin-left .18s ease; }
 
 body.sidebar-collapsed #sidebar { width: var(--sidebar-w-collapsed); }
 body.sidebar-collapsed #main { margin-left: var(--sidebar-w-collapsed); }
