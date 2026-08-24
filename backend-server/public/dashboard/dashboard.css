@@ -472,6 +472,14 @@ body.sidebar-collapsed #sidebar nav a .icon { font-size: 18px; width: auto; }
     :root { --sidebar-w: 0px; }
     #sidebar { display: none; }
     #main { margin-left: 0; }
+    /* Sin esto el `#main { margin-left: 0 }` de arriba NO gana: las media
+       queries no suman especificidad, así que `body.sidebar-collapsed #main`
+       (1 id + 1 clase + 1 elemento) le sigue ganando a `#main` (1 id + 1
+       elemento) y deja 64px de margen contra un sidebar que acá está en
+       `display:none` — una franja muerta en una pantalla de 375px. Como el
+       menú arranca COLAPSADO por defecto, lo veía todo admin que entrara
+       desde el teléfono. */
+    body.sidebar-collapsed #main { margin-left: 0; }
     .detail-grid { grid-template-columns: 1fr; }
     .stats-grid { grid-template-columns: 1fr 1fr; }
 }
