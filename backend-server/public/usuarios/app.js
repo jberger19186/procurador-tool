@@ -3431,6 +3431,12 @@ async function saveBitacoraEntrada(e) {
     e.preventDefault();
     const alertEl = document.getElementById('bitacora-modal-alert');
     const btn = document.getElementById('btn-guardar-bitacora');
+    // Guard contra doble submit: `btn.disabled` bloquea un segundo CLICK de mouse
+    // (un <button disabled> no dispara click), pero no bloquea un segundo evento
+    // `submit` disparado por otra vía (Enter rebotado, un requestSubmit() repetido)
+    // mientras el primer POST/PUT todavía está en vuelo — sin este chequeo, ese
+    // segundo submit vuelve a entrar acá y crea una entrada duplicada en el servidor.
+    if (btn.disabled) return;
 
     const id = document.getElementById('bit-id').value;
     const kind = document.getElementById('bit-kind').value;
@@ -3772,6 +3778,8 @@ async function saveMexpFicha(e) {
     e.preventDefault();
     const alertEl = document.getElementById('mexp-modal-alert');
     const btn = document.getElementById('btn-guardar-mexp');
+    // Mismo guard que saveBitacoraEntrada — ver el comentario ahí para el porqué.
+    if (btn.disabled) return;
 
     const id = document.getElementById('mexp-id').value;
     const expediente = document.getElementById('mexp-expediente').value.trim();
