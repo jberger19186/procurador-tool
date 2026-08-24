@@ -10,9 +10,89 @@
 > **ninguno de esos tres cubre**: que el código que se despliega efectivamente corra en un
 > navegador o en la app real.
 >
-> **Estado:** propuesta lista para ejecutar. **No se modificó código al armarlo.**
+> **Estado:** **campaña ejecutada — 7 de 10 bloques cerrados, 3 bloqueados por el entorno.**
+> Ver §0 para el estado por bloque, el rendimiento real y los hallazgos que quedaron abiertos.
 >
 > **Elaborado con:** Opus 5. **Para ejecutar con:** ver §4 (modelo y esfuerzo por bloque).
+
+---
+
+## 0. Estado de la campaña (actualizado 2026-08-24)
+
+| Bloque | Estado | Informe |
+|---|---|---|
+| **V0** Andamio | ✅ Ejecutado | commit `aa4621a` (stubs + `.claude/skills/verify/`) |
+| **V1a** Portal — Bitácora + Mis Expedientes | ✅ Ejecutado | `verify-V1a-2026-08-24.md` |
+| **V1b** Portal — las otras 8 secciones | ✅ Ejecutado | `verify-V1b-2026-08-24.md` |
+| **V2a** Dashboard — Usuarios, Tickets, Planes | ✅ Ejecutado | `verify-V2a-2026-08-24.md` |
+| **V2b** Dashboard — las otras 8 secciones | ✅ Ejecutado | `verify-V2b-2026-08-24.md` |
+| **V3** API backend + gates por plan | ✅ Ejecutado (29/29) | `verify-V3-2026-08-24.md` |
+| **V4** Electron sin PJN | ⛔ Bloqueado por el entorno | — |
+| **V5** Electron con PJN | ⛔ Bloqueado por herencia de V4 | — |
+| **V6** Extensión Chrome | ⛔ Bloqueado por el entorno | — |
+| **V7** Cobranza / MercadoPago | ✅ Ejecutado (40/40) | `verify-V7-2026-08-24.md` |
+
+### Rendimiento: 4 bugs reales, los 4 corregidos y desplegados
+
+La campaña se justificaba con un dato medido (§1): de los 5 commits `fix:` que tocaron
+`public/usuarios/` en agosto, **4 los encontró el operador con el producto ya en producción**.
+Lo que produjo:
+
+| # | Bug | Dónde salió | Commit |
+|---|---|---|---|
+| 1 | **Doble submit** creaba entradas/fichas duplicadas — `btn.disabled` no frena un segundo evento `submit` | V1a | `354fbcc` |
+| 2 | **El mismo gap en 4 formularios más** del portal (`doLogin`, `saveProfile`, `savePassword`, `submitNewTicket`) | V1b | `f5d1348` |
+| 3 | **El sidebar del dashboard admin no se ocultaba en mobile** — estilo inline le ganaba a la media query; 744px de contenido en un viewport de 375px | V2b | `0441f52` |
+| 4 | **Staging podía cobrar de verdad**: mismo token de MP que producción, con el aviso escrito pero sin ningún mecanismo que lo hiciera cumplir | V7 | `9bb05d4` |
+
+Los 4 comparten un rasgo: **ninguno era visible leyendo el código**. El #1 y el #2 exigen disparar
+dos `submit` reales; el #3, medir geometría en un viewport real; el #4, comparar dos archivos que
+viven solo en el servidor. Es exactamente el eje que la campaña decía cubrir.
+
+### Hallazgos abiertos (no corregidos, a decisión del operador)
+
+Ninguno rompe un camino feliz. Se dejan documentados con su origen para que no se pierdan:
+
+1. **`submitAddUser()` usa un `alert()` nativo en el éxito** (V2a) — inconsistente con el
+   `showAlert()` inline del resto del dashboard, y traba cualquier automatización que no lo maneje.
+   Fix sugerido en el informe de V2a.
+2. **`deleteMonitorParte()` usa `confirm()` nativo** en vez del `showConfirm()` custom que adoptó el
+   resto del portal (V1b), más 2 `alert()` cercanos y `resendVerification()`.
+3. **El dashboard admin depende de diálogos nativos en casi toda acción con efecto** (V2a/V2b) —
+   confirmado empíricamente en 3 corridas seguidas (9 `confirm()` distintos solo en V2a, más
+   `deleteFeriado`, `legalPublish`, `legalDelete`, `clearCache`, `reencryptScripts` en V2b; por
+   lectura de código, `rejectUserBlock` usa además un `prompt()`). Es **sistémico**: si se decide
+   corregirlo, necesita alcance explícito, no un fix puntual.
+4. **`#main` del dashboard admin desborda ~26px en mobile** (visto al corregir el bug #3) —
+   preexistente y sin relación con el sidebar, quedó fuera del alcance de ese fix.
+5. **Escape no cierra ningún modal del portal** (V1a) — no hay listener en todo `app.js`; ninguna de
+   las ~10 pantallas lo tiene. No es una regresión.
+
+**Documentado como comportamiento correcto, no como bug** (para que nadie los vuelva a "arreglar"):
+`legalPreview` ejecuta el `html_content` de un documento legal dentro de un `<iframe srcdoc>` — el
+contenido lo escribe siempre un admin en un editor de HTML crudo y el iframe aísla el resto del
+dashboard (V2b) · una `description` de 6000 caracteres devuelve **201**, no 400: `texto()` la trunca
+a 5000 por diseño (V3).
+
+### Por qué V4/V5/V6 quedaron bloqueados
+
+**No es falta de tiempo ni de prioridad — este entorno no tiene el handle.** Se intentó y se
+confirmó, en vez de dejarlos abiertos otro trimestre:
+
+- **V4** — `request_access` de computer-use devolvió `notInstalled` para "Procurador SCW" en 3
+  intentos, **incluso con la app ya abierta por el operador**, y tras confirmar por shell que la
+  instalación y el acceso directo existen con ese nombre exacto. Pedir "Procurador" a secas sugirió
+  **"SnoreToast"** (el proceso de notificaciones de la app, no la app). Es el aislamiento de
+  sesiones de Windows ya documentado en `CLAUDE.md` (sesión de F3.1, 2026-08-15).
+- **V6** — `list_connected_browsers` devolvió `[]`: no hay Chrome conectado por la extensión Claude
+  for Chrome, así que no hay camino a un navegador real con la extensión del PJN cargada.
+  **R9.1/R9.2 siguen abiertos desde julio**, ahora con la causa acotada.
+- **V5** — depende del mismo handle que V4 (conducir la app Electron), así que queda bloqueado por
+  herencia. No se intentó por separado.
+
+**Para desbloquearlos** hace falta una sesión con acceso real de escritorio/navegador — como las de
+la "prueba diaria" que sí funcionaron en julio y agosto — o conectar la extensión Claude for Chrome
+en el Chrome del operador (para V6).
 
 ---
 
@@ -83,7 +163,7 @@ Tres ejes, en este orden:
 | **V1a** | Portal — Bitácora + Mis Expedientes | stub + Playwright | no | 🟢 |
 | **V1b** | Portal — las otras 8 secciones | stub + Playwright | no | 🟢 |
 | **V2a** | Dashboard — Usuarios, Tickets, Planes | stub + Playwright | no | 🟢 |
-| **V2b** | Dashboard — las otras 9 secciones | stub + Playwright | no | 🟢 |
+| **V2b** | Dashboard — las otras 8 secciones | stub + Playwright | no | 🟢 |
 | **V3** | API backend + gates por plan | HTTP a staging | no | 🟡 |
 | **V4** | Electron **sin** PJN | computer-use | sí (sin cupo) | 🟡 |
 | **V5** | Electron **con** PJN (5 flujos) | computer-use + credenciales | **sí** | 🔴 |
@@ -321,7 +401,14 @@ pero **no consume cupo**.
 
 ---
 
-### V5 — Electron con PJN 🔴
+### V5 — Electron con PJN 🔴 ⛔ BLOQUEADO POR HERENCIA DE V4 (2026-08-24)
+
+> **No se intentó por separado, y no hace falta:** V5 necesita el mismo handle que V4 —conducir la
+> app Electron instalada con computer-use— y ese handle no existe en este entorno (ver el bloque
+> V4 arriba: `request_access` devolvió `notInstalled` incluso con la app abierta, por el aislamiento
+> de sesiones de Windows). Se desbloquea junto con V4, en una sesión con acceso de escritorio real.
+> El playbook que necesita **ya está escrito** en `CLAUDE.md` ("Prueba diaria de la app Electron vía
+> computer-use"), así que cuando el handle exista, el bloque es de ejecución directa.
 
 Los 5 flujos reales. **Esto ya está escrito**: seguir el playbook "Prueba diaria de la app Electron
 vía computer-use" del `CLAUDE.md`, que tiene el orden, los expedientes, el `batch.txt` y la
