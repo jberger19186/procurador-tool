@@ -203,7 +203,21 @@ pantallas con estado compartido, y con esfuerzo medio se va a conducir el camino
 
 ---
 
-### V2a / V2b — Dashboard admin 🟢
+### V2a — Usuarios, Tickets, Planes 🟢 ✅ EJECUTADO (2026-08-24)
+
+> Informe completo: `docs/internal/verify-V2a-2026-08-24.md`. **1 hallazgo nuevo, sin corregir:**
+> `submitAddUser()` dispara un `alert()` **nativo** en el éxito ("Usuario … creado correctamente"),
+> distinto del `showAlert()` inline que usa el resto del dashboard — traba automatización/QA que
+> no maneje el diálogo. **Confirmación empírica extensa de un patrón ya señalado en el hallazgo #2
+> de V1b:** el dashboard admin disparó **9 diálogos nativos distintos** en esta corrida (cambio de
+> plan, reactivar, editar email, activar cuenta, vencimiento de plan ×2, desactivar/activar plan
+> ×2) — todos funcionan bien, pero es la norma en esta sección, no la excepción; solo
+> `adminSuspendUser` usa un modal custom. El resto del bloque, sano: ficha completa con ajustes
+> manuales/usos extra/beneficios, escape de HTML confirmado con `<img onerror>` y `<script>` en 2
+> campos nuevos, hilo de tickets con nota interna vs externa, editar respuesta, toggle de
+> prioridad IA↔manual, alta/edición de plan con visibilidad y checkbox Bitácora, vencimiento de
+> plan aplicado y quitado. `stub-dashboard.js` ganó almacén en memoria para
+> Usuarios/Tickets/Planes — reusable para V2b. **Siguiente bloque: V2b.**
 
 314 KB, 12 secciones, y la única verificación en navegador que tuvo fue el fix XSS-1 y el botón de
 PDF de facturas (C1).
