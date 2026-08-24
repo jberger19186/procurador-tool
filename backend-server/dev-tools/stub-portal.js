@@ -28,27 +28,89 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const PORTAL_DIR = path.join(PUBLIC_DIR, 'usuarios');
 const PORT = parseInt(process.argv[2], 10) || 5188;
 
-// ─── Cuenta fija devuelta por /client/account ──────────────────────────────
-const ACCOUNT = {
-    success: true,
-    account: {
-        email: 'verify@test.local',
-        nombre: 'Test',
-        apellido: 'Verify',
-        cuit: '27320694359',
-        plan: 'COMBO_PROMO',
-        planDisplayName: 'Combo Beta',
-        status: 'active',
-        registrationStatus: 'active',
-        emailVerified: true,
-        paymentProvider: 'mercadopago',
-        bitacoraEnabled: true,
-        homeSection: 'plan',
-        usage: { count: 3, limit: 999999 },
-        subsystems: {},
-        expiresAt: '2027-01-01T00:00:00.000Z',
+// ─── Cuenta devuelta por /client/account — MUTABLE ─────────────────────────
+// A diferencia de V1a (una cuenta fija alcanzaba), V1b necesita probar varios
+// estados de cuenta (trial sin activar, suspendida, en gracia, etc.) sin
+// reiniciar el proceso. `POST /debug/account` mergea un patch acá — es un
+// endpoint de SOLO este stub, no existe en el backend real.
+const ACCOUNT_STATE = {
+    email: 'verify@test.local',
+    nombre: 'Test',
+    apellido: 'Verify',
+    cuit: '27320694359',
+    telefono: '',
+    domicilio: {},
+    plan: { name: 'COMBO_PROMO', displayName: 'Combo Beta' },
+    planType: 'combo',
+    status: 'active',
+    registrationStatus: 'active',
+    emailVerified: true,
+    paymentProvider: 'mercadopago',
+    bitacoraEnabled: true,
+    homeSection: 'plan',
+    usageLimit: 999999,
+    usageCount: 3,
+    courtesyExtras: 0,
+    period: { daysRemaining: 18 },
+    usage: {
+        proc:              { used: 12, limit: 50, unlimited: false },
+        batch:             { used: 2,  limit: 20, unlimited: false },
+        informe:           { used: 5,  limit: 50, unlimited: false },
+        monitor_novedades: { used: 3,  limit: 50, unlimited: false },
+        monitor_partes:    { used: 2,  limit: 20, unlimited: false },
     },
+    subsystems: {},
+    expiresAt: '2027-01-01T00:00:00.000Z',
+    planExpiryDate: null,
+    nextBillingDate: '2026-09-20T00:00:00.000Z',
+    cancelAt: null,
+    planChangesThisCycle: 0,
+    // Campos de la sección Reactivación (solo relevantes con registrationStatus='suspended_admin')
+    suspensionReason: null,
+    suspendedAt: null,
+    reactivationRequest: null,
 };
+
+// ─── Planes (para el modal "Ver planes disponibles") ───────────────────────
+const PLANS = [
+    { name: 'COMBO_PROMO', displayName: 'Combo Beta', priceArs: 15000, active: true },
+    { name: 'EXTENSION_PROMO', displayName: 'Extensión', priceArs: 1500, active: true },
+];
+
+// ─── Tickets ────────────────────────────────────────────────────────────────
+let nextTicketId = 2;
+let nextCommentId = 2;
+const TICKETS = [
+    { id: 1, title: 'Ticket de seed para V1b', category: 'technical', status: 'open',
+      description: 'Descripción de seed, para probar el detalle y los comentarios.',
+      created_at: '2026-08-20T12:00:00.000Z',
+      comments: [
+          { id: 1, author_role: 'user', message: 'Mensaje inicial del usuario.', created_at: '2026-08-20T12:00:00.000Z' },
+      ] },
+];
+
+// ─── Notificaciones ─────────────────────────────────────────────────────────
+const NOTIFICATIONS = [
+    { id: 1, title: 'Notificación de seed (no leída)', message: 'Mensaje de prueba para V1b.', type: 'info',
+      created_at: '2026-08-23T12:00:00.000Z', read_at: null },
+    { id: 2, title: 'Notificación de seed (ya leída)', message: 'Esta ya estaba leída.', type: 'success',
+      created_at: '2026-08-20T12:00:00.000Z', read_at: '2026-08-21T09:00:00.000Z' },
+];
+
+// ─── Pagos / facturas ───────────────────────────────────────────────────────
+const PAYMENTS = [
+    { id: 1, amount: 15000, status: 'approved', created_at: '2026-08-01T12:00:00.000Z', payment_method: 'mercadopago' },
+];
+const INVOICES = [
+    { id: 1, amount: 15000, status: 'emitida', issued_at: '2026-08-02T12:00:00.000Z', pdf_url: null },
+];
+
+// ─── Monitor de partes ──────────────────────────────────────────────────────
+let nextParteId = 3;
+const PARTES = [
+    { id: 1, nombre_parte: 'DON COCHO', jurisdiccion_sigla: 'FCR' },
+    { id: 2, nombre_parte: 'LA TOSTADORA MODERNA', jurisdiccion_sigla: 'FCR' },
+];
 
 // ─── Almacén en memoria ─────────────────────────────────────────────────────
 let nextExpId = 2;
@@ -161,13 +223,114 @@ http.createServer(async (req, res) => {
             return json(res, { success: true, token: 'STUB.TOKEN.' + Date.now() });
         }
 
-        // ── Cuenta / notificaciones / planes ──
-        if (p === '/client/account')                    return json(res, ACCOUNT);
-        if (p === '/client/notifications')               return json(res, { success: true, notifications: [], unread: 0 });
-        if (p === '/usuarios/api/plans')                 return json(res, { success: true, plans: [] });
-        if (p === '/usuarios/api/subscription/current')  return json(res, { success: true, subscription: {} });
-        if (p.startsWith('/monitor/') || p.startsWith('/tickets'))
-            return json(res, { success: true, data: [], partes: [], tickets: [] });
+        // ── Debug: mutar el estado de cuenta sin reiniciar el proceso ──
+        // NO existe en el backend real — es exclusivo de este stub, para poder
+        // probar trial/suspendida/en-gracia/etc. en la misma sesión de navegador.
+        if (req.method === 'POST' && p === '/debug/account') {
+            const body = await readJsonBody(req);
+            Object.assign(ACCOUNT_STATE, body);
+            return json(res, { success: true, account: ACCOUNT_STATE });
+        }
+
+        // ── Cuenta ──
+        if (p === '/client/account') return json(res, { success: true, account: ACCOUNT_STATE });
+
+        // ── Notificaciones ──
+        if (p === '/client/notifications' && req.method === 'GET')
+            return json(res, { success: true, notifications: NOTIFICATIONS });
+        {
+            const m = p.match(/^\/client\/notifications\/(\d+)\/read$/);
+            if (req.method === 'POST' && m) {
+                const n = NOTIFICATIONS.find((x) => x.id === Number(m[1]));
+                if (n) n.read_at = new Date().toISOString();
+                return json(res, { success: true });
+            }
+        }
+
+        // ── Planes / checkout / suscripción ──
+        if (p === '/usuarios/api/plans') return json(res, { success: true, plans: PLANS });
+        if (p === '/usuarios/api/subscription/current')
+            return json(res, {
+                success: true,
+                paymentProvider: ACCOUNT_STATE.paymentProvider,
+                hasPaymentMethod: !!ACCOUNT_STATE.paymentProvider,
+                nextBillingDate: ACCOUNT_STATE.nextBillingDate,
+                cancelAt: ACCOUNT_STATE.cancelAt,
+                planDisplayName: ACCOUNT_STATE.plan.displayName,
+                paymentGraceEndsAt: ACCOUNT_STATE.paymentGraceEndsAt || null,
+            });
+        if (p === '/usuarios/api/payments') return json(res, { success: true, payments: PAYMENTS });
+        if (p === '/usuarios/api/invoices') return json(res, { success: true, invoices: INVOICES });
+        if (req.method === 'POST' && p === '/usuarios/api/checkout/cancel') {
+            const en30dias = new Date(Date.now() + 30 * 86400000).toISOString();
+            ACCOUNT_STATE.cancelAt = en30dias;
+            return json(res, { success: true, cancelAt: en30dias });
+        }
+        if (req.method === 'POST' && p === '/usuarios/api/checkout/reactivate') {
+            ACCOUNT_STATE.cancelAt = null;
+            return json(res, { success: true });
+        }
+
+        // ── Reactivación (sección "reactivacion", solo con registrationStatus=suspended_admin) ──
+        if (req.method === 'POST' && p === '/users/reactivation-request') {
+            const body = await readJsonBody(req);
+            ACCOUNT_STATE.reactivationRequest = { status: 'pending', sent_at: new Date().toISOString(), message: body.message || '' };
+            return json(res, { success: true });
+        }
+
+        // ── Asistente IA ──
+        if (req.method === 'POST' && p === '/usuarios/api/ai-chat') {
+            await readJsonBody(req);
+            return json(res, { success: true, reply: 'Respuesta de prueba del stub (sin IA real).' });
+        }
+
+        // ── Descarga del instalador Electron ──
+        if (p === '/api/extension/electron-token') return json(res, { success: true, token: 'STUB.DL.TOKEN' });
+
+        // ── Tickets ──
+        if (p === '/tickets' && req.method === 'GET') return json(res, { success: true, tickets: TICKETS });
+        if (p === '/tickets' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            const t = { id: nextTicketId++, status: 'open', created_at: new Date().toISOString(), comments: [], ...body };
+            TICKETS.push(t);
+            return json(res, { success: true, ticket: t });
+        }
+        {
+            const m = p.match(/^\/tickets\/(\d+)$/);
+            if (m && req.method === 'GET') {
+                const t = TICKETS.find((x) => x.id === Number(m[1]));
+                if (!t) return json(res, { success: false, error: 'No encontrado' }, 404);
+                return json(res, { success: true, ticket: t, comments: t.comments });
+            }
+        }
+        {
+            const m = p.match(/^\/tickets\/(\d+)\/comment$/);
+            if (m && req.method === 'POST') {
+                const t = TICKETS.find((x) => x.id === Number(m[1]));
+                const body = await readJsonBody(req);
+                const c = { id: nextCommentId++, author_role: 'user', message: body.message, created_at: new Date().toISOString() };
+                if (t) t.comments.push(c);
+                return json(res, { success: true, comment: c });
+            }
+        }
+
+        // ── Monitor de partes ──
+        if (p === '/monitor/partes' && req.method === 'GET')
+            return json(res, { success: true, partes: PARTES, limite: 20, usadas: PARTES.length });
+        if (p === '/monitor/partes' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            const parte = { id: nextParteId++, ...body };
+            PARTES.push(parte);
+            return json(res, { success: true, parte });
+        }
+        {
+            const m = p.match(/^\/monitor\/partes\/(\d+)$/);
+            if (m && req.method === 'DELETE') {
+                const idx = PARTES.findIndex((x) => x.id === Number(m[1]));
+                if (idx >= 0) PARTES.splice(idx, 1);
+                return json(res, { success: true });
+            }
+        }
 
         // ── Feriados ──
         if (p === '/usuarios/api/feriados') {
