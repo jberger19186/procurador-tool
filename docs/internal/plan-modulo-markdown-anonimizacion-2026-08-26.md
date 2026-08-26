@@ -440,6 +440,44 @@ Sin esto, un usuario nuevo con el flag encendido ve el botón pero no entiende *
 archivo que le entrega** — el tour es el único lugar del producto que explica flujos, y hoy
 terminaría de construirse (M2-M4) sin que el tour lo mencione en absoluto.
 
+**📋 Segunda tarea concreta de M5, agregada 2026-08-26 (mismo pedido del operador):** la **Ayuda**
+de la app (`electron-app/renderer.js`, array `FAQ_ITEMS`/`FAQ_CATS`) y del portal
+(`backend-server/public/usuarios/app.js`, `AYUDA_FAQ_ITEMS`/`AYUDA_FAQ_CATS`) tienen que sumar una
+categoría **`markdown`** — y el **system prompt único del asistente de IA**
+(`backend-server/utils/aiSupportPrompt.js`, compartido por el chat de Electron y el del portal) debe
+incorporar el módulo en su sección "Qué hace el producto" y sus resoluciones comunes.
+
+🚨 **Aclaración obligatoria en las 3 superficies, la que pidió explícitamente el operador:** el
+motor **NO procesa imágenes, solo texto extraíble**. Las páginas escaneadas (sin capa de texto)
+quedan marcadas con un aviso (`> [Página N — imagen sin texto extraíble]`), **no se transcriben**
+— sin OCR en esta versión (decisión de diseño de M2, confirmada por M0: el 14,6% de páginas de los
+adjuntos reales no tienen texto). Sin esta aclaración, un usuario que suba un expediente con
+escaneos va a creer que el módulo "se comió" contenido, cuando en realidad nunca prometió leerlo.
+
+Borrador de entradas de FAQ (categoría `markdown`, mismo tono que las existentes):
+
+- *"¿Qué hace el módulo Markdown?"* → "Convierte un informe PDF ya generado en dos archivos `.md`
+  (texto plano): uno completo y uno **anonimizado** (nombres de partes y terceros enmascarados),
+  listo para pegar en el chat de tu IA preferida sin exponer datos de terceros."
+- *"¿El módulo lee escaneos o imágenes dentro del PDF?"* → "No. Solo extrae texto que ya está en el
+  PDF como texto (no como imagen). Las páginas escaneadas o los sellos de firma digital sobre una
+  imagen quedan marcados como '[imagen sin texto extraíble]', no se transcriben — no hay OCR en
+  esta versión."
+- *"¿La anonimización es 100% segura?"* → "Es una ayuda automática, no una garantía. Revisá siempre
+  el resultado antes de compartirlo — podés editar el diccionario de reemplazos y reprocesar."
+- *"¿El contenido del expediente sale de mi computadora?"* → "No. Todo el procesamiento es local:
+  ni el PDF, ni el Markdown, ni el mapping se envían al servidor. Solo se consulta si tu plan
+  incluye el módulo."
+
+Y para `aiSupportPrompt.js`, un bullet nuevo en "Qué hace el producto" (mismo formato que los
+existentes de Procuración/Informe/Monitor) más una entrada en "Cómo resolver los problemas más
+comunes" cubriendo exactamente la misma aclaración de "no lee imágenes, sin OCR".
+
+**Nota aparte, y más urgente que Markdown porque ya está en producción:** Bitácora (F1-F3.4)
+**tampoco tiene ninguna entrada** en las 3 superficies de ayuda de hoy — ver el pendiente agregado
+en `propuesta-bitacora-agenda-2026-07.md` §11.2. Documentar los dos módulos juntos en la misma
+sesión de M5 evita 2 pasadas separadas sobre los mismos 3 archivos.
+
 ---
 
 ### M6 — Landing + TyC 🟢
