@@ -94,3 +94,6 @@ tests/*.png
 tests/tests/
 ext-header-preview.png
 extension-app/imagenes/old/
+
+# ─── Logs de auditoría de seguridad del cliente Electron (runtime, por máquina) ──
+electron-app/security-logs/

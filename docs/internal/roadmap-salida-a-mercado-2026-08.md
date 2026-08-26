@@ -1,0 +1,400 @@
+# Roadmap de salida a mercado — ProcuradorTool (2026-08-26)
+
+> **Para qué existe este documento.** Hasta hoy los pendientes del proyecto vivían como planes
+> independientes, cada uno correcto por su cuenta pero sin un orden entre sí: el plan de MercadoPago
+> no sabía que la auditoría de seguridad depende de él, la campaña de code-review no sabía que dos
+> de sus bloques necesitan al operador presente igual que la demo, y la lista de pendientes de
+> `CLAUDE.md` mezclaba trabajo ejecutable con trámites externos y con decisiones de negocio.
+>
+> **Esto es un solo proyecto con un solo objetivo: sacar el producto a mercado.** Este documento es
+> la única fuente de verdad sobre **el orden**. Cada etapa remite a su plan de detalle; ninguno de
+> esos planes se duplica acá.
+>
+> **Regla de uso:** cuando se pregunte "¿qué sigue?", se responde desde acá — no reconstruyendo la
+> lista desde `CLAUDE.md` ni desde los planes sueltos.
+
+---
+
+## §1 — El mapa
+
+```
+  ETAPA 1 — MEJORAS DE PRODUCTO            ┌── CARRIL PARALELO ──────────────┐
+  (lo que se muestra y se vende)           │  AZ — Azure Trusted Signing     │
+    1.1 Bitácora F3.4                      │  (trámite externo, 1-3 días      │
+    1.2 Módulo Markdown / anonimización    │   hábiles — ARRANCA EL DÍA 0)   │
+    1.3 Landing + TyC (beta, límites)      └─────────────────────────────────┘
+    1.4 Guía de backup y recuperación
+    1.5 Control periódico contra el PJN
+    1.6 Demo reproducible en la landing
+              │
+              ▼
+  ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
+    F6 cifrado → F1/F2/F3/F4 → F5 → F8 → F7 cobranza (gate) → F9 verify
+              │
+              ▼
+  ETAPA 3 — SECURITY REVIEW  (SEC-2: S1–S7 + S9 Strix)
+              │
+              ▼
+  ETAPA 4 — MERCADOPAGO PRODUCCIÓN (B3)
+    Fase A/B → Fase C (primer cobro real) → S8 (fraude con cobro real)
+    → code-review y security-review focalizados del delta
+              │
+              ▼
+  LANZAMIENTO  →  post-lanzamiento: L1 planes · C1 Facturante · L2 KB IA
+```
+
+---
+
+## §2 — Por qué este orden y no otro
+
+Cuatro razones, todas económicas — ninguna estética:
+
+1. **Producto antes que revisión.** Revisar código que está por reescribirse es trabajo tirado. La
+   Etapa 1 agrega superficie nueva (el módulo Markdown es un módulo entero) y toca los dos archivos
+   más grandes del proyecto. Si el code-review corre primero, hay que repetirlo.
+2. **Code review antes que seguridad.** Los fixes del code-review cambian la superficie que audita
+   SEC-2. Auditar primero obliga a auditar dos veces.
+3. **Todo antes que MercadoPago.** El día que las credenciales de MP sean reales, cada bug del camino
+   del pago cuesta dinero. B3 debe entrar sobre código ya revisado y auditado, no al revés. Por eso
+   la fase **F7 (cobranza) del code-review es un gate duro** de la Etapa 4.
+4. **AZ arranca el día 0.** Es lo único cuyo tiempo no lo controlamos (Certificate Profile: 1-3 días
+   hábiles). No bloquea nada, pero si se deja para el final, el lanzamiento queda esperando un
+   trámite. Arranca en paralelo con la Etapa 1 y se olvida hasta que llegue.
+
+---
+
+## §3 — Etapa 1 — Mejoras de producto
+
+> **Gate de negocio.** Los ítems 1.1 y 1.2 son **features nuevas**: entran al roadmap porque el
+> operador quiere venderlas, no porque el producto las necesite para funcionar. Están catalogadas en
+> "Diferidos a decisión de negocio" de `CLAUDE.md` y **arrancan cuando el operador da el visto
+> bueno**. Los ítems 1.3 a 1.6 no dependen de esa decisión.
+
+### 1.1 — Bitácora F3.4
+
+| | |
+|---|---|
+| **Plan** | [`plan-f3-4-semana-e-ics-2026-08.md`](plan-f3-4-semana-e-ics-2026-08.md) (ya escrito, listo para ejecutar) |
+| **Qué es** | **Bloque A — vista "Semana"**: un tercer modo de calendario entre Mes y Lista. Cierra el pendiente P-F1.3-a (la vista se mencionaba en el diseño original y quedó afuera). Solo portal, riesgo 🟢. **Bloque B — export `.ics`**: exportar los vencimientos y tareas al calendario del usuario (Google Calendar, Outlook). Backend + portal, riesgo 🟡 |
+| **Modelo / esfuerzo** | A: Sonnet · **bajo** · B: Sonnet · **medio** |
+| **Sesiones** | 1–2 (los bloques son independientes; recomendado A primero) |
+| **Despliegue** | Backend/portal. **Sin migración, sin release de Electron, sin tocar scripts encriptados** |
+| **Fuera de alcance** | **Tipos de entrada personalizados** — el único de los 3 ítems de F3.4 que toca el modelo de datos, y no hay pedido concreto. Queda diferido |
+
+> El valor del plan está en su §B.2: el `.ics` es 100% serialización de fechas **en el único módulo
+> del proyecto que ya produjo 3 bugs reales de timezone en producción**. Enumera las 6 trampas
+> concretas, cada una de las cuales produce un archivo que *parece* funcionar.
+
+### 1.2 — Módulo Markdown / anonimización judicial
+
+| | |
+|---|---|
+| **Plan** | [`plan-modulo-markdown-anonimizacion-2026-08-26.md`](plan-modulo-markdown-anonimizacion-2026-08-26.md) ⭐ **nuevo** |
+| **Qué es** | Toma un informe PDF generado por la app, descarga los PDF vinculados, extrae todo a Markdown, y produce además una versión **anonimizada** (expediente → `Expediente`, partes → `Actor`/`Demandado`, terceros → `Jon### Ber###`) con un diccionario de reemplazos editable y reprocesable |
+| **Dónde** | Botón propio en el topbar, al lado de 📔 Bitácora. Gateado por plan (`markdown_enabled`) |
+| **Modelo / esfuerzo** | Sonnet en 6 de 7 bloques. **Opus solo en M4** (motor de anonimización) |
+| **Sesiones** | 6–10 + 1 release. **Puede subir a 9–13** según el resultado de M0 |
+| **🚨 Gate propio** | **M0 — spike de viabilidad.** Antes de escribir código hay que confirmar si los PDF vinculados se pueden descargar sin sesión del PJN. Si no se puede, el módulo pasa de "parsing" a "tocar un script encriptado", y **deja de poder procesar informes viejos**. Es una decisión de producto, no de implementación |
+
+### 1.3 — Landing + Términos y Condiciones + Privacidad
+
+| | |
+|---|---|
+| **Plan** | no requiere documento propio — el alcance está acá |
+| **Modelo / esfuerzo** | Sonnet · **medio** (el contenido legal lo revisa el operador, no Claude) |
+| **Sesiones** | 1 |
+| **Depende de** | que el alcance de 1.1 y 1.2 esté **congelado** (no terminado — congelado) |
+
+Cuatro cambios, todos pedidos explícitamente por el operador:
+
+1. **Estado de Beta, remarcado.** Hoy la landing habla de "promo" y "precio fundador", pero **no dice
+   en ningún lado que el producto está en fase de prueba**. Debe decirlo — en la landing y en los TyC.
+2. **Limitación de responsabilidad.** Es lo más importante de todo el bloque y hoy está flojo:
+   el producto **automatiza actos con consecuencias procesales** (plazos, vencimientos, informes que
+   un abogado usa para decidir). Los TyC tienen que decir que las salidas son una **ayuda** que el
+   profesional debe **supervisar y verificar**, y que la responsabilidad del acto procesal es suya.
+3. **Ampliar Bitácora, Markdown y extensión.** Bitácora hoy tiene una línea en la landing (agregada
+   en agosto); Markdown no existe todavía; la extensión está mencionada pero no explicada.
+   Cada una con su cláusula de "en prueba, supervisado por el usuario".
+4. **La leyenda del anonimizador**, textual: *la anonimización es una ayuda automática, no una
+   garantía; el usuario es responsable de revisar el resultado antes de compartirlo*. Sin esto, el
+   módulo promete algo que ningún motor de regex puede cumplir sobre documentos judiciales reales.
+
+**Archivos:** `public/landing/index.html`, `public/terminos/index.html`, `public/privacidad/index.html`
+(estos dos últimos **no se tocan desde el 2026-06-02** — anteriores a Bitácora, al módulo Markdown y a
+todo lo de agosto). Despliegue estático vía Nginx, **sin `pm2 restart`**.
+
+> ⚖️ **Recomendación:** el texto de limitación de responsabilidad debería mirarlo un abogado antes de
+> publicarse. Claude puede redactar el borrador y explicar qué cubre cada cláusula; no es asesoramiento
+> legal. El operador es abogado — esto es un recordatorio de que el borrador es un punto de partida.
+
+### 1.4 — Guía de backup y recuperación (operativa, para el administrador)
+
+| | |
+|---|---|
+| **Plan** | no requiere documento propio — el alcance está acá. **Entregable: [`guia-backup-recuperacion.md`](guia-backup-recuperacion.md)** |
+| **Modelo / esfuerzo** | Sonnet · **medio** |
+| **Sesiones** | 1 |
+| **Depende de** | nada — se puede hacer cuando sea |
+
+El operador pidió *"una guía de cómo se realizan los backup en el servidor y una guía de recuperación,
+determinando cómo el administrador puede obtener dichos backups para hacer copias locales y
+resguardarlas"*. Hoy **existe el mecanismo pero no la guía**, y al relevarlo aparecieron dos huecos
+reales:
+
+**Lo que ya existe y funciona:**
+- Cron diario 03:00 → `backend-server/scripts/backup-db.js` → `pg_dump` comprimido → **DO Spaces**
+  (bucket `procurador-backups`, región `nyc3`), retención 30 días + copia local en
+  `/var/backups/procurador/`. Regenera además `database/schema.sql` y sube `schema-latest`.
+- `ops/backup-now.sh [prod|staging]` — backup on-demand pre-deploy, últimos 10.
+- `ops/restore-db.sh [prod|staging] <archivo>` — restauración, con backup de seguridad previo del
+  destino y confirmación tipeada para prod. **Probado end-to-end** contra una base descartable.
+- Dos simulacros de rollback escritos y corridos (`ops/drill-rollback.sh`, `drill-code-rollback.sh`).
+
+**🚨 Hueco 1 — el backup automático solo cubre la base de datos.** Verificado leyendo el script: hace
+`pg_dump` y nada más. **No** cubre:
+- **`backend-server/storage/invoices/`** — los PDF de facturas reales, con CUIT y domicilio de
+  clientes. Son documentos fiscales que **no se pueden regenerar** (los sube el admin desde ARCA a
+  mano) y **no están en ningún backup automático**. Tampoco en el `.7z` manual, que copia DB + env +
+  keys + certs + código, pero no `storage/`. **Es el hallazgo más serio de este bloque.**
+- `.env` / `.env.staging`, `keys/` (RSA), `certs/` — sí están en el `.7z` manual, pero eso es una
+  rutina que se ejecuta a mano y a discreción, no un backup.
+
+**🚨 Hueco 2 — no hay procedimiento documentado para bajar un backup a una máquina local.** El
+operador puede hacerlo (`scp` desde `/var/backups/procurador/`, o desde DO Spaces con las credenciales
+del `.env`, o desde el panel web de DigitalOcean), pero no está escrito en ningún lado, y "puedo
+deducirlo" no es un plan de recuperación.
+
+**La guía debe cubrir, en este orden:**
+1. Qué se respalda hoy, dónde queda, con qué retención, y **qué NO se respalda** (los dos huecos).
+2. **Cómo el administrador baja una copia local**, con los comandos exactos, por las tres vías
+   (local del servidor por `scp` · DO Spaces por CLI · panel web).
+3. Con qué frecuencia conviene bajarla y dónde guardarla (el `.7z` a OneDrive ya es la rutina — hay
+   que integrarla, no reemplazarla).
+4. **Cómo se restaura**, con el árbol de decisión: ¿es un problema de datos, de código, o de ambos?
+   (los tres caminos ya existen: `restore-db.sh`, tags de git, fix-forward de Electron).
+5. **Cómo se verifica que un backup sirve** — restaurarlo contra una base descartable, que es lo que
+   ya hace el simulacro. Un backup que nunca se restauró no es un backup.
+6. Cerrar el hueco 1: extender `backup-db.js` para incluir `storage/invoices/`, o justificar por
+   escrito por qué no.
+
+### 1.5 — Control periódico de funcionamiento contra el PJN
+
+| | |
+|---|---|
+| **Plan** | no requiere documento propio — el alcance está acá |
+| **Modelo / esfuerzo** | Sonnet · **bajo-medio** |
+| **Sesiones** | 1 |
+| **Buena noticia** | **El 80% ya está construido** |
+
+El operador pidió *"controles de funcionamiento periódico de la aplicación para con el sitio del PJN,
+con mi usuario"*. Eso es exactamente **SEC-2·B.2**, implementado en julio y publicado en el release
+v2.7.38: el módulo oculto `electron-app/src/verification/dailyVerification.js` corre procuración e
+informe reales contra el PJN con la cuenta de prueba, reusando los mismos flujos que dispara un
+usuario (`runProcessLogic` / `runInformeLogic`), reporta a
+`POST /client/verification-report`, y el dashboard admin lo muestra con semáforo en la sección
+Diagnóstico (verde / amarillo a los 7 días sin correr / rojo).
+
+**Lo que falta, medido:**
+- **Está apagado.** `habilitado: false` por defecto. Se activó en la máquina del operador en julio y
+  **no corre desde el 2026-07-14** (detectado en la revisión de salud del 25/07). Un semáforo que
+  nadie mira no es un control.
+- **Cubre 2 de los 5 flujos** — procuración e informe. **No cubre Monitor** (novedades), que es el
+  que más contacto tiene con cambios del PJN, ni la extensión.
+- **No avisa.** El semáforo vive en el dashboard; si el operador no entra, no se entera. Falta un
+  aviso real (email al `ALERT_EMAIL_TO`, que ya existe y ya se usa para altas de usuarios).
+- **No está documentado como rutina.** Nadie sabe que existe salvo leyendo el `runbook`.
+
+**El bloque, entonces:** reactivarlo, extenderlo al Monitor, agregarle el aviso por email ante rojo o
+ante 7 días sin correr, y **escribir el procedimiento** (cada cuánto, quién mira, qué se hace si da
+rojo). Es barato y es lo que evita enterarse de un cambio del PJN por un cliente enojado.
+
+### 1.6 — Demo reproducible del producto en la landing
+
+| | |
+|---|---|
+| **Plan** | [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md) ⭐ **nuevo** |
+| **Qué es** | Tour guiado en HTML estático servido desde `/demo/`, con capturas reales anonimizadas + clips cortos, un capítulo por módulo, linkeable desde cada tarjeta de la landing |
+| **Modelo / esfuerzo** | Sonnet · medio (alto en el bloque de captura) |
+| **Sesiones** | 4–6 + 1 con el operador presente |
+| **Depende de** | **1.1 y 1.2 terminadas** (hay que poder mostrarlas) y de 1.3 (para no tocar la landing dos veces) |
+| **El hallazgo que abarata el bloque** | Los **stubs de V0** (`dev-tools/stub-portal.js` y `stub-dashboard.js`) sirven los archivos reales del portal y el dashboard contra una API falsa. **Las capturas web salen sin un solo dato real que esfumar** — la anonimización deja de ser un problema para media demo |
+| **Lo que el operador tiene que capturar a mano** | **Extensión Chrome y sitio del PJN.** No hay Chrome conectado por Claude-in-Chrome, y computer-use otorga los navegadores en tier "read" (se ven, no se pueden clickear). Ver §4 del plan de la demo para el detalle |
+
+---
+
+## §4 — Etapa 2 — Code review integral
+
+| | |
+|---|---|
+| **Plan** | [`plan-code-review-integral-2026-08-26.md`](plan-code-review-integral-2026-08-26.md) ⭐ **nuevo** |
+| **Fases** | 9 — F1 a F8 de `/code-review` + **F9 = los bloques V4/V5/V6 de `/verify`** que quedaron bloqueados por el entorno |
+| **Modelo** | Sonnet en 6. **Opus en 2**: F6 (cadena de cifrado de scripts) y F7 (cobranza) |
+| **Esfuerzo** | `xhigh` en las 3 áreas grandes nunca revisadas · `high` en 4 · `medium` en 1 |
+| **Sesiones** | 9–13 |
+| **Depende de** | Etapa 1 cerrada |
+| **Habilita** | Etapa 3, y vía F7 la Etapa 4 |
+
+**El hueco que justifica la campaña, medido el 2026-08-26:** todo el módulo Bitácora
+(`routes/bitacora.js` **84 KB**, el único endpoint anónimo del sistema, y el crecimiento de
+`public/usuarios/app.js` hasta **236 KB**) se construyó **después** de la última revisión integral y
+**nunca tuvo una pasada de código**. Y los dos archivos más grandes del proyecto (`dashboard.js`
+324 KB y `usuarios/app.js` 236 KB) nunca tuvieron más que un `grep` dirigido.
+
+**Dos pedidos del operador ya incorporados:**
+- **Verificar que los scripts se encripten correctamente** → es la fase **F6**, en Opus, y no es solo
+  lectura: incluye un harness ejecutable que descarga los 13 scripts de la whitelist, verifica firma
+  y hash contra la DB, compara contra el fuente del repo (detecta drift entre lo desplegado y lo
+  versionado) y confirma que los 6 scripts filtrados siguen dando 404.
+- **Incluir V4/V5/V6** → es la fase **F9**, y corre **después** de que los fixes de F1–F5 estén
+  desplegados (verificar en runtime un producto al que le faltan los arreglos produce hallazgos que
+  se corrigen solos).
+
+---
+
+## §5 — Etapa 3 — Security review
+
+| | |
+|---|---|
+| **Plan** | [`plan-seguridad-lanzamiento-2026-08.md`](plan-seguridad-lanzamiento-2026-08.md) (SEC-2, **actualizado el 2026-08-26** con el bloque S9) |
+| **Bloques en esta etapa** | **S1–S7 + S9**. **S8 NO** — ver abajo |
+| **Modelo** | Sonnet en todos los de esta etapa |
+| **Sesiones** | 6–9 (S1+S2 y S3+S4 son agrupables) |
+| **Depende de** | Etapa 2 cerrada y sus fixes desplegados |
+
+**Lo nuevo: S9 — Strix.** Pentest agéntico en runtime (`github.com/usestrix`, Apache 2.0, Docker + CLI).
+Aporta el eje que S1–S8 no tienen: **exploración no dirigida y explotación demostrada**, en vez de
+confirmación de hipótesis escritas. Corre **solo contra staging**, y **antes hay que cortar dos
+salidas reales**: el SMTP de staging (hereda Brevo real → un agente registrando cuentas dispara emails
+reales) y MercadoPago (se resuelve poniendo `MP_ENV` fuera de `sandbox`, lo que hace que el guard de
+agosto anule el token). Backup y restauración de `procurador_db_staging` obligatorios.
+
+**🚨 Resolución de una contradicción real entre planes:** el bloque **S8 (fraude con cobro real)** del
+plan SEC-2 exige que B3 esté cerrado, pero este roadmap pone la seguridad **antes** que MercadoPago.
+No es un conflicto: es una partición. **S1–S7 + S9 corren en la Etapa 3; S8 corre dentro de la Etapa
+4**, después del primer cobro real. Sin decirlo explícito, alguien da "SEC-2 ejecutado" por cerrado
+con un bloque sin correr.
+
+**Entregable de cierre de la etapa (no está en el plan original, se agrega acá):** un **informe
+unificado** con los 9 bloques, sus hallazgos, los parches y las re-corridas de verificación, con fecha
+y alcance. Es lo que se le muestra a un cliente institucional que pregunte por la auditoría, y el
+punto de partida del auditor externo el día que se contrate.
+
+---
+
+## §6 — Etapa 4 — MercadoPago producción (B3)
+
+| | |
+|---|---|
+| **Plan** | [`plan-mercadopago-produccion-2026-08-24.md`](plan-mercadopago-produccion-2026-08-24.md) (ya escrito, con datos medidos en vivo) |
+| **Fases** | A (endurecimiento del código, Sonnet/alto) + B (trámite del operador, en paralelo) → **C (Opus/alto, con el operador presente — el switch y el primer cobro real)** → D (facturación, no bloqueante) → E (post-lanzamiento) |
+| **Sesiones** | 3–5 |
+| **Gate duro de entrada** | **F7 del code-review cerrada.** Es la fase que revisa la transacción atómica de `handlePaymentEvent` y la atribución de preapprovals por ventana de tiempo — lo único de la cadena de cobro que V7 no pudo verificar en runtime |
+| **Después de la Fase C** | **S8 de SEC-2** (fraude con cobro real, Opus) + un code-review y un security-review **focalizados en el delta** que introdujo la Fase A |
+
+**Lo que hay que tener presente al llegar acá** (medido el 2026-08-24, corrige creencias previas):
+- `PAYMENT_MODULE_ENABLED` **ya está en `true`** en producción. El switch pendiente es reemplazar
+  credenciales sandbox por reales, no encender el módulo.
+- Los `MP_PLAN_*_ID` de producción **son de la cuenta sandbox**: sin recrearlos en la cuenta real, el
+  checkout devuelve 500 para todos los planes apenas se cambie el token.
+- **No hay ningún webhook registrado** en el panel de MP. Sin darlo de alta, ningún pago se acredita.
+- **0 pagos, 0 facturas, 0 suscripciones con método de pago** en la base real. El radio de impacto del
+  switch es nulo: no hay ningún cliente que se pueda romper.
+- 🚨 **`.env.staging` va en el checklist:** `MP_ENV=production` **solo** en producción; staging queda
+  en `sandbox`. Desde agosto hay un guard que falla cerrado si alguien sincroniza los dos archivos —
+  pero no conviene depender de él.
+
+**Un requisito de orden que no es técnico:** los TyC de la Etapa 1.3 (estado de beta + limitación de
+responsabilidad) **tienen que estar publicados antes del primer cobro real**. Cobrarle a alguien con
+términos que no reflejan que el producto está en prueba es exposición innecesaria y gratuita de evitar.
+
+---
+
+## §7 — Carril paralelo — AZ (Azure Trusted Signing)
+
+| | |
+|---|---|
+| **Qué es** | Firma del instalador `.exe`. Sin esto, Windows SmartScreen advierte en **cada instalación nueva** |
+| **Por qué arranca el día 0** | Certificate Profile demora **1-3 días hábiles**. No lo controlamos |
+| **Pasos** | Cuenta Azure → Trusted Signing Account → Certificate Profile (Public Trust) → App Registration → 5 variables de entorno → configurar `electron-builder` |
+| **Quién** | El trámite es del operador. La configuración de `electron-builder` es 1 sesión, Sonnet/bajo |
+| **Beneficio colateral ya documentado** | El bloqueo de SmartScreen fue exactamente lo que trabó dos veces la instalación del auto-update durante las pruebas de F3.0 (el instalador quedaba en el escritorio seguro, invisible para cualquier automatización). Un instalador firmado elimina esa fricción también para el testing |
+
+---
+
+## §8 — Dependencias cruzadas que no son obvias
+
+Las que este roadmap existe para hacer visibles. Cada una es un error concreto que se evita:
+
+| # | Dependencia | Qué pasa si se ignora |
+|---|---|---|
+| **1** | **S8 de SEC-2 se ejecuta en la Etapa 4, no en la 3** | Se da "SEC-2 ejecutado" por cerrado con el bloque de fraude con dinero real sin correr |
+| **2** | **La demo debe ser regenerable por script, no un set de PNG** | Las Etapas 2 y 3 cambian la UI **después** de armar la demo. En 11 días de agosto se publicaron 3 releases que cambiaron los visores y el topbar |
+| **3** | **Todo lo que necesita escritorio real se agrupa en las mismas sesiones** | Ver §9. Son 4 trabajos distintos que hoy están en 3 planes distintos y necesitan exactamente el mismo handle |
+| **4** | **F7 (cobranza) es el gate de B3, y va al final de la Etapa 2** | Correrla al principio y entrar a B3 ocho sesiones después obliga a revalidarla |
+| **5** | **Los TyC de beta se publican antes del primer cobro real** | Se cobra con términos que no dicen que el producto está en prueba |
+| **6** | **1.3 (landing) y 1.6 (demo) tocan el mismo archivo** | Dos sesiones editando `landing/index.html` en paralelo = conflicto. 1.3 primero, 1.6 después |
+| **7** | **AZ arranca el día 0** | El lanzamiento queda esperando un trámite de 3 días que podría haber corrido en paralelo desde el principio |
+| **8** | **El módulo Markdown tiene su propio gate (M0) antes de M1** | Se construyen 6 sesiones de módulo y recién ahí se descubre que los adjuntos necesitan sesión autenticada del PJN |
+
+---
+
+## §9 — Las sesiones que necesitan al operador presente
+
+**Cuatro trabajos distintos, en tres planes distintos, necesitan exactamente el mismo handle:** una
+máquina con la app Electron lanzada desde la sesión de Windows que computer-use ve, y —para lo de
+Chrome— un navegador real con la extensión cargada.
+
+| Trabajo | De dónde viene | Qué necesita |
+|---|---|---|
+| **V4 + V5** (Electron sin/con PJN) | Etapa 2, fase F9 | computer-use con handle real de la app · V5 consume cupo del PJN |
+| **V6** (extensión Chrome) | Etapa 2, fase F9 | Chrome real con la extensión + credenciales PJN |
+| **Capturas de la demo** (app Electron) | Etapa 1.6, bloque D3 | el mismo handle que V4 |
+| **Capturas de la demo** (extensión + PJN) | Etapa 1.6, bloque D3 | el operador saca las capturas a mano — **no es automatizable** |
+| **Fase C de B3** (primer cobro real) | Etapa 4 | el operador completando un checkout real |
+
+**La causa del bloqueo, acotada (no es prioridad ni tiempo):** `request_access` de computer-use
+devuelve `notInstalled` para "Procurador SCW" **incluso con la app abierta** — aislamiento de sesiones
+de Windows: un proceso lanzado desde la shell vive en una sesión que la herramienta no ve. **Hay
+precedente de que funciona**: el 2026-07-23 una sesión condujo la instalación NSIS completa con
+computer-use. La condición se reproduce lanzando la app desde la sesión visible al agente.
+
+**Recomendación:** agrupar V4 + V5 + las capturas de la app en **una sola sesión de operador**, con
+la app ya abierta por él antes de empezar. V6 y las capturas de la extensión, en otra (necesitan
+Chrome, no la app). Es la diferencia entre 2 sesiones coordinadas y 5 intentos sueltos que fallan por
+el mismo motivo.
+
+**Ya cerrado y no vuelve a pedirse:** **R9.1 / R9.2** — el operador confirmó el 2026-08-26 el login
+del popup de la extensión y un flujo completo contra el PJN real. Con eso el Bloque R del plan de
+pruebas integral queda **37/37, sin ningún caso abierto**.
+
+---
+
+## §10 — Estimación y qué queda para después del lanzamiento
+
+| Etapa | Sesiones | Notas |
+|---|---|---|
+| **1** — Producto | **13–21** | 1.1 (1–2) · 1.2 (6–10, o 9–13 según M0) · 1.3 (1) · 1.4 (1) · 1.5 (1) · 1.6 (4–6) |
+| **2** — Code review | **9–13** | 3 fases `xhigh` consumen sesión propia o más |
+| **3** — Security review | **6–9** | S1+S2 y S3+S4 agrupables |
+| **4** — MercadoPago | **3–5** | + S8 + los reviews del delta |
+| **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
+| **Total aproximado** | **31–48 sesiones** | Más las sesiones con operador presente de §9 |
+
+**Después del lanzamiento** (siguen en "Diferidos" de `CLAUDE.md`, en este orden):
+
+1. **L1 — Activar planes BASIC / PRO / ENTERPRISE.** Un `UPDATE` de una línea. Depende de que el
+   cobro funcione y de decidir los precios finales.
+2. **C1 — Contrato Facturante.** Facturación automática. El código ya existe (`utils/facturante.js`);
+   falta contratar el servicio. **No bloqueante** — hoy el admin sube el PDF de ARCA a mano y funciona.
+3. **L2 — Base de Conocimiento IA.** Alimentar el asistente con 20-30 tickets reales cerrados. Por
+   definición no se puede hacer antes de tener clientes.
+
+**Lo que ningún plan de este roadmap cubre**, dicho para que "roadmap ejecutado" no se confunda con
+"producto terminado":
+
+- **Pruebas de carga y concurrencia real** — nunca se hicieron. Cobran importancia con clientes reales.
+- **Auditoría de seguridad externa profesional** — ver §8 del plan SEC-2 para qué reemplaza y qué no.
+- **Soporte de otros navegadores y mobile real.**
+- **La captación de clientes en sí** — hay un plan aparte (`docs/plan-captacion-clientes.md`) que este
+  roadmap no toca.
