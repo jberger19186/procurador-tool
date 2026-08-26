@@ -1604,7 +1604,7 @@ resultado a la vista.
 | **F3.1** — Badge de pendientes en la app | **Sonnet, bajo** | Chico | ✅ **Código listo (2026-08-15).** Backend ya en producción; cliente pendiente de release. Ver detalle arriba. |
 | **F3.2** — Visor del monitor con captura | **Sonnet, medio** | Chico-mediano *(más bajo de lo que parecía)* | ✅ **Código listo (2026-08-15).** Backend (`origen='monitor'`) ya en producción; cliente pendiente de release. Ver detalle arriba. |
 | **F3.3** — Sugerencias automáticas desde novedades del monitor (bandeja aceptar/descartar) | **Opus, alto** | **Grande** | ✅ **Ejecutada y en producción (2026-08-15).** El diferencial mayor. ⚠️ La premisa de esta fila resultó equivocada: el matching **no** requería heurística legal ("qué movimiento merece un vencimiento") porque el Monitor no emite movimientos sino casos nuevos — evento de significado único, sin fecha que inferir. Lo genuinamente difícil fue otra cosa: descubrir que **el input nunca había ocurrido** (0 novedades en 19 corridas reales) y que el estado "novedad" es **transitorio**, lo que obliga a persistir la sugerencia en la detección. Ver detalle arriba. |
-| **F3.4** — Tipos de entrada personalizados · export `.ics` · vista "Semana" (P-F1.3-a) | **Sonnet, bajo-medio** | Variable | **Solo si hay demanda real.** Nada acá es estructural; son las palancas que se agregan cuando un usuario las pide, no antes. |
+| **F3.4** — Tipos de entrada personalizados · export `.ics` · vista "Semana" (P-F1.3-a) | **Sonnet, bajo-medio** | Variable | 🟡 **Parcial.** Bloque A (vista Semana) ✅ **ejecutado 2026-08-26** — cierra P-F1.3-a. Bloque B (export `.ics`) sigue con plan listo, sin código. Tipos de entrada personalizados queda explícitamente afuera (toca el modelo de datos, sin pedido concreto). |
 
 > **Regla transversal (crítica para no romper nada):** cada sub-bloque se valida en **staging** antes de prod, y el flag `bitacora_enabled` nace en `false` en **todos** los planes → aunque algo salga mal, ningún usuario ve la Bitácora hasta encender el flag en un plan de prueba. La Fase 1 completa se prueba y publica **sin emitir ningún release de Electron**. Ver también §11 "Nota de producto" (hallazgo C6): la Fase 1 sola no debe anunciarse ni venderse — es para validación interna.
 
@@ -1616,22 +1616,22 @@ resultado a la vista.
 > adelante. No son bugs ni deuda técnica urgente — son cabos sueltos conscientes, anotados acá
 > para que no se pierdan entre sesiones. Se van agregando a medida que cada fase se ejecuta.
 >
-> #### 📋 Resumen a simple vista (actualizado 2026-08-16, tras cerrar F3.0–F3.3 y publicar el release electron-v2.7.49)
+> #### 📋 Resumen a simple vista (actualizado 2026-08-26, tras ejecutar el Bloque A de F3.4)
 >
 > **🔵 El grande, con nombre y ya conocido — F3.4.** No es un bug ni un cabo suelto: es la
 > **última fase del plan**. Agrupa 3 cosas sin diseño cerrado en la propuesta original (ver la fila
 > F3.4 de §11.1 y P-F1.3-a más abajo): **tipos de entrada personalizados** (hoy fijos:
 > vencimiento/audiencia/tarea/nota) · **export `.ics`** (agenda de Bitácora → Google
-> Calendar/Outlook) · **vista "Semana"** del calendario (F1.3 la recortó a propósito). Nada acá
-> es estructural.
+> Calendar/Outlook) · **vista "Semana"** del calendario (F1.3 la recortó a propósito, ✅ ya cerrada).
+> Nada acá es estructural.
 >
-> 📄 **2 de los 3 ítems ya tienen plan de implementación escrito:
-> `docs/internal/plan-f3-4-semana-e-ics-2026-08.md`** (2026-08-16, diseñado con Opus, sin código).
-> Cubre **vista "Semana"** (Bloque A, Sonnet/bajo — cierra P-F1.3-a) y **export `.ics`** (Bloque B,
-> Sonnet/medio), con los puntos de enganche exactos y, sobre todo, **las 6 trampas del `.ics`**:
-> es una feature 100% de serialización de fechas en el módulo que produjo los 3 bugs de timezone de
-> P-F3.0-a. **Los tipos de entrada personalizados quedan explícitamente afuera** de ese plan — es el
-> único de los tres que toca el modelo de datos (`kind` tiene un CHECK) y no tiene pedido concreto.
+> 📄 **Plan de implementación: `docs/internal/plan-f3-4-semana-e-ics-2026-08.md`**
+> (2026-08-16, diseñado con Opus). **Bloque A (vista "Semana") ✅ EJECUTADO 2026-08-26** — cierra
+> P-F1.3-a, ver detalle abajo. **Bloque B (export `.ics`) sigue con plan listo, sin código** —
+> Sonnet/medio, es una feature 100% de serialización de fechas en el módulo que produjo los 3 bugs
+> de timezone de P-F3.0-a, con las 6 trampas documentadas en el plan (§B.2). **Los tipos de entrada
+> personalizados quedan explícitamente afuera** de ese plan — es el único de los tres que toca el
+> modelo de datos (`kind` tiene un CHECK) y no tiene pedido concreto.
 >
 > **🟡 Reales pero bajos, con dueño y condición de cierre clara** (detalle completo en la tabla
 > de abajo, buscar por `#`):
@@ -1639,7 +1639,7 @@ resultado a la vista.
 > | # | Qué es, en una línea | Se cierra cuando |
 > |---|---|---|
 > | **P-F1.1-a** | El disclaimer condicional de la feria judicial de julio (cuando la CSJN publica la acordada) nunca se construyó — la calculadora de plazos solo tiene el texto genérico fijo. | El admin carga la feria de julio vía F1.8 → agregar la lógica condicional del disclaimer. |
-> | **P-F1.3-a** | Vista "Semana" — mismo ítem que agrupa F3.4. | 📄 Plan listo, Bloque A (`plan-f3-4-semana-e-ics-2026-08.md`) — sin código escrito. |
+> | **P-F1.3-a** | Vista "Semana" — mismo ítem que agrupa F3.4. | ✅ **CERRADO 2026-08-26** — Bloque A del plan (`plan-f3-4-semana-e-ics-2026-08.md`) ejecutado: 3er botón del toggle Mes/Semana/Lista, 7 columnas lun-dom reusando `bitEntryRowHtml()`, verificado en stub sin regresión de Mes/Lista y sin el bug de timezone (entrada del día correcto por `bitLocalYmd()`). |
 > | **P-F1.3-b** | Búsqueda de texto y filtro "Hechos" se resuelven client-side, no hay `q=` server-side. Funciona bien hoy (tope 500 filas protege). | Si algún día escala mal, agregar el parámetro al backend. |
 > | **P-F3.0-b** | El contador `snapshotsCreados` del resumen de import no distingue "creado" de "ya existía" — cosmético, no afecta integridad (verificado por SQL). | Deliberadamente no corregido junto con F1.7 (el único camino destructivo) — merece su propia sesión. |
 > | **P-F1.1-b** | El test de Electron extrae `tokenizar()` del código fuente con regex en vez de importarla — más frágil que un `require`. | La próxima vez que haya otra razón para tocar `buscarPdfExpediente.js`. |

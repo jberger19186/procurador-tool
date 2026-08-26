@@ -20,7 +20,7 @@ const state = {
     chatLoading: false,
     plans: [],
     bitacora: {
-        view: 'mes',            // 'mes' | 'lista'
+        view: 'mes',            // 'mes' | 'semana' | 'lista'
         monthCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
         selectedDay: null,      // 'YYYY-MM-DD'
         tipo: '',                // filtro por chip ('' = todos)
@@ -2791,6 +2791,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('bitacora-search')?.addEventListener('input', (e) => bitacoraOnSearchInput(e.target.value));
     document.getElementById('bitacora-mes-prev')?.addEventListener('click', () => bitacoraMonthNav(-1));
     document.getElementById('bitacora-mes-next')?.addEventListener('click', () => bitacoraMonthNav(1));
+    document.getElementById('bitacora-semana-prev')?.addEventListener('click', () => bitacoraWeekNav(-1));
+    document.getElementById('bitacora-semana-next')?.addEventListener('click', () => bitacoraWeekNav(1));
 
     // ─── Mis Expedientes: wiring de la sección (F1.4) ──────────────────────
     document.getElementById('btn-mexp-nueva')?.addEventListener('click', openMexpNuevaFicha);
@@ -3092,13 +3094,22 @@ function bitacoraApplyViewToggle() {
         btn.classList.toggle('active', btn.dataset.view === state.bitacora.view);
     });
     const mes = document.getElementById('bitacora-vista-mes');
+    const semana = document.getElementById('bitacora-vista-semana');
     const lista = document.getElementById('bitacora-vista-lista');
     if (mes) mes.style.display = state.bitacora.view === 'mes' ? 'grid' : 'none';
+    // A diferencia de #bitacora-vista-mes (CSS grid de 2 columnas aplicado al
+    // propio contenedor), #bitacora-vista-semana es un .card simple — la grilla
+    // de 7 columnas vive en el .bitacora-semana-grid interno, siempre
+    // display:grid por su propia clase CSS. Por eso acá corresponde 'block',
+    // no 'grid': copiarlo por analogía con Mes rompería el layout sin error
+    // visible en consola (ver plan F3.4 §A.3).
+    if (semana) semana.style.display = state.bitacora.view === 'semana' ? 'block' : 'none';
     if (lista) lista.style.display = state.bitacora.view === 'lista' ? 'block' : 'none';
 }
 
 function bitacoraLoadAndRenderView() {
     if (state.bitacora.view === 'mes') loadBitacoraMonth();
+    else if (state.bitacora.view === 'semana') loadBitacoraWeek();
     else loadBitacoraLista();
 }
 
@@ -3442,6 +3453,86 @@ function renderBitacoraDayPanel(ymd) {
         return;
     }
     body.innerHTML = entradas.map(bitEntryRowHtml).join('');
+}
+
+// ─── Vista Semana (F3.4, Bloque A) ─────────────────────────────────────────
+// Mismo ciclo que loadBitacoraMonth(): rango → query → apiFetch → filtrar
+// client-side → cachear → renderizar. Comparte state.bitacora.monthCursor con
+// la vista Mes a propósito (decisión A.6 del plan): al alternar entre vistas
+// el usuario espera seguir parado en la misma fecha, no saltar a "hoy".
+function bitacoraWeekRange(cursor) {
+    const dow = (cursor.getDay() + 6) % 7; // lunes = 0, igual que bitacoraMonthRange
+    const weekStart = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - dow);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    return { weekStart, weekEnd };
+}
+
+function bitacoraWeekNav(delta) {
+    const c = state.bitacora.monthCursor;
+    state.bitacora.monthCursor = new Date(c.getFullYear(), c.getMonth(), c.getDate() + delta * 7);
+    state.bitacora.selectedDay = null;
+    loadBitacoraWeek();
+}
+
+async function loadBitacoraWeek() {
+    const { weekStart, weekEnd } = bitacoraWeekRange(state.bitacora.monthCursor);
+    const params = bitacoraBuildQuery(weekStart, weekEnd);
+    try {
+        const res = await apiFetch(`/usuarios/api/bitacora?${params.toString()}`);
+        if (!res || !res.ok) { state.bitacora.entries = []; renderBitacoraWeek(); return; }
+        const data = await res.json();
+        const rows = bitacoraApplyClientFilters(data.entradas || []);
+        state.bitacora.entries = rows;
+        bitCacheEntries(rows);
+        renderBitacoraWeek();
+    } catch (e) {
+        console.error('Error cargando bitácora (semana):', e);
+        state.bitacora.entries = [];
+        renderBitacoraWeek();
+    }
+}
+
+function renderBitacoraWeek() {
+    const grid = document.getElementById('bitacora-semana-grid');
+    const label = document.getElementById('bitacora-semana-label');
+    if (!grid || !label) return;
+
+    const { weekStart, weekEnd } = bitacoraWeekRange(state.bitacora.monthCursor);
+    const fmtCorto = { day: 'numeric', month: 'short' };
+    const fmtLargo = { day: 'numeric', month: 'short', year: 'numeric' };
+    label.textContent = `${weekStart.toLocaleDateString('es-AR', fmtCorto)} – ${weekEnd.toLocaleDateString('es-AR', fmtLargo)}`;
+
+    // due_at es timestamptz a mediodía local (bitToIsoMidday) → bitLocalYmd(),
+    // NUNCA bitUtcYmd() acá — ver §A.5 del plan y el comentario de bitLocalYmd().
+    const todayYmd = bitLocalYmd(new Date());
+    const porDia = {};
+    (state.bitacora.entries || []).forEach(e => {
+        if (!e.due_at) return;
+        const ymd = bitLocalYmd(e.due_at);
+        (porDia[ymd] = porDia[ymd] || []).push(e);
+    });
+
+    const nombresDia = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    let html = '';
+    const cur = new Date(weekStart);
+    for (let i = 0; i < 7; i++) {
+        const ymd = bitLocalYmd(cur);
+        const entradasDia = (porDia[ymd] || []).sort((a, b) => new Date(a.due_at) - new Date(b.due_at));
+        const esHoy = ymd === todayYmd;
+        const cuerpo = entradasDia.length
+            ? entradasDia.map(bitEntryRowHtml).join('')
+            : '<div class="bitacora-semana-col-empty">Sin entradas</div>';
+        html += `<div class="bitacora-semana-col ${esHoy ? 'hoy' : ''}">
+            <div class="bitacora-semana-col-header">
+                <span>${nombresDia[i]}</span>
+                <span class="num">${cur.getDate()}</span>
+            </div>
+            <div class="bitacora-semana-col-body">${cuerpo}</div>
+        </div>`;
+        cur.setDate(cur.getDate() + 1);
+    }
+    grid.innerHTML = html;
 }
 
 // ─── Vista Lista ─────────────────────────────────────────────────────────────

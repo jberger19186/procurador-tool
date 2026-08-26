@@ -1699,6 +1699,46 @@ body.sidebar-collapsed .nav-item #nav-notif-badge { right: 2px; top: 2px; transf
     align-self: flex-start;
 }
 
+/* Vista Semana: 7 columnas lun-dom (F3.4, Bloque A) */
+.bitacora-semana-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+}
+@media (max-width: 900px) {
+    .bitacora-semana-grid { grid-template-columns: 1fr; }
+}
+.bitacora-semana-col {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.bitacora-semana-col.hoy { border-color: var(--accent); border-width: 2px; }
+.bitacora-semana-col-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text-muted);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+}
+.bitacora-semana-col-header .num { font-size: 14px; color: var(--text); }
+.bitacora-semana-col.hoy .bitacora-semana-col-header .num { color: var(--accent); }
+.bitacora-semana-col-body { display: flex; flex-direction: column; gap: 2px; }
+.bitacora-semana-col-empty { font-size: 11px; color: var(--text-muted); padding: 6px 2px; text-align: center; }
+/* .bitacora-entry asume el padding:20px de .card-body (margin:0 -20px para
+   pisarlo de borde a borde) — acá el padding del contenedor es 8px, así que
+   sin este override el margen negativo desborda la columna y superpone las
+   entradas de días vecinos. Se pisa solo dentro de la vista Semana. */
+.bitacora-semana-col-body .bitacora-entry { margin: 0; padding: 6px 4px; }
+
 /* Colores por tipo de entrada (dot, badge, borde de card) */
 .bit-color-vencimiento { background: var(--red); }
 .bit-color-audiencia { background: var(--purple); }

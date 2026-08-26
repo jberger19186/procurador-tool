@@ -2,7 +2,8 @@
 
 > **Estado:** ✅ **APROBADO POR EL OPERADOR (2026-08-26)** — es el ítem **1.1 de la Etapa 1** del
 > [roadmap de salida a mercado](roadmap-salida-a-mercado-2026-08.md), el primero de todo el camino.
-> Ya no espera ningún go/no-go. **No hay código escrito todavía.**
+> **Bloque A (vista "Semana") ✅ EJECUTADO Y VERIFICADO 2026-08-26** — cierra P-F1.3-a. **Bloque B
+> (export `.ics`) sigue sin código escrito.**
 > **Fecha:** 2026-08-16 · **Diseñado con:** Opus 5 (solo diseño, no se tocó código)
 > **Lo que su ejecución arrastra:** el export `.ics` agrega un formato al endpoint de exportación de
 > Bitácora, así que **se audita dentro del bloque S2 de SEC-2** (Etapa 3) — sin bloque propio, pero
@@ -33,10 +34,10 @@ por qué se construyó sin un caso de uso reportado, y no lo interprete como que
 Recomendado: **Bloque A primero** (es el barato y sin riesgo; deja un triunfo rápido y no bloquea
 nada del B).
 
-| Bloque | Modelo / esfuerzo | Toca | Deploy | Riesgo |
-|---|---|---|---|---|
-| **A — Vista "Semana"** | Sonnet, **bajo** | Solo portal (`index.html`, `app.js`, `app.css`) | `scp` + `pm2 restart` | 🟢 Bajo — aditivo, reversible en segundos |
-| **B — Export `.ics`** | Sonnet, **medio** | Backend (`routes/bitacora.js`) + portal | `scp` + `pm2 restart` | 🟡 Medio — **es 100% serialización de fechas**, ver §B.0 |
+| Bloque | Modelo / esfuerzo | Toca | Deploy | Riesgo | Estado |
+|---|---|---|---|---|---|
+| **A — Vista "Semana"** | Sonnet, **bajo** | Solo portal (`index.html`, `app.js`, `app.css`) | `scp` + `pm2 restart` | 🟢 Bajo — aditivo, reversible en segundos | ✅ **Ejecutado y verificado 2026-08-26** (sin deploy a prod todavía) |
+| **B — Export `.ics`** | Sonnet, **medio** | Backend (`routes/bitacora.js`) + portal | `scp` + `pm2 restart` | 🟡 Medio — **es 100% serialización de fechas**, ver §B.0 | ⬜ Sin código |
 
 **Ninguno de los dos requiere:** migración de base de datos · release de Electron · tocar scripts
 encriptados · tocar nada de cobro.
@@ -139,6 +140,20 @@ La vista Semana solo toca `due_at`, así que va con `bitLocalYmd()` — igual qu
 3. No-regresión: las vistas Mes y Lista siguen funcionando igual.
 
 **Sin backup de base necesario** — el bloque no escribe una sola fila.
+
+> ✅ **Verificado 2026-08-26** contra `dev-tools/stub-portal.js` (Browser pane, sin screenshot —
+> lectura por `read_page`/`javascript_tool`, per las trampas del skill `verify`): los 3 botones
+> del toggle alternan `active` y el `display` correcto de cada contenedor (mes=`grid`,
+> semana=`block` — el propio contenedor no es el grid, el `.bitacora-semana-grid` interno sí lo es
+> por CSS de clase, ver el comentario dejado en `bitacoraApplyViewToggle()`) · la entrada de seed
+> con `due_at` 22/08 apareció en la columna Sáb 22 exacta (caza el bug de timezone si se hubiera
+> usado `bitUtcYmd()` por error) · navegación ±1 semana cruzó el borde de mes (31 ago → 1-6 sep)
+> · el filtro de búsqueda se aplica igual en Semana · no-regresión confirmada en Mes (42 días,
+> `display:grid`) y Lista (agrupado por fecha, mismo dato). **Hallazgo propio no anticipado por el
+> plan:** `.bitacora-entry` usa `margin:0 -20px` asumiendo el padding de 20px de `.card-body` —
+> en la columna angosta de Semana (8px de padding) ese margen negativo desborda y superpondría
+> columnas vecinas; corregido con un override scoped `.bitacora-semana-col-body .bitacora-entry`
+> (`margin:0; padding:6px 4px`), verificado en el DOM real (`marginLeft: "0px"`).
 
 ---
 

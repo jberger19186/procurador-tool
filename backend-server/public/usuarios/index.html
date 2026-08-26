@@ -353,6 +353,7 @@
                         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
                             <div class="bitacora-view-toggle" role="tablist">
                                 <button type="button" class="bitacora-view-btn active" data-view="mes">Mes</button>
+                                <button type="button" class="bitacora-view-btn" data-view="semana">Semana</button>
                                 <button type="button" class="bitacora-view-btn" data-view="lista">Lista</button>
                             </div>
                             <input type="search" id="bitacora-search" class="input-search" placeholder="🔍 Buscar por título o expediente..." style="max-width:260px">
@@ -399,6 +400,20 @@
                         </div>
                         <div class="card-body" id="bitacora-day-panel-body">
                             <div class="empty-state"><p>Seleccioná un día en el calendario</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vista Semana: 7 columnas lun-dom -->
+                <div id="bitacora-vista-semana" class="card" style="display:none">
+                    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+                        <button class="btn btn-outline btn-sm" id="bitacora-semana-prev">&#8249;</button>
+                        <h3 id="bitacora-semana-label">—</h3>
+                        <button class="btn btn-outline btn-sm" id="bitacora-semana-next">&#8250;</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="bitacora-semana-grid" id="bitacora-semana-grid">
+                            <div class="empty-state"><p>Cargando semana...</p></div>
                         </div>
                     </div>
                 </div>
