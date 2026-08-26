@@ -125,6 +125,31 @@ async function extraerTextoPdf(pdfPath) {
     return { numPaginas: doc.numPages, paginas };
 }
 
+/**
+ * Render genérico — para PDFs sin la plantilla conocida del informe (los
+ * adjuntos del SCW que descarga M3: despachos, cédulas, DEOs, sentencias,
+ * cuyo layout no se conoce de antemano). A diferencia de
+ * `renderizarInformeMarkdown`, NO intenta reconocer una tabla de movimientos
+ * ni un encabezado — solo concatena las líneas de cada página como texto
+ * corrido, dejando el mismo marcador honesto en las páginas sin texto.
+ *
+ * @param {Array<{ numero: number, lineas: string[] }>} paginas
+ * @returns {{ markdown: string, paginasSinTexto: number[] }}
+ */
+function renderizarGenericoMarkdown(paginas) {
+    const bloques = [];
+    const paginasSinTexto = [];
+    for (const pagina of paginas) {
+        if (pagina.lineas.length === 0) {
+            bloques.push(`> [Página ${pagina.numero} — imagen sin texto extraíble]`);
+            paginasSinTexto.push(pagina.numero);
+            continue;
+        }
+        bloques.push(pagina.lineas.join('  \n'));
+    }
+    return { markdown: bloques.join('\n\n'), paginasSinTexto };
+}
+
 // ─── Clasificación y render específicos de la plantilla del informe ────────
 // Ver `informequickscwpjn.js` para el layout real: título (expediente) →
 // carátula (1-2 líneas) → dependencia/jurisdicción → "Situacion: X" →
@@ -281,6 +306,7 @@ module.exports = {
     reconstruirLineasPagina,
     extraerTextoPdf,
     renderizarInformeMarkdown,
+    renderizarGenericoMarkdown,
     procesarInformeAMarkdown,
     derivarNombreSalida,
 };

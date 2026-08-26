@@ -249,7 +249,7 @@ producción. Verificar que ninguna versión existente cambie.
 
 ---
 
-### M3 — Descarga y unificación de adjuntos 🟢 **ESCENARIO A confirmado por M0**
+### M3 — Descarga y unificación de adjuntos 🟢 **ESCENARIO A confirmado por M0** ✅ **EJECUTADO (2026-08-26)**
 
 | | |
 |---|---|
@@ -279,6 +279,53 @@ módulo **no abre Chrome** y el candado de ejecución (`active_executions`) **nu
 Se puede procesar un informe mientras corre una procuración, sin el error "proceso activo en otro
 dispositivo". *(Se conserva la nota tachada porque la restricción volvería a aplicar si alguna vez se
 agregara OCR vía navegador o cualquier otro camino que necesite Puppeteer.)*
+
+> ✅ **Ejecutado y verificado 2026-08-26.** Motor nuevo en `electron-app/markdown/descargarAdjuntos.js`,
+> apoyado en la capa genérica de M2 (`extraerTextoPdf`/`renderizarGenericoMarkdown`, agregada a
+> `extraerPdfAMarkdown.js` para este reuso exacto). **🚨 Allowlist de host implementada desde el
+> arranque, no diferida a S10 de SEC-2** — `esUrlPermitida()` exige `https:` + host exacto
+> `scw.pjn.gov.ar` + path que empiece con `/scw/viewer.seam`, verificada contra 706 URLs reales
+> medidas por M0 (todas con esa forma exacta). Cualquier otra cosa (localhost, IP de metadata de
+> nube, `file://`, un subdominio parecido tipo typosquatting) se descarta ANTES de la primera
+> petición de red — mitiga en el código el riesgo R7/SSRF que el spike de M0 y el bloque S10 de
+> SEC-2 ya tenían identificado, en vez de dejarlo pendiente de auditoría.
+>
+> **Deduplicación en los 2 niveles que pedía el hallazgo de M0, implementados por separado y
+> verificados por separado:** (1) por **URL**, dentro de la lista de links de un mismo informe
+> (`deduplicarPorUrl`) — cubre el caso, aunque no típico, de que el mismo link aparezca 2 veces en
+> la misma tabla de Movimientos; (2) por **`filename`** del `Content-Disposition`, a través de un
+> `registro` (`Map`) que se puede compartir entre varias llamadas de `descargarAdjuntos` — cubre el
+> hallazgo real de M0: dos informes del mismo expediente traen tokens (URLs) distintos para el
+> MISMO documento, pero el mismo `filename` estable. Un adjunto que ya está en el registro se
+> **borra la copia recién bajada** y se reusa el Markdown ya extraído, sin descargar dos veces el
+> mismo documento entre informes de una misma sesión de procesamiento (el caso de uso que M0/P3
+> dejó previsto: "agrupar por expediente").
+>
+> **Límites dimensionados sobre el volumen REAL medido, no estimado:** tope de 100 adjuntos por
+> informe (frente al máximo medido de 37), 20 MB por adjunto y 200 MB totales por corrida — el SCW
+> **no manda `Content-Length`** (confirmado con una descarga real efímera antes de escribir código),
+> así que el tope se aplica **durante** la descarga, leyendo el stream de a chunks, no antes de
+> empezar. Timeout de 30s por adjunto con `AbortController`. Limpieza del directorio temporal en
+> `finally`, incluso si algo falla a mitad de la descarga o la extracción.
+>
+> **Verificado con `electron-app/test/descargarAdjuntos.test.js` — 22/22 PASS:** 8 unidades de la
+> allowlist (incluye SSRF a `127.0.0.1`/`169.254.169.254`, `file://` y typosquatting) · dedup por
+> URL sintética · 5 unidades con `fetch` **mockeado** (sin red) para el registro por `filename`, el
+> tope de tamaño, que un fallo puntual no aborta el lote, y los eventos de `onProgress` · **6 de
+> integración real contra el SCW real** (extracción de links de un PDF real, 0 descartados por
+> allowlist, descarga real de una muestra, magic bytes `%PDF-` confirmados, extracción a Markdown
+> con encabezados `## Anexo N` numerados). **Hallazgo real, no un bug, que la muestra chica dejó
+> ver:** uno de los adjuntos reales descargados es un documento **genuinamente escaneado de 30
+> páginas** (1,2 MB, 0% de texto en las 30) — el primer caso real donde el marcador de "página sin
+> texto" de M2 se ejerció sobre datos reales (el informe propio dio 0% de páginas sin texto, así que
+> M2 solo nunca lo había visto en vivo). Confirma en producción real el 14,6% medido por M0 sobre
+> los adjuntos del SCW.
+>
+> **Deliberadamente NO se probó la descarga real de los 35 adjuntos completos** en la corrida
+> estándar del test (solo una muestra de 1-2) — no golpear el servidor real de más en cada corrida
+> de este test. El test soporta `--full` para la corrida completa cuando haga falta (opt-in, no
+> default). **Sin residuos:** los adjuntos descargados se leen a un directorio temporal del sistema
+> y se borran al terminar cada test.
 
 ---
 
