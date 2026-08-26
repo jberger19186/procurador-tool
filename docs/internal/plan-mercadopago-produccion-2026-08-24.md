@@ -127,7 +127,7 @@ de operar en un estado híbrido silencioso.
 Mismo criterio de proporcionalidad que el guard existente: anular la capacidad de cobro y loguear en
 `console.error` de forma greppeable, **sin tirar abajo el resto de la aplicación**.
 
-#### A.4 — Rama `refunded` en `handlePaymentEvent` *(condicional a decisión del operador)*
+#### A.4 — Rama `refunded` en `handlePaymentEvent` — ✅ **DECIDIDO: corte inmediato**
 
 **Hueco detectado el 2026-08-24 al revisar la cobertura de este plan, no listado antes.**
 `handlePaymentEvent` tiene ramas para `approved` y `rejected`; cualquier otro estado cae al `else`
@@ -139,23 +139,42 @@ MP envía el webhook, el pago queda con `status='refunded'` en la base, y `subsc
 tocan. Importa ahora porque el reembolso manual es el flujo vigente (E.1 no está implementado) y
 aparece en C.3.7.
 
-**Es primero una decisión de negocio, no un bug:**
+**✅ Política elegida por el operador (2026-08-26): reembolso = corte inmediato** — lo habitual en
+SaaS. La alternativa evaluada y descartada era *"acceso hasta fin del período"*, que no requería
+código porque es el comportamiento actual.
 
-| Política | Implicancia |
-|---|---|
-| **Reembolso = corte inmediato** *(lo habitual en SaaS)* | Requiere la rama nueva: al recibir `refunded`, suspender la cuenta. ~10 líneas. |
-| **Reembolso = acceso hasta fin del período** | No requiere código: el comportamiento actual ya es ese. |
+**Qué implica implementarlo** (~10 líneas, pero con tres detalles que no son obvios):
 
-**No bloquea la comercialización** en ninguno de los dos casos: mientras el volumen sea bajo, el admin
-puede suspender la cuenta a mano desde el dashboard. Implementarlo acá es barato; postergarlo a la
-Fase E también es defendible. Lo que **no** conviene es reembolsarle a un cliente real sin haber
-tomado la decisión.
+1. **Agregar la rama `refunded` en `handlePaymentEvent`**, junto a `approved` y `rejected`, que
+   suspenda la cuenta: `subscriptions.status` y `users.registration_status` a `suspended`.
+   ⚠️ **No reusar `suspended_plan_expired`** — ese estado tiene su propio circuito de recuperación
+   por vencimiento de plan (cron 5f + reactivación por checkout). Un reembolso no es un vencimiento;
+   conviene que el motivo quede distinguible en `user_events` para que el admin entienda por qué la
+   cuenta se cortó.
+2. **Idempotencia**, igual que ya tienen `approved` y `rejected`: MP reenvía webhooks. Un segundo
+   `refunded` del mismo `external_payment_id` no debe volver a suspender ni duplicar el evento
+   (el guard de `webhook_events` ya cubre el reenvío exacto; verificar que la rama nueva pase por él).
+3. **Cancelar el preapproval en MP**, si sigue vivo. Reembolsar un pago **no cancela la suscripción
+   recurrente**: sin este paso, el usuario queda suspendido pero MP le vuelve a cobrar el mes
+   siguiente — el peor de los dos mundos. Reusar `cancelSubscription` / `pausePreapproval`, que ya
+   existen y están verificados.
+
+**Verificación:** contra staging (sandbox), simular el webhook `refunded` sobre un pago de fixture y
+confirmar los 4 efectos: cuenta suspendida · evento registrado con el motivo · preapproval
+cancelado/pausado en MP · reenvío del mismo webhook sin efecto adicional. Se apoya en el harness de
+V7 (`verify-v7-cobranza.js`), que ya sabe disparar webhooks firmados sin escribir en MP.
+
+**Sigue sin bloquear la comercialización:** si por algún motivo esta rama no llegara a la Fase A, el
+admin puede suspender a mano desde el dashboard. Pero al estar decidido, **entra en la Fase A** y se
+prueba con el resto del endurecimiento, antes de que haya dinero real.
 
 #### Verificación de la Fase A
 - Harness contra **staging** (sandbox, sin riesgo): dos llamadas consecutivas con la misma clave
   devuelven el **mismo** `preapproval.id`; con claves distintas, ids distintos.
 - Las 3 ramas del guard de A.3 probadas explícitamente (como se hizo con el guard de V7: encendido,
   forzado a la condición de error, y restaurado).
+- **A.4**: webhook `refunded` simulado sobre un pago de fixture → los 4 efectos verificados (cuenta
+  suspendida · evento con motivo · preapproval cancelado/pausado · reenvío idempotente).
 - No-regresión: el smoke de cobranza (`dev-tools/smoke-payments.js`, 19/19) y el harness de V7
   (`verify-v7-cobranza.js`, 40/40) siguen pasando.
 
@@ -219,7 +238,7 @@ exactamente las piezas más delicadas, y son las que esta fase tiene que cubrir:
 | C.3.4 | **`updatePreapprovalAmount`** (cambio de plan con monto real) | Validado en sandbox, nunca contra un preapproval que cobra de verdad. |
 | C.3.5 | Firma HMAC con el **secreto productivo** → webhook aceptado (200) | La prueba positiva de firma solo vale contra el secreto real. |
 | C.3.6 | Factura pendiente creada, límites del plan aplicados, `expires_at` avanzado | Confirma los fixes B1/B2 con datos reales. |
-| C.3.7 | **Cancelar y reembolsar** la suscripción de prueba | Cierra el ciclo y deja la cuenta limpia. El reembolso se hace **manual en el panel de MP** (ver Fase E.1). |
+| C.3.7 | **Cancelar y reembolsar** la suscripción de prueba, y **confirmar que la rama `refunded` de A.4 corta el acceso de verdad** | Cierra el ciclo y deja la cuenta limpia. El reembolso se hace **manual en el panel de MP** (ver Fase E.1). Es además la única oportunidad de ver la rama nueva ejercitada por un webhook **real** de MP y no simulado: verificar los 4 efectos de A.4 (cuenta suspendida · evento con motivo · preapproval cancelado · sin cobro al mes siguiente). |
 
 **Criterio de corte:** si C.3.1 o C.3.3 no pasan, **revertir al `.env` de sandbox** (el backup del
 paso C.2.1) antes de anunciar nada. El rollback es un `cp` + `pm2 restart`, segundos.

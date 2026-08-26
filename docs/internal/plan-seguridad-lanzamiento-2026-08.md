@@ -253,7 +253,11 @@ ejecutar antes del switch a producción** — contra sandbox no prueba nada nuev
 MP real), reuso de un preapproval ajeno (`linkPreapproval` tiene protección anti-IDOR: confirmarla con
 dinero real), la ventana de atribución de `markPaymentConfigured` con **dos checkouts concurrentes**
 (riesgo de colisión ya documentado y aceptado para Beta — al lanzar deja de ser aceptable), y qué pasa
-si un usuario reembolsa vía MP y conserva acceso (**A.4** del plan de MP).
+si un usuario reembolsa vía MP y conserva acceso (**A.4** del plan de MP — desde el 2026-08-26 la
+política decidida es **corte inmediato**, así que acá el eje ya no es *"¿qué pasa si conserva
+acceso?"* sino **verificar que la rama `refunded` corta de verdad**, y que no se la puede esquivar:
+reembolso parcial, reembolso de un pago viejo mientras hay uno nuevo aprobado, o un `refunded` que
+llega **después** de una renovación exitosa).
 
 **⚠️ Nota de orden agregada el 2026-08-26 (resuelve una contradicción real del plan):** S8 exige que
 B3 esté cerrado, pero el roadmap ubica la auditoría de seguridad (Etapa 3) **antes** de MercadoPago
