@@ -2743,6 +2743,12 @@ window.showPlanForm = async function(planId) {
                         📔 Incluye Bitácora (agenda/vencimientos/expedientes seguidos)
                     </label>
                 </div>
+                <div style="margin-top:8px">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                        <input type="checkbox" id="pf-markdown-enabled" ${plan?.markdown_enabled ? 'checked' : ''} style="accent-color:#1a73e8">
+                        📝 Incluye Markdown (extracción y anonimización de informes)
+                    </label>
+                </div>
             </div>
 
             <!-- CONFIGURACIÓN DE PROMO -->
@@ -2842,6 +2848,7 @@ window.savePlanForm = async function(planId) {
         plan_type:    document.getElementById('pf-plan-type').value || null,
         visibility:   document.getElementById('pf-visibility')?.value || 'public',
         bitacora_enabled: document.getElementById('pf-bitacora-enabled')?.checked === true,
+        markdown_enabled: document.getElementById('pf-markdown-enabled')?.checked === true,
         promo_type:   promoType,
         promo_end_date:   promoType === 'date'  ? (document.getElementById('pf-promo-date').value || null) : null,
         promo_max_users:  promoType === 'quota' ? (parseInt(document.getElementById('pf-promo-quota').value) || null) : null,

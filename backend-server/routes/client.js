@@ -532,7 +532,7 @@ router.get('/account', authenticateToken, async (req, res) => {
                    p.proc_executions_limit, p.proc_expedientes_limit,
                    p.batch_executions_limit, p.batch_expedientes_limit,
                    p.informe_limit, p.monitor_partes_limit, p.monitor_novedades_limit,
-                   p.period_days, p.plan_type, p.bitacora_enabled
+                   p.period_days, p.plan_type, p.bitacora_enabled, p.markdown_enabled
             FROM users u
             LEFT JOIN subscriptions s ON u.id = s.user_id
             LEFT JOIN plans p ON s.plan_id = p.id
@@ -661,6 +661,10 @@ router.get('/account', authenticateToken, async (req, res) => {
                 },
                 planType: u.plan_type || null,
                 bitacoraEnabled: u.bitacora_enabled === true,
+                // M1 del módulo Markdown/Anonimización — mismo patrón que bitacoraEnabled.
+                // No consume cupo (decisión del operador, 2026-08-26): es procesamiento
+                // 100% local, no toca el PJN ni gasta recursos del servidor.
+                markdownEnabled: u.markdown_enabled === true,
                 // 'plan'|'bitacora' — la validación contra bitacoraEnabled (hallazgo A4: no aterrizar
                 // en una sección gateada si el usuario perdió el plan) se hace en el punto de uso
                 // (app.js), no acá — ver initDashboard().

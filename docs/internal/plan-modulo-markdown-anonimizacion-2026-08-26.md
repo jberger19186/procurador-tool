@@ -137,7 +137,7 @@ brief y no cierra la puerta a nada; la lista de informes recientes se resuelve l
 
 ## 3. Los bloques
 
-### M1 — Habilitación por plan (backend) 🟢
+### M1 — Habilitación por plan (backend) 🟢 ✅ **EJECUTADO Y EN PRODUCCIÓN (2026-08-26)**
 
 | | |
 |---|---|
@@ -160,9 +160,24 @@ Copia exacta del patrón de Bitácora F1.1 + F1.5, que ya está probado y en pro
 interruptor listo para cuando el cliente lo necesite. Igual que Bitácora, el flag existiendo antes
 que la feature permite desplegar el resto sin que nadie lo vea.
 
-**Decisión abierta (no bloqueante):** ¿este módulo **consume cupo**? Bitácora no consume. Propongo
-**que tampoco consuma en la v1** — no toca el PJN ni gasta recursos del servidor, es procesamiento
-local. Si más adelante se ve abuso, se agrega. Anotarlo en el plan comercial, no en el código.
+**✅ Decisión del operador (2026-08-26): NO consume cupo.** Mismo criterio que Bitácora — es
+procesamiento 100% local, no toca el PJN ni gasta recursos del servidor. Documentado en el
+`COMMENT` de la columna `markdown_enabled` para que quede escrito en el propio schema.
+
+> ✅ **Verificado 2026-08-26** con `dev-tools/verify-markdown-m1.js` contra staging (mismo patrón
+> `pg`+`jwt`+`https` con guard `DB_NAME`) — **11/11 PASS**: la columna existe y nace en `false` en
+> todos los planes reales · `GET /client/account` expone `markdownEnabled` reflejando el flag en
+> ambos sentidos (encendido/apagado) · `PUT /admin/plans/:id` persiste el flag · **el `COALESCE`
+> protege el flag** — un `PUT` que solo cambia `display_name` NO lo apaga (mismo antecedente que
+> motivó el `COALESCE` de `bitacora_enabled`/`visibility`) · no-regresión de `bitacora_enabled` (no
+> se ve afectado por tocar `markdown_enabled`) · alta de plan (`POST /admin/plans`) persiste el
+> campo desde el alta · `GET /admin/plans` (`SELECT *`) lo expone sin cambios de código ·
+> no-regresión de `GET /usuarios/api/plans`. **Desplegado a staging→prod**: backup de DB previo en
+> ambos entornos, migración aplicada (los 6 planes reales de prod quedaron en `false`), backup de
+> los 3 archivos de código, md5 servido = md5 local exacto, health/landing/portal/dashboard 200,
+> `pm2-error.log` sin entradas nuevas (la más reciente sigue del 15/08). **Checkbox "📝 Incluye
+> Markdown" agregado al dashboard admin**, al lado del de Bitácora — el módulo queda listo para
+> encenderse plan por plan cuando M2-M5 estén construidos, sin que nadie lo note hoy.
 
 ---
 
