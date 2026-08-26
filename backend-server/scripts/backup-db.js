@@ -110,6 +110,41 @@ async function runBackup() {
     fs.unlinkSync(localPath);
     log(`🗑️  Archivo local eliminado: ${localPath}`);
 
+    // 3.5 Backup de storage/invoices/ — hallazgo del roadmap 2026-08-26 (ítem 1.4):
+    // el pg_dump de arriba respalda la BASE, pero los PDF de facturas viven en
+    // disco (backend-server/storage/invoices/, fuera de public/ desde el fix C1
+    // de seguridad) y NUNCA estaban en ningún backup. Son documentos fiscales
+    // reales (nombre/CUIT/domicilio del cliente) que el admin sube A MANO desde
+    // ARCA — si el servidor se pierde, NO se pueden regenerar. Solo contra prod
+    // (staging no tiene facturas reales). Sube al mismo prefijo `backups/` que
+    // el dump de la DB, así que hereda la retención de 30 días de más abajo
+    // sin necesitar lógica de limpieza propia.
+    if (DB_NAME === 'procurador_db') {
+        const invoicesDir = path.join(__dirname, '..', 'storage', 'invoices');
+        const invoicesFilename = `invoices_${timestamp}.tar.gz`;
+        const invoicesLocalPath = path.join(TMP_DIR, invoicesFilename);
+        if (fs.existsSync(invoicesDir) && fs.readdirSync(invoicesDir).length > 0) {
+            try {
+                await execAsync(`tar -czf ${invoicesLocalPath} -C ${path.dirname(invoicesDir)} invoices`);
+                const invoicesStream = fs.createReadStream(invoicesLocalPath);
+                await s3.send(new PutObjectCommand({
+                    Bucket: SPACES_BUCKET,
+                    Key: `backups/${invoicesFilename}`,
+                    Body: invoicesStream,
+                    ContentType: 'application/gzip'
+                }));
+                fs.unlinkSync(invoicesLocalPath);
+                log(`✅ storage/invoices/ respaldado: ${invoicesFilename}`);
+            } catch (err) {
+                // No bloqueante: un fallo acá no debe hacer fallar el backup real de la DB.
+                log(`⚠️  Error respaldando storage/invoices/: ${err.message}`);
+                if (fs.existsSync(invoicesLocalPath)) fs.unlinkSync(invoicesLocalPath);
+            }
+        } else {
+            log(`ℹ️  storage/invoices/ vacío o inexistente, se omite ese respaldo`);
+        }
+    }
+
     // 4. Eliminar backups viejos (> RETENTION_DAYS días)
     try {
         const cutoff = new Date();
