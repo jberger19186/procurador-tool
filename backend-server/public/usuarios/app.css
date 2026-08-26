@@ -1944,6 +1944,17 @@ body.sidebar-collapsed .nav-item #nav-notif-badge { right: 2px; top: 2px; transf
    Mis expedientes (F1.4)
    ============================================= */
 
+.mexp-selection-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--accent-light); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 10px 16px; margin-bottom: 16px; font-size: 13.5px;
+}
+.mexp-selection-bar.hidden { display: none; }
+.mexp-selection-bar #mexp-selection-count { font-weight: 600; color: var(--text); }
+.mexp-table td.mexp-td-check, .mexp-table th.mexp-th-check { width: 36px; padding-right: 0; }
+.mexp-table td.mexp-td-check { cursor: default; }
+.mexp-table input[type="checkbox"].mexp-checkbox { width: 16px; height: 16px; cursor: pointer; vertical-align: middle; }
+
 .mexp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .mexp-table th {
     text-align: left;

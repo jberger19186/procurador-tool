@@ -117,7 +117,7 @@ const PARTES = [
 ];
 
 // ─── Almacén en memoria ─────────────────────────────────────────────────────
-let nextExpId = 2;
+let nextExpId = 4;
 let nextBitId = 2;
 let nextSugId = 2;
 
@@ -131,6 +131,20 @@ const EXPEDIENTES = [
             { id: 1, kind: 'procuracion', run_date: '2026-08-15T12:00:00.000Z', situacion: 'EN DESPACHO',
               data: { movimientos: [{ fecha: '14/08/2026', tipo: 'DESPACHO', detalle: 'Pasan los autos a resolver.' }] } },
         ],
+    },
+    // Los 2 de acá abajo son solo para probar multi-selección (Mis Expedientes,
+    // Bloque A) — sin snapshots ni entradas, no hacía falta más para ese caso.
+    {
+        id: 2, expediente: 'CAF 018685/2024', jurisdiccion: 'Cámara Federal',
+        dependencia: 'Sala II', caratula: 'RODRIGUEZ c/ ANSES s/ REAJUSTES',
+        situacion_actual: 'A DESPACHO', situacion_fecha: null, notas: null,
+        updated_at: '2026-08-18T12:00:00.000Z', snapshots: [],
+    },
+    {
+        id: 3, expediente: 'FCR 118745/2017', jurisdiccion: 'Justicia Federal de Comodoro Rivadavia',
+        dependencia: 'Juzgado Federal 1', caratula: 'LOPEZ c/ MARTINEZ s/ COBRO DE PESOS',
+        situacion_actual: null, situacion_fecha: null, notas: null,
+        updated_at: '2026-08-15T12:00:00.000Z', snapshots: [],
     },
 ];
 

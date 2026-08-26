@@ -446,6 +446,13 @@
                             <input type="search" id="mexp-search" class="input-search" placeholder="🔍 Buscar por expediente o carátula...">
                         </div>
                     </div>
+                    <div class="mexp-selection-bar hidden" id="mexp-selection-bar">
+                        <span id="mexp-selection-count">0 seleccionados</span>
+                        <div style="display:flex;gap:8px">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="mexpClearSelection()">Cancelar</button>
+                            <button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;border-color:#fecaca" onclick="mexpAskEliminarSeleccionados()">🗑 Eliminar seleccionados</button>
+                        </div>
+                    </div>
                     <div class="card">
                         <div class="card-body" id="mexp-lista-body" style="padding:0">
                             <div class="empty-state"><p>Cargando...</p></div>
@@ -920,7 +927,7 @@
             <button class="modal-close" onclick="closeMexpEliminarModal()">&#10005;</button>
         </div>
         <div class="modal-body">
-            <p style="font-size:14px;color:var(--text);line-height:1.5;margin-bottom:14px">
+            <p id="mexp-eliminar-texto" style="font-size:14px;color:var(--text);line-height:1.5;margin-bottom:14px">
                 Vas a dejar de seguir este expediente. ¿Qué querés hacer con sus entradas de bitácora vinculadas?
             </p>
             <div style="display:flex;flex-direction:column;gap:8px">

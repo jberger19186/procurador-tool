@@ -40,6 +40,9 @@ const state = {
         search: '',
         fichaId: null,       // id de la ficha abierta (null = vista listado)
         ficha: null,         // { expediente, entradas, snapshots } de la ficha abierta
+        selected: new Set(), // ids tildados en el listado, para borrado múltiple
+        _visibleIds: [],      // ids que pasan el filtro vigente (para "seleccionar todo")
+        _eliminarIds: null,   // ids objetivo del modal de eliminar abierto (1 o varios)
     },
     captureLote: null,      // { casos, origen, tipo } — pantalla de revisión del lote (F2.3)
 };
@@ -3841,6 +3844,52 @@ function mexpOnSearchInput(value) {
     renderMexpLista();
 }
 
+// ─── Multi-selección (borrado en lote) ──────────────────────────────────────
+// La selección vive en `state.miExp.selected` (Set de ids), no en el DOM: si
+// viviera en checkboxes sueltos, filtrar por búsqueda la perdería sola. Se
+// mantiene entre búsquedas a propósito (elegís algunos, buscás otro, sumás
+// más) — lo único acotado al filtro vigente es el checkbox "seleccionar todo".
+function mexpToggleSelect(id, checked) {
+    if (checked) state.miExp.selected.add(id);
+    else state.miExp.selected.delete(id);
+    mexpRenderSelectionBar();
+    mexpUpdateSelectAllCheckbox();
+}
+
+function mexpToggleSelectAll(checked) {
+    const visibles = state.miExp._visibleIds || [];
+    if (checked) visibles.forEach(id => state.miExp.selected.add(id));
+    else visibles.forEach(id => state.miExp.selected.delete(id));
+    renderMexpLista();
+}
+
+function mexpUpdateSelectAllCheckbox() {
+    const master = document.getElementById('mexp-check-all');
+    if (!master) return;
+    const visibles = state.miExp._visibleIds || [];
+    const seleccionadosVisibles = visibles.filter(id => state.miExp.selected.has(id));
+    master.checked = visibles.length > 0 && seleccionadosVisibles.length === visibles.length;
+    master.indeterminate = seleccionadosVisibles.length > 0 && seleccionadosVisibles.length < visibles.length;
+}
+
+function mexpRenderSelectionBar() {
+    const bar = document.getElementById('mexp-selection-bar');
+    const countEl = document.getElementById('mexp-selection-count');
+    if (!bar || !countEl) return;
+    const n = state.miExp.selected.size;
+    if (n === 0) {
+        bar.classList.add('hidden');
+        return;
+    }
+    bar.classList.remove('hidden');
+    countEl.textContent = n === 1 ? '1 seleccionado' : `${n} seleccionados`;
+}
+
+function mexpClearSelection() {
+    state.miExp.selected.clear();
+    renderMexpLista();
+}
+
 function renderMexpLista() {
     const body = document.getElementById('mexp-lista-body');
     if (!body) return;
@@ -3853,27 +3902,41 @@ function renderMexpLista() {
             (x.caratula || '').toLowerCase().includes(q)
         );
     }
+    state.miExp._visibleIds = rows.map(x => x.id);
 
     if (rows.length === 0) {
         const msg = state.miExp.search ? 'Sin resultados para tu búsqueda' : 'Todavía no seguís ningún expediente';
         body.innerHTML = `<div class="empty-state"><p>${msg}</p></div>`;
+        mexpRenderSelectionBar();
         return;
     }
 
-    const trs = rows.map(x => `
+    const trs = rows.map(x => {
+        const checked = state.miExp.selected.has(x.id) ? 'checked' : '';
+        return `
         <tr onclick="openMexpFicha(${x.id})">
+            <td class="mexp-td-check" onclick="event.stopPropagation()">
+                <input type="checkbox" class="mexp-checkbox" ${checked} onchange="mexpToggleSelect(${x.id}, this.checked)">
+            </td>
             <td><strong>${escapeHtml(x.expediente)}</strong></td>
             <td>${escapeHtml(x.caratula || '—')}</td>
             <td>${escapeHtml(x.situacion_actual || '—')}</td>
             <td>${x.vencidas > 0 ? `<span class="mexp-pend-badge">🔴 ${x.vencidas}</span>` : '—'}</td>
             <td>${formatDate(x.updated_at)}</td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 
     body.innerHTML = `<table class="mexp-table">
-        <thead><tr><th>Expediente</th><th>Carátula</th><th>Situación</th><th>Pendien.</th><th>Últ. act.</th></tr></thead>
+        <thead><tr>
+            <th class="mexp-th-check" onclick="event.stopPropagation()"><input type="checkbox" class="mexp-checkbox" id="mexp-check-all" onchange="mexpToggleSelectAll(this.checked)"></th>
+            <th>Expediente</th><th>Carátula</th><th>Situación</th><th>Pendien.</th><th>Últ. act.</th>
+        </tr></thead>
         <tbody>${trs}</tbody>
     </table>`;
+
+    mexpUpdateSelectAllCheckbox();
+    mexpRenderSelectionBar();
 }
 
 // ─── Ficha ───────────────────────────────────────────────────────────────────
@@ -4136,7 +4199,27 @@ async function saveMexpFicha(e) {
 }
 
 // ─── Eliminar seguimiento (con elección sobre las entradas) ─────────────────
+// El modal es el mismo para 1 caso (desde la ficha) o varios (desde el
+// listado, borrado múltiple) — `_eliminarIds` guarda el objetivo y el texto
+// se ajusta al plural. `mexpEliminarFicha(modo)` recorre los ids de a uno,
+// SECUENCIAL (mismo criterio que el guardado de un lote en F2.3): con pocas
+// decenas de casos como mucho, y así un fallo puntual no aborta el resto.
 function askMexpEliminar() {
+    const id = state.miExp.fichaId;
+    if (!id) return;
+    state.miExp._eliminarIds = [id];
+    document.getElementById('mexp-eliminar-texto').textContent =
+        'Vas a dejar de seguir este expediente. ¿Qué querés hacer con sus entradas de bitácora vinculadas?';
+    document.getElementById('modal-mexp-eliminar').classList.remove('hidden');
+}
+
+function mexpAskEliminarSeleccionados() {
+    const ids = [...state.miExp.selected];
+    if (ids.length === 0) return;
+    state.miExp._eliminarIds = ids;
+    const plural = ids.length === 1 ? 'este expediente' : `estos ${ids.length} expedientes`;
+    document.getElementById('mexp-eliminar-texto').textContent =
+        `Vas a dejar de seguir ${plural}. ¿Qué querés hacer con sus entradas de bitácora vinculadas?`;
     document.getElementById('modal-mexp-eliminar').classList.remove('hidden');
 }
 
@@ -4145,27 +4228,46 @@ function closeMexpEliminarModal() {
 }
 
 async function mexpEliminarFicha(modo) {
-    const id = state.miExp.fichaId;
-    if (!id) return;
+    const ids = state.miExp._eliminarIds;
+    if (!ids || ids.length === 0) return;
     closeMexpEliminarModal();
 
-    try {
-        const res = await apiFetch(`/usuarios/api/expedientes/${id}?entries=${modo}`, { method: 'DELETE' });
-        if (!res || !res.ok) { showToast('No se pudo eliminar el expediente.', 'error'); return; }
-        const data = await res.json();
+    let ok = 0, fail = 0, entradasBorradas = 0;
+    for (const id of ids) {
+        try {
+            const res = await apiFetch(`/usuarios/api/expedientes/${id}?entries=${modo}`, { method: 'DELETE' });
+            if (!res || !res.ok) { fail++; continue; }
+            const data = await res.json();
+            ok++;
+            entradasBorradas += data.entradasBorradas || 0;
+        } catch (e) {
+            fail++;
+        }
+    }
+
+    state.miExp._eliminarIds = null;
+    state.miExp.selected.clear();
+
+    if (fail === 0) {
         showToast(
-            modo === 'delete'
-                ? `Expediente eliminado junto con ${data.entradasBorradas} entrada(s).`
-                : 'Expediente eliminado. Sus entradas quedaron sueltas, sin vínculo.',
+            ids.length === 1
+                ? (modo === 'delete' ? `Expediente eliminado junto con ${entradasBorradas} entrada(s).` : 'Expediente eliminado. Sus entradas quedaron sueltas, sin vínculo.')
+                : `${ok} expedientes eliminados.`,
             'success'
         );
+    } else if (ok === 0) {
+        showToast('No se pudo eliminar ningún expediente.', 'error');
+    } else {
+        showToast(`${ok} eliminados, ${fail} no se pudieron eliminar.`, 'error');
+    }
+
+    // Si la ficha abierta era uno de los eliminados, volvés al listado.
+    if (state.miExp.fichaId && ids.includes(state.miExp.fichaId)) {
         state.miExp.fichaId = null;
         state.miExp.ficha = null;
         mexpShowLista();
-        await loadMexpList();
-    } catch (e) {
-        showToast('Error de conexión.', 'error');
     }
+    await loadMexpList();
 }
 
 // ─── Modal: ver un snapshot del historial ───────────────────────────────────
