@@ -232,7 +232,83 @@ Prod: md5 servido = md5 local en los 2 archivos, `pm2-api` reinició sin loop
 
 ---
 
-### B2 — Modal unificado de entradas (Sonnet/alto) — PENDIENTE
+### B2 — Modal unificado de entradas (Sonnet/alto) — ✅ CÓDIGO LISTO, sin desplegar
+
+**Cubre 11, 12, 14, 15.** Archivos: `index.html`, `app.js`, `app.css`
+(`backend-server/public/usuarios/`) + `routes/capture.js` (1 línea). **Sin
+migración, sin release.**
+
+**Punto 11 — causa raíz real, no una impresión.** Confirmado leyendo el CSS: el
+estilo de inputs de la app está scopeado a `.form-group input` (`app.css:492`);
+la pantalla de revisión del lote (`#modal-bitacora-lote`, F2.3) renderizaba sus
+campos como `<input class="lote-titulo">`/`<input class="lote-fecha">` **fuera**
+de cualquier `.form-group` — inputs 100% sin estilo, browser default, dentro de
+un modal por lo demás con el sistema de diseño de la app. No era una cuestión
+de "se ve raro", es que la regla de CSS literalmente no los alcanzaba.
+
+**Puntos 12 y 14 se resuelven juntos con un wizard de 2 pantallas** que
+reemplaza esa pantalla de revisión:
+1. **Selector de tipo por botones** (Vencimiento/Audiencia/Tarea/Nota) — la
+   pantalla nueva del wizard. Reemplaza el `prompt()` nativo del visor, pero
+   **el prompt en sí sigue vivo hoy** (vive en `visorModal_template.html` /
+   `visor_informes_template.html`, Electron, requiere release → es tarea de
+   B3). Para no bloquear B2 en eso, el wizard soporta los dos casos: si el
+   draft ya trae un `tipo` (como manda el visor de HOY), salta directo al
+   paso 2; si no lo trae (lo que hará el visor una vez B3 elimine el prompt),
+   muestra los botones primero. **Backend:** `capture.js` ya no exige `tipo`
+   para `entrada-lote` (solo para `entrada`, la acción individual que sí nace
+   de un botón que ya sabe su tipo) — 1 línea, para que el camino sin-tipo sea
+   válido cuando corresponda.
+2. **Paso por caso** (Anterior · Descartar · Guardar/Actualizar · Siguiente):
+   header con expediente/carátula/dependencia/situación/última actividad
+   (punto 12) + los mismos campos que el modal individual, incluida la
+   calculadora de plazo para `vencimiento`. Guardar/Descartar son decisiones
+   explícitas por caso, no atadas a la navegación — Anterior/Siguiente se
+   puede usar libremente sin crear ni perder nada; los valores editados de
+   cada caso quedan en memoria mientras se navega.
+
+**Se agregó el campo "Repetir"** (semanal/mensual/anual) a ambos modales — el
+backend ya validaba `repeat_rule` desde F1.2 pero **ningún formulario lo
+exponía**; el "algo más según el tipo" del punto 12 apuntaba a esto. Bug de
+signo encontrado al cablearlo: el backend rechaza cualquier `repeat_rule` que
+no sea `undefined`/`null`/uno de `REPEAT_RULES` — un string vacío (`''`, lo
+que manda un `<select>` en su opción por defecto) **no pasa ese chequeo**;
+hay que convertirlo a `null` explícito antes de enviarlo.
+
+**El header de contexto (`#bit-caso-header`) también quedó en el modal
+individual**, no solo en el wizard — se generalizó: aparece cuando la entrada
+tiene un caso vinculado (preset desde una ficha, desde la captura, o elegido a
+mano en el `<select>` de expediente), resuelto contra `state.bitacora.expedientes`
+(ya poblado siempre antes de abrir el modal) — sin pedir nada nuevo al backend.
+
+**Verificado con el stub del portal y Playwright:**
+- Modal individual: header completo (expediente/carátula/dependencia/
+  situación/última actividad), `kind`/`title`/`description` precargados desde
+  el caso capturado, bloque de plazo visible solo para `vencimiento`, opciones
+  de "Repetir" presentes.
+- Guardado con `repeat_rule='monthly'` → confirmado en la entrada creada
+  (`GET /usuarios/api/bitacora`).
+- Editar una entrada con `repeat_rule` guardado → el `<select>` la precarga.
+- Wizard con `tipo` preseteado (como manda el visor de hoy): salta el selector,
+  título default se arma del primer movimiento del caso.
+- Guardar caso 1 → botón pasa a "Actualizar", banner "✓ Se creó una entrada",
+  "Descartar" se deshabilita. Siguiente → caso 2 sin movimientos usa el título
+  default genérico. Descartar caso 2 → banner de descarte, footer cambia a
+  "Finalizar". Anterior → caso 1 conserva los valores editados intactos.
+  Finalizar → **1 sola entrada creada** (el descarte no generó nada), con
+  `expediente_id` verificado igual al id real de la ficha del caso 1.
+- Wizard sin `tipo`: selector de 4 botones, elegir "Vencimiento" muestra el
+  bloque de plazo; la calculadora reusada (`calcularPlazoBitacora` con ids
+  parametrizados) da el mismo resultado en el wizard que en el modal
+  individual (10 días hábiles desde 14/08 → 31/08 en ambos).
+- Bug encontrado y corregido en el camino: el texto del selector de tipo decía
+  "1 caso seleccionados" (concordancia rota) — corregido a singular/plural.
+- 0 errores de consola nuevos.
+
+**Pendiente de B2:** desplegar staging → prod (mismo criterio que B1: decidir
+si va solo o junto con lo que siga).
+
+---
 
 ### B3 — Visores (Sonnet/alto) — PENDIENTE
 **Absorbe el punto 5** (mover desde B1): el visor es `file://` y el portal
@@ -247,5 +323,12 @@ próxima corrida.
 **También de B3:** agregar `&exp=<numero>` a los 4 hrefs de ficha (`main.js:2454`,
 `visorModal_template.html:645,694`, `visor_informes_template.html:446`) para que
 el deep-link abra la ficha exacta en vez del listado.
+
+**Y (nuevo, de B2):** sacar el `prompt()` de "＋ Crear entradas…" en los 2
+templates (`visorModal_template.html`, `visor_informes_template.html`) —
+cambiar `accionLote('entrada-lote', mapa[tipo])` por `accionLote('entrada-lote', null)`
+directo. El backend y el portal ya soportan el camino sin `tipo` (B2, verificado
+con el selector de botones) — es un cambio de 1-2 líneas por template, el resto
+de la infraestructura ya está lista.
 
 ### B4 — Carátula en Informe (Sonnet/medio-alto) — PENDIENTE

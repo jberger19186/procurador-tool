@@ -1791,29 +1791,69 @@ body.sidebar-collapsed .nav-item #nav-notif-badge { right: 2px; top: 2px; transf
 .home-pill.active:hover { border-color: var(--accent); }
 
 /* =============================================
-   Revisión del lote de captura (F2.3)
+   Contexto de caso en el modal de entrada (F2.3+B2) — expediente/carátula/
+   dependencia/situación/última actividad, para que crear una entrada desde un
+   visor no pierda de vista de qué caso se trata. Reutilizado en el modal
+   individual (#bit-caso-header) y en cada paso del wizard de lote.
    ============================================= */
-.lote-fila {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 4px;
-    border-bottom: 1px solid var(--border);
+.bit-caso-header {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
 }
-.lote-fila:last-child { border-bottom: none; }
-.lote-fila-check { margin-top: 10px; flex-shrink: 0; }
-.lote-fila-exp {
-    flex: 0 0 130px;
+.bit-caso-header-exp {
     font-family: monospace;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--accent-dark);
+}
+.bit-caso-header-car {
+    font-size: 13px;
+    color: var(--text);
+    margin-top: 2px;
+}
+.bit-caso-header-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* =============================================
+   Wizard de entradas para selección múltiple (F2.3→B2)
+   ============================================= */
+.bit-lote-intro { font-size: 13.5px; color: var(--text); margin-bottom: 14px; }
+.bit-tipo-picker {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.bit-tipo-btn {
+    padding: 16px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .15s, background .15s;
+}
+.bit-tipo-btn:hover { border-color: var(--accent); background: var(--bg); }
+
+.bit-lote-progress {
     font-size: 12px;
     font-weight: 600;
-    color: var(--accent-dark);
-    padding-top: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-bottom: 10px;
 }
-.lote-fila-campos { flex: 1; display: flex; gap: 8px; }
-.lote-fila-campos input[type="text"] { flex: 1; }
-.lote-fila-campos input[type="date"] { flex: 0 0 155px; }
-.lote-fila.excluida { opacity: .45; }
 
 /* =============================================
    Restaurar backup (F1.7)

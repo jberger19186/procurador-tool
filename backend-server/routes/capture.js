@@ -97,8 +97,12 @@ router.post('/', (req, res) => {
         const tipo   = TIPOS_ENTRADA.includes(body.tipo) ? body.tipo : null;
         const origen = ORIGENES.includes(body.origen) ? body.origen : 'procuracion';
 
-        // Una acción de entrada sin tipo válido no tiene con qué precargar el modal.
-        if (accion.startsWith('entrada') && !tipo) return redirigir(res, { captura: 'error' });
+        // `entrada` (mini-menú "+ vencimiento/tarea/nota" de UN caso) SIEMPRE trae un
+        // tipo — nace de un botón que ya lo sabe, no hay con qué precargar el modal
+        // sin él. `entrada-lote` (selección múltiple) es distinto desde B2: el tipo
+        // se puede elegir DESPUÉS, del lado autenticado, con botones en vez del
+        // prompt() que usa el visor hoy — así que acá viaja opcional.
+        if (accion === 'entrada' && !tipo) return redirigir(res, { captura: 'error' });
 
         let casos;
         if (esLote) {

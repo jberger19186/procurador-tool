@@ -2763,7 +2763,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-bitacora-nueva')?.addEventListener('click', () => openBitacoraModal());
     document.getElementById('bitacora-entrada-form')?.addEventListener('submit', saveBitacoraEntrada);
     document.getElementById('bit-kind')?.addEventListener('change', bitTogglePlazoBlock);
-    document.getElementById('bit-plazo-calcular')?.addEventListener('click', calcularPlazoBitacora);
+    // Nota: `calcularPlazoBitacora` toma un parámetro opcional `ids` — llamarla directo
+    // como handler pasaría el objeto Event en ese lugar, así que va envuelta.
+    document.getElementById('bit-plazo-calcular')?.addEventListener('click', () => calcularPlazoBitacora());
+    // Elegir un caso del selector (no solo llegar con uno precargado) también actualiza
+    // el header de contexto — generaliza el punto 12 más allá del flujo de captura.
+    document.getElementById('bit-expediente')?.addEventListener('change', (e) => bitRenderCasoHeader(e.target.value));
 
     document.querySelectorAll('.bitacora-view-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -3051,9 +3056,13 @@ function bitAddBusinessDays(fromYmd, dias) {
     return bitLocalYmd(cur);
 }
 
-async function calcularPlazoBitacora() {
-    const desde = document.getElementById('bit-plazo-desde').value;
-    const dias = parseInt(document.getElementById('bit-plazo-dias').value, 10);
+// `ids`: permite reusar la misma calculadora en el wizard de lote (B2), que tiene sus
+// propios ids de campo (`lote-plazo-*`) para no colisionar con el modal individual
+// cuando ambos existen en el DOM a la vez.
+async function calcularPlazoBitacora(ids) {
+    const p = ids || { desde: 'bit-plazo-desde', dias: 'bit-plazo-dias', due: 'bit-due' };
+    const desde = document.getElementById(p.desde).value;
+    const dias = parseInt(document.getElementById(p.dias).value, 10);
     if (!desde || !dias || dias < 1) {
         showToast('Completá la fecha de notificación y la cantidad de días hábiles.', 'error');
         return;
@@ -3061,7 +3070,7 @@ async function calcularPlazoBitacora() {
     const anioBase = bitParseLocalDate(desde).getFullYear();
     await bitEnsureFeriados([anioBase, anioBase + 1]); // el vencimiento puede caer en el año siguiente
     const resultado = bitAddBusinessDays(desde, dias);
-    document.getElementById('bit-due').value = resultado;
+    document.getElementById(p.due).value = resultado;
     showToast(`Vencimiento calculado: ${formatDate(resultado)}`, 'success');
 }
 
@@ -3501,6 +3510,30 @@ function bitTogglePlazoBlock() {
     if (block) block.style.display = kind === 'vencimiento' ? 'block' : 'none';
 }
 
+// Header de contexto (B2, puntos 12/21 de la lista de arreglos del visor): busca la
+// ficha en `state.bitacora.expedientes` (ya poblado por loadBitacoraExpedientes, que
+// corre antes de cualquiera de los 3 call sites de openBitacoraModal) y muestra
+// expediente/carátula/dependencia/situación/última actividad. Sin ficha vinculada
+// (el "＋ Nueva entrada" global de la sección Bitácora) el bloque queda oculto — no
+// hay nada que mostrar todavía.
+function bitRenderCasoHeader(expedienteId) {
+    const el = document.getElementById('bit-caso-header');
+    if (!el) return;
+    const ficha = expedienteId
+        ? (state.bitacora.expedientes || []).find(x => String(x.id) === String(expedienteId))
+        : null;
+    if (!ficha) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.innerHTML = `
+        <div class="bit-caso-header-exp">${escapeHtml(ficha.expediente)}</div>
+        ${ficha.caratula ? `<div class="bit-caso-header-car">${escapeHtml(ficha.caratula)}</div>` : ''}
+        <div class="bit-caso-header-meta">
+            ${ficha.dependencia ? `<span>${escapeHtml(ficha.dependencia)}</span>` : ''}
+            ${ficha.situacion_actual ? `<span>${escapeHtml(ficha.situacion_actual)}</span>` : ''}
+            ${ficha.situacion_fecha ? `<span>Últ. actividad: ${formatDate(ficha.situacion_fecha)}</span>` : ''}
+        </div>`;
+    el.style.display = 'block';
+}
+
 // `overrides` (F2.3): {kind, title, description} — precarga adicional para cuando la
 // entrada nace de una captura desde el visor (kind=tipo elegido en el mini-menú,
 // title/description sugeridos a partir del movimiento). Opcional; sin overrides se
@@ -3515,6 +3548,7 @@ function openBitacoraModal(presetExpedienteId, overrides) {
     if (overrides?.kind) document.getElementById('bit-kind').value = overrides.kind;
     if (overrides?.title) document.getElementById('bit-title').value = overrides.title;
     if (overrides?.description) document.getElementById('bit-description').value = overrides.description;
+    bitRenderCasoHeader(document.getElementById('bit-expediente').value);
     bitTogglePlazoBlock();
     document.getElementById('modal-bitacora-entrada').classList.remove('hidden');
 }
@@ -3532,6 +3566,8 @@ function openBitacoraModalById(id) {
     document.getElementById('bit-description').value = e.description || '';
     document.getElementById('bit-due').value = e.due_at ? bitLocalYmd(e.due_at) : '';
     document.getElementById('bit-expediente').value = e.expediente_id || '';
+    document.getElementById('bit-repeat').value = e.repeat_rule || '';
+    bitRenderCasoHeader(e.expediente_id);
     bitTogglePlazoBlock();
     document.getElementById('modal-bitacora-entrada').classList.remove('hidden');
 }
@@ -3557,6 +3593,7 @@ async function saveBitacoraEntrada(e) {
     const description = document.getElementById('bit-description').value.trim();
     const dueYmd = document.getElementById('bit-due').value;
     const expedienteId = document.getElementById('bit-expediente').value;
+    const repeatRule = document.getElementById('bit-repeat').value;
 
     if (!title) {
         showAlert(alertEl, 'error', 'El título es obligatorio.');
@@ -3569,6 +3606,9 @@ async function saveBitacoraEntrada(e) {
         description: description || null,
         due_at: dueYmd ? bitToIsoMidday(dueYmd) : null,
         expediente_id: expedienteId || null,
+        // '' (opción "No se repite") → null. El backend rechaza cualquier valor que no
+        // sea undefined/null/uno de REPEAT_RULES — un string vacío no pasa ese chequeo.
+        repeat_rule: repeatRule || null,
     };
 
     btn.disabled = true;
@@ -4505,31 +4545,45 @@ async function abrirEntradaIndividualDesdeDraft(caso, origen, tipo) {
     }
 }
 
-// "＋ Crear entradas…" sobre una selección múltiple: pantalla de revisión (§4.2a del
-// plan) — una fila editable por caso, con calculadora de fecha aplicable a todos.
+// ═══════════════════════════════════════════════════════════════════════════
+// "＋ Crear entradas…" sobre una selección múltiple (B2, puntos 12/14/15 de la
+// lista de arreglos del visor). Wizard de 2 pantallas:
+//   1. Elegir el TIPO de entrada — una sola vez para todo el lote (antes era un
+//      prompt() nativo con "1=Vencimiento/2=Tarea/3=Nota"; ahora son botones).
+//      Se saltea si `tipo` ya viene resuelto en el draft (el visor de HOY sigue
+//      preguntando por prompt antes de capturar — ver la nota en capture.js).
+//   2. Recorrer los casos uno por uno (Anterior/Siguiente), con Guardar/Descartar
+//      como una decisión explícita por caso, no atada a la navegación — el
+//      usuario puede ir y volver sin que eso cree ni borre nada.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const BIT_TIPO_ENTRADA_LABELS = {
+    vencimiento: '⏰ Vencimiento',
+    audiencia:   '⚖️ Audiencia',
+    tarea:       '✅ Tarea',
+    nota:        '📝 Nota',
+};
+
 function abrirRevisionLoteDesdeDraft(casos, origen, tipo) {
-    state.captureLote = { casos, origen, tipo };
+    state.captureLote = {
+        casos, origen,
+        tipo: tipo || null,
+        idx: 0,
+        // Un valor por caso, independiente del formulario en pantalla — así ir y
+        // volver con Anterior/Siguiente no pierde lo que el usuario ya tipeó.
+        filas: casos.map(c => ({
+            title: '', // se completa perezoso en el primer render (recién ahí se conoce `tipo` si vino del selector)
+            due: bitLocalYmd(new Date()),
+            repeat: '',
+            description: (c.movimientos || [])[0]?.detalle || '',
+        })),
+        fichaMap: null, // expediente → expediente_id, resuelto una sola vez para TODO el lote
+        estado: casos.map(() => ({ status: 'pendiente', entryId: null })), // 'pendiente'|'guardado'|'descartado'
+    };
     document.getElementById('lote-modal-title').textContent = `Crear entradas — ${casos.length} caso${casos.length !== 1 ? 's' : ''}`;
     document.getElementById('lote-modal-alert').classList.remove('visible');
-    document.getElementById('lote-fecha-todos').value = bitLocalYmd(new Date());
-    renderFilasLote();
     document.getElementById('modal-bitacora-lote').classList.remove('hidden');
-}
-
-function renderFilasLote() {
-    const cont = document.getElementById('lote-filas-container');
-    const { casos, tipo } = state.captureLote;
-    const hoy = bitLocalYmd(new Date());
-    cont.innerHTML = casos.map((c, i) => `
-        <div class="lote-fila" data-idx="${i}">
-            <input type="checkbox" class="lote-fila-check" checked onchange="this.closest('.lote-fila').classList.toggle('excluida', !this.checked)">
-            <div class="lote-fila-exp">${escapeHtml(c.expediente)}</div>
-            <div class="lote-fila-campos">
-                <input type="text" class="lote-titulo" value="${escapeHtml(tituloSugeridoDesdeCaso(c, tipo))}" maxlength="300">
-                <input type="date" class="lote-fecha" value="${hoy}">
-            </div>
-        </div>
-    `).join('');
+    loteAsegurarFichas();
 }
 
 function closeLoteModal() {
@@ -4537,73 +4591,217 @@ function closeLoteModal() {
     state.captureLote = null;
 }
 
-function aplicarFechaATodoElLote() {
-    const val = document.getElementById('lote-fecha-todos').value;
-    if (!val) return;
-    document.querySelectorAll('#lote-filas-container .lote-fecha').forEach(inp => { inp.value = val; });
+function loteSetFooter(html) {
+    document.getElementById('lote-modal-footer-extra').innerHTML = html;
 }
 
-async function guardarLoteEntradas() {
-    const alertEl = document.getElementById('lote-modal-alert');
-    const { casos, origen, tipo } = state.captureLote || {};
-    if (!casos) return;
+// Paso previo a las 2 pantallas del wizard: upsert de fichas + snapshot de TODOS los
+// casos de la selección en un solo POST — "capturar una entrada ya implica guardar
+// la procuración/informe de ese momento" (§4.2 del plan). Se hace una sola vez al
+// abrir, no por caso, para no repetir el mismo insert/upsert en cada paso.
+async function loteAsegurarFichas() {
+    const { casos, origen } = state.captureLote;
+    document.getElementById('lote-modal-content').innerHTML = '<div class="empty-state"><p>Guardando los casos seleccionados…</p></div>';
+    loteSetFooter('');
+    try {
+        const res = await apiFetch('/usuarios/api/expedientes/capture-lote', {
+            method: 'POST',
+            body: { accion: 'snapshot-lote', casos: casos.map(c => Object.assign({}, c, { origen })) }
+        });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            showAlert(document.getElementById('lote-modal-alert'), 'error', data.error || 'No se pudieron guardar los casos.');
+            loteSetFooter('');
+            return;
+        }
+        state.captureLote.fichaMap = new Map((data.perCaso || []).map(p => [p.expediente, p.expediente_id]));
+        if (state.captureLote.tipo) loteRenderPasoCaso();
+        else loteRenderSelectorTipo();
+    } catch (e) {
+        showAlert(document.getElementById('lote-modal-alert'), 'error', 'Error de conexión al guardar los casos.');
+    }
+}
 
-    const filas = Array.from(document.querySelectorAll('#lote-filas-container .lote-fila'));
-    const incluidas = filas.filter(f => f.querySelector('.lote-fila-check').checked);
-    if (incluidas.length === 0) { showAlert(alertEl, 'error', 'Marcá al menos un caso.'); return; }
+function loteRenderSelectorTipo() {
+    const n = state.captureLote.casos.length;
+    document.getElementById('lote-modal-content').innerHTML = `
+        <p class="bit-lote-intro">¿Qué tipo de entrada querés crear para ${n === 1 ? 'el caso seleccionado' : `los ${n} casos seleccionados`}?</p>
+        <div class="bit-tipo-picker">
+            ${Object.entries(BIT_TIPO_ENTRADA_LABELS).map(([k, label]) =>
+                `<button type="button" class="bit-tipo-btn" onclick="loteElegirTipo('${k}')">${label}</button>`
+            ).join('')}
+        </div>`;
+    loteSetFooter('');
+}
 
-    const btn = document.getElementById('btn-lote-guardar');
+function loteElegirTipo(tipo) {
+    state.captureLote.tipo = tipo;
+    loteRenderPasoCaso();
+}
+
+// Persiste en `filas[idx]` lo que el usuario tenga tipeado en el paso actual —
+// se llama ANTES de navegar (Anterior/Siguiente) o de guardar/descartar, para que
+// nada se pierda al moverse entre casos.
+function loteLeerCamposActuales() {
+    const { idx, filas } = state.captureLote;
+    const fila = filas[idx];
+    const titleEl = document.getElementById('lote-caso-titulo');
+    if (!titleEl) return; // paso 1 (selector de tipo) o transición en curso
+    fila.title = titleEl.value;
+    fila.due = document.getElementById('lote-caso-fecha').value;
+    fila.repeat = document.getElementById('lote-caso-repeat').value;
+    fila.description = document.getElementById('lote-caso-desc').value;
+}
+
+function loteRenderPasoCaso() {
+    const { casos, idx, tipo, filas, estado } = state.captureLote;
+    const caso = casos[idx];
+    const fila = filas[idx];
+    if (!fila.title) fila.title = tituloSugeridoDesdeCaso(caso, tipo); // default una sola vez, no pisa una edición
+    const est = estado[idx];
+    const esVencimiento = tipo === 'vencimiento';
+    const ultimaActividad = (caso.movimientos || [])[0]?.fecha || (caso.fecha_corrida ? formatDate(caso.fecha_corrida) : '');
+
+    document.getElementById('lote-modal-content').innerHTML = `
+        <div class="bit-lote-progress">Caso ${idx + 1} de ${casos.length} — ${BIT_TIPO_ENTRADA_LABELS[tipo] || tipo}</div>
+        <div class="bit-caso-header">
+            <div class="bit-caso-header-exp">${escapeHtml(caso.expediente)}</div>
+            ${caso.caratula ? `<div class="bit-caso-header-car">${escapeHtml(caso.caratula)}</div>` : ''}
+            <div class="bit-caso-header-meta">
+                ${caso.dependencia ? `<span>${escapeHtml(caso.dependencia)}</span>` : ''}
+                ${caso.situacion_actual ? `<span>${escapeHtml(caso.situacion_actual)}</span>` : ''}
+                ${ultimaActividad ? `<span>Últ. actividad: ${escapeHtml(ultimaActividad)}</span>` : ''}
+            </div>
+        </div>
+        ${est.status !== 'pendiente' ? `
+            <div class="alert visible ${est.status === 'guardado' ? 'alert-success' : 'alert-info'}">
+                ${est.status === 'guardado' ? '✓ Se creó una entrada para este caso.' : 'Descartado — no se creó ninguna entrada para este caso.'}
+            </div>` : ''}
+        <div class="form-group">
+            <label for="lote-caso-titulo">Título</label>
+            <input type="text" id="lote-caso-titulo" maxlength="300" value="${escapeHtml(fila.title)}">
+        </div>
+        ${esVencimiento ? `
+        <div class="form-row" style="display:flex;gap:10px">
+            <div class="form-group" style="flex:1">
+                <label for="lote-plazo-desde">Notificado/inicia el</label>
+                <input type="date" id="lote-plazo-desde">
+            </div>
+            <div class="form-group" style="flex:1">
+                <label for="lote-plazo-dias">Días hábiles</label>
+                <input type="number" id="lote-plazo-dias" min="1" max="365" placeholder="Ej: 15">
+            </div>
+            <div class="form-group" style="flex:0 0 auto;display:flex;align-items:flex-end;padding-bottom:14px">
+                <button type="button" class="btn btn-outline btn-sm" onclick="calcularPlazoBitacora({desde:'lote-plazo-desde',dias:'lote-plazo-dias',due:'lote-caso-fecha'})">Calcular</button>
+            </div>
+        </div>` : ''}
+        <div class="form-group">
+            <label for="lote-caso-fecha">Fecha</label>
+            <input type="date" id="lote-caso-fecha" value="${fila.due}">
+        </div>
+        <div class="form-group">
+            <label for="lote-caso-repeat">Repetir</label>
+            <select id="lote-caso-repeat">
+                <option value="" ${!fila.repeat ? 'selected' : ''}>No se repite</option>
+                <option value="weekly" ${fila.repeat === 'weekly' ? 'selected' : ''}>Semanal</option>
+                <option value="monthly" ${fila.repeat === 'monthly' ? 'selected' : ''}>Mensual</option>
+                <option value="yearly" ${fila.repeat === 'yearly' ? 'selected' : ''}>Anual</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+            <label for="lote-caso-desc">Descripción / notas</label>
+            <textarea id="lote-caso-desc" rows="3" maxlength="5000">${escapeHtml(fila.description)}</textarea>
+        </div>`;
+
+    loteSetFooter(`
+        <button type="button" class="btn btn-outline" ${idx === 0 ? 'disabled' : ''} onclick="loteIrAnterior()">&#8249; Anterior</button>
+        <button type="button" class="btn btn-outline" ${est.status === 'guardado' ? 'disabled' : ''} onclick="loteDescartarCasoActual()">Descartar</button>
+        <button type="button" class="btn btn-primary" id="btn-lote-guardar-caso" onclick="loteGuardarCasoActual()">${est.status === 'guardado' ? 'Actualizar' : 'Guardar'}</button>
+        ${idx < casos.length - 1
+            ? `<button type="button" class="btn btn-outline" onclick="loteIrSiguiente()">Siguiente &#8250;</button>`
+            : `<button type="button" class="btn btn-primary" onclick="loteFinalizar()">Finalizar</button>`
+        }
+    `);
+}
+
+function loteIrAnterior() {
+    loteLeerCamposActuales();
+    state.captureLote.idx--;
+    loteRenderPasoCaso();
+}
+
+function loteIrSiguiente() {
+    loteLeerCamposActuales();
+    state.captureLote.idx++;
+    loteRenderPasoCaso();
+}
+
+async function loteGuardarCasoActual() {
+    loteLeerCamposActuales();
+    const { casos, idx, tipo, filas, estado, fichaMap } = state.captureLote;
+    const caso = casos[idx];
+    const fila = filas[idx];
+    const est = estado[idx];
+
+    if (!fila.title.trim()) {
+        showAlert(document.getElementById('lote-modal-alert'), 'error', 'El título es obligatorio.');
+        return;
+    }
+
+    const btn = document.getElementById('btn-lote-guardar-caso');
     btn.disabled = true;
     const original = btn.textContent;
-    btn.innerHTML = '<span class="spinner"></span> Guardando fichas...';
+    btn.innerHTML = '<span class="spinner"></span> Guardando...';
+
+    const body = {
+        kind: tipo,
+        title: fila.title.trim(),
+        description: fila.description.trim() || null,
+        due_at: fila.due ? bitToIsoMidday(fila.due) : null,
+        expediente_id: fichaMap.get(caso.expediente) || null,
+        repeat_rule: fila.repeat || null,
+    };
 
     try {
-        // 1) upsert de fichas + snapshot de TODOS los casos incluidos, en un solo POST.
-        const casosIncluidos = incluidas.map(f => casos[parseInt(f.dataset.idx, 10)]);
-        const resFichas = await apiFetch('/usuarios/api/expedientes/capture-lote', {
-            method: 'POST',
-            body: { accion: 'snapshot-lote', casos: casosIncluidos.map(c => Object.assign({}, c, { origen })) }
-        });
-        if (!resFichas) return;
-        const dataFichas = await resFichas.json();
-        if (!resFichas.ok) { showAlert(alertEl, 'error', dataFichas.error || 'No se pudieron guardar los casos.'); return; }
-
-        const idPorExpediente = new Map((dataFichas.perCaso || []).map(p => [p.expediente, p.expediente_id]));
-
-        // 2) una entrada por fila incluida, con el título/fecha que el usuario dejó en la revisión.
-        // Secuencial (no Promise.all): son como máximo unas pocas decenas de filas —una revisión
-        // manual, no un hot path— y así un fallo puntual no aborta las que ya se crearon.
-        btn.innerHTML = '<span class="spinner"></span> Creando entradas...';
-        let creadas = 0, fallidas = 0;
-        for (const fila of incluidas) {
-            const idx = parseInt(fila.dataset.idx, 10);
-            const caso = casos[idx];
-            const expedienteId = idPorExpediente.get(caso.expediente) || null;
-            const titulo = fila.querySelector('.lote-titulo').value.trim() || tituloSugeridoDesdeCaso(caso, tipo);
-            const fecha = fila.querySelector('.lote-fecha').value;
-            const res = await apiFetch('/usuarios/api/bitacora', {
-                method: 'POST',
-                body: {
-                    kind: tipo,
-                    title: titulo,
-                    description: (caso.movimientos || [])[0]?.detalle || '',
-                    due_at: fecha ? bitToIsoMidday(fecha) : null,
-                    expediente_id: expedienteId,
-                }
-            });
-            if (res && res.ok) creadas++; else fallidas++;
+        const res = est.entryId
+            ? await apiFetch(`/usuarios/api/bitacora/${est.entryId}`, { method: 'PUT', body })
+            : await apiFetch('/usuarios/api/bitacora', { method: 'POST', body });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) {
+            showAlert(document.getElementById('lote-modal-alert'), 'error', data.error || 'No se pudo guardar.');
+            return;
         }
-
-        closeLoteModal();
-        showToast(
-            fallidas === 0 ? `${creadas} entrada(s) creada(s).` : `${creadas} entrada(s) creada(s), ${fallidas} fallaron.`,
-            fallidas === 0 ? 'success' : 'error'
-        );
-        await refrescarTrasCaptura();
+        est.status = 'guardado';
+        est.entryId = est.entryId || data.entrada?.id || null;
+        loteRenderPasoCaso();
     } catch (e) {
-        showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
+        showAlert(document.getElementById('lote-modal-alert'), 'error', 'Error de conexión. Intentá de nuevo.');
     } finally {
         btn.disabled = false;
         btn.textContent = original;
     }
+}
+
+function loteDescartarCasoActual() {
+    const est = state.captureLote.estado[state.captureLote.idx];
+    if (est.status === 'guardado') return; // ya no aplica: "Descartar" queda deshabilitado en ese estado
+    est.status = 'descartado';
+    loteRenderPasoCaso();
+}
+
+async function loteFinalizar() {
+    loteLeerCamposActuales();
+    const resumen = state.captureLote.estado.reduce((acc, e) => {
+        acc[e.status] = (acc[e.status] || 0) + 1;
+        return acc;
+    }, {});
+    const partes = [];
+    if (resumen.guardado) partes.push(`${resumen.guardado} entrada(s) creada(s)`);
+    if (resumen.descartado) partes.push(`${resumen.descartado} descartada(s)`);
+    if (resumen.pendiente) partes.push(`${resumen.pendiente} sin decidir`);
+    closeLoteModal();
+    showToast(partes.length ? partes.join(', ') + '.' : 'No se creó ninguna entrada.', resumen.guardado ? 'success' : 'info');
+    await refrescarTrasCaptura();
 }
