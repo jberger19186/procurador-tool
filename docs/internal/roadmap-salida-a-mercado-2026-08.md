@@ -101,8 +101,16 @@ Cuatro razones, todas económicas — ninguna estética:
 | **Qué es** | Toma un informe PDF generado por la app, descarga los PDF vinculados, extrae todo a Markdown, y produce además una versión **anonimizada** (expediente → `Expediente`, partes → `Actor`/`Demandado`, terceros → `Jon### Ber###`) con un diccionario de reemplazos editable y reprocesable |
 | **Dónde** | Botón propio en el topbar, al lado de 📔 Bitácora. Gateado por plan (`markdown_enabled`) |
 | **Modelo / esfuerzo** | Sonnet en 6 de 7 bloques. **Opus solo en M4** (motor de anonimización) |
-| **Sesiones** | 6–10 + 1 release. **Puede subir a 9–13** según el resultado de M0 |
-| **🚨 Gate propio** | **M0 — spike de viabilidad.** Antes de escribir código hay que confirmar si los PDF vinculados se pueden descargar sin sesión del PJN. Si no se puede, el módulo pasa de "parsing" a "tocar un script encriptado", y **deja de poder procesar informes viejos**. Es una decisión de producto, no de implementación |
+| **Sesiones** | **6–10 + 1 release.** ~~Puede subir a 9–13 según M0~~ → **descartado, ver abajo** |
+| **✅ Gate propio — CERRADO el 2026-08-26** | **M0 devolvió ESCENARIO A**, el más barato: los documentos del SCW se descargan **sin sesión** (12/12 `HTTP 200`, verificado sobre los 4 tipos). **M3 es `fetch` en Node** — no se toca ningún script encriptado, no entra el candado de ejecución, y **el módulo SÍ procesa informes viejos**. La capa de texto salió mejor de lo previsto: **0 %** de páginas sin texto en el informe, **14,6 %** en los adjuntos (sin OCR en v1). 📄 [`spike-markdown-M0-2026-08-26.md`](spike-markdown-M0-2026-08-26.md) |
+
+> 🚨 **Lo que M0 encontró y ningún documento del módulo contemplaba:** los `viewer.seam` que el
+> informe embebe **abren el documento original sin autenticación**, y sus tokens **no expiran**
+> (≥27 días medidos). Un `.md` con los nombres enmascarados pero los **enlaces vivos entrega el
+> expediente sin anonimizar** a quien lo reciba. **La anonimización tiene que alcanzar a las URLs, no
+> solo al texto** — es la regla 4 de M4, con una decisión de producto pendiente del operador
+> (eliminar / referencia local / dejarlas; recomendación: referencia local). Su verificación es
+> binaria y ya está incorporada al bloque **S10** de la Etapa 3.
 
 ### 1.3 — Landing + Términos y Condiciones + Privacidad
 
@@ -350,8 +358,9 @@ Las que este roadmap existe para hacer visibles. Cada una es un error concreto q
 | **5** | **Los TyC de beta se publican antes del primer cobro real** | Se cobra con términos que no dicen que el producto está en prueba |
 | **6** | **1.3 (landing) y 1.6 (demo) tocan el mismo archivo** | Dos sesiones editando `landing/index.html` en paralelo = conflicto. 1.3 primero, 1.6 después |
 | **7** | **AZ arranca el día 0** | El lanzamiento queda esperando un trámite de 3 días que podría haber corrido en paralelo desde el principio |
-| **8** | **El módulo Markdown tiene su propio gate (M0) antes de M1** | Se construyen 6 sesiones de módulo y recién ahí se descubre que los adjuntos necesitan sesión autenticada del PJN |
+| **8** | ~~**El módulo Markdown tiene su propio gate (M0) antes de M1**~~ ✅ **resuelto 2026-08-26** | Se construían 6 sesiones de módulo para descubrir recién ahí que los adjuntos necesitan sesión del PJN. **M0 se ejecutó y devolvió escenario A** — el riesgo no se materializó, y el arranque de 1.2 pasa a ser M1. En el camino apareció **una dependencia nueva hacia la Etapa 3**: la anonimización debe alcanzar a las URLs (fila 10) |
 | **9** | **Lo que la Etapa 1 construye, las Etapas 2 y 3 tienen que revisarlo** | Es la dependencia que se destapó el 2026-08-26 al confirmar 1.1 y 1.2. El code-review ya la tenía cubierta (**F5** = módulo Markdown; **F1** declara depender de Etapa 1 porque F3.4 toca `routes/bitacora.js`). La seguridad **no**: SEC-2 se escribió el 24/08, cuando 1.2 todavía era una decisión de negocio sin resolver → se le agregó el bloque **S10**. Sin eso, se cierra la Etapa 3 con un módulo entero sin auditar, y encima el que más promete al usuario (*"esto no tiene datos personales"*) |
+| **10** | **Un `.md` "anonimizado" con enlaces del SCW vivos entrega el original sin anonimizar** | Hallazgo de **M0** (2026-08-26): esos enlaces **no requieren login** y **no expiran** (≥27 días medidos). Si M4 no los trata, el módulo cumple su promesa solo en apariencia — y el usuario se entera después de mandar el archivo. La verificación es binaria (un grep de `viewer.seam`) y vive en **S10**, Etapa 3 |
 
 ---
 
@@ -390,7 +399,7 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 
 | Etapa | Sesiones | Notas |
 |---|---|---|
-| **1** — Producto | **13–21** | Los 6 ítems confirmados. 1.1 (1–2) · 1.2 (6–10, o 9–13 según M0) · 1.3 (1) · 1.4 (1) · 1.5 (1) · 1.6 (4–6) |
+| **1** — Producto | **13–21** | Los 6 ítems confirmados. 1.1 (1–2) · **1.2 (6–10 — M0 ya cerrado, la horquilla alta de 9–13 queda descartada)** · 1.3 (1) · 1.4 (1) · 1.5 (1) · 1.6 (4–6) |
 | **2** — Code review | **9–13** | 3 fases `xhigh` consumen sesión propia o más |
 | **3** — Security review | **7–11** | S1+S2 y S3+S4 agrupables. Incluye **S10** (+1–2), agregado el 26/08 |
 | **4** — MercadoPago | **3–5** | + S8 + los reviews del delta |

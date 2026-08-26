@@ -343,10 +343,14 @@ hipotético: un expediente lo redacta una contraparte.
 **Qué se prueba:**
 
 - **🚨 El destino de las descargas sale del documento, no de nuestro código.** M3 extrae anotaciones
-  `Link` del PDF y descarga esas URLs. Un PDF con un enlace a `http://127.0.0.1:3443/...`, a
+  `Link` del PDF y descarga esas URLs — y **M0 confirmó que lo hace con `fetch` directo en Node**
+  (escenario A), sin navegador de por medio, así que el pedido sale del proceso de Electron con la red
+  local del usuario por detrás. Un PDF con un enlace a `http://127.0.0.1:3443/`, a
   `http://169.254.169.254/` o a un `file://` convierte al módulo en un **SSRF que corre en la máquina
-  del abogado**, con su red local por detrás. Verificar que hay allowlist de esquema (`https` únicamente)
-  y de host (dominios del PJN), no solo un `try/catch`.
+  del abogado**. Verificar que hay allowlist de esquema (`https` únicamente) y de host, no solo un
+  `try/catch`. **Y no hay excusa para que falte:** M0 midió 706 URLs reales y **todas** tienen la misma
+  forma (`https://scw.pjn.gov.ar/scw/viewer.seam?id=…&tipoDoc=…`), así que la allowlist es una
+  constante, no una heurística.
 - **Path traversal en el nombre del archivo temporal.** Si el nombre se deriva de la URL o del título
   del enlace, un `../../` escribe fuera del temporal. Mismo patrón que ya se corrigió en `open-file`
   (E2-3) y en `safe-storage-*` (E2-1) — el proyecto tiene el antecedente, hay que confirmar que la
@@ -358,6 +362,16 @@ hipotético: un expediente lo redacta una contraparte.
 - **`pdfjs-dist` sobre archivos de terceros.** Es un parser complejo procesando input no confiable.
   Revisar CVEs de la versión instalada y confirmar que corre sin acceso a `eval` ni a APIs de Node
   desde el contexto de parseo.
+- **🚨 Que el `.md` anonimizado no conserve enlaces vivos al SCW — la verificación más barata y más
+  importante del bloque.** Hallazgo de **M0** (§4 de [`spike-markdown-M0-2026-08-26.md`](spike-markdown-M0-2026-08-26.md),
+  medido, no supuesto): los `viewer.seam` que el informe embebe **abren el documento original sin
+  ninguna autenticación** — basta el token de la URL — y **esos tokens no expiran** (siguen vivos 27
+  días después, que es el máximo que la muestra permitió medir). Entonces un `.md` con los nombres
+  enmascarados pero los enlaces intactos **entrega el expediente original sin anonimizar a quien lo
+  reciba**. Es anonimización teatral. **La aserción es binaria y se comprueba con un grep:** un
+  archivo anonimizado no debe contener **ninguna** URL de `viewer.seam`. Verificar también qué hizo
+  M4 con ellas (eliminar / referencia local / dejarlas) y que la versión *no* anonimizada sí las
+  conserve — ahí es correcto, es para uso propio.
 - **⭐ Fuga por anonimización incompleta — el de mayor consecuencia.** Esto es **S3 aplicado al módulo**:
   datos personales de terceros (Ley 25.326) que el usuario cree anonimizados y comparte. A diferencia
   de F5 —que lee el motor buscando errores—, acá se construye un **corpus adversarial**: nombres con

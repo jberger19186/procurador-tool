@@ -14,9 +14,19 @@
 > *"¿qué pasa si el PDF de entrada es hostil?"* — y este módulo descarga archivos desde URLs que salen
 > del **documento**, no de nuestro código.
 >
-> **Advertencia de arranque:** este plan tiene un **bloque gate (M0)** cuyo resultado puede
-> cambiar el tamaño del módulo entero — de "una sesión de parsing" a "tocar un script encriptado
-> y cortar release". **No empezar por M1 ni por la UI.** Ver §2.
+> ✅ **M0 EJECUTADO Y CERRADO el 2026-08-26 — ESCENARIO A, el más barato.** Informe con evidencia:
+> **[`spike-markdown-M0-2026-08-26.md`](spike-markdown-M0-2026-08-26.md)**. Los adjuntos del SCW se
+> descargan **sin sesión** (12/12 `HTTP 200`), así que **M3 es `fetch` en Node: no se toca ningún
+> script encriptado, no entra el candado de ejecución, y el módulo SÍ procesa informes viejos**. La
+> capa de texto resultó mucho mejor de lo previsto (**0 %** de páginas sin texto en el informe,
+> **14,6 %** en los adjuntos). **El alcance se mantiene en 6–10 sesiones; la horquilla alta de 9–13
+> queda descartada.** El arranque ahora es **M1**.
+>
+> 🚨 **Y el spike encontró algo que este plan no contemplaba y que amplía M4:** como los documentos
+> del SCW se abren **sin autenticación** y sus tokens **no expiran** (≥27 días medidos), un `.md` con
+> los nombres enmascarados pero **los enlaces intactos entrega acceso directo a los originales sin
+> anonimizar**. **La anonimización tiene que alcanzar a las URLs, no solo al texto.** Las 3 opciones
+> y la recomendación, en §4 del spike.
 
 ---
 
@@ -53,14 +63,21 @@ para cupo. **Nunca el contenido.**
 
 ---
 
-## 2. M0 — Spike de viabilidad 🔴 **GATE — nada arranca antes de esto**
+## 2. M0 — Spike de viabilidad ✅ **EJECUTADO Y CERRADO (2026-08-26)**
+
+> **📄 Resultado con evidencia: [`spike-markdown-M0-2026-08-26.md`](spike-markdown-M0-2026-08-26.md).**
+> Lo de abajo queda como **registro del diseño del gate** — las preguntas que se hicieron y por qué.
+> **Las respuestas están en el spike, no acá.** Resumen: **P1** el informe extrae 100 % del texto y
+> los adjuntos el 85,4 % → sin OCR en v1 · **P2 → ESCENARIO A**, descarga sin sesión, `fetch` en Node
+> · **P3** drag & drop + lista de recientes **agrupada por expediente** (en la carpeta real hay 30
+> informes de solo 4 expedientes).
 
 | | |
 |---|---|
-| **Modelo / esfuerzo** | Sonnet · **medio** |
-| **Duración** | 1 sesión |
-| **Entregable** | Un documento corto (`docs/internal/spike-markdown-M0-<fecha>.md`) que responde 3 preguntas con evidencia, no con suposiciones, y **fija la arquitectura de M3** |
-| **Riesgo si se saltea** | Alto. Las dos primeras preguntas pueden convertir M3 de "descargar URLs" en "conducir una sesión de Puppeteer autenticada", que es 3× el trabajo y además **toca un script encriptado** |
+| **Modelo / esfuerzo** | Sonnet · **medio** — *ejecutado con Opus 5* |
+| **Duración** | 1 sesión — *cumplida* |
+| **Entregable** | ✅ [`spike-markdown-M0-2026-08-26.md`](spike-markdown-M0-2026-08-26.md) |
+| **Riesgo si se saltea** | Alto. Las dos primeras preguntas podían convertir M3 de "descargar URLs" en "conducir una sesión de Puppeteer autenticada", 3× el trabajo y **tocando un script encriptado**. **Ese riesgo quedó descartado** |
 
 ### Pregunta 1 — ¿Los PDF tienen capa de texto?
 
@@ -174,16 +191,23 @@ producción. Verificar que ninguna versión existente cambie.
 
 ---
 
-### M3 — Descarga y unificación de adjuntos 🟡 / 🔴 *(el tamaño lo fija M0)*
+### M3 — Descarga y unificación de adjuntos 🟢 **ESCENARIO A confirmado por M0**
 
 | | |
 |---|---|
-| **Modelo / esfuerzo** | Sonnet · **alto** (escenarios A/B) — **subir a Opus/alto si M0 devuelve el escenario C** |
-| **Depende de** | **M0 pregunta 2** — no arrancar antes |
+| **Modelo / esfuerzo** | Sonnet · **medio** — *bajó de "alto" al descartarse los escenarios B y C* |
+| **Depende de** | ✅ M0 cerrado. **`fetch` en Node, sin Puppeteer, sin sesión, sin candado de ejecución** |
 
-- Detección de anotaciones `Link` en el PDF principal, deduplicadas por URL.
-- Descarga a directorio temporal seguro, con **límite explícito de cantidad y tamaño total** (un
-  informe con 200 adjuntos no puede colgar la app ni llenar el disco) y **timeout por archivo**.
+- Detección de anotaciones `Link` en el PDF principal. **Formato único y uniforme, medido:**
+  `https://scw.pjn.gov.ar/scw/viewer.seam?id=<token>&tipoDoc=<despacho|cedula|deo|sentencia>`.
+- 🔑 **Deduplicación en dos niveles — hallazgo de M0, no es opcional.** Los tokens **cambian en cada
+  corrida** del informe (0 de 35 coinciden entre dos informes del mismo expediente) pero el documento
+  es el mismo. Entonces: **dentro** de un informe se deduplica por URL; **entre** informes hay que
+  usar el `filename` del `Content-Disposition` (`docNNNNNNNNN.pdf`), que sí es estable y cuyo
+  contenido es byte-idéntico. Deduplicar solo por URL descarga el mismo documento una vez por informe.
+- Descarga a directorio temporal seguro, con **límite explícito de cantidad y tamaño total** y
+  **timeout por archivo**. **Dimensionar sobre el volumen real medido: 1–37 adjuntos por informe**
+  (no sobre los 200 que este plan suponía antes de M0).
 - Extracción de cada adjunto con el mismo motor de M2 y **concatenación ordenada** con separadores
   legibles (`## Anexo 3 — <nombre del documento>`), respetando el orden en que aparecen en el
   original.
@@ -192,10 +216,11 @@ producción. Verificar que ninguna versión existente cambie.
 - Limpieza del temporal al terminar, **incluso ante error** (el patrón `try/finally` que el
   proyecto ya aplica en los flujos de Puppeteer).
 
-**Si M0 devuelve escenario B o C:** el candado de ejecución (`active_executions`) entra en juego —
-si el módulo abre Chrome, no puede hacerlo mientras corre una procuración. Hay que respetar el
-mismo pre-chequeo que usan los demás flujos, o el usuario recibirá el error "proceso activo en
-otro dispositivo" sin entender por qué.
+~~**Si M0 devuelve escenario B o C:**~~ ✅ **No aplica.** M0 devolvió **escenario A**, así que el
+módulo **no abre Chrome** y el candado de ejecución (`active_executions`) **nunca entra en juego**.
+Se puede procesar un informe mientras corre una procuración, sin el error "proceso activo en otro
+dispositivo". *(Se conserva la nota tachada porque la restricción volvería a aplicar si alguna vez se
+agregara OCR vía navegador o cualquier otro camino que necesite Puppeteer.)*
 
 ---
 
@@ -218,6 +243,22 @@ Las 3 reglas por defecto del brief, con lo que cada una esconde:
 | **Expediente** → `Expediente` | Un regex sobre `FCR 18745/2017` | El mismo expediente aparece **con y sin padding de ceros** (`018745` vs `18745`) y con jurisdicción o sin ella. Ya existe la normalización canónica del proyecto — **reusar `expedienteKey()`/`tokenizar()`, no escribir una tercera implementación** (el fixture `tests/fixtures/expediente-key-cases.json` existe justamente para eso) |
 | **Partes** → `Actor` / `Demandado` | Leer la carátula y reemplazar | Las carátulas tienen forma `X C/ Y S/TIPO DE PROCESO`, pero también `X Y C/ Z`, siglas (`A.F.I.P.`, con y sin puntos), y el nombre de la parte aparece después **abreviado o parcial** en el cuerpo. Un reemplazo literal de la carátula deja pasar la mitad de las menciones |
 | **Terceros** → `Jon### And### Ber###` | Regex de nombres propios | Es el caso difícil: acentos, apellidos con partículas (`de la Fuente`), nombres compuestos, MAYÚSCULAS (el PJN escribe casi todo en mayúsculas), y **falsos positivos** — `JUZGADO FEDERAL DE CALETA OLIVIA` no es una persona |
+| 🚨 **Enlaces al SCW** → *(ver abajo)* | *No estaba en el brief ni en este plan* | **Regla 4, agregada por M0.** Los `viewer.seam` del informe abren el documento original **sin autenticación** y sus tokens **no expiran** (≥27 días medidos). Un `.md` con los nombres enmascarados y los enlaces vivos **entrega el original sin anonimizar** |
+
+**🚨 La regla 4, en detalle — decisión de producto pendiente del operador.** Es el hallazgo de M0
+(§4 del spike) y es el que más barato sale de verificar y más caro sale de omitir: anonimizar el
+texto y dejar el link vivo produce un archivo que *parece* anonimizado y no lo está.
+
+| Opción | Qué hace con el enlace **en la versión anonimizada** | Costo |
+|---|---|---|
+| **A — eliminar** | Queda el texto, se borra la URL: `[Despacho 12/03/2026]` | Trivial. Pierde trazabilidad |
+| **B — referencia local** ⭐ | Apunta al adjunto ya descargado y anonimizado: `[Despacho 12/03/2026](anexos/anexo-03.md)` | Bajo. **El más coherente con el módulo** — el adjunto ya se bajó y se anonimizó en M3/M2 |
+| **C — dejar la URL** | Tal cual viene del informe | Cero, **pero rompe la promesa del módulo** |
+
+**Recomendación: B por defecto, A como opción, y C solo detrás de una advertencia explícita en
+pantalla.** La versión **no anonimizada** conserva las URLs sin problema — es para uso propio.
+La verificación es binaria y va en el bloque **S10** de SEC-2: *un `.md` anonimizado no debe contener
+ninguna URL de `viewer.seam`*.
 
 **Tres decisiones de diseño que hay que tomar antes de escribir el motor:**
 
@@ -290,13 +331,15 @@ Lo mínimo que este módulo aporta a ese cambio:
 ## 4. Orden y dependencias
 
 ```
-   M0 (GATE) ──┬──► M2 ──┬──► M4 (Opus) ──┐
-               │         │                │
-               └──► M3 ──┘                ├──► M5 ──► M6 ──► release Electron
-                                          │
-   M1 (backend, en paralelo) ─────────────┘
+   M0 ✅ CERRADO ─┬──► M2 ──┬──► M4 (Opus) ──┐
+   (escenario A)  │         │                │
+                  └──► M3 ──┘                ├──► M5 ──► M6 ──► release Electron
+                     (fetch)                 │
+   M1 (backend, en paralelo) ────────────────┘
 ```
 
+- ✅ **M0 está cerrado** ([spike](spike-markdown-M0-2026-08-26.md)). **El arranque es M1**, que además
+  se puede desplegar de inmediato sin release y en paralelo con todo lo demás.
 - **M1 puede desplegarse solo**, sin release y sin que nadie lo note.
 - **M2, M3 y M4 no tienen UI**: se desarrollan y prueban con harness de línea de comandos contra
   PDFs reales del operador. Eso es deliberado — el proyecto ya aprendió (F3.0 de Bitácora) que
@@ -310,9 +353,10 @@ Lo mínimo que este módulo aporta a ese cambio:
 
 | # | Riesgo | Probabilidad | Mitigación |
 |---|---|---|---|
-| **R1** | Los adjuntos requieren sesión autenticada (escenario B/C de M0) | **Media-alta** | Es la razón de existir de M0. Si es C, replantear alcance con el operador **antes** de M2 |
-| **R2** | El motor de anonimización deja pasar nombres | **Alta** (es inherente) | Sesgo al falso positivo + Solapa 2 editable + leyenda de "no es garantía" + **F5 del code-review en Opus** |
-| **R3** | Buena parte de los adjuntos son escaneos sin texto | Media | Marcador descriptivo (ya en el brief). **No meter OCR en v1** |
+| ~~**R1**~~ | ~~Los adjuntos requieren sesión autenticada (escenario B/C)~~ | ✅ **DESCARTADO por M0** | Escenario **A**: 12/12 descargas sin cookies con `HTTP 200`. `fetch` en Node y listo |
+| **R2** | El motor de anonimización deja pasar nombres | **Alta** (es inherente) | Sesgo al falso positivo + Solapa 2 editable + leyenda de "no es garantía" + **F5 del code-review en Opus** + **S10 de SEC-2** (corpus adversarial con tasa de falsos negativos medida) |
+| **R3** | ~~Buena parte de los adjuntos son escaneos sin texto~~ → **medido: 14,6 %** | ✅ **Baja** (era "Media") | M0 midió **0 %** de páginas sin texto en el informe y **14,6 %** en los adjuntos (la mayoría son híbridos: imagen de sello + capa de texto). Marcador descriptivo, **sin OCR en v1** |
+| **R7** 🆕 | **El `.md` anonimizado conserva enlaces que abren el original sin login** | **Alta si no se trata** | Hallazgo de M0. Regla 4 del motor (M4) + verificación binaria en S10. **Es el riesgo que convierte la anonimización en teatro** |
 | **R4** | `pdfjs-dist` altera el árbol de dependencias de Electron | Baja | Install quirúrgico + diff del lockfile. Antecedente real del 2026-07-25 |
 | **R5** | Un informe con muchos adjuntos cuelga la app | Media | Límite de cantidad/tamaño + timeout por archivo + progreso en consola cancelable |
 | **R6** | El usuario cree que el `.md` anonimizado es seguro para publicar | **Alta** | Leyenda en UI **y** en TyC. Es un riesgo legal, no técnico |
