@@ -515,5 +515,40 @@ desde el 15/08.
 ningún usuario todavía — el visor que la mostraría (B3/B4 del lado Electron)
 sigue sin estar en ningún release.
 
-**Pendiente:** el release de Electron con B3+B4 juntos — el único paso que
-falta para que los 21 puntos del plan lleguen a un usuario real.
+**Release `electron-v2.7.50` publicado y confirmado en vivo (2026-08-26).**
+Checklist estándar del proyecto: `npm start` (arranque limpio, sin
+`uncaughtException`) → `npm run build:dir` (`.exe` empaquetado real,
+`isPackaged:true`, clave pública cargada desde el `.asar`) → bump
+`2.7.49→2.7.50` en `package.json` (commit `bcbc23e`, push) → tag
+`electron-v2.7.50` + push → `npm run release`.
+
+**Mismo bug de infraestructura de siempre, otra vez** (viene fallando desde
+v2.7.38 — ~15 veces seguidas): el release se creó en GitHub con **solo el
+`.exe`** (422 *"Published releases must have a valid tag"* al intentar
+completar). Corregido sin rebuild: SHA512 real del `.exe` calculado con
+`System.Security.Cryptography.SHA512` de .NET (confirmado que el tamaño ya
+subido — 117.338.667 bytes — coincide exacto con el local, mismo archivo),
+`latest.yml` armado a mano en el formato de `electron-updater`, subido junto
+al `.blockmap`. **Detalle nuevo, no visto en releases anteriores:** el
+`.blockmap` subido por REST quedó con el nombre sanitizado distinto al del
+`.exe` (`Procurador.SCW-...` con punto, contra `Procurador-SCW-...` con
+guion) — GitHub sanea el espacio del nombre local de forma inconsistente
+según la vía de subida. Corregido borrando ese asset y resubiéndolo con el
+nombre exacto, para que los 3 archivos compartan el mismo prefijo.
+
+**Verificado:** `releases/latest` resuelve a 2.7.50 con los 3 assets
+(`latest.yml`, `.exe`, `.blockmap`, nombres consistentes) — confirmado por
+la API de GitHub directamente, sin necesidad del endpoint del backend (que
+requiere un JWT con la forma exacta que usa el cliente real, no reproducible
+rápido con un token armado a mano — no bloqueante, lo que importa es el
+estado real en GitHub). Versión visible actualizada en los 5 lugares (portal
+`app.js` + landing ×4), desplegada a producción (backup previo de ambos
+archivos, `pm2 restart procurador-api` sin loop `↺`747→748, md5 servido =
+md5 local en los 2 archivos) y confirmada en vivo: `curl` a la landing
+devuelve únicamente `v2.7.50`, sin residuos de `2.7.49`. Smoke
+health/usuarios/dashboard/landing 200, `pm2-error.log` sin entradas nuevas.
+
+**Con esto, los 21 puntos del plan quedan cerrados y en producción de punta
+a punta** — backend (B1/B2, ya en prod desde antes) + motor Puppeteer (B4,
+reencriptado en staging y prod) + la app Electron (B3+B4, release v2.7.50,
+llega a los usuarios vía auto-updater). Plan completo.
