@@ -2,7 +2,17 @@
 
 > **Origen:** `brief_modulo_anonimizacion_electron.md` (operador, 2026-08-26).
 > **Lugar en el proyecto:** **Etapa 1.2** de `docs/internal/roadmap-salida-a-mercado-2026-08.md`.
-> **Estado:** plan de implementación. **No se escribió código.** El módulo no existe todavía.
+> **Estado:** ✅ **APROBADO POR EL OPERADOR (2026-08-26)** — ya no espera ningún go/no-go de negocio.
+> **No se escribió código.** El módulo no existe todavía.
+>
+> **Lo que su aprobación arrastra hacia las etapas siguientes:** este módulo **va a existir cuando
+> corran la Etapa 2 y la Etapa 3**, y las dos tienen que cubrirlo. La Etapa 2 ya lo contemplaba —
+> fase **F5** del [plan de code-review](plan-code-review-integral-2026-08-26.md), con el motor de
+> anonimización en Opus. La Etapa 3 **no lo contemplaba**, porque el plan SEC-2 se escribió el 24/08
+> cuando este módulo todavía era una decisión sin resolver → se le agregó el bloque **S10** el
+> 2026-08-26. **F5 y S10 no se solapan:** F5 pregunta *"¿el motor está bien escrito?"*, S10 pregunta
+> *"¿qué pasa si el PDF de entrada es hostil?"* — y este módulo descarga archivos desde URLs que salen
+> del **documento**, no de nuestro código.
 >
 > **Advertencia de arranque:** este plan tiene un **bloque gate (M0)** cuyo resultado puede
 > cambiar el tamaño del módulo entero — de "una sesión de parsing" a "tocar un script encriptado

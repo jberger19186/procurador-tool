@@ -11,6 +11,12 @@
 > Ese orden no es estético: revisar código que está por reescribirse es trabajo tirado,
 > y auditar seguridad sobre una superficie que el code-review va a cambiar obliga a
 > auditar dos veces.
+>
+> ✅ **Confirmado el 2026-08-26:** los ítems 1.1 (Bitácora F3.4) y 1.2 (módulo Markdown) de la Etapa 1
+> **fueron aprobados por el operador** y se van a construir. Este plan ya lo asumía: **F5 es el módulo
+> Markdown** y **F1 declara depender de Etapa 1 cerrada** porque el `.ics` de F3.4 toca
+> `routes/bitacora.js`. No hay nada condicional que ajustar acá. (La contraparte de seguridad no
+> estaba cubierta — SEC-2 recibió el bloque **S10** el mismo día.)
 
 ---
 

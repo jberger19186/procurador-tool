@@ -53,6 +53,14 @@ Todo el resto de SEC-1 §5 (JWT, blacklist, política de contraseñas, anti-enum
 TLS, headers, firma RSA, autodestrucción, credenciales PJN, permisos de la extensión) **se da por
 vigente y no se vuelve a probar.**
 
+> ⏳ **Advertencia de vigencia de este propio plan (agregada 2026-08-26).** La tabla de arriba mide la
+> superficie **al 2026-08-24**. Este plan se ejecuta en la Etapa 3 del roadmap, es decir **después** de
+> que la Etapa 1 construya cosas que hoy no existen. Cuando llegue el momento, verificar contra el
+> [roadmap](roadmap-salida-a-mercado-2026-08.md) qué se construyó en el medio, con el mismo criterio
+> que se usó acá: **no se re-testea un control porque sí, se re-testea cuando cambió la superficie**.
+> Lo ya identificado y absorbido: el módulo Markdown (ítem 1.2) tiene bloque propio, **S10**; el export
+> `.ics` de Bitácora F3.4 (ítem 1.1) entra dentro de **S2**, sin bloque propio.
+
 ---
 
 ## §3 — Los bloques
@@ -238,8 +246,8 @@ si un usuario reembolsa vía MP y conserva acceso (**A.4** del plan de MP).
 
 **⚠️ Nota de orden agregada el 2026-08-26 (resuelve una contradicción real del plan):** S8 exige que
 B3 esté cerrado, pero el roadmap ubica la auditoría de seguridad (Etapa 3) **antes** de MercadoPago
-producción (Etapa 4). No es un conflicto sino una partición: **S1–S7 + S9 se ejecutan en la Etapa 3;
-S8 se ejecuta dentro de la Etapa 4**, después de la Fase C. Decirlo explícito evita el error de dar
+producción (Etapa 4). No es un conflicto sino una partición: **S1–S7 + S9 + S10 se ejecutan en la
+Etapa 3; S8 se ejecuta dentro de la Etapa 4**, después de la Fase C. Decirlo explícito evita el error de dar
 "SEC-2 ejecutado" por cerrado con un bloque sin correr — que es exactamente el tipo de omisión que
 este documento existe para prevenir.
 
@@ -247,8 +255,8 @@ este documento existe para prevenir.
 
 ### 🟠 S9 — Validación dinámica con Strix (pentest agéntico en runtime) *(agregado 2026-08-26)*
 
-> **Sonnet 5 para la conducción · esfuerzo MEDIO** · **solo contra staging** · corre **después** de
-> S1–S7, nunca antes
+> **Sonnet 5 para la conducción · esfuerzo MEDIO** · **solo contra staging** · corre **último de la
+> Etapa 3**, después de S1–S7 y de S10 — nunca antes
 
 **Qué es Strix.** Un agente open-source de pentesting autónomo (`github.com/usestrix`, Apache 2.0).
 A diferencia de todo lo demás en este plan, **no lee código: ataca la aplicación corriendo** —
@@ -256,7 +264,7 @@ navegador automatizado, shell, proxy HTTP de intercepción, y validación de cad
 prueba de concepto real. Se instala por script, corre en **Docker**, se maneja por CLI
 (`strix --target <url|dir|repo|openapi>`) y consume una API key de LLM.
 
-**Por qué suma algo que los bloques S1–S8 no dan.** Los 8 bloques anteriores son búsqueda dirigida:
+**Por qué suma algo que los demás bloques no dan.** Todos los otros bloques son búsqueda dirigida:
 Claude parte de hipótesis escritas y las confirma. Eso encuentra lo que se sospecha. Strix aporta el
 eje contrario — **exploración no dirigida y explotación efectiva**: encadena pasos que nadie
 hipotetizó y **demuestra** el hallazgo en vez de razonarlo. Es la diferencia entre *"este endpoint
@@ -308,6 +316,81 @@ es el que justifica tener las dos herramientas: una escribe el parche, la otra v
 
 ---
 
+### 🟠 S10 — Módulo Markdown / anonimización *(agregado 2026-08-26)*
+
+> **Sonnet 5 · esfuerzo ALTO · local (Electron) + staging para el gate** · **⏳ solo si el módulo 1.2 se construyó**
+
+**Por qué no estaba en la versión original de este plan.** Se escribió el 2026-08-24, cuando el
+módulo Markdown era una decisión de negocio sin resolver. El **2026-08-26 el operador lo confirmó
+como ítem 1.2 de la Etapa 1** del roadmap, lo que significa que **va a existir cuando esta etapa
+corra**. Sin este bloque, la Etapa 3 se cierra dejando sin auditar un módulo entero — y encima el
+único del producto que le hace al usuario una promesa de privacidad explícita.
+
+**Lo primero, para no inflar la severidad:** el módulo es **100% local** por diseño (§1 de su plan) —
+no expone ningún endpoint nuevo a internet; lo único que toca el servidor es el flag de plan
+`markdown_enabled`. Eso acota la superficie a un atacante que ya controla el **contenido del PDF de
+entrada**, que en el caso de uso real viene del PJN. Es un escenario menos probable que S1, pero no
+hipotético: un expediente lo redacta una contraparte.
+
+**El eje que aporta, y que F5 del code-review NO da.** Son preguntas distintas sobre el mismo código:
+
+| | F5 (Etapa 2, code-review) | S10 (Etapa 3, seguridad) |
+|---|---|---|
+| Pregunta | ¿el motor está bien escrito? | ¿qué pasa si el input es hostil? |
+| Input asumido | un informe normal | un PDF construido para romper el módulo |
+| Hallazgo típico | un regex que no matchea acentos | una URL de adjunto que apunta a `127.0.0.1:3443` |
+
+**Qué se prueba:**
+
+- **🚨 El destino de las descargas sale del documento, no de nuestro código.** M3 extrae anotaciones
+  `Link` del PDF y descarga esas URLs. Un PDF con un enlace a `http://127.0.0.1:3443/...`, a
+  `http://169.254.169.254/` o a un `file://` convierte al módulo en un **SSRF que corre en la máquina
+  del abogado**, con su red local por detrás. Verificar que hay allowlist de esquema (`https` únicamente)
+  y de host (dominios del PJN), no solo un `try/catch`.
+- **Path traversal en el nombre del archivo temporal.** Si el nombre se deriva de la URL o del título
+  del enlace, un `../../` escribe fuera del temporal. Mismo patrón que ya se corrigió en `open-file`
+  (E2-3) y en `safe-storage-*` (E2-1) — el proyecto tiene el antecedente, hay que confirmar que la
+  lección se aplicó acá.
+- **Límites de recursos, medidos y no leídos.** M3 declara "límite explícito de cantidad y tamaño
+  total + timeout por archivo" (riesgo R5 de su plan). Ejercitarlos: un PDF con 500 enlaces, un
+  adjunto de 2 GB, un servidor que responde 1 byte por segundo. Confirmar que la app no se cuelga ni
+  llena el disco, y que el `try/finally` de limpieza corre **también** en el camino de error.
+- **`pdfjs-dist` sobre archivos de terceros.** Es un parser complejo procesando input no confiable.
+  Revisar CVEs de la versión instalada y confirmar que corre sin acceso a `eval` ni a APIs de Node
+  desde el contexto de parseo.
+- **⭐ Fuga por anonimización incompleta — el de mayor consecuencia.** Esto es **S3 aplicado al módulo**:
+  datos personales de terceros (Ley 25.326) que el usuario cree anonimizados y comparte. A diferencia
+  de F5 —que lee el motor buscando errores—, acá se construye un **corpus adversarial**: nombres con
+  partículas (`de la Torre`), compuestos, con acentos y sin, en mayúsculas, partidos por salto de
+  línea o guión de corte, dentro de tablas, y **datos personales que no son nombres** (CUIT, DNI,
+  domicilios, teléfonos, emails, números de cuenta). Se mide la **tasa de falsos negativos** y se
+  reporta como número, no como impresión. Verificar además que el `mapping.txt` editable no permita
+  una entrada que rompa el reprocesamiento, y que reprocesar parta siempre del original.
+- **Coherencia entre la promesa y el resultado.** Confirmar que la leyenda de "ayuda automática, no
+  garantía" está en la UI **y** en los TyC (ítem 1.3 de la Etapa 1). Si el número de falsos negativos
+  del punto anterior es alto, la leyenda es lo único que separa al producto de una promesa incumplida.
+
+**Cómo:** corpus de PDFs sintéticos construidos para el bloque + un PDF real del operador para el
+caso base. Local, contra la app en dev — **nada de esto toca staging ni producción**, salvo la
+verificación del gate `markdown_enabled` (que un plan sin el flag no pueda abrir el módulo), que sí va
+por HTTP contra staging.
+
+**Escalar a Opus si M0 devolvió escenario B o C** — en ese caso el módulo deja de ser un parser puro y
+pasa a abrir Chrome o a tocar un script encriptado, lo que arrastra el candado de ejecución y la zona
+protegida de `src/security/` a la superficie de este bloque.
+
+> **Relación con S6.** S6 cubre el motor Puppeteer y el cliente Electron *actuales*. S10 no lo
+> reemplaza ni se solapa: es código que en ese momento no existía. Si se ejecutan en la misma sesión,
+> correr S6 primero — establece la línea base del cliente sobre la que S10 mide el delta.
+
+> **Relación con 1.1 (Bitácora F3.4).** El otro ítem confirmado de la Etapa 1 **no** necesita bloque
+> propio: el export `.ics` agrega un formato al endpoint de exportación que **S2 ya audita**. Lo que sí
+> hay que hacer es ejercitarlo dentro de S2, con dos casos que el `.ics` introduce y el Excel/JSON no:
+> una entrada sin `due_at` (que invalida el archivo entero) y una descripción con saltos de línea y
+> caracteres de control sin escapar.
+
+---
+
 ## §4 — Hallazgos ya detectados al armar este plan
 
 Detectados hoy, verificando en vivo. **No corregidos** — quedan documentados para que el operador
@@ -337,7 +420,8 @@ con `escHtml`/`escAttr`. La migración de los 71 sitios **no** reintrodujo XSS-1
 | **S5** | XSS en el admin no auditado | Sonnet 5 | 🔴 Alto | staging + stub | 5 |
 | **S6** | Motor Puppeteer / Electron | Sonnet 5 | 🔴 Alto | local | 6 |
 | **S7** | Rate limits y DoS | Sonnet 5 | 🟡 Medio | **solo staging** | 7 |
-| **S9** | **Strix — pentest agéntico en runtime** | Sonnet 5 (conducción) | 🟡 Medio | **solo staging** | 8 (último de la Etapa 3) |
+| **S10** | **Módulo Markdown / anonimización** | Sonnet 5 (Opus si M0 = B/C) | 🟠 Medio-alto | local + staging (gate) | 8 |
+| **S9** | **Strix — pentest agéntico en runtime** | Sonnet 5 (conducción) | 🟡 Medio | **solo staging** | 9 (último de la Etapa 3) |
 | **S8** | Fraude con cobro real | **Opus 5** | 🔴 Alto | prod (post-B3) | **condicional — se ejecuta en la Etapa 4** |
 
 **Orden por relación riesgo/costo:** S1 y S2 primero — son la superficie más expuesta (anónima) y la
@@ -402,6 +486,17 @@ Explícito, para que **"plan ejecutado" no se confunda con "producto auditado"**
 > Ejecutá el bloque **S<n>** de `docs/internal/plan-seguridad-lanzamiento-2026-08.md`. Leé §2 antes
 > de empezar para no re-testear lo que SEC-1 ya cubrió.
 
+**S10** (Sonnet 5, esfuerzo alto — **solo si el módulo Markdown de la Etapa 1.2 se construyó**):
+> Ejecutá el bloque **S10** de `docs/internal/plan-seguridad-lanzamiento-2026-08.md` — módulo
+> Markdown / anonimización. Confirmá primero que el módulo existe y leé qué escenario devolvió su
+> gate M0 (`plan-modulo-markdown-anonimizacion-2026-08-26.md`): **si fue B o C, subí a Opus**, porque
+> el módulo pasa a tocar el candado de ejecución y la zona protegida. Es un bloque **local**: nada
+> toca staging ni producción salvo la verificación del gate `markdown_enabled`. No repitas F5 del
+> code-review (que revisa si el motor está bien escrito): acá el eje es **input hostil** — SSRF por
+> las URLs que salen del PDF, path traversal, límites de recursos, y el corpus adversarial de
+> anonimización, cuyo resultado se reporta como **tasa de falsos negativos medida**, no como
+> impresión.
+
 **S9** (Sonnet 5, esfuerzo medio, **último bloque de la Etapa 3**):
 > Ejecutá el bloque **S9** de `docs/internal/plan-seguridad-lanzamiento-2026-08.md` — Strix contra
 > staging. **Antes de lanzar nada**, ejecutá y confirmá las 4 precondiciones de seguridad del bloque
@@ -452,18 +547,18 @@ Un pentest profesional hace, en esencia, cuatro cosas. Tres las cubre esta combi
 
 ### Recomendación
 
-**Para el lanzamiento Beta: alcanza con SEC-2 completo (S1–S7 + S9).** Con pocos clientes, sin
+**Para el lanzamiento Beta: alcanza con SEC-2 completo (S1–S7 + S9 + S10).** Con pocos clientes, sin
 tarjetas tocando nuestro sistema (las maneja MP) y con la superficie ya endurecida por SEC-1, el
 riesgo residual es aceptable y el costo de un pentest externo no se justifica todavía.
 
 **Para el lanzamiento masivo con cobro real: contratarla igual, pero después.** Correrla *después* de
 SEC-2 + Strix es lo que la vuelve barata: el externo llega a un producto ya limpio y su trabajo pasa
 de *descubrimiento* a *confirmación*, que es un encargo más corto y por lo tanto más barato. Al revés
-—contratarlo primero— se paga tarifa profesional por encontrar los mismos hallazgos que S1–S9
-encuentran solos.
+—contratarlo primero— se paga tarifa profesional por encontrar los mismos hallazgos que los bloques
+de este plan encuentran solos.
 
 **Y una cosa que sí conviene hacer aunque no se contrate nada:** un **informe de cierre unificado**
-al terminar la Etapa 3 (los 9 bloques + los hallazgos + los parches + las re-corridas), en un solo
+al terminar la Etapa 3 (los 10 bloques + los hallazgos + los parches + las re-corridas), en un solo
 documento con fecha y alcance. Ese documento es el que se le muestra a un cliente que pregunta, y es
 también el punto de partida del auditor externo el día que se contrate. Sin él, la evidencia queda
 dispersa en 9 informes y no sirve para ninguna de las dos cosas.

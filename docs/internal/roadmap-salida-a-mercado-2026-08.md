@@ -32,7 +32,7 @@
     F6 cifrado → F1/F2/F3/F4 → F5 → F8 → F7 cobranza (gate) → F9 verify
               │
               ▼
-  ETAPA 3 — SECURITY REVIEW  (SEC-2: S1–S7 + S9 Strix)
+  ETAPA 3 — SECURITY REVIEW  (SEC-2: S1–S7 + S9 Strix + S10 Markdown)
               │
               ▼
   ETAPA 4 — MERCADOPAGO PRODUCCIÓN (B3)
@@ -65,10 +65,18 @@ Cuatro razones, todas económicas — ninguna estética:
 
 ## §3 — Etapa 1 — Mejoras de producto
 
-> **Gate de negocio.** Los ítems 1.1 y 1.2 son **features nuevas**: entran al roadmap porque el
-> operador quiere venderlas, no porque el producto las necesite para funcionar. Están catalogadas en
-> "Diferidos a decisión de negocio" de `CLAUDE.md` y **arrancan cuando el operador da el visto
-> bueno**. Los ítems 1.3 a 1.6 no dependen de esa decisión.
+> ✅ **Gate de negocio — RESUELTO el 2026-08-26.** Los ítems 1.1 y 1.2 son **features nuevas**: entran
+> al roadmap porque el operador quiere venderlas, no porque el producto las necesite para funcionar.
+> Nacieron condicionados a un go/no-go, y **el operador dio el visto bueno**: los seis ítems de esta
+> etapa están confirmados y ninguno espera una decisión. Ya **no** figuran en "Diferidos a decisión de
+> negocio" de `CLAUDE.md` — esa sección quedó solo con lo genuinamente post-lanzamiento (L1 · C1 · L2).
+>
+> **Lo que esa confirmación arrastra hacia las etapas siguientes** (por eso no era un cambio cosmético):
+> el módulo Markdown es un módulo entero de código nuevo, así que **existirá cuando corran las Etapas
+> 2 y 3 y ambas tienen que cubrirlo**. La Etapa 2 ya lo contemplaba (fase **F5** del plan de
+> code-review). La Etapa 3 **no** — se le agregó el bloque **S10** el mismo día (ver §5). El único
+> condicionamiento que sigue vivo dentro de la etapa es **M0**, el gate técnico interno de 1.2, que no
+> decide *si* se hace sino *de qué tamaño*.
 
 ### 1.1 — Bitácora F3.4
 
@@ -256,10 +264,10 @@ rojo). Es barato y es lo que evita enterarse de un cambio del PJN por un cliente
 
 | | |
 |---|---|
-| **Plan** | [`plan-seguridad-lanzamiento-2026-08.md`](plan-seguridad-lanzamiento-2026-08.md) (SEC-2, **actualizado el 2026-08-26** con el bloque S9) |
-| **Bloques en esta etapa** | **S1–S7 + S9**. **S8 NO** — ver abajo |
+| **Plan** | [`plan-seguridad-lanzamiento-2026-08.md`](plan-seguridad-lanzamiento-2026-08.md) (SEC-2, **actualizado el 2026-08-26** con los bloques S9 y S10) |
+| **Bloques en esta etapa** | **S1–S7 + S9 + S10**. **S8 NO** — ver abajo |
 | **Modelo** | Sonnet en todos los de esta etapa |
-| **Sesiones** | 6–9 (S1+S2 y S3+S4 son agrupables) |
+| **Sesiones** | 7–11 (S1+S2 y S3+S4 son agrupables) |
 | **Depende de** | Etapa 2 cerrada y sus fixes desplegados |
 
 **Lo nuevo: S9 — Strix.** Pentest agéntico en runtime (`github.com/usestrix`, Apache 2.0, Docker + CLI).
@@ -269,14 +277,21 @@ salidas reales**: el SMTP de staging (hereda Brevo real → un agente registrand
 reales) y MercadoPago (se resuelve poniendo `MP_ENV` fuera de `sandbox`, lo que hace que el guard de
 agosto anule el token). Backup y restauración de `procurador_db_staging` obligatorios.
 
+**Lo otro nuevo: S10 — módulo Markdown / anonimización.** Se agregó el 2026-08-26 al confirmarse que
+1.2 se construye en la Etapa 1: cuando esta etapa corra, el módulo **va a existir**, y ningún bloque de
+S1–S9 lo cubría. No es un descuido del plan SEC-2 original — se escribió el 24/08, cuando el módulo era
+una decisión de negocio sin resolver. **El eje que aporta y que F5 del code-review no da:** F5 pregunta
+*"¿el motor de anonimización está bien escrito?"*; S10 pregunta *"¿qué pasa si el PDF de entrada es
+hostil?"* — el módulo descarga archivos desde URLs que salen del **documento**, no de nuestro código.
+
 **🚨 Resolución de una contradicción real entre planes:** el bloque **S8 (fraude con cobro real)** del
 plan SEC-2 exige que B3 esté cerrado, pero este roadmap pone la seguridad **antes** que MercadoPago.
-No es un conflicto: es una partición. **S1–S7 + S9 corren en la Etapa 3; S8 corre dentro de la Etapa
+No es un conflicto: es una partición. **S1–S7 + S9 + S10 corren en la Etapa 3; S8 corre dentro de la Etapa
 4**, después del primer cobro real. Sin decirlo explícito, alguien da "SEC-2 ejecutado" por cerrado
 con un bloque sin correr.
 
 **Entregable de cierre de la etapa (no está en el plan original, se agrega acá):** un **informe
-unificado** con los 9 bloques, sus hallazgos, los parches y las re-corridas de verificación, con fecha
+unificado** con los 10 bloques, sus hallazgos, los parches y las re-corridas de verificación, con fecha
 y alcance. Es lo que se le muestra a un cliente institucional que pregunte por la auditoría, y el
 punto de partida del auditor externo el día que se contrate.
 
@@ -336,6 +351,7 @@ Las que este roadmap existe para hacer visibles. Cada una es un error concreto q
 | **6** | **1.3 (landing) y 1.6 (demo) tocan el mismo archivo** | Dos sesiones editando `landing/index.html` en paralelo = conflicto. 1.3 primero, 1.6 después |
 | **7** | **AZ arranca el día 0** | El lanzamiento queda esperando un trámite de 3 días que podría haber corrido en paralelo desde el principio |
 | **8** | **El módulo Markdown tiene su propio gate (M0) antes de M1** | Se construyen 6 sesiones de módulo y recién ahí se descubre que los adjuntos necesitan sesión autenticada del PJN |
+| **9** | **Lo que la Etapa 1 construye, las Etapas 2 y 3 tienen que revisarlo** | Es la dependencia que se destapó el 2026-08-26 al confirmar 1.1 y 1.2. El code-review ya la tenía cubierta (**F5** = módulo Markdown; **F1** declara depender de Etapa 1 porque F3.4 toca `routes/bitacora.js`). La seguridad **no**: SEC-2 se escribió el 24/08, cuando 1.2 todavía era una decisión de negocio sin resolver → se le agregó el bloque **S10**. Sin eso, se cierra la Etapa 3 con un módulo entero sin auditar, y encima el que más promete al usuario (*"esto no tiene datos personales"*) |
 
 ---
 
@@ -374,14 +390,16 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 
 | Etapa | Sesiones | Notas |
 |---|---|---|
-| **1** — Producto | **13–21** | 1.1 (1–2) · 1.2 (6–10, o 9–13 según M0) · 1.3 (1) · 1.4 (1) · 1.5 (1) · 1.6 (4–6) |
+| **1** — Producto | **13–21** | Los 6 ítems confirmados. 1.1 (1–2) · 1.2 (6–10, o 9–13 según M0) · 1.3 (1) · 1.4 (1) · 1.5 (1) · 1.6 (4–6) |
 | **2** — Code review | **9–13** | 3 fases `xhigh` consumen sesión propia o más |
-| **3** — Security review | **6–9** | S1+S2 y S3+S4 agrupables |
+| **3** — Security review | **7–11** | S1+S2 y S3+S4 agrupables. Incluye **S10** (+1–2), agregado el 26/08 |
 | **4** — MercadoPago | **3–5** | + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
-| **Total aproximado** | **31–48 sesiones** | Más las sesiones con operador presente de §9 |
+| **Total aproximado** | **32–50 sesiones** | Más las sesiones con operador presente de §9 |
 
-**Después del lanzamiento** (siguen en "Diferidos" de `CLAUDE.md`, en este orden):
+**Después del lanzamiento** — son **exactamente estos tres** (sección "⚪ Post-lanzamiento" de
+`CLAUDE.md`, que hasta el 2026-08-26 se llamaba "Diferidos a decisión de negocio" y tenía además a
+1.1 y 1.2, hoy promovidos a la Etapa 1):
 
 1. **L1 — Activar planes BASIC / PRO / ENTERPRISE.** Un `UPDATE` de una línea. Depende de que el
    cobro funcione y de decidir los precios finales.

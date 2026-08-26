@@ -1,7 +1,14 @@
 # Plan de implementación — F3.4 parcial: vista "Semana" + export `.ics`
 
-> **Estado:** plan listo para ejecutar. **No hay código escrito todavía.**
+> **Estado:** ✅ **APROBADO POR EL OPERADOR (2026-08-26)** — es el ítem **1.1 de la Etapa 1** del
+> [roadmap de salida a mercado](roadmap-salida-a-mercado-2026-08.md), el primero de todo el camino.
+> Ya no espera ningún go/no-go. **No hay código escrito todavía.**
 > **Fecha:** 2026-08-16 · **Diseñado con:** Opus 5 (solo diseño, no se tocó código)
+> **Lo que su ejecución arrastra:** el export `.ics` agrega un formato al endpoint de exportación de
+> Bitácora, así que **se audita dentro del bloque S2 de SEC-2** (Etapa 3) — sin bloque propio, pero
+> con dos casos que el `.ics` introduce y el Excel/JSON no: una entrada sin `due_at` y una descripción
+> con saltos de línea sin escapar. Y `routes/bitacora.js` es el target de la fase **F1** del
+> code-review (Etapa 2), que por eso declara depender de que esta etapa esté cerrada.
 > **Documento padre:** `propuesta-bitacora-agenda-2026-07.md` §11 (F3.4) y §11.2 (pendientes)
 > **Alcance:** 2 de los 3 ítems de F3.4. **El tercero (tipos de entrada personalizados) queda
 > explícitamente afuera** — es el único de los tres que toca el modelo de datos (`kind` tiene un
