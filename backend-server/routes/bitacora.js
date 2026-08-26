@@ -1151,6 +1151,47 @@ expedientes.get('/', async (req, res) => {
     }
 });
 
+// ─── GET /by-key — resolver un número de expediente a su ficha ─────────────
+// Lo consume el portal cuando llega un deep-link `?goto=expediente&exp=<numero>`
+// desde un visor: el visor conoce el NÚMERO tal como lo devolvió el PJN (con
+// padding: "FCR 018745/2021"), no el id interno de la ficha.
+//
+// Por qué resuelve el servidor y no el portal: la normalización canónica
+// (`expedienteKey`) ya vive duplicada a propósito en dos codebases —backend y
+// Electron— con un fixture compartido como red contra la deriva (ver la cabecera
+// de utils/expedienteKey.js). Reimplementarla en el navegador sería una TERCERA
+// copia, sin test que la sujete, y su modo de falla es silencioso: el portal
+// diría "ese caso no está en tu Bitácora" para un caso que sí está.
+//
+// ⚠️ Va declarada ANTES de `/:id` a propósito: Express matchea por orden de
+// registro, y `/:id` capturaría "by-key" como si fuera un id.
+expedientes.get('/by-key', async (req, res) => {
+    const db = req.app.get('db');
+    const exp = texto(req.query.exp, MAX_EXPEDIENTE);
+
+    if (!exp || !esExpedienteValido(exp)) {
+        return res.status(400).json({ error: 'Falta el número de expediente o no es reconocible.' });
+    }
+
+    try {
+        const { rows } = await db.query(
+            `SELECT id, expediente, caratula
+               FROM expedientes_seguidos
+              WHERE user_id = $1 AND expediente_key = $2`,
+            [req.user.id, expedienteKey(exp)]
+        );
+        // 404 = "no lo seguís", no "no existe" — el portal lo traduce a un aviso
+        // accionable ("todavía no está en tu Bitácora") en vez de a un error.
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Ese expediente no está en tu Bitácora.', code: 'NO_SEGUIDO' });
+        }
+        res.json({ success: true, expediente: rows[0] });
+    } catch (error) {
+        console.error('Error resolviendo expediente por clave:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
 // ─── POST / — crear (o recuperar) la ficha de un caso ──────────────────────
 // Upsert por (user_id, expediente_key): si el usuario intenta seguir un caso que
 // ya sigue, se le devuelve el existente actualizado en vez de un error — es lo

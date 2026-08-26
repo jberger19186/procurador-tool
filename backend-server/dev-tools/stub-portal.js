@@ -23,6 +23,10 @@
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
+// Normalización canónica del backend real, no una reimplementación: si el stub
+// dedupe distinto que producción, el bloque de verificación pasa en verde por una
+// razón equivocada.
+const { expedienteKey, esExpedienteValido } = require('../utils/expedienteKey');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const PORTAL_DIR = path.join(PUBLIC_DIR, 'usuarios');
@@ -459,6 +463,58 @@ http.createServer(async (req, res) => {
         if (p === '/usuarios/api/sugerencias/descartar-todas' && req.method === 'POST') {
             SUGERENCIAS.length = 0;
             return json(res, { success: true });
+        }
+
+        // ── Resolución por número de expediente (deep-link ?goto=expediente&exp=) ──
+        // Usa la normalización REAL del backend (no una copia), para que el stub no
+        // pueda "pasar" con una lógica que producción no tiene.
+        if (p === '/usuarios/api/expedientes/by-key' && req.method === 'GET') {
+            const exp = (q.get('exp') || '').trim();
+            if (!exp || !esExpedienteValido(exp)) {
+                return json(res, { error: 'Falta el número de expediente o no es reconocible.' }, 400);
+            }
+            const clave = expedienteKey(exp);
+            const x = EXPEDIENTES.find((e) => expedienteKey(e.expediente) === clave);
+            if (!x) return json(res, { error: 'Ese expediente no está en tu Bitácora.', code: 'NO_SEGUIDO' }, 404);
+            return json(res, { success: true, expediente: { id: x.id, expediente: x.expediente, caratula: x.caratula } });
+        }
+
+        // ── Captura por lote desde un visor ──
+        // Devuelve `perCaso` como el backend real: el portal lo necesita para saber a
+        // qué ficha navegar después de guardar. Sin esto caía al catch-all genérico,
+        // que responde `{success:true}` sin perCaso — y el camino quedaba sin probar.
+        if (p === '/usuarios/api/expedientes/capture-lote' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            const casos = Array.isArray(body.casos) ? body.casos : [];
+            const conSnapshot = body.accion === 'snapshot-lote';
+            const perCaso = [];
+            const resumen = { creados: 0, actualizados: 0, snapshots: 0, omitidos: 0 };
+            for (const c of casos) {
+                if (!c || !esExpedienteValido(c.expediente || '')) { resumen.omitidos++; continue; }
+                const clave = expedienteKey(c.expediente);
+                let x = EXPEDIENTES.find((e) => expedienteKey(e.expediente) === clave);
+                const creado = !x;
+                if (creado) {
+                    x = { id: nextExpId++, expediente: c.expediente, jurisdiccion: c.jurisdiccion || null,
+                          dependencia: c.dependencia || null, caratula: c.caratula || null,
+                          situacion_actual: c.situacion_actual || null, situacion_fecha: new Date().toISOString(),
+                          notas: null, updated_at: new Date().toISOString(), snapshots: [] };
+                    EXPEDIENTES.push(x);
+                    resumen.creados++;
+                } else {
+                    Object.assign(x, { updated_at: new Date().toISOString() });
+                    resumen.actualizados++;
+                }
+                if (conSnapshot) {
+                    x.snapshots.unshift({ id: Date.now() + x.snapshots.length,
+                        kind: c.origen === 'informe' ? 'informe' : 'procuracion',
+                        run_date: new Date().toISOString(), situacion: c.situacion_actual || null,
+                        data: { movimientos: c.movimientos || [] } });
+                    resumen.snapshots++;
+                }
+                perCaso.push({ expediente: x.expediente, expediente_id: x.id, creado });
+            }
+            return json(res, { success: true, accion: body.accion, resumen, perCaso });
         }
 
         // ── Expedientes (Mis Expedientes) ──

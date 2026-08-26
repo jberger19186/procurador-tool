@@ -389,11 +389,21 @@ async function initDashboard() {
 
     // Consumir pending_goto (de SSO o de ?goto= persistido en sessionStorage)
     const pendingGoto = sessionStorage.getItem('pending_goto');
+    const pendingGotoExp = sessionStorage.getItem('pending_goto_exp');
+    sessionStorage.removeItem('pending_goto_exp');
     if (pendingGoto) {
         sessionStorage.removeItem('pending_goto');
         if (pendingGoto === 'nuevo-ticket') {
             navigateTo('soporte');
             setTimeout(() => openNewTicketModal(), 300);
+            return;
+        }
+        // `expediente` NO es una sección del portal — es el pedido "abrime la ficha de
+        // este caso", que vive dentro de Mis Expedientes. Sin esta rama, navigateTo()
+        // no matchea ningún `section-expediente`, deja TODAS las secciones ocultas y el
+        // usuario ve una pantalla en blanco (los links 📁 de los 3 visores caían acá).
+        if (pendingGoto === 'expediente') {
+            await abrirFichaPorNumero(pendingGotoExp);
             return;
         }
         navigateTo(pendingGoto);
@@ -698,18 +708,74 @@ function navigateTo(section, fromHistory) {
     // Historial del navegador: que el botón Atrás vuelva a la sección anterior del
     // portal en vez de salir. NO se toca la URL (pushState con '' = misma URL) → sin
     // riesgo para el SSO (#sso=), que de todos modos ya se limpió antes de navegar.
-    if (!fromHistory) {
-        const navState = { _sec: section };
-        if (history.state && history.state._sec) history.pushState(navState, '');
-        else history.replaceState(navState, '');
-    }
+    if (!fromHistory) pushNavState({ _sec: section });
 }
 
-// Botón Atrás/Adelante del navegador → navegar entre secciones del portal (no salir)
+// Apila una pantalla en el historial del navegador. La primera de la sesión usa
+// replaceState (no hay nada que apilar todavía); el resto empuja una entrada nueva.
+// Una pantalla repetida se reemplaza en vez de apilarse, para que Atrás nunca
+// parezca "no hacer nada" (pasa al reabrir la misma ficha dos veces seguidas).
+function pushNavState(navState) {
+    const actual = history.state;
+    if (!actual || !actual._sec) { history.replaceState(navState, ''); return; }
+    if (actual._sec === navState._sec && (actual._ficha || null) === (navState._ficha || null)) {
+        history.replaceState(navState, '');
+        return;
+    }
+    history.pushState(navState, '');
+}
+
+// ─── UNA SOLA PESTAÑA DEL PORTAL ──────────────────────────────────────────────
+// El portal se abre por DOS caminos y ninguno reusa pestaña por su cuenta:
+//   · Botones de la app Electron → `shell.openExternal()`, que entrega la URL al
+//     navegador del sistema: SIEMPRE abre una pestaña nueva, no existe el concepto
+//     de target al que apuntar.
+//   · Links/forms de los visores → `target="procurador_portal"`, que solo reusa
+//     dentro del mismo browsing context group; cada visor es un `file://` distinto,
+//     así que tampoco encuentra la pestaña anterior.
+// El único punto donde ambos caminos convergen es el portal mismo — por eso el
+// arreglo vive acá y no en Electron ni en los visores.
+//
+// Mecanismo: cada pestaña se anuncia al cargar; las ANTERIORES se cierran solas.
+// Gana la más nueva porque es la que el usuario está mirando (se acaba de abrir y
+// tiene el foco), así que no hace falta traer ninguna al frente — cosa que además
+// los navegadores bloquean desde una pestaña de fondo.
+//
+// ⚠️ Por qué no se pierde trabajo: Chrome solo permite `window.close()` si la
+// pestaña la abrió un script O si su historial tiene UNA sola entrada (verificado
+// en Chromium antes de escribir esto, no asumido). Una pestaña recién abierta e
+// intacta cumple la segunda condición → se cierra. Una en la que el usuario ya
+// navegó entre secciones acumuló entradas con pushState → el navegador la protege
+// solo. El chequeo de modal abierto de abajo es la misma intención, explícita.
+const TAB_BORN_AT = Date.now();
+
+function initPortalTabDedup() {
+    if (typeof BroadcastChannel === 'undefined') return; // navegador viejo: sin dedup, igual funciona
+    let ch;
+    try { ch = new BroadcastChannel('procurador_portal_tabs'); } catch (_) { return; }
+
+    ch.onmessage = (e) => {
+        const msg = e.data;
+        if (!msg || msg.type !== 'hello') return;
+        if (!(msg.bornAt > TAB_BORN_AT)) return;                          // solo cede ante una MÁS nueva
+        if (document.querySelector('.modal-overlay:not(.hidden)')) return; // hay algo a medio escribir
+        window.close();
+    };
+    ch.postMessage({ type: 'hello', bornAt: TAB_BORN_AT });
+}
+
+// Botón Atrás/Adelante del navegador → navegar entre pantallas del portal (no salir).
+// "Pantalla" incluye la ficha de un expediente, no solo la sección: sin el tramo de
+// `_ficha`, Atrás desde una ficha abierta salía de Mis Expedientes por completo en
+// vez de volver al listado, que es de donde el usuario venía.
 window.addEventListener('popstate', (e) => {
     if (!state.token) return; // sin sesión: comportamiento normal del navegador
     const st = e.state;
-    navigateTo((st && st._sec) || 'plan', true);
+    const sec = (st && st._sec) || 'plan';
+    navigateTo(sec, true);
+    if (sec === 'mis-expedientes' && st && st._ficha) {
+        openMexpFicha(st._ficha, true);
+    }
 });
 
 // ─── SIDEBAR MOBILE ───────────────────────────────────────────────────────────
@@ -2783,6 +2849,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (incomingGoto) {
         sessionStorage.setItem('pending_goto', incomingGoto);
     }
+    // `?goto=expediente&exp=<numero>`: el visor manda el NÚMERO del expediente (no el
+    // id interno, que no conoce). Se persiste al lado de pending_goto para sobrevivir
+    // el ciclo de login igual que él. Sin `exp` el goto sigue siendo válido — aterriza
+    // en el listado de Mis Expedientes (es lo que mandan los clientes ya instalados).
+    const incomingExp = urlParams.get('exp');
+    if (incomingExp) {
+        sessionStorage.setItem('pending_goto_exp', incomingExp);
+    }
 
     // Deep-link de captura desde un visor (F2.2/F2.3): POST /usuarios/capture redirige
     // acá con ?goto=bitacora&draft=<id>. El id se persiste igual que pending_goto —
@@ -2841,9 +2915,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Si solo había ?goto=/draft=/captura= sin SSO, limpiar la URL (ya están en sessionStorage)
-    if ((incomingGoto || incomingDraft || incomingCapturaError) && !hash.startsWith('#sso=')) {
+    if ((incomingGoto || incomingExp || incomingDraft || incomingCapturaError) && !hash.startsWith('#sso=')) {
         history.replaceState(null, '', window.location.pathname);
     }
+
+    // Anunciarse recién acá: la URL ya quedó limpia (replaceState, sin agregar
+    // entradas al historial), así que esta pestaña sigue siendo cerrable si otra
+    // más nueva la reemplaza sin que el usuario haya navegado en ella.
+    initPortalTabDedup();
 
     // Check if already logged in
     const token = getToken();
@@ -3524,7 +3603,7 @@ async function saveBitacoraEntrada(e) {
 // contextos, así que quien decide qué repintar es esta función, no cada botón.
 function bitacoraRefreshCurrentContext() {
     if (state.currentSection === 'mis-expedientes' && state.miExp.fichaId) {
-        openMexpFicha(state.miExp.fichaId);
+        openMexpFicha(state.miExp.fichaId, true); // repintado, no navegación
         return;
     }
     loadBitacoraAvisos();
@@ -3649,8 +3728,13 @@ function renderMexpLista() {
 }
 
 // ─── Ficha ───────────────────────────────────────────────────────────────────
-async function openMexpFicha(id) {
+// `sinPush`: no apilar una entrada de historial. Se usa cuando esto NO es una
+// navegación real sino un repintado de la ficha que ya estaba abierta (tildar una
+// entrada, editarla) — sin esa distinción, cada refresh dejaría una entrada más en
+// el historial y el botón Atrás tendría que apretarse N veces para salir de la ficha.
+async function openMexpFicha(id, sinPush) {
     mexpShowFicha();
+    if (!sinPush) pushNavState({ _sec: 'mis-expedientes', _ficha: id });
     state.miExp.fichaId = id;
     document.getElementById('mexp-ficha-body').innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
 
@@ -3677,6 +3761,43 @@ function closeMexpFicha() {
     state.miExp.ficha = null;
     mexpShowLista();
     loadMexpList(); // por si hubo cambios (editar/agregar entrada) mientras se veía la ficha
+}
+
+// Entrada desde un deep-link `?goto=expediente&exp=<numero>` (los links 📁 de los
+// visores). El visor conoce el número tal como lo devolvió el PJN, no el id de la
+// ficha, así que la resolución la hace el servidor con la normalización canónica
+// (GET /expedientes/by-key) — ver el comentario de ese endpoint.
+//
+// Sin `exp` (los clientes ya instalados, ≤ v2.7.49, mandan el link sin él) igual
+// aterriza en el listado: destino útil, no la pantalla en blanco de antes.
+async function abrirFichaPorNumero(exp) {
+    if (!state.account?.bitacoraEnabled) {
+        navigateTo('plan');
+        showToast('Tu plan no incluye el módulo Bitácora.', 'error');
+        return;
+    }
+
+    navigateTo('mis-expedientes');
+    if (!exp) return;
+
+    try {
+        const res = await apiFetch(`/usuarios/api/expedientes/by-key?exp=${encodeURIComponent(exp)}`);
+        if (!res) return;
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            showToast(
+                data.code === 'NO_SEGUIDO'
+                    ? `${exp} todavía no está en tu Bitácora. Guardalo desde el visor para verlo acá.`
+                    : (data.error || 'No se pudo abrir ese expediente.'),
+                'error'
+            );
+            return;
+        }
+        const data = await res.json();
+        await openMexpFicha(data.expediente.id);
+    } catch (e) {
+        showToast('Error de conexión al abrir el expediente.', 'error');
+    }
 }
 
 function mexpProximoVencimiento(entradas) {
@@ -3854,7 +3975,9 @@ async function saveMexpFicha(e) {
             showToast(id ? 'Expediente actualizado.' : 'Expediente agregado.', 'success');
         }
         await loadMexpList();
-        openMexpFicha(data.expediente.id);
+        // Editar (id presente) = la ficha ya estaba abierta → repintado, no apila.
+        // Crear (sin id) = venías del listado → sí es una navegación nueva.
+        openMexpFicha(data.expediente.id, !!id);
     } catch (err) {
         showAlert(alertEl, 'error', 'Error de conexión. Intentá de nuevo.');
     } finally {
@@ -4331,7 +4454,24 @@ async function guardarFichasDesdeDraft(casos, origen, accionBackend) {
                 : `Guardado: ${total} caso(s).`,
             'success'
         );
-        await refrescarTrasCaptura();
+
+        // Aterrizaje después de guardar: hasta acá el usuario quedaba en Bitácora
+        // viendo el listado general, sin ver el caso que acababa de guardar. El
+        // destino NO se puede pedir desde el visor —`/usuarios/capture` construye el
+        // redirect íntegramente del lado del servidor a propósito, para no ser un
+        // open redirect (ver cabecera de routes/capture.js)—, así que se decide acá,
+        // del lado autenticado, con el `expediente_id` real que ya devuelve perCaso.
+        const perCaso = Array.isArray(data.perCaso) ? data.perCaso : [];
+        if (perCaso.length === 1 && perCaso[0].expediente_id) {
+            navigateTo('mis-expedientes');
+            await openMexpFicha(perCaso[0].expediente_id);
+        } else if (perCaso.length > 1) {
+            // Varios casos: no hay una ficha "la" correcta → el listado es el destino
+            // útil, y ahí se ven todos los que se acaban de guardar.
+            navigateTo('mis-expedientes');
+        } else {
+            await refrescarTrasCaptura();
+        }
     } catch (e) {
         showToast('Error de conexión al guardar la captura.', 'error');
     }
