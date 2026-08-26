@@ -111,6 +111,17 @@ profesional, no solo comercial.
   fue diseñada para el que pierde el plan; hay que verificar que no sea una puerta para el que fue
   expulsado.
 - SQLi e IDOR **acotados a los ~15 endpoints nuevos** (re-test justificado en §2).
+- **Prototype pollution en el import `combinar`** *(agregado por el cruce con Strix, §S9).* El modo
+  `combinar` fusiona el JSON del backup con los datos del usuario. Un backup con claves `__proto__`,
+  `constructor` o `prototype` puede contaminar el prototipo de `Object` en el proceso del backend.
+  Probar con un backup construido a mano que las incluya, y confirmar que el merge las ignora (o que
+  usa un parseo que no las interpreta como claves de asignación).
+- **Mass assignment en los endpoints que aceptan objetos del cliente** *(agregado por el cruce con
+  Strix, §S9).* `PUT /usuarios/api/profile`, `POST/PUT /admin/plans` y los updates de suscripción
+  aceptan campos y varios usan `COALESCE`. Verificar que un payload con campos **no previstos**
+  (`role`, `usage_limit`, `registration_status`, `payment_provider`, `bitacora_enabled`) no se
+  persista: que exista una whitelist de campos y no un spread del body. Es la vía por la que un usuario
+  común se auto-otorgaría plan, cupo o rol admin.
 
 ---
 
@@ -259,10 +270,15 @@ este documento existe para prevenir.
 > Etapa 3**, después de S1–S7 y de S10 — nunca antes
 
 **Qué es Strix.** Un agente open-source de pentesting autónomo (`github.com/usestrix`, Apache 2.0).
-A diferencia de todo lo demás en este plan, **no lee código: ataca la aplicación corriendo** —
-navegador automatizado, shell, proxy HTTP de intercepción, y validación de cada hallazgo con una
-prueba de concepto real. Se instala por script, corre en **Docker**, se maneja por CLI
-(`strix --target <url|dir|repo|openapi>`) y consume una API key de LLM.
+Su toolkit combina **SAST + DAST**: puede tomar como target un repositorio o directorio (análisis
+estático), una URL (caja negra), o una spec OpenAPI/Postman. **En este bloque se lo usa en su modo
+dinámico** — atacar la aplicación corriendo — a propósito: el análisis estático de código ya es la
+Etapa 2 (`plan-code-review-integral-2026-08-26.md`), y correr el SAST de Strix acá sería duplicarla.
+Lo que aporta y no se solapa es el eje dinámico: navegador automatizado, shell, proxy HTTP de
+intercepción (Caido), un runtime de exploits en Python, y **validación de cada hallazgo con una
+prueba de concepto real** (no un warning estático). Se instala por script, corre en **Docker**, se
+maneja por CLI (`strix --target <url|dir|repo|openapi>`) y consume una API key de LLM (soporta
+Claude, entre otros).
 
 **Por qué suma algo que los demás bloques no dan.** Todos los otros bloques son búsqueda dirigida:
 Claude parte de hipótesis escritas y las confirma. Eso encuentra lo que se sospecha. Strix aporta el
@@ -273,6 +289,35 @@ parece vulnerable a IDOR"* y *"acá está el ID ajeno que devolvió 200"*.
 Es también la mitad que el propio proyecto viene señalando sin nombrarla: los 4 bugs que rindió la
 campaña `/verify` **no eran visibles leyendo el código**. Este bloque aplica el mismo principio al
 eje de seguridad.
+
+#### Cobertura: las clases que ataca Strix vs. los bloques de esta etapa
+
+Strix cubre el OWASP Top 10 y más. La tabla mapea **cada clase que Strix explota** contra el bloque
+dirigido de este plan que ya la mira desde una hipótesis escrita — para dejar explícito que S9 no
+introduce un eje sin red, sino que **valida en runtime lo que el resto audita por lectura**, y para
+marcar las clases donde S9 es la **única** cobertura no dirigida.
+
+| Clase que ataca Strix | Bloque dirigido que la cubre | Nota |
+|---|---|---|
+| **IDOR / control de acceso roto** | S1 (reclamo de draft ajeno), S2 (endpoints nuevos), SEC-1 (baseline) | S9 encadena y demuestra |
+| **Escalada de privilegios / auth bypass** | SEC-1 (authz admin, no re-testeado en §2) | S9 lo ataca sin hipótesis previa |
+| **SQL injection** | S2 (superficie nueva de Bitácora), SEC-1 | — |
+| **XSS (stored/reflected/DOM)** | S5 (admin), S6 (visores), S10 (módulo Markdown) | — |
+| **SSRF** | S10 (URLs que salen del PDF) | ⚠️ SSRF **general** (webhooks, `fetch` a MP) solo lo cubre S9 |
+| **Business logic / manipulación de pago** | S8 (cobro real, Etapa 4), S4 (farmeo del trial) | — |
+| **Race conditions** | S8 (atribución por ventana), S1 (almacén de drafts) | S9 las provoca en runtime |
+| **JWT / sesión / credential stuffing** | SEC-1 (JWT, blacklist) + S4/S7 (rate limits) | baseline no re-testeado |
+| **Misconfig / servicios expuestos** | SEC-1 NET-1 (`ufw`) | S9 re-mapea desde afuera |
+| **API: broken auth / rate-limit bypass** | S1/S2 (auth), S7 (umbrales) | ⚠️ el *bypass* del rate limit (spoofing de `X-Forwarded-For` con `trust proxy`) solo lo mira S9 |
+| **Prototype pollution** | S2 (merge de JSON en el import `combinar`) — *hipótesis agregada por este cruce* | única cobertura dirigida: S2 |
+| **Mass assignment** | S2 (endpoints con `COALESCE` que aceptan campos del cliente) — *hipótesis agregada por este cruce* | única cobertura dirigida: S2 |
+| **XXE / deserialización insegura** | S2 (parseo del backup), S10 (`pdfjs-dist` sobre XFA) | superficie chica; S9 la explora |
+| **OS command injection / SSTI** | — | N/A dirigido (sin template engine ni `exec` de input en el server); **S9 confirma la ausencia** |
+
+**Consecuencia de la tabla:** las dos clases que **ningún bloque dirigido nombraba** (prototype
+pollution y mass assignment) quedaron agregadas como hipótesis explícitas de **S2** (ver ese bloque),
+así que ahora tienen cobertura por lectura *además* de la exploración de S9. El resto ya estaba
+cubierto; S9 le agrega la demostración en runtime.
 
 **Alcance:** `https://localhost:3444` **desde dentro del servidor** (bypassa Nginx y el basic-auth de
 staging, exactamente como hizo el harness de V3), sobre la superficie autenticada y la anónima.
@@ -304,6 +349,15 @@ que cortar ambas salidas **antes** de arrancar:
   basic-auth), que es más lento pero evita instalar Docker en el VPS de producción. **Instalar Docker
   en el servidor de producción para correr una herramienta de ataque es una decisión del operador,
   no un detalle de implementación.**
+- 🚨 **Provisión de sesión autenticada — sin esto, Strix solo ataca la superficie anónima.** La app no
+  publica una spec OpenAPI/Postman, y la mayor parte de la superficie (Bitácora, cobranza, admin,
+  perfil) está **detrás de login**. Strix soporta escenarios autenticados, pero hay que **dárselos**:
+  crear en staging una cuenta de prueba desechable (rol usuario) y una admin, y pasarle a Strix o bien
+  el JWT vigente, o bien el flujo de login (`POST /auth/login` → `Authorization: Bearer`) para que
+  renueve la sesión solo. Sin este paso, la tabla de cobertura de arriba se cae a la mitad —
+  toda la fila autenticada queda sin ejercitar y el resultado se lee, falsamente, como "superficie
+  limpia". Confirmar **después de la corrida** que Strix efectivamente tocó rutas autenticadas
+  (revisar su log de requests), no asumirlo.
 - **Costo.** Es un agente autónomo: consume tokens sin techo natural. Fijar un presupuesto y un
   límite de tiempo de corrida antes de lanzarlo.
 

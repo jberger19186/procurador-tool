@@ -40,7 +40,7 @@
 | **Salidas** | `.md` completo · `.md` anonimizado · `mapping.txt` — en la carpeta de descargas **del usuario** (`PROCURADOR_DATA_DIR`), con prefijo propio |
 | **Bloques** | 7 (M0 gate + M1–M6) |
 | **Modelo dominante** | Sonnet. **Opus solo en M4** (motor de anonimización) |
-| **Sesiones estimadas** | **6–10**, más 1 release de Electron. **M0 puede subir el rango a 9–13** si la descarga de adjuntos necesita sesión autenticada |
+| **Sesiones estimadas** | **6–10**, más 1 release de Electron. ~~M0 puede subir el rango a 9–13~~ → **descartado: M0 cerró en escenario A** (ver nota de encabezado y §2) |
 | **Despliegue** | M1 es backend puro (sin release). M2–M5 son cliente → **un solo release al final** |
 | **Migración de DB** | 1 columna aditiva. Nada más |
 
