@@ -122,6 +122,15 @@
         <span id="badge-bitacora-topbar" class="badge-novedad badge-novedad-topbar" style="display:none">0</span>
     </button>
 
+    <!-- M5 (módulo Markdown): mismo patrón que btnTopbarBitacora — arranca oculto,
+         updateUserChip() (renderer.js) lo muestra solo si account.markdownEnabled
+         es true. A diferencia de Bitácora, este SÍ abre un modal local (no navega
+         al portal): todo el procesamiento es local, nada se manda al servidor. -->
+    <button class="tab-btn markdown-topbar-btn" id="btnTopbarMarkdown" style="display:none" title="Convertir un informe a Markdown (completo + anonimizado)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-9z"/><path d="M4.5 6.5v3M4.5 6.5l1.5 2 1.5-2M9.5 9.5v-3l1.5 3 1.5-3"/></svg>
+        Markdown
+    </button>
+
     <div class="topbar-spacer"></div>
 
     <!-- Controles de ventana (min / max / close) -->
@@ -890,6 +899,82 @@
         <div class="modal-footer">
             <button class="btn-secondary" id="btnCancelInforme">Cancelar</button>
             <button class="btn-primary" id="btnConfirmInforme">▶ Ejecutar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Markdown / Anonimización (M5) — 100% local, nada de esto toca el servidor
+     salvo la consulta de account.markdownEnabled que ya hizo updateUserChip(). -->
+<div class="modal" id="modalMarkdown">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3>📝 Markdown / Anonimización</h3>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="cuenta-tabs" style="margin-bottom:14px">
+                <button class="cuenta-tab active" data-md-tab="procesar">Procesar</button>
+                <button class="cuenta-tab" data-md-tab="mapping">Editor de mapeo</button>
+            </div>
+
+            <!-- Panel: Procesar -->
+            <div id="md-panel-procesar">
+                <p style="font-size:12.5px;color:var(--text-3);margin:0 0 10px">
+                    Convertí un informe PDF ya generado en dos archivos <strong>.md</strong>: uno
+                    completo y uno <strong>anonimizado</strong> (nombres de partes y terceros
+                    enmascarados), listo para pegar en el chat de tu IA preferida.
+                    <strong>Solo extrae texto, no procesa imágenes</strong> — las páginas escaneadas
+                    quedan marcadas, no se transcriben.
+                </p>
+
+                <div id="md-dropzone" class="md-dropzone">
+                    <div id="md-dropzone-idle">
+                        <div style="font-size:28px;margin-bottom:6px">📄</div>
+                        <div style="font-size:13px;color:var(--text-2)">Arrastrá un informe PDF acá</div>
+                        <div style="font-size:11.5px;color:var(--text-3);margin:4px 0 10px">o</div>
+                        <button class="btn-secondary" id="btnSelectMarkdownPdf" type="button">📁 Seleccionar PDF</button>
+                    </div>
+                    <div id="md-dropzone-archivo" style="display:none">
+                        <div style="font-size:13px;color:var(--text-2)">📄 <span id="md-archivo-nombre"></span></div>
+                        <button class="btn-secondary" id="btnCambiarMarkdownPdf" type="button" style="margin-top:8px">Cambiar archivo</button>
+                    </div>
+                </div>
+
+                <div id="md-progreso" style="display:none;margin-top:12px">
+                    <div style="font-size:12px;color:var(--text-2);margin-bottom:6px" id="md-progreso-label">Procesando...</div>
+                    <div id="md-progreso-log" class="md-progreso-log"></div>
+                </div>
+
+                <div id="md-resultado" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+                    <div style="font-size:12.5px;color:var(--text-2);margin-bottom:8px" id="md-resultado-resumen"></div>
+                    <div style="display:flex;flex-direction:column;gap:6px">
+                        <button class="btn-secondary md-btn-archivo" id="btnAbrirMdCompleto" type="button">📄 Abrir Markdown completo</button>
+                        <button class="btn-secondary md-btn-archivo" id="btnAbrirMdAnonimizado" type="button">🔒 Abrir Markdown anonimizado</button>
+                        <button class="btn-secondary md-btn-archivo" id="btnAbrirMapping" type="button">🗂 Abrir mapping.txt</button>
+                        <button class="btn-secondary" id="btnAbrirCarpetaMarkdown" type="button">📂 Abrir carpeta de descargas</button>
+                    </div>
+                </div>
+
+                <div id="md-error" class="cuenta-error" style="display:none;margin-top:10px"></div>
+            </div>
+
+            <!-- Panel: Editor de mapeo -->
+            <div id="md-panel-mapping" style="display:none">
+                <p style="font-size:12.5px;color:var(--text-3);margin:0 0 10px">
+                    Editá el diccionario de reemplazos y reprocesá — se aplica de nuevo sobre el
+                    documento original, sin volver a descargar nada.
+                </p>
+                <div id="md-mapping-sin-datos" style="font-size:13px;color:var(--text-3);padding:20px 0;text-align:center">
+                    Procesá un informe en la pestaña "Procesar" primero.
+                </div>
+                <textarea id="md-mapping-textarea" class="modal-input md-mapping-textarea" style="display:none" spellcheck="false"></textarea>
+                <div id="md-mapping-error" class="cuenta-error" style="display:none;margin-top:10px"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" id="btnCerrarMarkdown">Cerrar</button>
+            <button class="btn-primary" id="btnProcesarMarkdown" type="button">▶ Procesar</button>
+            <button class="btn-primary" id="btnReprocesarMarkdown" type="button" style="display:none">🔄 Reprocesar</button>
         </div>
     </div>
 </div>

@@ -17,6 +17,12 @@ const fs = require('fs');
 const AuthManager = require('./src/auth/authManager');
 const dailyVerification = require('./src/verification/dailyVerification');
 const { motivoInformeSinPDF, caratulaInformeExitoso } = require('./informe/motivoInformeSinPDF');
+// M5 (módulo Markdown/Anonimización) — 100% local, sin fork ni Puppeteer, así
+// que se requieren top-level como cualquier otro módulo puro del proceso
+// principal (mismo criterio que motivoInformeSinPDF de arriba).
+const { extraerTextoPdf, renderizarInformeMarkdown, derivarNombreSalida } = require('./markdown/extraerPdfAMarkdown');
+const { procesarAdjuntosDeInforme } = require('./markdown/descargarAdjuntos');
+const { anonimizar } = require('./markdown/anonimizar');
 
 let mainWindow;
 let loginWindow;
@@ -1980,6 +1986,129 @@ ipcMain.handle('select-batch-file', async () => {
         };
     } catch (err) {
         return { success: false, error: err.message };
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MARKDOWN / ANONIMIZACIÓN — M5 (UI). Orquesta M2+M3+M4, ya verificados por
+//  separado con sus propios harnesses. Todo local: la única llamada de red de
+//  todo el flujo es la que ya hace M3 (fetch directo a scw.pjn.gov.ar) — nada
+//  de esto pasa por nuestro backend salvo la lectura de account.markdownEnabled.
+// ═══════════════════════════════════════════════════════════════════════════
+
+ipcMain.handle('select-markdown-pdf', async () => {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Seleccionar informe PDF',
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+        properties: ['openFile']
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+    }
+    return { success: true, path: result.filePaths[0] };
+});
+
+// Defensa en profundidad — el botón del topbar ya está oculto sin el flag,
+// pero el handler no confía ciegamente en eso (mismo criterio que el gate de
+// checkout de Bitácora: "validado en staging y prod").
+async function verificarMarkdownHabilitado() {
+    try {
+        const acc = await authManager.backendClient.getAccount();
+        return acc?.success && acc?.account?.markdownEnabled === true;
+    } catch (_) {
+        return false;
+    }
+}
+
+ipcMain.handle('procesar-markdown-pdf', async (event, pdfPath) => {
+    try {
+        if (!(await verificarMarkdownHabilitado())) {
+            return { success: false, error: 'Tu plan no incluye el módulo Markdown.' };
+        }
+        if (!pdfPath || !fs.existsSync(pdfPath)) {
+            return { success: false, error: 'El archivo no existe.' };
+        }
+
+        const enviarProgreso = (evento) => {
+            try { mainWindow.webContents.send('markdown-progress', evento); } catch (_) {}
+        };
+
+        // M2 — extracción del PDF principal.
+        enviarProgreso({ tipo: 'extrayendo-informe' });
+        const { paginas } = await extraerTextoPdf(pdfPath);
+        const { markdown: markdownInforme, paginasSinTexto: paginasSinTextoInforme } = renderizarInformeMarkdown(paginas);
+
+        // M3 — adjuntos vinculados. Un fallo ACÁ no debe tirar todo el flujo:
+        // el informe principal (M2) ya es un resultado útil por sí solo, y M3
+        // solo lo enriquece. Mismo criterio de resiliencia que M3 aplica
+        // adjunto por adjunto, extendido a "M3 entero puede fallar".
+        let markdownAnexos = '';
+        let resumenAdjuntos = { totalAdjuntos: 0, descartadosPorAllowlist: 0, errores: [], paginasSinTexto: [] };
+        try {
+            resumenAdjuntos = await procesarAdjuntosDeInforme(pdfPath, { onProgress: enviarProgreso });
+            markdownAnexos = resumenAdjuntos.markdown || '';
+        } catch (error) {
+            enviarProgreso({ tipo: 'adjuntos-error', error: error.message });
+        }
+
+        const markdownCompleto = markdownAnexos
+            ? `${markdownInforme}\n\n---\n\n${markdownAnexos}\n`
+            : markdownInforme;
+
+        // M4 — anonimización, detección automática (sin mapping editado todavía).
+        enviarProgreso({ tipo: 'anonimizando' });
+        const { markdownAnonimizado, mappingTexto, entradas } = anonimizar(markdownCompleto);
+
+        // Escritura — los 3 archivos comparten el mismo "stem" (nombre base)
+        // para que queden agrupados al ordenar la carpeta alfabéticamente.
+        const descargas = await resolveUserDescargasDir();
+        fs.mkdirSync(descargas, { recursive: true });
+        const stem = derivarNombreSalida(pdfPath).replace(/\.md$/, '');
+        const mdPath = path.join(descargas, `${stem}.md`);
+        const mdAnonimizadoPath = path.join(descargas, `${stem}.anonimizado.md`);
+        const mappingPath = path.join(descargas, `${stem}.mapping.txt`);
+
+        fs.writeFileSync(mdPath, markdownCompleto, 'utf8');
+        fs.writeFileSync(mdAnonimizadoPath, markdownAnonimizado, 'utf8');
+        fs.writeFileSync(mappingPath, mappingTexto, 'utf8');
+
+        const paginasSinTextoTotal = paginasSinTextoInforme.length + (resumenAdjuntos.paginasSinTexto?.length || 0);
+        enviarProgreso({ tipo: 'completado' });
+
+        return {
+            success: true,
+            mdPath, mdAnonimizadoPath, mappingPath,
+            markdownCompleto, mappingTexto,
+            resumen: {
+                paginasSinTexto: paginasSinTextoTotal,
+                totalAdjuntos: resumenAdjuntos.totalAdjuntos,
+                erroresAdjuntos: resumenAdjuntos.errores?.length || 0,
+                entidadesDetectadas: entradas.length,
+            },
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+// Reprocesamiento del mapping — SIEMPRE en memoria, nunca releyendo el PDF ni
+// volviendo a descargar adjuntos. `markdownCompleto` viaja desde el renderer
+// (donde quedó guardado tras el primer procesamiento), nunca se re-lee del
+// disco — así el botón "Reprocesar" es instantáneo y coincide con lo que pide
+// el brief. `anonimizar()` es idempotente por diseño (parte siempre del
+// original), así que reprocesar 2 veces seguidas da el mismo resultado.
+ipcMain.handle('reprocesar-markdown-mapping', async (event, { markdownCompleto, mappingTexto, mdAnonimizadoPath, mappingPath }) => {
+    try {
+        if (typeof markdownCompleto !== 'string' || !mdAnonimizadoPath || !mappingPath) {
+            return { success: false, error: 'Faltan datos para reprocesar.' };
+        }
+        const r = anonimizar(markdownCompleto, mappingTexto);
+        fs.writeFileSync(mdAnonimizadoPath, r.markdownAnonimizado, 'utf8');
+        fs.writeFileSync(mappingPath, r.mappingTexto, 'utf8');
+        return { success: true, markdownAnonimizado: r.markdownAnonimizado, mappingTexto: r.mappingTexto };
+    } catch (error) {
+        return { success: false, error: error.message };
     }
 });
 

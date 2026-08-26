@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupInformeModal();
     setupProcurarCustomModal();
     setupMonitorModal();
+    setupMarkdownModal();
     updateHeaderInfo(); // Actualizar info del header al inicio
     updateUserChip();   // Poblar user chip del sidebar
     loadNotifications().catch(() => {}); // Badge de notificaciones no leídas
@@ -195,6 +196,9 @@ function initializeButtons() {
     // F2.7 (Bitácora): botón único de acceso rápido — abre el portal externo vía SSO,
     // visibilidad la decide updateUserChip() según account.bitacoraEnabled.
     bind('btnTopbarBitacora', () => openPortalSection('bitacora'));
+    // M5 (Markdown): a diferencia de Bitácora, abre un modal LOCAL — el módulo
+    // es 100% procesamiento en el equipo, no hay nada que navegar en el portal.
+    bind('btnTopbarMarkdown', openMarkdownModal);
 
     // ── Sidebar toggle (colapsar / expandir) ──
     const mainLayout = document.querySelector('.main-layout');
@@ -517,6 +521,11 @@ async function updateUserChip() {
         const btnBitacora = document.getElementById('btnTopbarBitacora');
         if (btnBitacora) btnBitacora.style.display = a.bitacoraEnabled === true ? '' : 'none';
 
+        // M5 (Markdown): mismo patrón exacto que Bitácora — arranca oculto en el
+        // HTML, se muestra acá leyendo el flag que M1 ya expone en /client/account.
+        const btnMarkdown = document.getElementById('btnTopbarMarkdown');
+        if (btnMarkdown) btnMarkdown.style.display = a.markdownEnabled === true ? '' : 'none';
+
         // F3.1: badge de pendientes — SOLO se pide si el módulo está habilitado.
         // Sin esto, el 100% de las cuentas sin el flag dispararía una consulta de
         // red extra al abrir la app, sin ningún dato que mostrar (mismo criterio
@@ -593,6 +602,19 @@ const FAQ_ITEMS = [
     { cat: 'errores', q: '¿Dónde están los archivos descargados?', a: 'En la carpeta configurada en Configuración > General > Carpeta de descargas. También podés acceder desde "Abrir descargas" en el sidebar.' },
     { cat: 'errores', q: '¿Necesito dejar Chrome abierto?', a: 'No. El sistema abre y cierra Chrome automáticamente en segundo plano. No interferís con el proceso salvo que abras ventanas del PJN manualmente.' },
     { cat: 'errores', q: '¿Qué hago si la app no arranca?', a: 'Cerrá Chrome completamente si estaba abierto, esperá 10 segundos y volvé a abrir la app. Si el problema persiste, usá el botón de soporte para abrir un ticket.' },
+    // --- BITÁCORA (P-AYUDA-1: módulo en producción desde 2026-08-14, sin FAQ hasta ahora) ---
+    { cat: 'bitacora', q: '¿Qué es la Bitácora?', a: 'Es tu agenda de vencimientos, audiencias, tareas y notas, con expedientes seguidos y su historial. Si tu plan la incluye, vas a ver un botón 📔 Bitácora en la barra superior que abre el portal.' },
+    { cat: 'bitacora', q: '¿Cómo sigo un expediente en la Bitácora?', a: 'Desde el visor de Procuración, Informe o Monitor, marcá el checkbox del expediente y usá "📌 Guardar caso". También podés agregarlo a mano desde "Mis expedientes" en el portal.' },
+    { cat: 'bitacora', q: '¿Cómo cargo un vencimiento o una audiencia?', a: 'Desde "＋ Nueva entrada" en la Bitácora del portal. Podés usar la calculadora de días hábiles (excluye fines de semana y feriados judiciales) para completar la fecha automáticamente.' },
+    { cat: 'bitacora', q: '¿Puedo exportar mi agenda a Google Calendar u Outlook?', a: 'Sí. Desde "Exportar" elegí el formato iCalendar (.ics) y se importa en cualquier app de calendario. Solo incluye entradas con fecha — las notas y tareas sin plazo quedan afuera.' },
+    { cat: 'bitacora', q: '¿Cómo hago un backup de mi Bitácora?', a: 'Desde "Exportar" → formato JSON. Es un backup completo y restaurable desde "Restaurar": podés combinarlo con lo que ya tenés o reemplazar todo.' },
+    { cat: 'bitacora', q: '¿Qué son las sugerencias del Monitor en la Bitácora?', a: 'Cuando el Monitor de partes detecta un expediente nuevo de una parte que seguís, la Bitácora te sugiere agregarlo a tu agenda — podés aceptarlo (con o sin una tarea de revisión) o descartarlo.' },
+    { cat: 'bitacora', q: 'Si mi plan deja de incluir Bitácora, ¿pierdo mis datos?', a: 'No. Tenés 90 días para exportar tu información aunque tu plan actual no incluya el módulo. Pasado ese plazo se bloquea la exportación, pero los datos no se borran.' },
+    // --- MARKDOWN / ANONIMIZACIÓN ---
+    { cat: 'markdown', q: '¿Qué hace el módulo Markdown?', a: 'Convierte un informe PDF ya generado en dos archivos .md (texto plano): uno completo y uno anonimizado (nombres de partes y terceros enmascarados), listo para pegar en el chat de tu IA preferida sin exponer datos de terceros.' },
+    { cat: 'markdown', q: '¿El módulo lee escaneos o imágenes dentro del PDF?', a: 'No. Solo extrae texto que ya está en el PDF como texto (no como imagen). Las páginas escaneadas o los sellos de firma digital sobre una imagen quedan marcados como "[imagen sin texto extraíble]", no se transcriben — no hay OCR en esta versión.' },
+    { cat: 'markdown', q: '¿La anonimización es 100% segura?', a: 'Es una ayuda automática, no una garantía. Revisá siempre el resultado antes de compartirlo — desde el Editor de mapeo podés editar el diccionario de reemplazos y reprocesar.' },
+    { cat: 'markdown', q: '¿El contenido del expediente sale de mi computadora?', a: 'No. Todo el procesamiento es local: ni el PDF, ni el Markdown, ni el diccionario de reemplazos se envían al servidor. Solo se consulta si tu plan incluye el módulo.' },
     // --- PRIVACIDAD Y SEGURIDAD ---
     { cat: 'privacidad', q: '¿Mis credenciales del PJN pasan por sus servidores?', a: 'No. Las contraseñas del PJN se almacenan exclusivamente en el gestor de contraseñas de tu Chrome y nunca salen de tu equipo. Procurador solo coordina la automatización.' },
     { cat: 'privacidad', q: '¿Cómo se protegen mis datos?', a: 'Los scripts de automatización están cifrados con AES-256 y se firman digitalmente. La comunicación con el servidor usa HTTPS/TLS. Tu sesión se valida con token JWT de corta duración.' },
@@ -605,6 +627,8 @@ const FAQ_CATS = [
     { id: 'procuracion', label: 'Procuración' },
     { id: 'informe',    label: 'Informe' },
     { id: 'monitor',    label: 'Monitor' },
+    { id: 'bitacora',   label: 'Bitácora' },
+    { id: 'markdown',   label: 'Markdown' },
     { id: 'extension',  label: 'Extensión' },
     { id: 'cuenta',     label: 'Cuenta' },
     { id: 'errores',    label: 'Errores' },
@@ -2932,6 +2956,242 @@ async function ejecutarInforme() {
         showNotification('Error al generar informe', 'error');
     } finally {
         setProcessRunning(false);
+    }
+}
+
+// ============ MARKDOWN / ANONIMIZACIÓN (M5) ============
+// Todo el procesamiento (M2/M3/M4) corre en el proceso principal; acá solo se
+// dispara y se muestra el resultado. `markdownEstado` guarda lo mínimo para
+// que "Reprocesar" (Solapa 2) pueda mandar el Markdown ORIGINAL de vuelta sin
+// releer nada de disco — es lo que hace que el reprocesamiento sea idempotente
+// y no dependa de que el archivo en disco siga igual a como se generó.
+let markdownEstado = null; // { pdfPath, markdownCompleto, mdPath, mdAnonimizadoPath, mappingPath }
+let markdownArchivoElegido = null;
+
+function setupMarkdownModal() {
+    // Tabs Procesar / Editor de mapeo
+    document.querySelectorAll('[data-md-tab]').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('[data-md-tab]').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const name = tab.dataset.mdTab;
+            document.getElementById('md-panel-procesar').style.display = name === 'procesar' ? '' : 'none';
+            document.getElementById('md-panel-mapping').style.display  = name === 'mapping'  ? '' : 'none';
+            const btnProcesar = document.getElementById('btnProcesarMarkdown');
+            const btnReproc = document.getElementById('btnReprocesarMarkdown');
+            btnProcesar.style.display = name === 'procesar' ? '' : 'none';
+            btnReproc.style.display = (name === 'mapping' && markdownEstado) ? '' : 'none';
+        });
+    });
+
+    // Seleccionar / cambiar archivo (diálogo nativo)
+    const elegirArchivo = async () => {
+        const result = await window.electronAPI.selectMarkdownPdf();
+        if (result.canceled || !result.success) return;
+        markdownSetArchivo(result.path);
+    };
+    document.getElementById('btnSelectMarkdownPdf').addEventListener('click', elegirArchivo);
+    document.getElementById('btnCambiarMarkdownPdf').addEventListener('click', elegirArchivo);
+
+    // Drag & drop — webUtils.getPathForFile() vía preload (File.path ya no
+    // existe en el renderer desde Electron 32, ver preload.js).
+    const dropzone = document.getElementById('md-dropzone');
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('md-dropzone-over');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('md-dropzone-over'));
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('md-dropzone-over');
+        const file = e.dataTransfer.files?.[0];
+        if (!file) return;
+        if (!/\.pdf$/i.test(file.name)) {
+            markdownMostrarError('Solo se aceptan archivos .pdf.');
+            return;
+        }
+        const rutaReal = window.electronAPI.getPathForFile(file);
+        markdownSetArchivo(rutaReal);
+    });
+
+    document.getElementById('btnProcesarMarkdown').addEventListener('click', ejecutarProcesarMarkdown);
+    document.getElementById('btnReprocesarMarkdown').addEventListener('click', ejecutarReprocesarMarkdown);
+    document.getElementById('btnCerrarMarkdown').addEventListener('click', () => closeModal('modalMarkdown'));
+
+    document.getElementById('btnAbrirMdCompleto').addEventListener('click', () => {
+        if (markdownEstado) window.electronAPI.openFile(markdownEstado.mdPath);
+    });
+    document.getElementById('btnAbrirMdAnonimizado').addEventListener('click', () => {
+        if (markdownEstado) window.electronAPI.openFile(markdownEstado.mdAnonimizadoPath);
+    });
+    document.getElementById('btnAbrirMapping').addEventListener('click', () => {
+        if (markdownEstado) window.electronAPI.openFile(markdownEstado.mappingPath);
+    });
+    document.getElementById('btnAbrirCarpetaMarkdown').addEventListener('click', () => {
+        window.electronAPI.openDownloadsFolder();
+    });
+
+    // Progreso — un renglón de log por evento, mismo espíritu que addLog() de
+    // la consola principal pero acotado al modal (no mezclarlo con la consola
+    // de procuración/informe, que es un flujo completamente distinto).
+    window.electronAPI.onMarkdownProgress((evento) => {
+        const log = document.getElementById('md-progreso-log');
+        const label = document.getElementById('md-progreso-label');
+        if (!log) return;
+        const linea = markdownDescribirEvento(evento);
+        if (label && linea.esLabel) label.textContent = linea.texto;
+        if (linea.texto) {
+            const div = document.createElement('div');
+            div.textContent = linea.texto;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+    });
+}
+
+function markdownDescribirEvento(evento) {
+    switch (evento.tipo) {
+        case 'extrayendo-informe':
+            return { esLabel: true, texto: 'Extrayendo el informe principal...' };
+        case 'descarga-inicio':
+            return { texto: `⬇ Descargando adjunto ${evento.index + 1}/${evento.total}...` };
+        case 'descarga-fin':
+            return { texto: evento.reusado ? `↺ ${evento.filename} (ya descargado antes)` : `✅ ${evento.filename}` };
+        case 'descarga-error':
+            return { texto: `⚠️ No se pudo descargar un adjunto: ${evento.error}` };
+        case 'extraccion-inicio':
+            return { esLabel: true, texto: `Extrayendo texto de ${evento.filename}...` };
+        case 'adjuntos-error':
+            return { texto: `⚠️ No se pudieron procesar los adjuntos: ${evento.error} (el informe principal sigue disponible)` };
+        case 'anonimizando':
+            return { esLabel: true, texto: 'Generando la versión anonimizada...' };
+        case 'completado':
+            return { esLabel: true, texto: 'Listo.' };
+        default:
+            return { texto: '' };
+    }
+}
+
+function markdownSetArchivo(rutaPdf) {
+    markdownArchivoElegido = rutaPdf;
+    document.getElementById('md-dropzone-idle').style.display = 'none';
+    document.getElementById('md-dropzone-archivo').style.display = '';
+    document.getElementById('md-archivo-nombre').textContent = rutaPdf.split(/[\\/]/).pop();
+    document.getElementById('md-error').style.display = 'none';
+}
+
+function markdownMostrarError(mensaje) {
+    const el = document.getElementById('md-error');
+    el.textContent = mensaje;
+    el.style.display = '';
+}
+
+function openMarkdownModal() {
+    // Resetear la pestaña Procesar a su estado inicial. Si ya había un
+    // resultado de esta sesión (markdownEstado), NO se pierde — el usuario
+    // puede haber cerrado el modal para leer el archivo y volver a abrirlo
+    // para ir a la Solapa 2 sin tener que procesar de nuevo.
+    document.querySelectorAll('[data-md-tab]').forEach(t => t.classList.remove('active'));
+    document.querySelector('[data-md-tab="procesar"]').classList.add('active');
+    document.getElementById('md-panel-procesar').style.display = '';
+    document.getElementById('md-panel-mapping').style.display = 'none';
+    document.getElementById('btnProcesarMarkdown').style.display = '';
+    document.getElementById('btnReprocesarMarkdown').style.display = 'none';
+
+    if (!markdownEstado) {
+        markdownArchivoElegido = null;
+        document.getElementById('md-dropzone-idle').style.display = '';
+        document.getElementById('md-dropzone-archivo').style.display = 'none';
+        document.getElementById('md-progreso').style.display = 'none';
+        document.getElementById('md-progreso-log').innerHTML = '';
+        document.getElementById('md-resultado').style.display = 'none';
+        document.getElementById('md-error').style.display = 'none';
+        document.getElementById('md-mapping-sin-datos').style.display = '';
+        document.getElementById('md-mapping-textarea').style.display = 'none';
+    }
+    openModal('modalMarkdown');
+}
+
+async function ejecutarProcesarMarkdown() {
+    if (!markdownArchivoElegido) {
+        markdownMostrarError('Elegí un informe PDF primero.');
+        return;
+    }
+
+    const btn = document.getElementById('btnProcesarMarkdown');
+    btn.disabled = true;
+    document.getElementById('md-error').style.display = 'none';
+    document.getElementById('md-resultado').style.display = 'none';
+    document.getElementById('md-progreso-log').innerHTML = '';
+    document.getElementById('md-progreso').style.display = '';
+    document.getElementById('md-progreso-label').textContent = 'Procesando...';
+
+    try {
+        const r = await window.electronAPI.procesarMarkdownPdf(markdownArchivoElegido);
+        if (!r.success) {
+            markdownMostrarError(r.error || 'No se pudo procesar el informe.');
+            return;
+        }
+
+        markdownEstado = {
+            pdfPath: markdownArchivoElegido,
+            markdownCompleto: r.markdownCompleto,
+            mdPath: r.mdPath,
+            mdAnonimizadoPath: r.mdAnonimizadoPath,
+            mappingPath: r.mappingPath,
+        };
+
+        const s = r.resumen || {};
+        const partes = [`${s.entidadesDetectadas ?? 0} entidad(es) detectada(s) para anonimizar`];
+        if (s.totalAdjuntos) partes.push(`${s.totalAdjuntos} adjunto(s) incorporado(s)`);
+        if (s.paginasSinTexto) partes.push(`${s.paginasSinTexto} página(s) sin texto extraíble (marcadas, no procesadas)`);
+        if (s.erroresAdjuntos) partes.push(`${s.erroresAdjuntos} adjunto(s) no se pudieron descargar`);
+        document.getElementById('md-resultado-resumen').textContent = partes.join(' · ');
+        document.getElementById('md-resultado').style.display = '';
+
+        // Precargar la Solapa 2 con el mapping recién generado.
+        document.getElementById('md-mapping-sin-datos').style.display = 'none';
+        const textarea = document.getElementById('md-mapping-textarea');
+        textarea.style.display = '';
+        textarea.value = r.mappingTexto;
+        document.getElementById('btnReprocesarMarkdown').style.display =
+            document.querySelector('[data-md-tab="mapping"]').classList.contains('active') ? '' : 'none';
+
+        showNotification('Markdown generado correctamente', 'success');
+    } catch (error) {
+        markdownMostrarError(`Error de procesamiento: ${error.message}`);
+    } finally {
+        btn.disabled = false;
+        document.getElementById('md-progreso').style.display = 'none';
+    }
+}
+
+async function ejecutarReprocesarMarkdown() {
+    if (!markdownEstado) return;
+    const btn = document.getElementById('btnReprocesarMarkdown');
+    const errEl = document.getElementById('md-mapping-error');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+
+    try {
+        const mappingEditado = document.getElementById('md-mapping-textarea').value;
+        const r = await window.electronAPI.reprocesarMarkdownMapping({
+            markdownCompleto: markdownEstado.markdownCompleto,
+            mappingTexto: mappingEditado,
+            mdAnonimizadoPath: markdownEstado.mdAnonimizadoPath,
+            mappingPath: markdownEstado.mappingPath,
+        });
+        if (!r.success) {
+            errEl.textContent = r.error || 'No se pudo reprocesar.';
+            errEl.style.display = '';
+            return;
+        }
+        showNotification('Reprocesado — el Markdown anonimizado se actualizó.', 'success');
+    } catch (error) {
+        errEl.textContent = `Error: ${error.message}`;
+        errEl.style.display = '';
+    } finally {
+        btn.disabled = false;
     }
 }
 

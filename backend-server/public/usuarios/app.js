@@ -2198,6 +2198,19 @@ const AYUDA_FAQ_ITEMS = [
     { cat: 'errores', q: '¿Dónde están los archivos descargados?', a: 'En la carpeta configurada en Configuración > General > Carpeta de descargas. También podés acceder desde "Abrir descargas" en el sidebar.' },
     { cat: 'errores', q: '¿Necesito dejar Chrome abierto?', a: 'No. El sistema abre y cierra Chrome automáticamente en segundo plano. No interferís con el proceso salvo que abras ventanas del PJN manualmente.' },
     { cat: 'errores', q: '¿Qué hago si la app no arranca?', a: 'Cerrá Chrome completamente si estaba abierto, esperá 10 segundos y volvé a abrir la app. Si el problema persiste, usá el botón de soporte para abrir un ticket.' },
+    // --- BITÁCORA (P-AYUDA-1: módulo en producción desde 2026-08-14, sin FAQ hasta ahora) ---
+    { cat: 'bitacora', q: '¿Qué es la Bitácora?', a: 'Es tu agenda de vencimientos, audiencias, tareas y notas, con expedientes seguidos y su historial. La encontrás en el menú lateral de este portal si tu plan la incluye.' },
+    { cat: 'bitacora', q: '¿Cómo sigo un expediente en la Bitácora?', a: 'Desde el visor de Procuración, Informe o Monitor en la app, marcá el checkbox del expediente y usá "📌 Guardar caso". También podés agregarlo a mano desde "Mis expedientes" acá en el portal.' },
+    { cat: 'bitacora', q: '¿Cómo cargo un vencimiento o una audiencia?', a: 'Desde "＋ Nueva entrada" en la Bitácora. Podés usar la calculadora de días hábiles (excluye fines de semana y feriados judiciales) para completar la fecha automáticamente.' },
+    { cat: 'bitacora', q: '¿Puedo exportar mi agenda a Google Calendar u Outlook?', a: 'Sí. Desde "Exportar" elegí el formato iCalendar (.ics) y se importa en cualquier app de calendario. Solo incluye entradas con fecha — las notas y tareas sin plazo quedan afuera.' },
+    { cat: 'bitacora', q: '¿Cómo hago un backup de mi Bitácora?', a: 'Desde "Exportar" → formato JSON. Es un backup completo y restaurable desde "Restaurar": podés combinarlo con lo que ya tenés o reemplazar todo.' },
+    { cat: 'bitacora', q: '¿Qué son las sugerencias del Monitor en la Bitácora?', a: 'Cuando el Monitor de partes detecta un expediente nuevo de una parte que seguís, la Bitácora te sugiere agregarlo a tu agenda — podés aceptarlo (con o sin una tarea de revisión) o descartarlo.' },
+    { cat: 'bitacora', q: 'Si mi plan deja de incluir Bitácora, ¿pierdo mis datos?', a: 'No. Tenés 90 días para exportar tu información aunque tu plan actual no incluya el módulo. Pasado ese plazo se bloquea la exportación, pero los datos no se borran.' },
+    // --- MARKDOWN / ANONIMIZACIÓN ---
+    { cat: 'markdown', q: '¿Qué hace el módulo Markdown?', a: 'Convierte un informe PDF ya generado (desde la app de escritorio) en dos archivos .md (texto plano): uno completo y uno anonimizado (nombres de partes y terceros enmascarados), listo para pegar en el chat de tu IA preferida sin exponer datos de terceros.' },
+    { cat: 'markdown', q: '¿El módulo lee escaneos o imágenes dentro del PDF?', a: 'No. Solo extrae texto que ya está en el PDF como texto (no como imagen). Las páginas escaneadas o los sellos de firma digital sobre una imagen quedan marcados como "[imagen sin texto extraíble]", no se transcriben — no hay OCR en esta versión.' },
+    { cat: 'markdown', q: '¿La anonimización es 100% segura?', a: 'Es una ayuda automática, no una garantía. Revisá siempre el resultado antes de compartirlo — desde el Editor de mapeo (en la app) podés editar el diccionario de reemplazos y reprocesar.' },
+    { cat: 'markdown', q: '¿El contenido del expediente sale de mi computadora?', a: 'No. Todo el procesamiento es local, dentro de la app de escritorio: ni el PDF, ni el Markdown, ni el diccionario de reemplazos se envían al servidor. Solo se consulta si tu plan incluye el módulo.' },
     // --- PRIVACIDAD Y SEGURIDAD ---
     { cat: 'privacidad', q: '¿Mis credenciales del PJN pasan por sus servidores?', a: 'No. Las contraseñas del PJN se almacenan exclusivamente en el gestor de contraseñas de tu Chrome y nunca salen de tu equipo. Procurador solo coordina la automatización.' },
     { cat: 'privacidad', q: '¿Cómo se protegen mis datos?', a: 'Los scripts de automatización están cifrados con AES-256 y se firman digitalmente. La comunicación con el servidor usa HTTPS/TLS. Tu sesión se valida con token JWT de corta duración.' },
@@ -2210,6 +2223,8 @@ const AYUDA_FAQ_CATS = [
     { id: 'procuracion', label: 'Procuración' },
     { id: 'informe',     label: 'Informe' },
     { id: 'monitor',     label: 'Monitor' },
+    { id: 'bitacora',    label: 'Bitácora' },
+    { id: 'markdown',    label: 'Markdown' },
     { id: 'extension',   label: 'Extensión' },
     { id: 'cuenta',      label: 'Cuenta' },
     { id: 'errores',     label: 'Errores' },

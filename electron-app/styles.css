@@ -198,6 +198,46 @@ body {
 }
 .bitacora-topbar-btn:hover { background: var(--accent-dark); color: #fff; }
 
+/* M5 (Markdown): mismo tratamiento visual que .bitacora-topbar-btn — acento
+   amber, distinguible de los tabs internos. */
+.markdown-topbar-btn {
+  color: var(--accent-dark);
+  background: var(--accent-muted);
+  margin-left: 4px;
+}
+.markdown-topbar-btn:hover { background: var(--accent-dark); color: #fff; }
+
+/* M5: zona de drag&drop del PDF de informe. */
+.md-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 22px 16px;
+  text-align: center;
+  transition: border-color .15s, background .15s;
+}
+.md-dropzone.md-dropzone-over { border-color: var(--accent); background: var(--accent-muted); }
+.md-progreso-log {
+  max-height: 110px;
+  overflow-y: auto;
+  font-size: 11.5px;
+  color: var(--text-2);
+  background: var(--bg-2, #f7f7f5);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.5;
+}
+.md-btn-archivo { text-align: left; }
+.md-mapping-textarea {
+  width: 100%;
+  min-height: 260px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
 /* F3.1: variante del badge de novedades para un botón compacto del topbar —
    ancla arriba a la derecha en vez de "margin-left:auto" (pensado para filas
    del sidebar, no aplica acá). */

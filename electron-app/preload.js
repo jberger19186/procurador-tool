@@ -1,4 +1,4 @@
-﻿const { contextBridge, ipcRenderer } = require('electron');
+﻿const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 console.log('🔄 Preload.js iniciando...');
 
@@ -115,6 +115,21 @@ try {
         onInformeIndividualVisorReady: (callback) => {
             ipcRenderer.on('informe-individual-visor-ready', (_, data) => callback(data));
         },
+
+        // ============ MARKDOWN / ANONIMIZACIÓN (M5) ============
+        // Todo el procesamiento (M2 extracción, M3 adjuntos, M4 anonimización)
+        // corre en el proceso principal — acá solo se dispara y se escucha el
+        // progreso, igual que run-process/run-informe.
+        selectMarkdownPdf: () => ipcRenderer.invoke('select-markdown-pdf'),
+        procesarMarkdownPdf: (pdfPath) => ipcRenderer.invoke('procesar-markdown-pdf', pdfPath),
+        reprocesarMarkdownMapping: (payload) => ipcRenderer.invoke('reprocesar-markdown-mapping', payload),
+        onMarkdownProgress: (callback) => {
+            ipcRenderer.on('markdown-progress', (_, data) => callback(data));
+        },
+        // Drag&drop: desde Electron 32, `File.path` ya no existe en el renderer
+        // por seguridad — `webUtils.getPathForFile()` es la vía oficial, y solo
+        // está disponible en preload/main (no en el contexto aislado del DOM).
+        getPathForFile: (file) => webUtils.getPathForFile(file),
 
         // ============ CUENTA Y TICKETS ============
         getLocalUser: () => ipcRenderer.invoke('get-local-user'),

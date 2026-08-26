@@ -22,15 +22,17 @@
         },
         // ── 2 ──────────────────────────────────────────────────────────────
         {
-            // F2.7 (Bitácora): '#btnTopbarBitacora' se suma vía `targets` (no `target`
-            // singular) porque `getBoundingBox` ignora los elementos de tamaño cero —
-            // si el plan no incluye el módulo, el botón sigue oculto (display:none) y
-            // el spotlight se calcula igual que antes, solo sobre `.tab-nav`. Con el
-            // módulo habilitado, el spotlight crece para abarcar también el botón.
-            targets: ['.tab-nav', '#btnTopbarBitacora'],
+            // F2.7 (Bitácora) + M5 (Markdown): '#btnTopbarBitacora'/'#btnTopbarMarkdown'
+            // se suman vía `targets` (no `target` singular) porque `getBoundingBox`
+            // ignora los elementos de tamaño cero — si el plan no incluye ninguno de
+            // los dos módulos, ambos botones siguen ocultos (display:none) y el
+            // spotlight se calcula igual que siempre, solo sobre `.tab-nav`. Con uno
+            // o los dos módulos habilitados, el spotlight crece para abarcarlos.
+            targets: ['.tab-nav', '#btnTopbarBitacora', '#btnTopbarMarkdown'],
             title: 'Navegación — tabs principales',
             text:  'Los tabs <strong>Procurar / Informe / Monitor / Descargas</strong> en la barra superior cambian la acción activa. También podés usar el menú lateral — ambos están sincronizados.<br><br>'
-                 + 'Si tu plan incluye el módulo <strong>📔 Bitácora</strong>, vas a ver un botón extra ahí mismo que abre tu agenda y expedientes seguidos en el portal.',
+                 + 'Si tu plan incluye el módulo <strong>📔 Bitácora</strong>, vas a ver un botón extra ahí mismo que abre tu agenda y expedientes seguidos en el portal.<br><br>'
+                 + 'Si tu plan incluye el módulo <strong>📝 Markdown</strong>, vas a ver otro botón ahí mismo que convierte un informe en dos archivos <code>.md</code>: uno completo para vos, y uno <strong>anonimizado</strong> — listo para pegar en el chat de tu IA preferida (ChatGPT, Claude, etc.) sin exponer los datos de las partes. Solo procesa texto, no imágenes.',
             setup: expandSidebar,
         },
         // ── 3 (NUEVO) ───────────────────────────────────────────────────────

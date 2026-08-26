@@ -448,7 +448,7 @@ judiciales reales.
 
 ---
 
-### M5 — UI: modal de 2 solapas + botón en el topbar 🟡
+### M5 — UI: modal de 2 solapas + botón en el topbar 🟡 ✅ **EJECUTADO (2026-08-26)**
 
 | | |
 |---|---|
@@ -471,6 +471,41 @@ singular**. El motor del tour ignora elementos de tamaño cero dentro de un `tar
 `target` singular oculto devuelve un rect `{0,0}` en vez de `null` → el spotlight apunta a la
 esquina superior izquierda para el 100% de los usuarios que no tengan el flag. Está documentado en
 la sesión de F2.7.
+
+> ✅ **Ejecutado y verificado 2026-08-26.** Botón `#btnTopbarMarkdown` junto a Bitácora, mismo
+> patrón (oculto en el HTML, `updateUserChip()` lo muestra con `account.markdownEnabled`). Modal
+> `#modalMarkdown` con 2 solapas (`cuenta-tabs`, mismo componente que ya usa el modal de Informe) —
+> **Procesar** (drag&drop vía `webUtils.getPathForFile()` + selector nativo, log de progreso,
+> resultado con botones para abrir cada uno de los 3 archivos y la carpeta) y **Editor de mapeo**
+> (`<textarea>` precargado con el `mapping.txt`, botón "Reprocesar"). **3 IPC handlers nuevos en
+> `main.js`** (`select-markdown-pdf`, `procesar-markdown-pdf`, `reprocesar-markdown-mapping`), con
+> **defensa en profundidad**: el handler vuelve a consultar `account.markdownEnabled` server-side
+> antes de procesar, no confía en que el botón esté oculto (mismo criterio que el gate de checkout
+> de Bitácora). **Reusa sin tocar** `resolveUserDescargasDir()` (carpeta por CUIT, D6) y los
+> handlers `open-file`/`open-downloads-folder` que ya existían — cero código nuevo para esas dos
+> cosas. Los 3 archivos de salida comparten el mismo "stem" (`markdown_<exp>_<ISO>` /
+> `.anonimizado.md` / `.mapping.txt`) para quedar agrupados al ordenar la carpeta. **El
+> reprocesamiento es realmente en memoria**: `markdownCompleto` viaja desde el renderer (guardado
+> ahí tras el primer procesamiento) en cada llamada a `reprocesar-markdown-mapping`, sin releer el
+> PDF ni volver a descargar adjuntos — un fallo de M3 (adjuntos) tampoco aborta el flujo completo,
+> el informe principal de M2 sigue siendo un resultado útil por sí solo.
+>
+> **Verificado con un test nuevo** (`electron-app/test/procesarMarkdownPipeline.test.js`, 11/11)
+> que reproduce la MISMA orquestación que hace el handler de `main.js` — la combinación M2+M3+M4
+> que ningún test de los bloques individuales había ejercitado: los 3 archivos comparten el stem
+> correcto, el completo y el anonimizado difieren, el anonimizado no lleva URLs del SCW, el
+> reprocesamiento sin cambios da el mismo resultado (idempotente), y el caso sin adjuntos (sin
+> links en el PDF) no rompe nada. **Suite completa del módulo: 94/94 PASS** (22+22+39+11). `npm
+> start` arranca limpio con los 3 módulos de `markdown/` requeridos top-level en `main.js` y
+> `webUtils` agregado a `preload.js`. Balance de tags del HTML y llaves del CSS verificado
+> programáticamente (24/24 divs del modal, 0 de diferencia en `styles.css`).
+>
+> **Sin verificación visual en pantalla** (este entorno no tiene handle de escritorio para Electron
+> — mismo bloqueo documentado en la campaña `/verify`, ver `plan-verificacion-runtime-2026-08-23.md`
+> §0) — pendiente la primera vez que se abra la app real, antes o junto con el release.
+>
+> **Con esto, el módulo Markdown queda completo (M1-M5). Falta M6** (tarjeta en la landing + TyC,
+> se ejecuta dentro de la Etapa 1.3) y **un release de Electron** para que llegue a producción.
 
 **📋 Tarea concreta de M5, agregada 2026-08-26 (antes de cortar el release de Electron):**
 extender el **paso 2 de 14** de `electron-app/onboarding/tour.js` — el mismo paso que ya agrupa
@@ -536,6 +571,16 @@ comunes" cubriendo exactamente la misma aclaración de "no lee imágenes, sin OC
 **tampoco tiene ninguna entrada** en las 3 superficies de ayuda de hoy — ver el pendiente agregado
 en `propuesta-bitacora-agenda-2026-07.md` §11.2. Documentar los dos módulos juntos en la misma
 sesión de M5 evita 2 pasadas separadas sobre los mismos 3 archivos.
+
+> ✅ **Ejecutado 2026-08-26** — las 2 tareas de documentación se resolvieron junto con el resto de
+> M5. **Tour:** paso 2/14 extendido con `targets: [..., '#btnTopbarMarkdown']` + tercer párrafo con
+> el texto acordado. **Ayuda/FAQ, las 3 superficies, para los 2 módulos a la vez** (P-AYUDA-1 de
+> Bitácora + Markdown, mismo pase): `electron-app/renderer.js` (`FAQ_ITEMS`/`FAQ_CATS`, +11
+> preguntas, 2 categorías nuevas) · `backend-server/public/usuarios/app.js`
+> (`AYUDA_FAQ_ITEMS`/`AYUDA_FAQ_CATS`, mismo contenido) · `backend-server/utils/aiSupportPrompt.js`
+> (bullets en "Qué hace el producto" y 3 entradas nuevas en "Cómo resolver los problemas más
+> comunes", incluida la aclaración explícita de "no hace OCR, solo texto"). **P-AYUDA-1 queda
+> cerrado.**
 
 ---
 
