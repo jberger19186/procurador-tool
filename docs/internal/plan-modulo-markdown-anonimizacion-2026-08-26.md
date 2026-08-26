@@ -181,7 +181,7 @@ procesamiento 100% local, no toca el PJN ni gasta recursos del servidor. Documen
 
 ---
 
-### M2 — Extracción del PDF principal a Markdown 🟡
+### M2 — Extracción del PDF principal a Markdown 🟡 ✅ **EJECUTADO (2026-08-26)**
 
 | | |
 |---|---|
@@ -203,6 +203,49 @@ hacerse con `npm install pdfjs-dist` **quirúrgico y revisando el diff del lockf
 ya tuvo un incidente exactamente acá: en la revisión de salud del 2026-07-25, un intento de usar
 `overrides` disparó una re-resolución del árbol que dejó staging con versiones **más viejas** que
 producción. Verificar que ninguna versión existente cambie.
+
+> ✅ **Ejecutado y verificado 2026-08-26.** `npm install pdfjs-dist@^4.10.38` en `electron-app` —
+> diff del lockfile confirmado: **0 versiones existentes cambiaron**, solo se agregaron `pdfjs-dist`
+> y su dependencia opcional `@napi-rs/canvas` (usada por pdfjs solo para *renderizar* páginas a
+> imagen, algo que este módulo nunca hace — extrae texto, no rasteriza). `npm audit` **antes y
+> después dio exactamente el mismo resultado** (9 vulnerabilidades, 1 moderate + 8 high, todas
+> preexistentes de `js-yaml`/`undici` en el árbol de `electron-builder`) — cero vulnerabilidades
+> nuevas. `npm start` arrancó limpio después del install.
+>
+> **pdfjs-dist v4 es ESM puro** (sin build CJS) — se carga con `import()` dinámico desde el módulo
+> CommonJS del proyecto (`electron-app/markdown/extraerPdfAMarkdown.js`), funciona sin problema
+> desde el proceso principal de Electron. `disableWorker: true` evita depender de Web Workers (no
+> existen tal como los usa el browser) y `standardFontDataUrl`/`cMapUrl` apuntan a los recursos que
+> trae el propio paquete (sin esto, solo un warning informativo, sin fallar).
+>
+> **Motor implementado en 2 capas** (`electron-app/markdown/extraerPdfAMarkdown.js`): (1) genérica
+> — reconstruye las líneas de una página en **orden de lectura real** (ordenando por `y`
+> descendente/`x` ascendente con tolerancia de línea, no confiando en el orden de los items del PDF,
+> que no está garantizado) — reutilizable por M3 para los adjuntos del SCW; (2) específica del
+> informe — clasifica las líneas según la plantilla real de `informequickscwpjn.js` (título ·
+> carátula/jurisdicción como cita · `**Situación:**` · tabla Markdown de "Movimientos" con
+> continuaciones sin fecha fundidas en la fila anterior y marcador `📎` para las líneas
+> `-> Ver documento`) y descarta el pie de página de cada hoja. Nombre del `.md` derivado del MISMO
+> `<exp>` que ya trae el PDF de origen (`informe_<exp>_<ISO>.pdf` → `markdown_<exp>_<ISO>.md`), sin
+> reinventar una tercera normalización de expediente.
+>
+> **Verificado con `electron-app/test/extraerPdfAMarkdown.test.js` — 22/22 PASS:** 15 unidades
+> sintéticas (reordenamiento pese a items desordenados, tolerancia de línea/jitter, escapado de `|`
+> en celdas, página sin texto que corta y reabre la tabla, continuación sin fila previa que no
+> explota) + 7 de integración contra un PDF **real** de informe (`informe_FCR 018745_2017_...pdf`,
+> el mismo tipo de archivo que midió M0), sin PDFs sintéticos de relleno. **Confirmado manualmente**
+> sobre las 4 páginas del informe real: la tabla de movimientos se reconstruye completa y una
+> continuación que cruza el límite entre la página 2 y la 3 se funde correctamente en una sola fila
+> (`DEO: ENVIO DEO: 2664333 - REMISIÓN DE AUTOS PRINCIPALES - JUZGADO FEDERAL DE RIO GALLEGOS -
+> SECRETARIA EJECUCION FISCAL`, partida en el PDF en 2 líneas por el salto de página) — 0 páginas
+> sin texto, coincide con la medición de M0 (0% en el informe propio). **Sin residuos:** los PDFs de
+> prueba se leyeron de la carpeta real del operador sin modificarlos, la salida de la integración se
+> escribe en un directorio temporal del sistema y se borra al final del test.
+>
+> **Alcance de M2 cumplido** (extracción + estructura + marcador de página sin texto). **Fuera de
+> alcance a propósito, por diseño** (le corresponde a M3/M5): la descarga de los adjuntos vinculados
+> por las líneas `-> Ver documento`, y cualquier wiring a `main.js`/IPC/UI — este módulo es una
+> función pura que M5 invocará con `PROCURADOR_DATA_DIR/descargas` cuando exista el botón.
 
 ---
 
