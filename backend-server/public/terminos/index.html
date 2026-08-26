@@ -185,7 +185,7 @@
     <a class="back-link" href="/register/" onclick="if(history.length>1){history.back();return false;}">← Volver</a>
     <div class="badge-beta">Versión Beta — Acceso Anticipado</div>
     <h1>Términos y Condiciones de Uso</h1>
-    <p class="doc-meta">Vigentes desde el 14 de mayo de 2026 · Procurador SCW / ProcuradorTool</p>
+    <p class="doc-meta">Vigentes desde el 14 de mayo de 2026 · Última actualización: 26 de agosto de 2026 · Procurador SCW / ProcuradorTool</p>
   </div>
 
   <div class="notice-beta">
@@ -204,9 +204,11 @@
     <p>Procurador SCW es una plataforma SaaS de automatización judicial dirigida exclusivamente a profesionales del derecho (abogados, procuradores) con credenciales propias y habilitadas en el sistema del Poder Judicial de la Nación (PJN) de la República Argentina. El servicio comprende:</p>
     <ul>
       <li><strong>Aplicación de escritorio (Electron):</strong> automatiza la procuración de expedientes, la generación de informes de estado y el monitoreo de partes en los portales SCW del PJN, utilizando el navegador Chrome y el gestor de contraseñas del propio usuario.</li>
+      <li><strong>Bitácora</strong> (según el plan contratado): agenda de vencimientos, audiencias, tareas y notas del usuario, con expedientes seguidos y su historial. El Monitor de Partes puede generar sugerencias automáticas de casos nuevos para seguir en la Bitácora — son una ayuda para no perder de vista un expediente, no una confirmación de que el caso corresponde efectivamente al usuario ni un consejo legal.</li>
+      <li><strong>Markdown / Anonimización</strong> (según el plan contratado): convierte un informe ya generado por la aplicación en archivos de texto plano (.md), incluyendo una versión con nombres de partes y terceros enmascarados automáticamente, pensada para que el usuario pueda compartir el contenido de un expediente con herramientas externas (por ejemplo, asistentes de inteligencia artificial) reduciendo la exposición de datos personales. El procesamiento se realiza <strong>íntegramente en la computadora del usuario</strong>: el contenido de los expedientes procesados por este módulo no se envía a los servidores de Procurador Tool.</li>
       <li><strong>Extensión de Chrome:</strong> acelera la carga de datos de expedientes (jurisdicción, número y año) en los módulos del PJN, cubriendo los portales SCW, Escritos, Notificaciones y DEOX.</li>
     </ul>
-    <p>Ambos componentes actúan <strong>en nombre del usuario y con sus propias credenciales</strong>, limitándose a automatizar acciones que el usuario podría realizar manualmente.</p>
+    <p>Todos los componentes actúan <strong>en nombre del usuario y con sus propias credenciales</strong>, limitándose a automatizar acciones que el usuario podría realizar manualmente.</p>
   </div>
 
   <!-- 3 -->
@@ -220,6 +222,7 @@
       <li>Los precios y condiciones de los planes están sujetos a cambios.</li>
     </ul>
     <p>El acceso durante la etapa beta puede ser limitado, revocado o modificado en cualquier momento.</p>
+    <p>En particular, los módulos <strong>Bitácora</strong>, <strong>Markdown / Anonimización</strong> y la <strong>Extensión de Chrome</strong> se encuentran en desarrollo activo: sus funciones, límites y disponibilidad pueden cambiar sin previo aviso, y su uso está sujeto a la supervisión activa del usuario conforme a la Sección 6.</p>
   </div>
 
   <!-- 4 -->
@@ -263,6 +266,11 @@
       <li>Controlar que las acciones realizadas automáticamente sean correctas y acordes a derecho.</li>
       <li>Verificar la exactitud de los datos procesados (expedientes, partes, plazos, notificaciones).</li>
       <li>Las consecuencias profesionales, procesales o legales derivadas del uso de la herramienta.</li>
+    </ul>
+    <p>En particular:</p>
+    <ul>
+      <li>Las <strong>sugerencias automáticas de la Bitácora</strong> (casos nuevos detectados por el Monitor de Partes) son una ayuda para no perder de vista un expediente — no constituyen asesoramiento legal ni garantizan que el caso corresponda efectivamente al usuario.</li>
+      <li>La <strong>anonimización de documentos</strong> (módulo Markdown) es un proceso automático de reconocimiento de texto y <strong>no garantiza la eliminación completa de datos identificatorios</strong>. El usuario es el único responsable de revisar el archivo anonimizado antes de compartirlo con terceros, incluyendo servicios de inteligencia artificial de terceros.</li>
     </ul>
   </div>
 
