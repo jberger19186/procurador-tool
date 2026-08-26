@@ -486,9 +486,25 @@ vacía habría sido ambigua con "no se scrapeó" vs. "expediente sin carátula")
 - `node --check` en los 4 archivos JS + el `<script>` del template extraído.
 - 0 errores de consola nuevos (salvo el favicon 404, irrelevante).
 
-**Pendiente de B4:** el script Puppeteer necesita reencrypt+redeploy al
-servidor (staging→prod) **antes** de que el release de Electron tenga sentido
-— si el release sale primero, el visor tendría la columna nueva pero el
-script viejo en el servidor seguiría sin mandar la carátula, mostrando "—"
-para todo. **Orden correcto: reencrypt del script primero, después el
-release de Electron con B3+B4 juntos.**
+**Reencrypt desplegado a STAGING (2026-08-26).** Backup previo del script en
+staging (`/tmp/informequickscwpjn.js.pre-B4-staging_*`). Corrido con la forma
+segura documentada (`node -r dotenv/config reencrypt_scripts.js
+dotenv_config_path=.env.staging`, desde el propio directorio de staging) —
+la misma que corrigió el incidente de julio donde una invocación ingenua
+reencriptaba prod por error. **Verificado por SQL, no por la salida del
+proceso** (el propio `reencrypt_scripts.js` a veces no cierra solo — comportamiento
+conocido, documentado, sin relación con este cambio): el hash de
+`informequickscwpjn.js` en `procurador_db_staging` coincide **byte a byte**
+con el hash del archivo local (`27a60469...`), `updated_at` fresco, y **los
+otros 18 scripts de la whitelist sin tocar** (mismo `updated_at` de antes).
+**Confirmado que producción quedó intacta**: su hash sigue siendo el de
+julio (`efb0f4a6...`), sin cambios. `pm2 restart procurador-staging` (por la
+caché de firmas, mismo criterio que el resto del proyecto) sin loop
+(`↺`112→113), health/usuarios 200, log de errores sin entradas nuevas.
+
+**Pendiente:** reencrypt a **producción** (falta pedirlo explícitamente —
+sigue el mismo criterio de todo el plan: nunca saltar staging, pero tampoco
+avanzar a prod sin confirmación) + el release de Electron con B3+B4 juntos.
+**Orden que sigue importando:** reencrypt de prod antes que el release — si
+el release sale primero, el visor tendría la columna nueva pero el script
+viejo en prod seguiría sin mandar la carátula.
