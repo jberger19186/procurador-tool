@@ -220,7 +220,15 @@ acumuladas (bug 16), y no veía la confirmación. Se resuelve con los otros fixe
   trabajo real (historial 16, ficha abierta) **sobrevivió**, las ociosas se
   cerraron. Una ociosa **con un modal abierto también sobrevivió** (guard).
 
-**Pendiente de B1:** desplegar staging → prod.
+**Desplegado y verificado en producción (2026-08-26).** Backup previo en ambos
+entornos (`/tmp/bitacora.js.pre-B1nav-*`, `/tmp/app.js.pre-B1nav-*`). Staging
+primero (401 sin token en `by-key`, sin regresión en `plans`/`subscription/current`,
+sin usuario de prueba con Bitácora habilitada disponible para un E2E completo —
+la lógica es la misma query/`expedienteKey` ya probada en el resto del router).
+Prod: md5 servido = md5 local en los 2 archivos, `pm2-api` reinició sin loop
+(`↺` 744→745), health/usuarios/dashboard/landing 200, `by-key` 401 sin token,
+`pm2-error.log` sin entradas nuevas (la única reciente es del 2026-08-15,
+`PayloadTooLargeError` ya documentado como preexistente).
 
 ---
 
