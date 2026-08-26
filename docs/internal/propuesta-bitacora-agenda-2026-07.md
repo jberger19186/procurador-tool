@@ -1604,7 +1604,7 @@ resultado a la vista.
 | **F3.1** — Badge de pendientes en la app | **Sonnet, bajo** | Chico | ✅ **Código listo (2026-08-15).** Backend ya en producción; cliente pendiente de release. Ver detalle arriba. |
 | **F3.2** — Visor del monitor con captura | **Sonnet, medio** | Chico-mediano *(más bajo de lo que parecía)* | ✅ **Código listo (2026-08-15).** Backend (`origen='monitor'`) ya en producción; cliente pendiente de release. Ver detalle arriba. |
 | **F3.3** — Sugerencias automáticas desde novedades del monitor (bandeja aceptar/descartar) | **Opus, alto** | **Grande** | ✅ **Ejecutada y en producción (2026-08-15).** El diferencial mayor. ⚠️ La premisa de esta fila resultó equivocada: el matching **no** requería heurística legal ("qué movimiento merece un vencimiento") porque el Monitor no emite movimientos sino casos nuevos — evento de significado único, sin fecha que inferir. Lo genuinamente difícil fue otra cosa: descubrir que **el input nunca había ocurrido** (0 novedades en 19 corridas reales) y que el estado "novedad" es **transitorio**, lo que obliga a persistir la sugerencia en la detección. Ver detalle arriba. |
-| **F3.4** — Tipos de entrada personalizados · export `.ics` · vista "Semana" (P-F1.3-a) | **Sonnet, bajo-medio** | Variable | 🟡 **Parcial.** Bloque A (vista Semana) ✅ **ejecutado 2026-08-26** — cierra P-F1.3-a. Bloque B (export `.ics`) sigue con plan listo, sin código. Tipos de entrada personalizados queda explícitamente afuera (toca el modelo de datos, sin pedido concreto). |
+| **F3.4** — Tipos de entrada personalizados · export `.ics` · vista "Semana" (P-F1.3-a) | **Sonnet, bajo-medio** | Variable | ✅ **2 de 3 ejecutados 2026-08-26.** Bloque A (vista Semana) y Bloque B (export `.ics`) en producción — ver detalle abajo. Tipos de entrada personalizados queda explícitamente afuera (toca el modelo de datos, sin pedido concreto). |
 
 > **Regla transversal (crítica para no romper nada):** cada sub-bloque se valida en **staging** antes de prod, y el flag `bitacora_enabled` nace en `false` en **todos** los planes → aunque algo salga mal, ningún usuario ve la Bitácora hasta encender el flag en un plan de prueba. La Fase 1 completa se prueba y publica **sin emitir ningún release de Electron**. Ver también §11 "Nota de producto" (hallazgo C6): la Fase 1 sola no debe anunciarse ni venderse — es para validación interna.
 
@@ -1616,22 +1616,22 @@ resultado a la vista.
 > adelante. No son bugs ni deuda técnica urgente — son cabos sueltos conscientes, anotados acá
 > para que no se pierdan entre sesiones. Se van agregando a medida que cada fase se ejecuta.
 >
-> #### 📋 Resumen a simple vista (actualizado 2026-08-26, tras ejecutar el Bloque A de F3.4)
+> #### 📋 Resumen a simple vista (actualizado 2026-08-26, tras ejecutar los Bloques A y B de F3.4)
 >
 > **🔵 El grande, con nombre y ya conocido — F3.4.** No es un bug ni un cabo suelto: es la
 > **última fase del plan**. Agrupa 3 cosas sin diseño cerrado en la propuesta original (ver la fila
 > F3.4 de §11.1 y P-F1.3-a más abajo): **tipos de entrada personalizados** (hoy fijos:
-> vencimiento/audiencia/tarea/nota) · **export `.ics`** (agenda de Bitácora → Google
-> Calendar/Outlook) · **vista "Semana"** del calendario (F1.3 la recortó a propósito, ✅ ya cerrada).
-> Nada acá es estructural.
+> vencimiento/audiencia/tarea/nota, único ítem que sigue sin construir) · **export `.ics`**
+> (agenda de Bitácora → Google Calendar/Outlook, ✅ ya cerrado) · **vista "Semana"** del calendario
+> (F1.3 la recortó a propósito, ✅ ya cerrada). Nada acá es estructural.
 >
 > 📄 **Plan de implementación: `docs/internal/plan-f3-4-semana-e-ics-2026-08.md`**
-> (2026-08-16, diseñado con Opus). **Bloque A (vista "Semana") ✅ EJECUTADO 2026-08-26** — cierra
-> P-F1.3-a, ver detalle abajo. **Bloque B (export `.ics`) sigue con plan listo, sin código** —
-> Sonnet/medio, es una feature 100% de serialización de fechas en el módulo que produjo los 3 bugs
-> de timezone de P-F3.0-a, con las 6 trampas documentadas en el plan (§B.2). **Los tipos de entrada
-> personalizados quedan explícitamente afuera** de ese plan — es el único de los tres que toca el
-> modelo de datos (`kind` tiene un CHECK) y no tiene pedido concreto.
+> (2026-08-16, diseñado con Opus). **Bloques A y B ✅ EJECUTADOS, VERIFICADOS Y EN PRODUCCIÓN
+> 2026-08-26** — ver detalle en la nota de verificación al pie del plan (21/21 en el harness de
+> staging para el `.ics`, incluido parseo real RFC 5545 y las 2 pruebas de timezone que cazarían
+> una regresión del tipo P-F3.0-a). **Los tipos de entrada personalizados quedan explícitamente
+> afuera** de ese plan — es el único de los tres que toca el modelo de datos (`kind` tiene un
+> CHECK) y no tiene pedido concreto; F3.4 queda 2/3 cerrada.
 >
 > **🟡 Reales pero bajos, con dueño y condición de cierre clara** (detalle completo en la tabla
 > de abajo, buscar por `#`):

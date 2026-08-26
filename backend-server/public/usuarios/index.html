@@ -767,6 +767,13 @@
                         <input type="radio" name="export-formato" value="json" id="export-formato-json" checked>
                         JSON — backup completo (restaurable)
                     </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+                        <input type="radio" name="export-formato" value="ics" id="export-formato-ics">
+                        iCalendar (.ics) — para Google Calendar / Outlook
+                    </label>
+                    <div id="export-ics-nota" style="display:none;padding-left:26px;font-size:11.5px;color:var(--text-muted)">
+                        Solo incluye entradas con fecha (los vencimientos y audiencias, no las notas ni tareas sin plazo).
+                    </div>
                 </div>
             </div>
         </div>

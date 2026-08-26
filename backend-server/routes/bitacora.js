@@ -281,12 +281,161 @@ async function enviarExportXlsx(res, datos, alcance) {
     res.end();
 }
 
+// ─── iCalendar (.ics) — F3.4 Bloque B (plan-f3-4-semana-e-ics-2026-08.md §B) ──
+// 🚨 100% serialización de fechas — cualquier cambio acá, releer §B.2 del plan
+// antes de tocar nada. Los otros dos formatos vuelcan `due_at` tal como viene
+// de la base; este tiene que DECIDIR, por cada entrada, si es de día completo
+// y en qué día calendario cae — ahí es donde estuvieron los 3 bugs de F3.0.
+
+// Iconos por tipo — duplicado deliberado del map `BIT_TIPOS` del portal
+// (public/usuarios/app.js). No se importa del front (B.6 del plan): son 5
+// líneas, cambian juntos con el CHECK de `kind` de la migración F1.1, y
+// mezclar código de servidor con el del cliente es peor que la duplicación.
+const ICS_ICONS = { vencimiento: '⏰', audiencia: '⚖️', tarea: '✅', gestion: '📋', nota: '📝' };
+const ICS_RRULE_FREQ = { weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY' };
+
+// RFC 5545 §3.3.11 — orden exacto: \ primero (si no, escaparía las barras que
+// se acaban de insertar), después ; y , , después saltos de línea.
+function icsEscapeText(str) {
+    return String(str ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,')
+        .replace(/\r\n|\r|\n/g, '\\n');
+}
+
+// RFC 5545 §3.1 — las líneas se pliegan a 75 OCTETOS (no caracteres: acentos
+// y "ñ" pesan 2 bytes en UTF-8), continuando con UN espacio al inicio de la
+// línea siguiente. Ese espacio cuenta para el límite de la línea que abre,
+// por eso las continuaciones tienen 74 bytes de contenido, no 75. No corta
+// un carácter multibyte a la mitad (los continuation bytes UTF-8 empiezan
+// con el patrón de bits 10xxxxxx).
+function icsFoldLine(line) {
+    const bytes = Buffer.from(line, 'utf8');
+    if (bytes.length <= 75) return line;
+    const partes = [];
+    let inicio = 0;
+    let primera = true;
+    while (inicio < bytes.length) {
+        const limite = primera ? 75 : 74;
+        let fin = Math.min(inicio + limite, bytes.length);
+        while (fin < bytes.length && (bytes[fin] & 0xC0) === 0x80) fin--;
+        partes.push((primera ? '' : ' ') + bytes.slice(inicio, fin).toString('utf8'));
+        inicio = fin;
+        primera = false;
+    }
+    return partes.join('\r\n');
+}
+
+function icsLine(nombre, valor) {
+    return icsFoldLine(`${nombre}:${valor}`);
+}
+
+function icsPad2(n) { return String(n).padStart(2, '0'); }
+
+/** AAAAMMDDTHHMMSSZ, en UTC — para DTSTAMP y para un evento con hora (all_day=false). */
+function icsFechaHoraUtc(d) {
+    return `${d.getUTCFullYear()}${icsPad2(d.getUTCMonth() + 1)}${icsPad2(d.getUTCDate())}` +
+           `T${icsPad2(d.getUTCHours())}${icsPad2(d.getUTCMinutes())}${icsPad2(d.getUTCSeconds())}Z`;
+}
+
+// El proyecto es para abogados argentinos: `due_at` se guarda a MEDIODÍA
+// horario local (bitToIsoMidday, en el portal) — mediodía en cualquier huso
+// entre UTC-11 y UTC+11 no cruza el borde del día en UTC, así que leer el día
+// calendario con los getters UTC es correcto sin que el servidor necesite
+// conocer el huso real del cliente. Documentado a propósito, no adivinado:
+// mismo razonamiento que causó los 3 bugs de timezone de F3.0 (P-F3.0-a) si
+// se hace sin pensarlo — acá se piensa y se deja escrito por qué funciona.
+function icsDiaCalendarioUtc(dueAt) {
+    const d = new Date(dueAt);
+    return `${d.getUTCFullYear()}${icsPad2(d.getUTCMonth() + 1)}${icsPad2(d.getUTCDate())}`;
+}
+
+/** Día siguiente a un YYYYMMDD — DTEND de un evento de día completo es EXCLUSIVO (RFC 5545). */
+function icsDiaSiguiente(ymd8) {
+    const y = Number(ymd8.slice(0, 4)), m = Number(ymd8.slice(4, 6)), d = Number(ymd8.slice(6, 8));
+    const dt = new Date(Date.UTC(y, m - 1, d + 1));
+    return `${dt.getUTCFullYear()}${icsPad2(dt.getUTCMonth() + 1)}${icsPad2(dt.getUTCDate())}`;
+}
+
+/**
+ * Un VEVENT por entrada con `due_at`. Las entradas sin fecha (notas, tareas
+ * de revisión de F3.3 sin plazo) se EXCLUYEN — un VEVENT sin DTSTART es
+ * inválido por RFC 5545 y algunos clientes rechazan el archivo entero, no
+ * solo el evento (B.2.3 del plan).
+ */
+function construirVeventsIcs(datos) {
+    const expPorId = new Map(datos.expedientes.map(x => [x.id, x.expediente]));
+    const dtstamp = icsFechaHoraUtc(new Date());
+
+    return datos.entradas
+        .filter(e => e.due_at)
+        .map(e => {
+            const lineas = [];
+            lineas.push(icsLine('BEGIN', 'VEVENT'));
+            lineas.push(icsLine('UID', `bitacora-${e.id}@procuradortool.com`));
+            lineas.push(icsLine('DTSTAMP', dtstamp));
+
+            if (e.all_day === false) {
+                lineas.push(icsLine('DTSTART', icsFechaHoraUtc(new Date(e.due_at))));
+            } else {
+                const diaYmd = icsDiaCalendarioUtc(e.due_at);
+                lineas.push(icsLine('DTSTART;VALUE=DATE', diaYmd));
+                lineas.push(icsLine('DTEND;VALUE=DATE', icsDiaSiguiente(diaYmd)));
+            }
+
+            const icon = ICS_ICONS[e.kind] || '';
+            const label = KIND_LABELS_ENTRADA[e.kind] || e.kind;
+            lineas.push(icsLine('SUMMARY', icsEscapeText(`${icon} ${label} — ${e.title || ''}`.trim())));
+
+            // `e.expediente` viene del LEFT JOIN de recolectarDatosExport solo en
+            // alcance='entradas'; en 'todo'/'expediente' hay que resolverlo por
+            // `expediente_id` contra `datos.expedientes` — mismo patrón que
+            // enviarExportXlsx() más arriba.
+            const expNombre = e.expediente || expPorId.get(e.expediente_id) || null;
+            const descPartes = [];
+            if (e.description) descPartes.push(e.description);
+            if (expNombre) descPartes.push(`Expediente: ${expNombre}`);
+            if (descPartes.length > 0) {
+                lineas.push(icsLine('DESCRIPTION', icsEscapeText(descPartes.join('\n'))));
+            }
+
+            const freq = ICS_RRULE_FREQ[e.repeat_rule];
+            if (freq) lineas.push(icsLine('RRULE', `FREQ=${freq}`));
+
+            lineas.push(icsLine('STATUS', e.done_at ? 'COMPLETED' : 'CONFIRMED'));
+            lineas.push(icsLine('CATEGORIES', icsEscapeText(label)));
+            lineas.push(icsLine('END', 'VEVENT'));
+            return lineas.join('\r\n');
+        });
+}
+
+function enviarExportIcs(res, datos, alcance) {
+    const vevents = construirVeventsIcs(datos);
+    const calendario = [
+        icsLine('BEGIN', 'VCALENDAR'),
+        icsLine('VERSION', '2.0'),
+        icsLine('PRODID', '-//Procurador SCW//Bitacora//ES'),
+        icsLine('CALSCALE', 'GREGORIAN'),
+        ...vevents,
+        icsLine('END', 'VCALENDAR'),
+    ].join('\r\n') + '\r\n';
+
+    const filename = `bitacora-${alcance}-${new Date().toISOString().slice(0, 10)}.ics`;
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(calendario);
+}
+
 router.get('/bitacora/export', authenticateToken, checkBitacoraPlan({ conGracia: true }), async (req, res) => {
     const db = req.app.get('db');
     const userId = req.user.id;
 
     const alcance = ['todo', 'entradas', 'expediente'].includes(req.query.alcance) ? req.query.alcance : 'todo';
-    const formato = req.query.formato === 'json' ? 'json' : 'xlsx';
+    // Whitelist explícito, no un ternario encadenado (el original colapsaba
+    // cualquier valor desconocido a 'xlsx' — agregar un 3er formato con otro
+    // ternario anidado habría sido ilegible y frágil).
+    const formato = ['xlsx', 'json', 'ics'].includes(req.query.formato) ? req.query.formato : 'xlsx';
 
     let expedienteId = null;
     if (alcance === 'expediente') {
@@ -305,6 +454,8 @@ router.get('/bitacora/export', authenticateToken, checkBitacoraPlan({ conGracia:
         const datos = await recolectarDatosExport(db, userId, { alcance, expedienteId, desde, hasta });
         if (formato === 'json') {
             enviarExportJson(res, datos, alcance);
+        } else if (formato === 'ics') {
+            enviarExportIcs(res, datos, alcance);
         } else {
             await enviarExportXlsx(res, datos, alcance);
         }

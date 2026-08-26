@@ -2,8 +2,8 @@
 
 > **Estado:** ✅ **APROBADO POR EL OPERADOR (2026-08-26)** — es el ítem **1.1 de la Etapa 1** del
 > [roadmap de salida a mercado](roadmap-salida-a-mercado-2026-08.md), el primero de todo el camino.
-> **Bloque A (vista "Semana") ✅ EJECUTADO Y VERIFICADO 2026-08-26** — cierra P-F1.3-a. **Bloque B
-> (export `.ics`) sigue sin código escrito.**
+> **Los 2 bloques ✅ EJECUTADOS, VERIFICADOS Y DESPLEGADOS A PRODUCCIÓN (2026-08-26).** F3.4 queda
+> completo salvo los tipos de entrada personalizados, explícitamente fuera de alcance de este plan.
 > **Fecha:** 2026-08-16 · **Diseñado con:** Opus 5 (solo diseño, no se tocó código)
 > **Lo que su ejecución arrastra:** el export `.ics` agrega un formato al endpoint de exportación de
 > Bitácora, así que **se audita dentro del bloque S2 de SEC-2** (Etapa 3) — sin bloque propio, pero
@@ -36,8 +36,8 @@ nada del B).
 
 | Bloque | Modelo / esfuerzo | Toca | Deploy | Riesgo | Estado |
 |---|---|---|---|---|---|
-| **A — Vista "Semana"** | Sonnet, **bajo** | Solo portal (`index.html`, `app.js`, `app.css`) | `scp` + `pm2 restart` | 🟢 Bajo — aditivo, reversible en segundos | ✅ **Ejecutado y verificado 2026-08-26** (sin deploy a prod todavía) |
-| **B — Export `.ics`** | Sonnet, **medio** | Backend (`routes/bitacora.js`) + portal | `scp` + `pm2 restart` | 🟡 Medio — **es 100% serialización de fechas**, ver §B.0 | ⬜ Sin código |
+| **A — Vista "Semana"** | Sonnet, **bajo** | Solo portal (`index.html`, `app.js`, `app.css`) | `scp` + `pm2 restart` | 🟢 Bajo — aditivo, reversible en segundos | ✅ **Ejecutado, verificado y en producción (2026-08-26)** |
+| **B — Export `.ics`** | Sonnet, **medio** | Backend (`routes/bitacora.js`) + portal | `scp` + `pm2 restart` | 🟡 Medio — **es 100% serialización de fechas**, ver §B.0 | ✅ **Ejecutado, verificado (21/21 en staging) y en producción (2026-08-26)** |
 
 **Ninguno de los dos requiere:** migración de base de datos · release de Electron · tocar scripts
 encriptados · tocar nada de cobro.
@@ -356,6 +356,31 @@ importe correctamente.
 - ❌ **No crear un endpoint nuevo.** Ver B.1.
 - ❌ **No importar código del portal en el backend.** Si hace falta el map de tipos, duplicarlo con
   un comentario que lo diga.
+
+> ✅ **Verificado 2026-08-26** con un harness Node contra staging
+> (`dev-tools/verify-f34-bloqueB-ics.js`, mismo patrón que `verify-v3-bitacora-api.js`: `pg`+`jwt`+
+> `https`, guard que aborta si `DB_NAME` no contiene "staging") — **21/21 PASS**, con **parseo real
+> del `.ics`** (unfolding + unescape RFC 5545 implementados a mano en el propio harness, sin
+> librerías externas) en vez de inspección visual. Cubrió: gate sin flag → 403 · los 3 alcances con
+> `Content-Type: text/calendar` · cantidad de `VEVENT` = entradas CON `due_at` (una entrada sin
+> fecha, de las 4 fixture, quedó afuera — B.2.3) · `all_day=true` → `DTSTART;VALUE=DATE` +
+> `DTEND;VALUE=DATE` del **día siguiente** (exclusivo) con el **día calendario exacto** (hoy, no
+> ayer — el test de una línea que cazaría un bug de timezone) · `all_day=false` → `DTSTART` con
+> hora · un título con `;`, `,` y `\` sale escapado (verificado sobre el texto **desplegado**, no
+> sobre el raw con CRLF — el plegado a 75 octetos puede partir la secuencia de escape a la mitad,
+> lo que dio un falso negativo en la primera corrida del harness, corregido en el propio test) ·
+> `DESCRIPTION` con salto de línea real tras des-escapar · `repeat_rule=monthly` →
+> `RRULE:FREQ=MONTHLY` · `UID` estable entre 2 exports consecutivos del mismo dato · `DTSTAMP`
+> presente en los 3 `VEVENT` · `alcance=expediente` sin `expediente_id` → 404 (no-regresión) ·
+> `formato=xlsx`/`json` sin cambios (no-regresión) · un `formato` inválido cae al whitelist ·
+> **la ventana de gracia de 90 días funciona igual con `.ics`** (10 días → 200, 100 días → 403).
+> Frontend verificado en el Browser pane contra `dev-tools/stub-portal.js`: el 3er radio aparece,
+> la nota "solo entradas con fecha" se muestra/oculta correctamente al cambiar de formato, JSON
+> sigue siendo el default (el plan asumía que era xlsx — **corrección de hecho**: desde la sesión
+> 2026-06-18 el default es JSON, así que "no requiere cambio" en §B.4.3 seguía siendo cierto pero
+> por otra razón), sin errores de consola. **Desplegado a staging→prod** con backup previo de los
+> 3 archivos en ambos entornos, md5 servido = md5 local exacto, health/landing/portal 200 en prod,
+> `pm2-error.log` sin entradas nuevas (la más reciente sigue siendo del 15/08).
 
 ---
 

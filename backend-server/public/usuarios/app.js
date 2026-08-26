@@ -2800,8 +2800,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('mexp-search')?.addEventListener('input', (e) => mexpOnSearchInput(e.target.value));
     document.getElementById('btn-mexp-volver')?.addEventListener('click', closeMexpFicha);
 
-    // ─── Exportación: wiring del modal (F1.6) ───────────────────────────────
+    // ─── Exportación: wiring del modal (F1.6 + .ics de F3.4 Bloque B) ──────
     document.querySelectorAll('input[name="export-alcance"]').forEach(r => {
+        r.addEventListener('change', exportUpdateSubfields);
+    });
+    document.querySelectorAll('input[name="export-formato"]').forEach(r => {
         r.addEventListener('change', exportUpdateSubfields);
     });
 
@@ -4238,6 +4241,14 @@ function exportUpdateSubfields() {
     const alcance = document.querySelector('input[name="export-alcance"]:checked')?.value || 'todo';
     document.getElementById('export-rango-wrap').style.display = alcance === 'entradas' ? 'flex' : 'none';
     document.getElementById('export-expediente-wrap').style.display = alcance === 'expediente' ? 'block' : 'none';
+
+    // .ics excluye las entradas sin fecha (notas, tareas de revisión de F3.3
+    // sin plazo) — un VEVENT sin DTSTART es inválido por RFC 5545. El modal
+    // lo aclara para que "menos entradas que el Excel del mismo alcance" no
+    // se lea como un bug (§B.2.3 del plan).
+    const formato = document.querySelector('input[name="export-formato"]:checked')?.value || 'json';
+    const notaIcs = document.getElementById('export-ics-nota');
+    if (notaIcs) notaIcs.style.display = formato === 'ics' ? 'block' : 'none';
 }
 
 function closeExportModal() {
@@ -4480,7 +4491,10 @@ async function descargarExportBitacora() {
         }
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);
-        const ext = formato === 'json' ? 'json' : 'xlsx';
+        // Whitelist explícito, mismo criterio que el backend (routes/bitacora.js) —
+        // no encadenar otro ternario para el 3er formato.
+        const EXT_POR_FORMATO = { xlsx: 'xlsx', json: 'json', ics: 'ics' };
+        const ext = EXT_POR_FORMATO[formato] || 'xlsx';
         const fechaHoy = new Date().toISOString().slice(0, 10);
         const a = document.createElement('a');
         a.href = blobUrl;
