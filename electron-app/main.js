@@ -16,7 +16,7 @@ const { fork } = require('child_process');
 const fs = require('fs');
 const AuthManager = require('./src/auth/authManager');
 const dailyVerification = require('./src/verification/dailyVerification');
-const { motivoInformeSinPDF } = require('./informe/motivoInformeSinPDF');
+const { motivoInformeSinPDF, caratulaInformeExitoso } = require('./informe/motivoInformeSinPDF');
 
 let mainWindow;
 let loginWindow;
@@ -2081,7 +2081,10 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
                         const descargasPath = path.join(getUserDataDir(cuit), 'descargas');
                         const informeDir = path.join(__dirname, 'informe');
                         const resumenPath = path.join(descargasPath, `resumen_informe_individual_${Date.now()}.json`);
-                        fs.writeFileSync(resumenPath, JSON.stringify([{ expediente, ok: true, exitCode: 0 }], null, 2), 'utf8');
+                        // B4: carátula ya scrapeada por el script, presente en el mismo RESULT
+                        // que motivoInformeSinPDF ya parsea — ver el comentario en ese módulo.
+                        const caratula = caratulaInformeExitoso(result.output);
+                        fs.writeFileSync(resumenPath, JSON.stringify([{ expediente, ok: true, exitCode: 0, caratula }], null, 2), 'utf8');
                         const { generarVisorHTML } = require(path.join(informeDir, 'generador_visor.js'));
                         const configProceso = { rutas: { descargas: descargasPath } };
                         const rutaHTML = await generarVisorHTML(resumenPath, configProceso, null, bitacoraInfo, 'informe-individual');
@@ -2151,6 +2154,7 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
 
             let expSuccess = false;
             let motivoFallo = null;
+            let caratulaExp = null;
             try {
                 const expResult = await authManager.executeRemoteScriptAsLocal(
                     'informequickscwpjn.js',
@@ -2162,6 +2166,9 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
                 // expediente no existe o se cerró el navegador, sin generar informe.
                 motivoFallo = expSuccess ? motivoInformeSinPDF(expResult.output) : null;
                 if (motivoFallo) expSuccess = false;
+                // B4: carátula ya scrapeada por el script — null en cualquier caso que no
+                // sea éxito real (no hay carátula que ofrecer de un expediente inexistente).
+                caratulaExp = expSuccess ? caratulaInformeExitoso(expResult.output) : null;
                 mainWindow.webContents.send('process-log', {
                     type: expSuccess ? 'success' : 'error',
                     text: `  ${expSuccess ? '✅' : '❌'} [${i + 1}/${validLines.length}] ${expStr}: ${expSuccess ? 'OK' : (motivoFallo || 'falló (exit code ≠ 0)')}`
@@ -2196,7 +2203,7 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
             }
 
             if (!abortado) {
-                batchResults.push({ expediente: expStr, ok: expSuccess, exitCode: expSuccess ? 0 : 1, motivo: motivoFallo || undefined });
+                batchResults.push({ expediente: expStr, ok: expSuccess, exitCode: expSuccess ? 0 : 1, motivo: motivoFallo || undefined, caratula: caratulaExp || undefined });
                 // Pausa entre expedientes (excepto el último) para que Chrome libere el perfil
                 if (i < validLines.length - 1) {
                     mainWindow.webContents.send('process-log', {

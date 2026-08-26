@@ -18,21 +18,23 @@
  * @param {string} output - stdout completo de la ejecución
  * @returns {string|null} Motivo legible si terminó sin informe, o null si fue OK
  */
-function motivoInformeSinPDF(output) {
+/** Extrae y parsea el último `RESULT: {...}` del stdout. `null` si no hay ninguno o no es JSON legible. */
+function ultimoResultado(output) {
     const lineas = String(output || '')
         .split('\n')
         .filter(l => l.trim().startsWith('RESULT:'));
     if (lineas.length === 0) return null;
-
-    let payload;
     try {
         // El último RESULT es el desenlace: cada uno va seguido de un exit inmediato,
         // pero si en el futuro se emitiera más de uno, el que vale es el final.
-        payload = JSON.parse(lineas[lineas.length - 1].trim().substring(7));
+        return JSON.parse(lineas[lineas.length - 1].trim().substring(7));
     } catch (_) {
         return null;
     }
+}
 
+function motivoInformeSinPDF(output) {
+    const payload = ultimoResultado(output);
     if (payload?.codigo === 'EXPEDIENTE_INEXISTENTE') {
         return payload.mensaje || 'Expediente inexistente o no disponible para su consulta pública';
     }
@@ -42,4 +44,17 @@ function motivoInformeSinPDF(output) {
     return null;
 }
 
-module.exports = { motivoInformeSinPDF };
+/**
+ * B4 (puntos 19/20 del plan de arreglos de Bitácora): la carátula que el script ya
+ * scrapea para el PDF, ahora también en el payload de éxito — ver el comentario en
+ * informequickscwpjn.js. `null` ante cualquier resultado que no sea el de éxito (un
+ * expediente inexistente, un navegador cerrado, etc. no tienen carátula que ofrecer).
+ * @param {string} output - stdout completo de la ejecución
+ * @returns {string|null}
+ */
+function caratulaInformeExitoso(output) {
+    const payload = ultimoResultado(output);
+    return (payload && typeof payload.caratula === 'string' && payload.caratula) || null;
+}
+
+module.exports = { motivoInformeSinPDF, caratulaInformeExitoso };

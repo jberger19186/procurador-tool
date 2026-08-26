@@ -145,7 +145,11 @@ function prepararDatos(expedientes, config, rutaExcel, bitacoraInfo) {
             expediente: exp.expediente,
             ok: exp.ok,
             exitCode: exp.exitCode || 0,
-            rutaPDF: rutaPDF
+            rutaPDF: rutaPDF,
+            // B4 (puntos 19/20): antes se descartaba acá aunque `main.js` ya la mandara
+            // — el modelo de datos del informe "no tenía" carátula porque este generador
+            // la tiraba, no porque el script no la supiera.
+            caratula: exp.caratula || null
         };
     });
 

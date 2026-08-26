@@ -426,4 +426,69 @@ lo bloquea) **contra los 2 templates reales**, con datos sintéticos representat
 **Pendiente de B3:** no se despliega solo — comparte el release de Electron
 con B4 (ver abajo). Falta B4 antes de cortarlo.
 
-### B4 — Carátula en Informe (Sonnet/medio-alto) — PENDIENTE
+### B4 — Carátula en Informe (Sonnet/medio-alto) — ✅ CÓDIGO LISTO, sin desplegar
+
+**Cubre 19 y 20.** Archivos: `backend-server/scripts/informequickscwpjn.js`
+(motor Puppeteer, requiere reencrypt+redeploy — **no** release de Electron) ·
+`electron-app/informe/motivoInformeSinPDF.js` · `electron-app/main.js` ·
+`electron-app/informe/generador_visor.js` · `electron-app/informe/visor_informes_template.html`.
+
+**Causa raíz, confirmada por lectura de código antes de tocar nada** (no era
+"falta scrapear la carátula" como podría sonar el hallazgo original): el
+script **ya la scrapea** — `extraerDatosGenerales(page)` (en `testM2.js`, la
+misma función que usa procuración) la trae desde siempre, y el informe la usa
+para dibujar el encabezado del PDF (`generarPDFExpediente`, `testM2.js:1779`).
+El dato existe y se ve en el PDF mismo. Lo que pasaba es que **se perdía en la
+cadena de 4 pasos entre el script y el visor**, cortada en 3 puntos distintos:
+
+1. `informequickscwpjn.js` emitía el resultado exitoso como un literal
+   hardcodeado (`'RESULT: {"mensaje":"Proceso completado con éxito."}'`)
+   — la carátula, ya en la variable `datosExpediente.datosGenerales.caratula`
+   dos líneas antes, nunca se adjuntaba al payload.
+2. `main.js` construye `batchResults`/el resumen del informe individual
+   leyendo ese `RESULT:` (vía `motivoInformeSinPDF`, que ya parseaba el
+   payload para otra cosa) — sin la carátula en el payload, no había nada que
+   leer ahí tampoco.
+3. `generador_visor.js/prepararDatos()` reconstruye el objeto de cada
+   expediente a mano (`{expediente, ok, exitCode, rutaPDF}`) — aunque el paso
+   2 la hubiera pasado, **este paso la tiraba** al no incluirla en el objeto
+   reconstruido.
+4. El template (`campoDeCaso`) mandaba `car: ''` **hardcodeado** al capturar
+   — el punto 20 exacto del reporte original.
+
+**Fix en los 4 puntos, no un parche en el último:** arreglar solo el punto 4
+(el template) no serviría de nada porque los datos nunca llegan hasta ahí —
+había que reabrir el caño completo. Se extendió el módulo compartido
+`motivoInformeSinPDF.js` (que ya existía justo para no duplicar el parseo del
+`RESULT:` entre dos consumidores, según su propio comentario de cabecera) con
+`caratulaInformeExitoso(output)`, reusando el mismo parser interno en vez de
+escribir un tercero.
+
+**Punto 19 (columna faltante en la tabla):** agregada entre "Expediente" y
+"Estado", con truncado a 55 caracteres + `title` con el texto completo (mismo
+patrón que la columna de carátula del visor de procuración). `—` para los
+casos fallidos (sin `datosGenerales`, no hay carátula que mostrar — la celda
+vacía habría sido ambigua con "no se scrapeó" vs. "expediente sin carátula").
+
+**Verificado sin necesitar el PJN real:**
+- `caratulaInformeExitoso()` probado contra el parser real (mismo
+  `ultimoResultado()` interno que ya usa `motivoInformeSinPDF`, no una copia).
+- **`generarVisorHTML()` real** (no simulada) corrida con 3 casos sintéticos
+  (2 exitosos con carátula, 1 fallido) → el HTML generado, leído de vuelta e
+  inspeccionado: los 3 objetos `expedientes` llegan con `caratula` (los 2
+  casos reales, `null` el fallido) — confirma que `generador_visor.js` ya no
+  la descarta.
+- Ese mismo HTML servido y abierto con Playwright: columna "Carátula" visible
+  con el texto correcto en las 2 filas exitosas, "—" en la fallida.
+- `campoDeCaso(exp)` ejecutado en vivo sobre el caso capturado → `car` trae el
+  texto real, ya no `''` (punto 20 cerrado, confirmado en el propio DOM del
+  visor, no por lectura de código).
+- `node --check` en los 4 archivos JS + el `<script>` del template extraído.
+- 0 errores de consola nuevos (salvo el favicon 404, irrelevante).
+
+**Pendiente de B4:** el script Puppeteer necesita reencrypt+redeploy al
+servidor (staging→prod) **antes** de que el release de Electron tenga sentido
+— si el release sale primero, el visor tendría la columna nueva pero el
+script viejo en el servidor seguiría sin mandar la carátula, mostrando "—"
+para todo. **Orden correcto: reencrypt del script primero, después el
+release de Electron con B3+B4 juntos.**

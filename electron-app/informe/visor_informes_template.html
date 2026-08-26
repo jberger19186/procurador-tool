@@ -288,6 +288,7 @@
       <tr id="bit-thead-row">
         <th style="width:5%">N°</th>
         <th>Expediente</th>
+        <th>Carátula</th>
         <th class="center" style="width:14%">Estado</th>
         <th class="center" style="width:10%">Código</th>
         <th class="center" style="width:10%">PDF</th>
@@ -351,10 +352,15 @@
         : `<span class="btn-pdf disabled">N/A</span>`;
       const bitCell = (typeof bitRowCell === 'function') ? bitRowCell(exp, index) : '';
       const expCell = (typeof bitExpCellHtml === 'function') ? bitExpCellHtml(exp) : esc(exp.expediente);
+      // Punto 19: columna de carátula — el dato ya llega en `exp.caratula` desde B4
+      // (antes ni siquiera se generaba; ahora el generador la propaga en vez de tirarla).
+      const caratula = exp.caratula || '';
+      const caratulaCorta = caratula.length > 55 ? caratula.substring(0, 55) + '…' : caratula;
       tr.innerHTML = `
         ${bitCell}
         <td style="color:var(--text-3)">${index + 1}</td>
         <td class="mono">${expCell}</td>
+        <td title="${esc(caratula)}" style="color:var(--text-1)">${esc(caratulaCorta) || '—'}</td>
         <td class="center">
           <span class="status-badge ${exp.ok ? 'badge-ok' : 'badge-err'}">
             <span class="badge-dot"></span>${exp.ok ? 'OK' : 'Error'}
@@ -537,7 +543,9 @@
   }
 
   function campoDeCaso(exp) {
-    return { exp: exp.expediente || '', jur: '', dep: '', car: '', sit: '', fproc: DATOS_BATCH.fechaEjecucion || '', movs: '[]' };
+    // Punto 20: `car` salía siempre vacío — el dato existía (el script lo scrapea para
+    // el PDF) pero se perdía en el camino antes de B4. Ver generador_visor.js/prepararDatos.
+    return { exp: exp.expediente || '', jur: '', dep: '', car: exp.caratula || '', sit: '', fproc: DATOS_BATCH.fechaEjecucion || '', movs: '[]' };
   }
   function accionLote(accion, tipo) {
     if (seleccionados.size === 0) return;

@@ -909,8 +909,15 @@ async function main() {
             cierreProgramatico = true;
             await browser.close();
 
-            // 3️⃣ Emitimos resultado de éxito
-            console.log('RESULT: {"mensaje":"Proceso completado con éxito."}');
+            // 3️⃣ Emitimos resultado de éxito — con la carátula (B4, puntos 19/20 del plan
+            // de arreglos de Bitácora): `datosExpediente.datosGenerales.caratula` ya se
+            // scrapea acá arriba, para el PDF (`generarPDFExpediente`), pero nunca salía
+            // del script — el visor de informe la recibía siempre vacía. Se agrega al
+            // payload en vez de duplicar el scraping en otro lado.
+            console.log('RESULT: ' + JSON.stringify({
+                mensaje: "Proceso completado con éxito.",
+                caratula: datosExpediente?.datosGenerales?.caratula || null
+            }));
 
             // 4️⃣ Salimos del proceso con código 0
             process.exit(0);
