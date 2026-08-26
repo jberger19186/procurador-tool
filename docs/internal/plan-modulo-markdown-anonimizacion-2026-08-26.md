@@ -366,6 +366,33 @@ singular**. El motor del tour ignora elementos de tamaño cero dentro de un `tar
 esquina superior izquierda para el 100% de los usuarios que no tengan el flag. Está documentado en
 la sesión de F2.7.
 
+**📋 Tarea concreta de M5, agregada 2026-08-26 (antes de cortar el release de Electron):**
+extender el **paso 2 de 14** de `electron-app/onboarding/tour.js` — el mismo paso que ya agrupa
+`.tab-nav` + `#btnTopbarBitacora` — sumando el botón de Markdown al array `targets`:
+
+```js
+targets: ['.tab-nav', '#btnTopbarBitacora', '#btnTopbarMarkdown'],  // (o el id real que use M5)
+```
+
+Y un tercer párrafo en el `text` del paso, con el mismo patrón condicional que ya usa Bitácora
+("Si tu plan incluye..."). **El texto tiene que decir explícitamente 3 cosas** — es la aclaración
+que pidió el operador y que ningún otro lugar del producto dice todavía:
+
+1. Que el módulo genera **archivos `.md`** (no un visor ni un PDF).
+2. Que produce **dos versiones**: una completa y una **anonimizada**.
+3. Que el `.md` anonimizado está pensado para **pegarlo en el chat de la IA que el usuario ya usa**
+   (ChatGPT, Claude, Gemini, etc.) — sin exponer nombres de partes ni datos de terceros.
+
+Borrador de texto (ajustar tono al del resto del tour):
+
+> Si tu plan incluye el módulo **📝 Markdown**, vas a ver otro botón ahí mismo que convierte un
+> informe en dos archivos `.md`: uno completo para vos, y uno **anonimizado** — listo para pegar en
+> el chat de tu IA preferida (ChatGPT, Claude, etc.) sin exponer los datos de las partes.
+
+Sin esto, un usuario nuevo con el flag encendido ve el botón pero no entiende **para qué sirve el
+archivo que le entrega** — el tour es el único lugar del producto que explica flujos, y hoy
+terminaría de construirse (M2-M4) sin que el tour lo mencione en absoluto.
+
 ---
 
 ### M6 — Landing + TyC 🟢

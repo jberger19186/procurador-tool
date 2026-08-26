@@ -125,6 +125,16 @@ pantallas. Estructura propuesta (6 capítulos, ~20 pasos):
 5. **Bitácora** — captura desde el visor con un clic → la ficha del caso → la agenda con
    vencimientos → (F3.4) la vista Semana y el export `.ics`.
 6. **Markdown / anonimización** — informe → `.md` completo → `.md` anonimizado + mapping editable.
+   **⚠️ Nota agregada 2026-08-26, a pedido del operador:** este capítulo no puede quedarse en
+   "mostrar que se generan los 2 archivos" — tiene que explicar **para qué sirve el `.md`
+   anonimizado**, que es lo que un usuario nuevo no adivina solo mirando el modal: pasos extra
+   sugeridos — (a) abrir el `.md` anonimizado, (b) copiarlo o arrastrarlo al chat de la IA que el
+   usuario ya usa (ChatGPT, Claude, Gemini), (c) un pantallazo o mock de esa IA respondiendo sobre
+   el contenido del expediente **sin nombres de partes visibles**, para que quede claro en la propia
+   demo qué problema resuelve el módulo (compartir un expediente para razonar sobre él sin exponer
+   datos). Coordinar el texto exacto con el copy de `electron-app/onboarding/tour.js` paso 2/14
+   (ver `plan-modulo-markdown-anonimizacion-2026-08-26.md`, sección M5) — misma promesa, dicha una
+   vez en el producto y otra vez en la landing, sin contradecirse.
 7. **Extensión Chrome** — el data-entry automático en los 5 flujos del PJN.
 
 **Decisión que hay que tomar acá:** ¿la demo es **una sola pieza larga** o **una por módulo**?
