@@ -305,8 +305,16 @@ mano en el `<select>` de expediente), resuelto contra `state.bitacora.expediente
   "1 caso seleccionados" (concordancia rota) — corregido a singular/plural.
 - 0 errores de consola nuevos.
 
-**Pendiente de B2:** desplegar staging → prod (mismo criterio que B1: decidir
-si va solo o junto con lo que siga).
+**Desplegado y verificado en producción (2026-08-26).** Backup previo en ambos
+entornos (`/tmp/*.pre-B2-*`). Staging: reinició sin loop (`↺`111→112), la
+relajación de `capture.js` probada en las dos direcciones —
+`accion=entrada-lote` sin `tipo` → `303` con `draft=...` (aceptado);
+`accion=entrada` sin `tipo` → `303` con `captura=error` (sigue rechazando,
+como debe) — sin regresión en `plans`/`by-key`. Prod: md5 servido = md5 local
+en los 4 archivos, PM2 `↺`745→746 sin loop, health/usuarios/dashboard/landing
+200, la misma prueba de `capture.js` repetida con el mismo resultado,
+`pm2-error.log` sin cambios de tamaño/fecha desde el 15/08 (sin entradas
+nuevas).
 
 ---
 
