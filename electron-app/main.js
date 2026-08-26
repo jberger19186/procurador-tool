@@ -2451,7 +2451,10 @@ function generarVisorMonitoreo(modo, resultados, bitacoraInfo = null) {
         const bitTd = (e) => {
             if (!bit.enabled) return '';
             if (bitSeguidosSet.has(claveLigeraBit(e.numero_expediente))) {
-                return '<td class="bit-sel-cell"><a class="bit-ficha-link" href="https://api.procuradortool.com/usuarios/?goto=expediente" target="procurador_portal" title="Ya seguido en tu Bitácora">📁</a></td>';
+                // Punto 9/B1: el link lleva el número real — antes `?goto=expediente` sin
+                // `exp=` no resolvía a ninguna sección (pantalla en blanco, mismo bug que
+                // en los visores de procuración/informe, corregido acá por consistencia).
+                return '<td class="bit-sel-cell"><a class="bit-ficha-link" href="https://api.procuradortool.com/usuarios/?goto=expediente&exp=' + encodeURIComponent(e.numero_expediente || '') + '" target="procurador_portal" title="Ya seguido en tu Bitácora">📁</a></td>';
             }
             return `<td class="bit-sel-cell"><input type="checkbox" class="bit-checkbox"
                 data-bit-exp="${escAttr(e.numero_expediente)}" data-bit-jur="${escAttr(r.jurisdiccion_sigla)}"
@@ -2688,11 +2691,9 @@ function generarVisorMonitoreo(modo, resultados, bitacoraInfo = null) {
                     '<button class="bit-btn" id="bit-bar-entradas">＋ Crear entradas…</button>' +
                     '<button class="bit-btn-ghost" id="bit-bar-limpiar" style="margin-left:auto">✕ limpiar</button>';
                 document.getElementById('bit-bar-casos').onclick = function () { accionLote('ficha-lote'); };
-                document.getElementById('bit-bar-entradas').onclick = function () {
-                    var tipo = prompt('Tipo de entrada para los ' + seleccionados.size + ' casos seleccionados:\\n\\n1 = Vencimiento\\n2 = Tarea\\n3 = Nota', '1');
-                    var mapa = { '1': 'vencimiento', '2': 'tarea', '3': 'nota' };
-                    if (mapa[tipo]) accionLote('entrada-lote', mapa[tipo]);
-                };
+                // Punto 14/B2: el selector de tipo por botones vive del lado autenticado
+                // del portal — el prompt() nativo queda eliminado, no reemplazado acá.
+                document.getElementById('bit-bar-entradas').onclick = function () { accionLote('entrada-lote', null); };
                 document.getElementById('bit-bar-limpiar').onclick = function () {
                     seleccionados.clear();
                     document.querySelectorAll('.bit-checkbox').forEach(function (c) { c.checked = false; });

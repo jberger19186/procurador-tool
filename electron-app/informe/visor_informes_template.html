@@ -213,6 +213,9 @@
     font-size: 10.5px; color: var(--accent-dark); text-decoration: none; font-weight: 600;
     padding: 3px 7px; border-radius: 6px; background: var(--accent-muted);
   }
+  /* Punto 9: número de expediente como link cuando el caso ya está seguido. */
+  a.exp-link { color: var(--accent-dark); text-decoration: none; }
+  a.exp-link:hover { text-decoration: underline; }
   .bit-menu {
     display: none; position: absolute; right: 0; top: 28px; z-index: 50;
     background: var(--bg-surface); border: 1px solid var(--border-strong);
@@ -347,10 +350,11 @@
         ? `<a href="${exp.rutaPDF || '#'}" class="btn-pdf">📄 Abrir PDF</a>`
         : `<span class="btn-pdf disabled">N/A</span>`;
       const bitCell = (typeof bitRowCell === 'function') ? bitRowCell(exp, index) : '';
+      const expCell = (typeof bitExpCellHtml === 'function') ? bitExpCellHtml(exp) : esc(exp.expediente);
       tr.innerHTML = `
         ${bitCell}
         <td style="color:var(--text-3)">${index + 1}</td>
-        <td class="mono">${exp.expediente}</td>
+        <td class="mono">${expCell}</td>
         <td class="center">
           <span class="status-badge ${exp.ok ? 'badge-ok' : 'badge-err'}">
             <span class="badge-dot"></span>${exp.ok ? 'OK' : 'Error'}
@@ -428,24 +432,57 @@
   var seleccionados = new Set();
   var seguidosSet = new Set();
 
+  function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function claveLigera(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
   function yaSeguido(exp) { return seguidosSet.has(claveLigera(exp.expediente)); }
+  // Punto 9: mismo mecanismo que el visor de procuración — el link lleva el número
+  // real, el portal (B1) lo resuelve al id de la ficha con la normalización del backend.
+  function fichaUrl(exp) { return 'https://api.procuradortool.com/usuarios/?goto=expediente&exp=' + encodeURIComponent(exp.expediente || ''); }
+
+  // Punto 5: optimista — este visor tampoco recibe confirmación del POST a
+  // /usuarios/capture (otra pestaña, otro origen). Ver el comentario gemelo en
+  // visorModal_template.html para el razonamiento completo.
+  function marcarComoGuardado(exp) {
+    var clave = claveLigera(exp.expediente);
+    if (seguidosSet.has(clave)) return;
+    seguidosSet.add(clave);
+    renderizarTabla(DATOS_BATCH.expedientes);
+  }
+  function marcarLoteComoGuardado(lista) {
+    var cambio = false;
+    lista.forEach(function (exp) {
+      var clave = claveLigera(exp.expediente);
+      if (!seguidosSet.has(clave)) { seguidosSet.add(clave); cambio = true; }
+    });
+    if (cambio) renderizarTabla(DATOS_BATCH.expedientes);
+  }
 
   function bitInit() {
     if (!DATOS_BATCH.bitacora || !DATOS_BATCH.bitacora.enabled) return;
     seguidosSet = new Set((DATOS_BATCH.bitacora.seguidos || []).map(claveLigera));
 
+    // Punto 8: dos columnas — ícono de estado individual + checkbox de selección
+    // múltiple, independiente entre sí (ver el comentario largo en
+    // visorModal_template.html; misma decisión, mismo motivo).
     const theadRow = document.getElementById('bit-thead-row');
     if (theadRow) {
-      const th = document.createElement('th');
-      th.className = 'bit-sel-cell';
-      theadRow.insertBefore(th, theadRow.firstChild);
+      const th1 = document.createElement('th'); th1.className = 'bit-sel-cell';
+      const th2 = document.createElement('th'); th2.className = 'bit-sel-cell';
+      theadRow.insertBefore(th2, theadRow.firstChild);
+      theadRow.insertBefore(th1, theadRow.firstChild);
     }
     window.bitRowCell = function (exp, index) {
-      if (yaSeguido(exp)) {
-        return '<td class="bit-sel-cell"><a class="bit-ficha-link" href="https://api.procuradortool.com/usuarios/?goto=expediente" target="procurador_portal" title="Ya seguido en tu Bitácora">📁</a></td>';
-      }
-      return '<td class="bit-sel-cell"><input type="checkbox" class="bit-checkbox" data-bit-idx="' + index + '"' + (seleccionados.has(index) ? ' checked' : '') + '></td>';
+      const estadoCell = yaSeguido(exp)
+        ? '<td class="bit-sel-cell"><a class="bit-ficha-link" href="' + fichaUrl(exp) + '" target="procurador_portal" title="Ya seguido — ver ficha">📁</a></td>'
+        : '<td class="bit-sel-cell"><button type="button" class="bit-plus-btn" data-bit-guardar-idx="' + index + '" title="Guardar caso en tu Bitácora">💾</button></td>';
+      const checkCell = '<td class="bit-sel-cell"><input type="checkbox" class="bit-checkbox" data-bit-idx="' + index + '"' + (seleccionados.has(index) ? ' checked' : '') + '></td>';
+      return estadoCell + checkCell;
+    };
+    window.bitExpCellHtml = function (exp) {
+      const num = esc(exp.expediente || '');
+      return yaSeguido(exp)
+        ? '<a class="exp-link" href="' + fichaUrl(exp) + '" target="procurador_portal" title="Ver ficha en Bitácora">' + num + '</a>'
+        : num;
     };
     window.bitAfterRenderTabla = function () {
       document.querySelectorAll('.bit-checkbox').forEach(function (chk) {
@@ -453,6 +490,13 @@
           const idx = parseInt(chk.dataset.bitIdx, 10);
           if (chk.checked) seleccionados.add(idx); else seleccionados.delete(idx);
           renderBarra();
+        });
+      });
+      document.querySelectorAll('[data-bit-guardar-idx]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const exp = DATOS_BATCH.expedientes[parseInt(btn.dataset.bitGuardarIdx, 10)];
+          enviarCaptura(Object.assign({ accion: 'ficha' }, campoDeCaso(exp)));
+          marcarComoGuardado(exp);
         });
       });
       renderBarra();
@@ -495,12 +539,11 @@
   function campoDeCaso(exp) {
     return { exp: exp.expediente || '', jur: '', dep: '', car: '', sit: '', fproc: DATOS_BATCH.fechaEjecucion || '', movs: '[]' };
   }
-  function loteSeleccionado() {
-    return Array.from(seleccionados).map(function (i) { return campoDeCaso(DATOS_BATCH.expedientes[i]); });
-  }
   function accionLote(accion, tipo) {
     if (seleccionados.size === 0) return;
-    enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(loteSeleccionado()) });
+    const exps = Array.from(seleccionados).map(function (i) { return DATOS_BATCH.expedientes[i]; });
+    enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(exps.map(campoDeCaso)) });
+    marcarLoteComoGuardado(exps);
   }
 
   function renderBarra() {
@@ -516,11 +559,9 @@
       '<button class="bit-btn-ghost" id="bit-bar-limpiar" style="margin-left:auto">✕ limpiar</button>';
     document.getElementById('bit-bar-casos').onclick    = function () { accionLote('ficha-lote'); };
     document.getElementById('bit-bar-inf').onclick      = function () { accionLote('snapshot-lote'); };
-    document.getElementById('bit-bar-entradas').onclick = function () {
-      const tipo = prompt('Tipo de entrada para los ' + seleccionados.size + ' casos seleccionados:\n\n1 = Vencimiento\n2 = Tarea\n3 = Nota', '1');
-      const mapa = { '1': 'vencimiento', '2': 'tarea', '3': 'nota' };
-      if (mapa[tipo]) accionLote('entrada-lote', mapa[tipo]);
-    };
+    // Punto 14: el selector de tipo por botones ahora vive del lado autenticado del
+    // portal (B2) — el prompt() nativo queda eliminado, no reemplazado acá.
+    document.getElementById('bit-bar-entradas').onclick = function () { accionLote('entrada-lote', null); };
     document.getElementById('bit-bar-limpiar').onclick  = function () {
       seleccionados.clear();
       document.querySelectorAll('.bit-checkbox').forEach(function (c) { c.checked = false; });

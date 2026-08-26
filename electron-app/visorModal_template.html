@@ -235,7 +235,6 @@
     display: flex; justify-content: space-between; align-items: center;
     background: var(--bg-elevated);
   }
-  .modal-nav { display: flex; gap: 5px; }
   .btn-nav {
     height: 28px; padding: 0 13px;
     border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
@@ -285,6 +284,10 @@
     padding: 3px 7px; border-radius: 6px; background: var(--accent-muted);
   }
   .bit-ficha-link:hover { text-decoration: underline; }
+  /* Punto 9: número de expediente como link cuando el caso ya está seguido —
+     mismo color que `.mono` pero subrayable, para que se note que es clickeable. */
+  a.exp-link { color: var(--accent-dark); text-decoration: none; }
+  a.exp-link:hover { text-decoration: underline; }
   .bit-menu {
     display: none; position: absolute; right: 0; top: 28px; z-index: 50;
     background: var(--bg-surface); border: 1px solid var(--border-strong);
@@ -332,11 +335,9 @@
       </div>
       <div class="modal-body" id="modal-body"></div>
       <div class="modal-footer">
-        <div class="modal-nav">
-          <button class="btn-nav" id="btn-anterior" onclick="navegarExpediente(-1)">← Anterior</button>
-          <button class="btn-nav" id="btn-siguiente" onclick="navegarExpediente(1)">Siguiente →</button>
-        </div>
+        <button class="btn-nav" id="btn-anterior" onclick="navegarExpediente(-1)">← Anterior</button>
         <span class="modal-contador" id="modal-contador"></span>
+        <button class="btn-nav" id="btn-siguiente" onclick="navegarExpediente(1)">Siguiente →</button>
       </div>
     </div>
   </div>
@@ -453,6 +454,11 @@
         return;
       }
 
+      // B3, punto 8: dos columnas — la de `bitColHeader` (ícono de estado individual,
+      // guardar/ver ficha) y una segunda fija para el checkbox de selección múltiple,
+      // que ahora es independiente del estado de guardado del caso (antes el checkbox
+      // desaparecía en cuanto el caso quedaba seguido, impidiendo incluirlo en una
+      // acción masiva — punto 10: "en todos los casos" debe poder seleccionarse).
       const bitCol = (typeof bitColHeader === 'function') ? bitColHeader() : '';
       let html = `<div class="table-wrapper"><table>
         <thead><tr>
@@ -472,9 +478,13 @@
         const caratulaCorta = caratula.length > 45    ? caratula.substring(0,45)    + '…' : caratula;
         const depCorta      = dependencia.length > 28 ? dependencia.substring(0,28) + '…' : dependencia;
         const bitCell = (typeof bitRowCell === 'function') ? bitRowCell(exp, index) : '';
+        // Punto 9: el número de expediente es link a la ficha cuando el caso ya está
+        // seguido — `bitExpCellHtml` decide (definida en la sección Bitácora más abajo,
+        // undefined si el plan no incluye el módulo, igual que el resto de `bit*`).
+        const expCell = (typeof bitExpCellHtml === 'function') ? bitExpCellHtml(exp) : esc(expediente);
         html += `<tr>
           ${bitCell}
-          <td class="mono">${expediente}</td>
+          <td class="mono">${expCell}</td>
           <td title="${escAttr(caratula)}" style="color:var(--text-1);font-weight:500">${esc(caratulaCorta)}</td>
           <td title="${escAttr(dependencia)}">${esc(depCorta)}</td>
           <td>${esc(situacion)}</td>
@@ -623,28 +633,80 @@
           };
         }
 
-        function guardarCaso(exp)       { enviarCaptura(Object.assign({ accion: 'ficha' },    campoDeCaso(exp))); }
-        function guardarProcuracion(exp){ enviarCaptura(Object.assign({ accion: 'snapshot' }, campoDeCaso(exp))); }
-        function crearEntrada(exp, tipo){ enviarCaptura(Object.assign({ accion: 'entrada', tipo: tipo }, campoDeCaso(exp))); }
-
-        function loteSeleccionado() {
-          return Array.from(seleccionados).map(function (i) { return campoDeCaso(expedientesFiltrados[i]); });
+        // Punto 9: el link de "ya seguido" (columna 1 y modal) lleva el número real del
+        // caso — antes solo mandaba a la sección Bitácora en general (§B0/B1 del plan:
+        // era la causa de la pantalla en blanco original, `?goto=expediente` sin más
+        // resolvía a "ninguna sección"). El portal (B1) ya sabe resolver `exp=` al id
+        // real de la ficha con la misma normalización que usa el backend.
+        function fichaUrl(exp) {
+          return 'https://api.procuradortool.com/usuarios/?goto=expediente&exp=' + encodeURIComponent(exp.expediente || '');
         }
+
+        // Punto 5: el visor no tiene forma de confirmar que el POST a `/usuarios/capture`
+        // (otra pestaña, otro origen — ver `enviarCaptura`) haya terminado bien; nunca
+        // vuelve una respuesta acá. Por eso esto es deliberadamente OPTIMISTA: se asume
+        // éxito en el momento del click y se repinta — es preferible a lo de antes (la
+        // fila se quedaba mostrando "no guardado" para siempre, aunque sí se hubiera
+        // guardado). Si el guardado real falla, el error se ve en la pestaña del portal.
+        function marcarComoGuardado(exp) {
+          var clave = claveLigera(exp.expediente);
+          if (seguidosSet.has(clave)) return;
+          seguidosSet.add(clave);
+          refrescarVistaGuardado();
+        }
+        function marcarLoteComoGuardado(lista) {
+          var cambio = false;
+          lista.forEach(function (exp) {
+            var clave = claveLigera(exp.expediente);
+            if (!seguidosSet.has(clave)) { seguidosSet.add(clave); cambio = true; }
+          });
+          if (cambio) refrescarVistaGuardado();
+        }
+        function refrescarVistaGuardado() {
+          mostrarTabla(expedientesFiltrados); // repinta 💾→📁 y el link del expediente
+          // Si el modal de detalle está abierto sobre el caso recién guardado, refrescarlo
+          // también — si no, sus botones/link de ficha quedarían desactualizados hasta
+          // cerrarlo y volver a abrirlo.
+          if (document.getElementById('modal').classList.contains('active')) {
+            abrirModal(expedienteActualIndex);
+          }
+        }
+
+        function guardarCaso(exp)       { enviarCaptura(Object.assign({ accion: 'ficha' },    campoDeCaso(exp))); marcarComoGuardado(exp); }
+        function guardarProcuracion(exp){ enviarCaptura(Object.assign({ accion: 'snapshot' }, campoDeCaso(exp))); marcarComoGuardado(exp); }
+        function crearEntrada(exp, tipo){ enviarCaptura(Object.assign({ accion: 'entrada', tipo: tipo }, campoDeCaso(exp))); marcarComoGuardado(exp); }
+
         function accionLote(accion, tipo) {
           if (seleccionados.size === 0) return;
-          enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(loteSeleccionado()) });
+          var exps = Array.from(seleccionados).map(function (i) { return expedientesFiltrados[i]; });
+          enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(exps.map(campoDeCaso)) });
+          marcarLoteComoGuardado(exps);
         }
 
-        // ── Columna de selección (tabla general) ──
+        // ── Dos columnas por fila (punto 8) ──
+        // Columna 1 — ícono de ESTADO INDIVIDUAL: 💾 (guarda con un clic) si el caso no
+        // está seguido, 📁 (link a la ficha) si ya lo está.
+        // Columna 2 — checkbox de SELECCIÓN MÚLTIPLE, siempre presente sin importar el
+        // estado: antes desaparecía en cuanto el caso quedaba guardado, así que no se
+        // lo podía incluir en una acción masiva (punto 10 — "en todos los casos" debe
+        // poder tildarse, ej. para re-capturar la procuración de un caso ya seguido).
         // El índice es la posición dentro de `expedientesFiltrados` en el momento del
-        // render — es lo mismo que usa `abrirModal(index)` en el botón "Ver →" de la fila,
-        // así que no hace falta un identificador propio del expediente.
-        window.bitColHeader = function () { return '<th class="bit-sel-cell"></th>'; };
+        // render — es lo mismo que usa `abrirModal(index)` en el botón "Ver →" de la fila.
+        window.bitColHeader = function () {
+          return '<th class="bit-sel-cell"></th><th class="bit-sel-cell"></th>';
+        };
         window.bitRowCell = function (exp, index) {
-          if (yaSeguido(exp)) {
-            return '<td class="bit-sel-cell"><a class="bit-ficha-link" href="https://api.procuradortool.com/usuarios/?goto=expediente" target="procurador_portal" title="Ya seguido en tu Bitácora">📁</a></td>';
-          }
-          return '<td class="bit-sel-cell"><input type="checkbox" class="bit-checkbox" data-bit-idx="' + index + '"' + (seleccionados.has(index) ? ' checked' : '') + '></td>';
+          var estadoCell = yaSeguido(exp)
+            ? '<td class="bit-sel-cell"><a class="bit-ficha-link" href="' + fichaUrl(exp) + '" target="procurador_portal" title="Ya seguido — ver ficha">📁</a></td>'
+            : '<td class="bit-sel-cell"><button type="button" class="bit-plus-btn" data-bit-guardar-idx="' + index + '" title="Guardar caso en tu Bitácora">💾</button></td>';
+          var checkCell = '<td class="bit-sel-cell"><input type="checkbox" class="bit-checkbox" data-bit-idx="' + index + '"' + (seleccionados.has(index) ? ' checked' : '') + '></td>';
+          return estadoCell + checkCell;
+        };
+        window.bitExpCellHtml = function (exp) {
+          var num = esc(exp.expediente || '');
+          return yaSeguido(exp)
+            ? '<a class="exp-link" href="' + fichaUrl(exp) + '" target="procurador_portal" title="Ver ficha en Bitácora">' + num + '</a>'
+            : num;
         };
         // La búsqueda reemplaza `expedientesFiltrados` por completo — los índices tildados
         // dejarían de corresponder a las filas que el usuario realmente vio y marcó. Más
@@ -658,6 +720,11 @@
               var idx = parseInt(chk.dataset.bitIdx, 10);
               if (chk.checked) seleccionados.add(idx); else seleccionados.delete(idx);
               renderBarra();
+            });
+          });
+          document.querySelectorAll('[data-bit-guardar-idx]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              guardarCaso(expedientesFiltrados[parseInt(btn.dataset.bitGuardarIdx, 10)]);
             });
           });
           renderBarra();
@@ -676,11 +743,10 @@
             '<button class="bit-btn-ghost" id="bit-bar-limpiar" style="margin-left:auto">✕ limpiar</button>';
           document.getElementById('bit-bar-casos').onclick     = function () { accionLote('ficha-lote'); };
           document.getElementById('bit-bar-proc').onclick      = function () { accionLote('snapshot-lote'); };
-          document.getElementById('bit-bar-entradas').onclick  = function () {
-            var tipo = prompt('Tipo de entrada para los ' + seleccionados.size + ' casos seleccionados:\n\n1 = Vencimiento\n2 = Tarea\n3 = Nota', '1');
-            var mapa = { '1': 'vencimiento', '2': 'tarea', '3': 'nota' };
-            if (mapa[tipo]) accionLote('entrada-lote', mapa[tipo]);
-          };
+          // Punto 14: el prompt() nativo ("1=Vencimiento/2=Tarea/3=Nota") queda reemplazado
+          // por botones — pero ya no acá, sino del lado autenticado del portal (B2), que
+          // desde entonces acepta `entrada-lote` sin `tipo` y muestra el selector ahí.
+          document.getElementById('bit-bar-entradas').onclick  = function () { accionLote('entrada-lote', null); };
           document.getElementById('bit-bar-limpiar').onclick   = function () {
             seleccionados.clear();
             document.querySelectorAll('.bit-checkbox').forEach(function (c) { c.checked = false; });
@@ -689,17 +755,22 @@
         }
 
         // ── Mini-menú del modal de movimientos (📔+ por caso) ──
+        // Puntos 6/10: mismas opciones para todos los casos (venc/tarea/nota/proc); la
+        // única diferencia por estado es "📌 Guardar caso" (redundante si ya está seguido,
+        // el caso existe) y el link a la ficha (solo tiene sentido si ya existe).
         window.bitModalActionsHtml = function (exp) {
-          if (yaSeguido(exp)) {
-            return '<div class="bit-modal-actions"><a class="bit-ficha-link" href="https://api.procuradortool.com/usuarios/?goto=expediente" target="procurador_portal">📁 Este caso está en tu Bitácora — Ver ficha</a></div>';
+          var seguido = yaSeguido(exp);
+          var html = '<div class="bit-modal-actions">';
+          if (seguido) {
+            html += '<a class="bit-ficha-link" href="' + fichaUrl(exp) + '" target="procurador_portal" style="flex-basis:100%">📁 Este caso está en tu Bitácora — Ver ficha</a>';
           }
-          return '<div class="bit-modal-actions">' +
+          html +=
             '<button class="bit-btn" data-bit-act="venc">＋ Vencimiento</button>' +
             '<button class="bit-btn" data-bit-act="tarea">＋ Tarea</button>' +
             '<button class="bit-btn" data-bit-act="nota">＋ Nota</button>' +
-            '<button class="bit-btn" data-bit-act="caso">📌 Guardar caso</button>' +
             '<button class="bit-btn" data-bit-act="proc">💾 Guardar procuración</button>' +
-            '</div>';
+            (seguido ? '' : '<button class="bit-btn" data-bit-act="caso">📌 Guardar caso</button>');
+          return html + '</div>';
         };
         window.bitWireModalActions = function (exp) {
           var actions = document.querySelector('.bit-modal-actions');

@@ -318,25 +318,112 @@ nuevas).
 
 ---
 
-### B3 — Visores (Sonnet/alto) — PENDIENTE
-**Absorbe el punto 5** (mover desde B1): el visor es `file://` y el portal
-`https://` — orígenes distintos, así que no comparten `localStorage` ni
-`BroadcastChannel`, y un `fetch` al backend desde el visor mandaría `Origin: null`
-(habría que abrir CORS a `null`, que es un olor de seguridad). **Mecanismo
-decidido: actualización optimista local** — el visor marca la fila como guardada
-en el momento del click, y la verdad se reconcilia en la próxima generación del
-visor (que re-consulta `seguidos`). Documentar que es optimista: si el guardado
-falla, el error se ve en el portal y el visor quedaría desactualizado hasta la
-próxima corrida.
-**También de B3:** agregar `&exp=<numero>` a los 4 hrefs de ficha (`main.js:2454`,
-`visorModal_template.html:645,694`, `visor_informes_template.html:446`) para que
-el deep-link abra la ficha exacta en vez del listado.
+### B3 — Visores (Sonnet/alto) — ✅ CÓDIGO LISTO, sin release
 
-**Y (nuevo, de B2):** sacar el `prompt()` de "＋ Crear entradas…" en los 2
-templates (`visorModal_template.html`, `visor_informes_template.html`) —
-cambiar `accionLote('entrada-lote', mapa[tipo])` por `accionLote('entrada-lote', null)`
-directo. El backend y el portal ya soportan el camino sin `tipo` (B2, verificado
-con el selector de botones) — es un cambio de 1-2 líneas por template, el resto
-de la infraestructura ya está lista.
+**Cubre 5, 6, 7, 8, 9, 10, 13, 18** + los 2 pendientes que B1/B2 dejaron
+anotados (href `&exp=` y sacar el `prompt()`). Archivos: `visorModal_template.html`
+(procuración), `informe/visor_informes_template.html` (informe), `main.js`
+(2 líneas de paridad en el visor del Monitor — no incluido en los 21 puntos
+originales, ver nota más abajo). **Requiere release de Electron** — es el único
+bloque que lo necesita; no desplegado todavía a propósito (ver B4).
+
+**Puntos 8/10 — dos columnas, con una regla que cambia el punto 10 respecto de
+la lectura literal inicial:** columna 1 = ícono de estado individual (💾 si no
+está guardado, clic = guarda al toque; 📁 si ya está, link a la ficha). Columna
+2 = checkbox de selección múltiple, **ahora SIEMPRE presente** — antes
+desaparecía en cuanto el caso quedaba guardado, así que un caso ya seguido no
+se podía incluir en una acción masiva (ej. re-capturar su procuración). Punto
+10 en su lectura literal ("guardar caso" exclusivo de los no guardados) se
+aplicó al **menú del modal**, no al checkbox de la tabla — un caso guardado
+puede tildarse para "Guardar procuración"/"Crear entradas" en lote sin problema.
+
+**Puntos 6/10 en el modal:** los 5 botones (venc/tarea/nota/proc/caso) pasan a
+mostrarse para TODOS los casos salvo "📌 Guardar caso" (redundante si el caso
+ya existe) — y si ya está guardado, se agrega el link "📁 Ver ficha" arriba de
+los botones, no en su lugar. Guardar/crear entrada desde el modal marca el
+caso como guardado y **refresca el modal en el lugar** (no lo cierra) — pasa
+de 5 a 4 botones + aparece el link, verificado en vivo.
+
+**Punto 9:** el número de expediente es ahora un `<a>` cuando el caso está
+seguido (mismo destino que el ícono de columna 1) — antes era texto plano
+siempre.
+
+**Punto 13:** el footer del modal pasó de `[Anterior][Siguiente] ····· [N de M]`
+(un solo grupo a la izquierda + contador a la derecha) a 3 hijos directos del
+flex `space-between`: `[Anterior] ····· [N de M] ····· [Siguiente]`.
+
+**Punto 18 (alcance del bloque en Informe):** el visor de informe **no tiene
+modal de detalle** (cada fila abre su PDF directo) — así que ahí solo aplican
+los puntos con equivalente real: 8 (dos columnas), 9 (link), 5 (optimista) y
+sacar el `prompt()`. Los puntos 6/10/13 no tienen contraparte en Informe
+(dependen de un modal que ese visor nunca tuvo) — no es un recorte, es que no
+hay nada que arreglar ahí.
+
+**Punto 5 (movido de B1) — mecanismo confirmado, no solo diseñado:** el visor
+es `file://`, el portal `https://` — no comparten `localStorage` ni
+`BroadcastChannel`, y el POST de captura nunca vuelve una respuesta a este
+documento (otra pestaña, otro origen). **Actualización optimista**: el click
+agrega la clave a `seguidosSet` en memoria y repinta — la tabla completa
+siempre, y el modal también si está abierto sobre ese mismo caso. Es
+deliberadamente optimista (si el guardado real falla, el error queda en la
+pestaña del portal, el visor no se entera) — mejor que el estado anterior,
+donde la fila jamás se actualizaba ni siquiera cuando el guardado SÍ funcionaba.
+
+**El `&exp=<numero>` en los 4 hrefs (`main.js:2454`, `visorModal_template.html`
+×2, `visor_informes_template.html:446`)** ya estaba anotado como pendiente de
+B1 — hecho acá. Sin él, el endpoint nuevo de B1 (`GET .../expedientes/by-key`)
+nunca recibía el número a resolver.
+
+**El `prompt()` de "＋ Crear entradas…" eliminado en los 3 sitios** (los 2
+templates + el visor del Monitor en `main.js`, agregado por consistencia — no
+estaba en los 21 puntos pero es el mismo bug de 1 línea, con la misma
+infraestructura de B2 ya lista para recibirlo). `accionLote('entrada-lote', null)`
+directo; el selector de tipo por botones (punto 14) ya vive en el portal.
+
+**Monitor — alcance explícitamente NO ampliado:** el visor del Monitor
+(`generarVisorMonitoreo` en `main.js`) recibió solo los 2 fixes de paridad de
+arriba (href + prompt). El rediseño de columnas/modal de los puntos 6-13 **no**
+se aplicó ahí — nunca se probó ni se reportó como problema en la sesión
+original (los 21 puntos hablan de "el visor" y de "informe" explícitamente,
+nunca de Monitor), y su estructura es distinta (acordeón de tarjetas por
+parte, no una tabla+modal). Ampliar el alcance sin que nadie lo haya pedido
+ni probado habría sido la clase de scope creep que este plan viene evitando
+bloque a bloque.
+
+**Verificado con un arnés standalone servido por HTTP** (no `file://`: Playwright
+lo bloquea) **contra los 2 templates reales**, con datos sintéticos representativos
+(un caso ya seguido, uno nuevo, uno fallido):
+- Header de 2 columnas confirmado en ambos archivos: 📁+link en el caso
+  seguido, 💾+checkbox en los no seguidos.
+- Clic en 💾 (columna 1) → la fila se repinta a 📁 sin recargar, el número de
+  expediente pasa a link — sin esperar respuesta del servidor (confirma el
+  diseño optimista).
+- Modal: caso no guardado → 5 botones, sin link de ficha; "Guardar procuración"
+  → el modal se refresca EN EL LUGAR (sigue abierto) → 4 botones + link de
+  ficha aparece.
+- Footer del modal: `Anterior | 3 de 3 | Siguiente` — orden confirmado.
+- Checkbox de selección múltiple sigue funcionando sobre casos YA guardados
+  (el punto que este bloque tenía que garantizar para el punto 10) — la barra
+  de acciones masivas se activa igual.
+- `prompt()` interceptado y confirmado que **no se dispara** al clickear "＋
+  Crear entradas…" en ninguno de los 2 templates.
+- 0 errores de consola nuevos en ambos.
+- **Hallazgo del propio arnés de prueba, no del producto:** el primer intento
+  de armar los datos de prueba usó `str.replace()` de Python (reemplaza TODAS
+  las ocurrencias) sobre el marcador `<!-- BITACORA_RUNTIME -->`, que también
+  aparece una segunda vez dentro de un comentario de código que lo describe —
+  el reemplazo global inyectó un `</script>` literal ahí adentro y el parser
+  HTML cortó el `<script>` real a la mitad, dejando toda la lógica de Bitácora
+  sin ejecutar (sin ningún error de consola, porque no es un error de JS, es
+  el HTML nunca llegando a ejecutarse). **Se verificó que el mecanismo real en
+  `main.js` no tiene este problema**: usa `html.replace(marcador, script)` de
+  JavaScript, que reemplaza solo la primera coincidencia — confirmado leyendo
+  el código antes de descartar la hipótesis de bug real. Corregido el arnés
+  (reemplazo acotado a la primera ocurrencia) y repetida la verificación.
+- `node --check` sobre los 3 archivos (`main.js` completo + los 2 `<script>`
+  extraídos de los templates).
+
+**Pendiente de B3:** no se despliega solo — comparte el release de Electron
+con B4 (ver abajo). Falta B4 antes de cortarlo.
 
 ### B4 — Carátula en Informe (Sonnet/medio-alto) — PENDIENTE
