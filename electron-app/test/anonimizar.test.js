@@ -1,0 +1,422 @@
+/**
+ * Verifica el motor de anonimización (bloque M4),
+ * plan `docs/internal/plan-modulo-markdown-anonimizacion-2026-08-26.md`.
+ *
+ *   node electron-app/test/anonimizar.test.js
+ *
+ * Tres capas:
+ *   1. Unidades de cada pieza (carátula, marcadores, variantes, mapping).
+ *   2. 🚨 CORPUS ADVERSARIAL con **tasa de falsos negativos MEDIDA** — lo
+ *      que exige §M4 del plan y el bloque S10 de SEC-2: el resultado se
+ *      reporta como un número, no como una impresión. Incluye tanto fugas
+ *      (un dato personal que sobrevive) como sobre-enmascarado (una
+ *      institución que se rompe), porque las dos rompen el producto: la
+ *      primera expone datos, la segunda hace que el usuario deje de confiar.
+ *   3. Integración contra los informes REALES del operador.
+ */
+
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const {
+    anonimizar,
+    detectarEntidades,
+    aplicarMapping,
+    serializarMapping,
+    parsearMapping,
+    parsearCaratula,
+    detectarTercerosPorMarcador,
+    variantesPresentes,
+    enmascararNombre,
+} = require('../markdown/anonimizar');
+const { procesarInformeAMarkdown } = require('../markdown/extraerPdfAMarkdown');
+
+let ok = 0, fail = 0;
+function check(nombre, cond, detalle) {
+    if (cond) { ok++; console.log(`✅ ${nombre}`); }
+    else { fail++; console.log(`❌ ${nombre}${detalle ? ' — ' + detalle : ''}`); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  1. UNIDADES
+// ═══════════════════════════════════════════════════════════════════════════
+
+(function testCaratula() {
+    // Caso REAL: la carátula viene partida en 2 líneas de cita porque el PDF
+    // la envuelve — el nombre "SHIRLEY LICET" queda cortado justo al medio.
+    const md = [
+        '# FCR 018745/2017',
+        '',
+        '> AFIP-DGI (BD 7570/10/2017) c/ PARDO MONTOYA, SHIRLEY',
+        '> LICET s/EJECUCION FISCAL - A.F.I.P.',
+        '> Justicia Federal de Comodoro Rivadavia | JUZGADO FEDERAL DE RIO GALLEGOS',
+        '',
+        '**Situación:** ARCHÍVESE',
+    ].join('\n');
+    const { actor, demandado } = parsearCaratula(md);
+    check('parsearCaratula: une la carátula partida en 2 líneas y recupera el nombre completo',
+        demandado === 'PARDO MONTOYA, SHIRLEY LICET', `demandado=${JSON.stringify(demandado)}`);
+    check('parsearCaratula: quita el nº de boleta de deuda del actor',
+        actor === 'AFIP-DGI', `actor=${JSON.stringify(actor)}`);
+    check('parsearCaratula: NO se lleva la jurisdicción dentro del demandado',
+        !/Justicia|JUZGADO/i.test(demandado || ''));
+
+    // Las otras 3 formas reales medidas en los informes del operador.
+    const casos = [
+        ['> AFIP c/ ADRIAN BOYADJIAN Y OTRO S.R.L. s/EJECUCION FISCAL', 'AFIP', 'ADRIAN BOYADJIAN Y OTRO S.R.L.'],
+        ['> ARCA c/ AGUA DEL CAMPO SOCIEDAD DE RESPONSABILIDAD LIMITADA s/EJECUCION FISCAL', 'ARCA', 'AGUA DEL CAMPO SOCIEDAD DE RESPONSABILIDAD LIMITADA'],
+        ['> AFIP (BD 05999/05/2018) c/ AUSTRAL AGRO S.A s/EJECUCION FISCAL', 'AFIP', 'AUSTRAL AGRO S.A'],
+    ];
+    let okCasos = 0;
+    for (const [linea, actorEsp, demEsp] of casos) {
+        const r = parsearCaratula(`# EXP 1/2020\n\n${linea}\n`);
+        if (r.actor === actorEsp && r.demandado === demEsp) okCasos++;
+        else console.log(`     ↳ esperado {${actorEsp} | ${demEsp}}, obtenido {${r.actor} | ${r.demandado}}`);
+    }
+    check('parsearCaratula: las otras 3 carátulas reales del operador se parsean bien', okCasos === 3, `${okCasos}/3`);
+})();
+
+(function testEnmascarar() {
+    check('enmascararNombre: formato del brief (3 letras + ###)',
+        enmascararNombre('Jonathan Andrés Berger') === 'Jon### And### Ber###',
+        enmascararNombre('Jonathan Andrés Berger'));
+    check('enmascararNombre: token corto no se rompe',
+        enmascararNombre('LI PO') === 'LI### PO###', enmascararNombre('LI PO'));
+})();
+
+(function testMarcadores() {
+    // Caso REAL: el marcador está seguido de texto procesal que NO es nombre.
+    const md = '| 8/04/2026 | FIRMA DESPACHO: TENGASE AL DR. ISLA MATA POR PRESENTADO - POR SECRETARIA LIBRESE DEOX |';
+    const terceros = detectarTercerosPorMarcador(md);
+    check('detectarTercerosPorMarcador: corta ante palabra procesal ("ISLA MATA", no "ISLA MATA POR PRESENTADO")',
+        terceros.includes('ISLA MATA'), JSON.stringify(terceros));
+
+    // Caso REAL de la sección "Intervinientes" (los pipes vienen escapados
+    // como `\|` porque M2 los escapa al renderizar la tabla).
+    const md2 = 'LETRADO APODERADO\\|DAMIAN HORACIO ISLA MATA\\|Tomo: 111 Folio: 678 - Federal\\|20223670785';
+    const t2 = detectarTercerosPorMarcador(md2);
+    check('detectarTercerosPorMarcador: captura el nombre completo tras un pipe escapado',
+        t2.includes('DAMIAN HORACIO ISLA MATA'), JSON.stringify(t2));
+
+    const md3 = 'FISCALIA\\|FISCAL\\|I.E.J. UNIDAD FISCAL RIO GALLEGOS\\|DR. PABLO FERNANDO MANSILLA\\|20263242034';
+    const t3 = detectarTercerosPorMarcador(md3);
+    check('detectarTercerosPorMarcador: captura el fiscal con "DR."',
+        t3.includes('PABLO FERNANDO MANSILLA'), JSON.stringify(t3));
+})();
+
+(function testVariantes() {
+    // El caso real: nombre completo en Intervinientes, abreviado en un movimiento.
+    const md = 'LETRADO APODERADO DAMIAN HORACIO ISLA MATA ... TENGASE AL DR. ISLA MATA POR PRESENTADO';
+    const v = variantesPresentes('DAMIAN HORACIO ISLA MATA', md);
+    check('variantesPresentes: encuentra "ISLA MATA" porque aparece de verdad en el texto',
+        v.includes('ISLA MATA'), JSON.stringify(v));
+    const v2 = variantesPresentes('DAMIAN HORACIO ISLA MATA', 'texto sin ninguna mención parcial');
+    check('variantesPresentes: NO inventa variantes que no están en el texto',
+        v2.length === 0, JSON.stringify(v2));
+})();
+
+(function testOrdenPorLongitud() {
+    // 🚨 Si se aplicara el término corto primero, el largo ya no matchearía y
+    // quedaría medio nombre expuesto.
+    const md = 'Compareció DAMIAN HORACIO ISLA MATA, luego el DR. ISLA MATA firmó.';
+    const entradas = [
+        { original: 'ISLA MATA', reemplazo: 'Isl### Mat###' },
+        { original: 'DAMIAN HORACIO ISLA MATA', reemplazo: 'Dam### Hor### Isl### Mat###' },
+    ];
+    const out = aplicarMapping(md, entradas);
+    check('aplicarMapping: el término MÁS LARGO gana (no queda "DAMIAN HORACIO Isl### Mat###")',
+        out.includes('Dam### Hor### Isl### Mat###') && !out.includes('DAMIAN HORACIO'), out);
+})();
+
+(function testMappingRoundTrip() {
+    const entradas = [{ original: 'JUAN PEREZ', reemplazo: 'Jua### Per###', tipo: 'tercero' }];
+    const texto = serializarMapping(entradas);
+    const vuelta = parsearMapping(texto);
+    check('mapping: serializar → parsear conserva la entrada',
+        vuelta.length === 1 && vuelta[0].original === 'JUAN PEREZ' && vuelta[0].reemplazo === 'Jua### Per###',
+        JSON.stringify(vuelta));
+    check('mapping: el encabezado lleva la advertencia de "no es una garantía"',
+        /NO es una garant[ií]a/i.test(texto) && /Revis[aá] siempre/i.test(texto));
+    check('parsearMapping: ignora comentarios y líneas vacías',
+        parsearMapping('# comentario\n\nA = B\n').length === 1);
+    check('parsearMapping: un reemplazo con "=" adentro se parte solo en el primero',
+        parsearMapping('A = B = C')[0].reemplazo === 'B = C');
+})();
+
+(function testIdempotencia() {
+    // Decisión de diseño 2 del plan: reprocesar debe partir SIEMPRE del
+    // original. Aplicar dos veces sobre el resultado daría `Ter######`.
+    const md = '# EXP 1/2020\n\n> AFIP c/ JUAN CARLOS PEREZ s/EJECUCION FISCAL\n\nEl DR. JUAN CARLOS PEREZ compareció.';
+    const r1 = anonimizar(md);
+    const r2 = anonimizar(md, r1.mappingTexto);
+    check('anonimizar: reprocesar con el mismo mapping da el MISMO resultado (idempotente)',
+        r1.markdownAnonimizado === r2.markdownAnonimizado);
+    check('anonimizar: no aparece doble enmascarado (###\\s*###)',
+        !/###\s*###/.test(r2.markdownAnonimizado), r2.markdownAnonimizado);
+})();
+
+(function testReglaEnlaces() {
+    // REGLA 4 (opción A del operador): el enlace al SCW abre el documento
+    // original SIN login y su token no expira → en la versión anonimizada NO
+    // puede sobrevivir, o la anonimización es teatral.
+    const md = [
+        '# EXP 1/2020',
+        '',
+        '| 1/01/2020 | DESPACHO: algo [Ver documento](https://scw.pjn.gov.ar/scw/viewer.seam?id=TOKEN%3D&tipoDoc=despacho) |',
+        '',
+        'Suelto: https://scw.pjn.gov.ar/scw/viewer.seam?id=OTRO%3D&tipoDoc=cedula',
+    ].join('\n');
+    const { markdownAnonimizado } = anonimizar(md);
+    check('REGLA 4: el .md anonimizado NO contiene ninguna URL de viewer.seam',
+        !/viewer\.seam/i.test(markdownAnonimizado), markdownAnonimizado);
+    check('REGLA 4: se conserva el texto visible del enlace (no se pierde información)',
+        markdownAnonimizado.includes('Ver documento'));
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  2. 🚨 CORPUS ADVERSARIAL — con tasa de falsos negativos MEDIDA
+// ═══════════════════════════════════════════════════════════════════════════
+// Cada caso declara qué DEBE desaparecer del resultado (`fugas`) y qué DEBE
+// sobrevivir intacto (`preservar`). El resultado se reporta como número.
+
+const CORPUS = [
+    {
+        // Las partículas ("DE", "LA") están en PALABRAS_NO_NOMBRE, así que el
+        // candidato solo sobrevive porque `pareceNombrePersona` exige que UN
+        // token sea propio, no todos — acá lo son "MARIA" y "FUENTE".
+        // Nota: NO se pide preservar "AFIP" aunque sea un organismo — es la
+        // parte ACTORA, y la regla del brief dice partes → `Actor`. Que se
+        // reemplace es el comportamiento correcto por diseño; el usuario que
+        // prefiera conservarlo borra esa línea del mapping (el encabezado del
+        // mapping.txt lo sugiere explícitamente).
+        nombre: 'Nombre con partícula ("DE LA FUENTE")',
+        md: '# EXP 10/2020\n\n> AFIP c/ MARIA DE LA FUENTE s/EJECUCION FISCAL\n\nSe notificó a MARIA DE LA FUENTE.',
+        fugas: ['MARIA DE LA FUENTE'],
+        preservar: [],
+    },
+    {
+        nombre: 'Coma en la carátula pero SIN coma en el cuerpo (caso real medido)',
+        md: '# EXP 11/2020\n\n> AFIP c/ PARDO MONTOYA, SHIRLEY LICET s/EJECUCION FISCAL\n\n| 1/01/2020 | RETORNO CEDULA: DESTINATARIO: PARDO MONTOYA SHIRLEY LICET |',
+        fugas: ['PARDO MONTOYA SHIRLEY LICET', 'PARDO MONTOYA, SHIRLEY LICET'],
+        preservar: [],
+    },
+    {
+        nombre: 'Mención parcial de un tercero (completo + abreviado)',
+        md: '# EXP 12/2020\n\n> ARCA c/ EMPRESA X S.A. s/EJECUCION FISCAL\n\nLETRADO APODERADO\\|DAMIAN HORACIO ISLA MATA\\|Tomo 1\n\n| 2/02/2021 | TENGASE AL DR. ISLA MATA POR PRESENTADO |',
+        fugas: ['DAMIAN HORACIO ISLA MATA', 'ISLA MATA'],
+        preservar: [],
+    },
+    {
+        nombre: 'CUIT pelado sin guiones ni etiqueta (caso real medido)',
+        md: '# EXP 13/2020\n\n> ARCA c/ EMPRESA X S.A. s/EJECUCION FISCAL\n\nLETRADO\\|JUAN PEREZ\\|Tomo: 111 Folio: 678 - Federal\\|20223670785',
+        fugas: ['20223670785'],
+        preservar: [],
+    },
+    {
+        nombre: 'CUIT con guiones',
+        md: '# EXP 14/2020\n\n> ARCA c/ EMPRESA X S.A. s/EJECUCION FISCAL\n\nCUIT del deudor: 27-32069435-9',
+        fugas: ['27-32069435-9'],
+        preservar: [],
+    },
+    {
+        nombre: 'DNI etiquetado',
+        md: '# EXP 15/2020\n\n> ARCA c/ EMPRESA X S.A. s/EJECUCION FISCAL\n\nDNI: 32.069.435 del demandado',
+        fugas: ['32.069.435'],
+        preservar: [],
+    },
+    {
+        nombre: '🚨 NO sobre-enmascarar instituciones (falso positivo que rompe el documento)',
+        md: '# EXP 16/2020\n\n> AFIP c/ JUAN PEREZ s/EJECUCION FISCAL\n> Justicia Federal de Comodoro Rivadavia | JUZGADO FEDERAL DE RIO GALLEGOS - SECRETARIA EJECUCION FISCAL\n\n| 1/01/2020 | PASE: CAMARA FEDERAL DE COMODORO RIVADAVIA - MESA ENTRADAS CIVIL |',
+        fugas: ['JUAN PEREZ'],
+        preservar: ['JUZGADO FEDERAL DE RIO GALLEGOS', 'CAMARA FEDERAL DE COMODORO RIVADAVIA', 'MESA ENTRADAS CIVIL', 'SECRETARIA EJECUCION FISCAL'],
+    },
+    {
+        nombre: '🚨 NO enmascarar el nº de cédula de 14 dígitos (no es CUIT)',
+        md: '# EXP 17/2020\n\n> ARCA c/ EMPRESA X S.A. s/EJECUCION FISCAL\n\n| 1/01/2020 | CEDULA ELECTRONICA TRIBUNAL: CEDULA N° 23000062608263 - NOTIFICADO |',
+        fugas: [],
+        preservar: ['23000062608263'],
+    },
+    {
+        nombre: 'Razón social con y sin punto final (variación real medida)',
+        md: '# EXP 18/2020\n\n> AFIP c/ AUSTRAL AGRO S.A s/EJECUCION FISCAL\n\n| 1/01/2020 | DESTINATARIO: AUSTRAL AGRO S.A. - FECHA |',
+        fugas: ['AUSTRAL AGRO S.A'],
+        preservar: [],
+    },
+    {
+        nombre: 'Enlace al SCW dentro de una tabla',
+        md: '# EXP 19/2020\n\n> AFIP c/ JUAN PEREZ s/EJECUCION FISCAL\n\n| 1/01/2020 | FIRMA [Ver documento](https://scw.pjn.gov.ar/scw/viewer.seam?id=AB%3D&tipoDoc=despacho) |',
+        fugas: ['viewer.seam', 'JUAN PEREZ'],
+        preservar: [],
+    },
+    {
+        nombre: 'Expediente con y sin padding de ceros en el mismo documento',
+        md: '# FCR 018745/2017\n\n> AFIP c/ JUAN PEREZ s/EJECUCION FISCAL\n\nEn los autos FCR 018745/2017 se resolvió.',
+        fugas: ['FCR 018745/2017'],
+        preservar: [],
+    },
+    {
+        nombre: 'Nombre compuesto largo (4 tokens)',
+        md: '# EXP 20/2020\n\n> AFIP c/ MARIA JOSE GARCIA LOPEZ s/EJECUCION FISCAL\n\nNotificada MARIA JOSE GARCIA LOPEZ en su domicilio.',
+        fugas: ['MARIA JOSE GARCIA LOPEZ'],
+        preservar: [],
+    },
+    {
+        // 🚨 Caso encontrado inspeccionando A MANO la salida real (no lo cazó
+        // ningún test): las variantes de una razón social larga generaban
+        // fragmentos como "DE RESPONSABILIDAD", que reemplazarían esa frase en
+        // CUALQUIER otro contexto del documento. Acá la frase aparece también
+        // en una oración ajena al demandado y debe sobrevivir intacta.
+        nombre: '🚨 Un fragmento de la razón social NO debe reemplazarse fuera del nombre',
+        md: '# EXP 21/2020\n\n> ARCA c/ AGUA DEL CAMPO SOCIEDAD DE RESPONSABILIDAD LIMITADA s/EJECUCION FISCAL\n\n| 1/01/2020 | DESPACHO: se analiza el límite DE RESPONSABILIDAD del fiador |',
+        fugas: ['AGUA DEL CAMPO SOCIEDAD DE RESPONSABILIDAD LIMITADA'],
+        preservar: ['el límite DE RESPONSABILIDAD del fiador'],
+    },
+    {
+        // 🚨 Caso encontrado leyendo A MANO la salida real: el PDF envuelve la
+        // carátula por ancho, así que en el .md el nombre queda partido por un
+        // "\n> ". Sin tolerar ese separador, el término completo no matchea y
+        // el segundo nombre de la persona sobrevive EXPUESTO en la carátula.
+        // El test de integración tampoco lo detectaba: comparaba con el mismo
+        // criterio ciego que tenía el motor.
+        nombre: '🚨 Nombre PARTIDO por el salto de línea de la cita (carátula envuelta)',
+        md: '# FCR 018745/2017\n\n> AFIP-DGI (BD 7570/10/2017) c/ PARDO MONTOYA, SHIRLEY\n> LICET s/EJECUCION FISCAL - A.F.I.P.\n\n| 1/01/2020 | DESTINATARIO: PARDO MONTOYA SHIRLEY LICET |',
+        fugas: ['PARDO MONTOYA, SHIRLEY\n> LICET', 'PARDO MONTOYA SHIRLEY LICET'],
+        preservar: [],
+    },
+    {
+        // El fix del caso anterior agrega ">" a los separadores tolerados.
+        // Este caso vigila que eso NO habilite un match a través de la
+        // frontera de una celda de tabla (donde el separador es "|").
+        nombre: 'El separador ">" no debe unir tokens a través de celdas de tabla',
+        md: '# EXP 22/2020\n\n> AFIP c/ JUAN PEREZ s/EJECUCION FISCAL\n\n| 1/01/2020 | algo PEREZ |\n| 2/01/2020 | JUAN otra cosa |',
+        fugas: ['JUAN PEREZ'],
+        preservar: ['algo PEREZ', 'JUAN otra cosa'],
+    },
+];
+
+function correrCorpus() {
+    console.log('\n▶ CORPUS ADVERSARIAL — tasa de falsos negativos medida\n');
+    let totalFugas = 0, fugasNoDetectadas = 0;
+    let totalPreservar = 0, preservarRotos = 0;
+    const detalleFugas = [];
+    const detalleRotos = [];
+
+    for (const caso of CORPUS) {
+        const { markdownAnonimizado } = anonimizar(caso.md);
+        let casoOk = true;
+
+        for (const fuga of caso.fugas) {
+            totalFugas++;
+            // Comparación tolerante a espacios/comas, igual que el motor.
+            const escapado = fuga.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\s,]+/g, '[\\s,>]+');
+            if (new RegExp(escapado, 'i').test(markdownAnonimizado)) {
+                fugasNoDetectadas++;
+                casoOk = false;
+                detalleFugas.push(`${caso.nombre} → sobrevivió: "${fuga}"`);
+            }
+        }
+        for (const preservar of caso.preservar) {
+            totalPreservar++;
+            if (!markdownAnonimizado.includes(preservar)) {
+                preservarRotos++;
+                casoOk = false;
+                detalleRotos.push(`${caso.nombre} → se rompió: "${preservar}"`);
+            }
+        }
+        console.log(`   ${casoOk ? '✅' : '❌'} ${caso.nombre}`);
+    }
+
+    const tasaFN = totalFugas === 0 ? 0 : (fugasNoDetectadas / totalFugas) * 100;
+    const tasaFP = totalPreservar === 0 ? 0 : (preservarRotos / totalPreservar) * 100;
+
+    console.log('');
+    console.log(`   📊 Datos que DEBÍAN desaparecer:      ${totalFugas - fugasNoDetectadas}/${totalFugas} · tasa de FALSOS NEGATIVOS: ${tasaFN.toFixed(1)}%`);
+    console.log(`   📊 Texto que DEBÍA sobrevivir intacto: ${totalPreservar - preservarRotos}/${totalPreservar} · tasa de SOBRE-ENMASCARADO: ${tasaFP.toFixed(1)}%`);
+    if (detalleFugas.length) { console.log('\n   🚨 FUGAS:'); detalleFugas.forEach(d => console.log(`      · ${d}`)); }
+    if (detalleRotos.length) { console.log('\n   ⚠️  SOBRE-ENMASCARADO:'); detalleRotos.forEach(d => console.log(`      · ${d}`)); }
+    console.log('');
+
+    check(`CORPUS: tasa de falsos negativos = 0% (${totalFugas - fugasNoDetectadas}/${totalFugas} datos ocultados)`, fugasNoDetectadas === 0);
+    check(`CORPUS: tasa de sobre-enmascarado = 0% (${totalPreservar - preservarRotos}/${totalPreservar} preservados)`, preservarRotos === 0);
+    return { tasaFN, tasaFP };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  3. INTEGRACIÓN — contra los informes REALES del operador
+// ═══════════════════════════════════════════════════════════════════════════
+
+function informesReales() {
+    const base = path.join(os.homedir(), 'AppData', 'Roaming', 'procurador-electron', 'usuarios');
+    if (!fs.existsSync(base)) return [];
+    const porExp = new Map();
+    for (const cuit of fs.readdirSync(base)) {
+        const descargas = path.join(base, cuit, 'descargas');
+        if (!fs.existsSync(descargas)) continue;
+        for (const f of fs.readdirSync(descargas)) {
+            if (!/^informe_.*\.pdf$/i.test(f)) continue;
+            const exp = f.replace(/_\d{4}-\d{2}-\d{2}T.*$/, '');
+            const full = path.join(descargas, f);
+            const mtime = fs.statSync(full).mtimeMs;
+            if (!porExp.has(exp) || porExp.get(exp).mtime < mtime) porExp.set(exp, { full, mtime });
+        }
+    }
+    return [...porExp.values()].map(v => v.full);
+}
+
+async function testIntegracionReal() {
+    const pdfs = informesReales();
+    if (pdfs.length === 0) {
+        console.log('⚠️  Sin informes reales disponibles — se omite la integración de M4.');
+        return;
+    }
+    console.log(`\n▶ Integración M4 contra ${pdfs.length} informes REALES del operador\n`);
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'test-m4-'));
+    try {
+        let conPartes = 0;
+        for (const pdf of pdfs) {
+            const { mdPath } = await procesarInformeAMarkdown(pdf, tmp);
+            const md = fs.readFileSync(mdPath, 'utf8');
+            const { markdownAnonimizado, entradas } = anonimizar(md);
+
+            const { demandado } = parsearCaratula(md);
+            const nombreExp = path.basename(pdf).replace(/^informe_/, '').replace(/_\d{4}-\d{2}-\d{2}T.*$/, '');
+
+            if (demandado) conPartes++;
+
+            // El demandado real NO puede sobrevivir en el anonimizado.
+            const escapado = demandado
+                ? demandado.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\s,]+/g, '[\\s,>]+')
+                : null;
+            const sobrevive = escapado ? new RegExp(escapado, 'i').test(markdownAnonimizado) : false;
+
+            check(`  [${nombreExp}] el demandado real no sobrevive en el anonimizado`, !sobrevive,
+                `demandado=${JSON.stringify(demandado)}`);
+            check(`  [${nombreExp}] el .md anonimizado no contiene URLs de viewer.seam`,
+                !/viewer\.seam/i.test(markdownAnonimizado));
+            check(`  [${nombreExp}] se detectó al menos el expediente y una parte`,
+                entradas.length >= 2, `entradas=${entradas.length}`);
+            // No debe destruir la estructura del documento.
+            check(`  [${nombreExp}] conserva la estructura (título y sección Movimientos)`,
+                /^# /m.test(markdownAnonimizado) && markdownAnonimizado.includes('## Movimientos'));
+        }
+        check('Integración: los 4 informes reales tienen carátula parseable', conPartes === pdfs.length,
+            `${conPartes}/${pdfs.length}`);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+}
+
+const resultadoCorpus = correrCorpus();
+
+testIntegracionReal().then(() => {
+    console.log(`\n${ok}/${ok + fail} PASS`);
+    console.log(`Tasa de falsos negativos del corpus adversarial: ${resultadoCorpus.tasaFN.toFixed(1)}%`);
+    if (fail > 0) process.exit(1);
+}).catch(e => {
+    console.error('❌ Error inesperado:', e);
+    process.exit(1);
+});

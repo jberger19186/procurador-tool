@@ -329,7 +329,7 @@ agregara OCR vía navegador o cualquier otro camino que necesite Puppeteer.)*
 
 ---
 
-### M4 — Motor de anonimización + `mapping.txt` 🔴 **Opus**
+### M4 — Motor de anonimización + `mapping.txt` 🔴 **Opus** ✅ **EJECUTADO (2026-08-26)**
 
 | | |
 |---|---|
@@ -386,6 +386,65 @@ ninguna URL de `viewer.seam`*.
 
 Sin esa leyenda, el módulo promete algo que ningún motor de regex puede cumplir en documentos
 judiciales reales.
+
+> ✅ **Ejecutado y verificado 2026-08-26** — `electron-app/markdown/anonimizar.js` + corpus
+> adversarial en `electron-app/test/anonimizar.test.js`. **39/39 PASS · tasa de falsos negativos
+> 0,0% (18/18) · tasa de sobre-enmascarado 0,0% (8/8)**, medidas y reportadas como número, que es
+> lo que pedían §M4 y el bloque S10 de SEC-2.
+>
+> **Antes de escribir una sola regla se miraron los 4 expedientes reales del operador**, y eso
+> cambió el diseño respecto de lo que este plan anticipaba. Lo que apareció en los datos:
+> · las 4 carátulas tienen formas distintas (persona física con coma, empresa con nombre de
+> persona adentro, razón social escrita completa, `S.A` sin punto) · la parte figura **con coma en
+> la carátula y sin coma en el cuerpo** (`PARDO MONTOYA, SHIRLEY LICET` vs `PARDO MONTOYA SHIRLEY
+> LICET`) · hay una sección **"Intervinientes"** con roles explícitos que el plan no mencionaba,
+> con **CUIT pelados de 11 dígitos sin guiones ni etiqueta** (`20223670785` — buscar la palabra
+> "CUIT" no alcanza) · y el mismo letrado aparece completo en Intervinientes (`DAMIAN HORACIO ISLA
+> MATA`) y abreviado en un movimiento (`DR. ISLA MATA`).
+>
+> **4 decisiones de diseño que la evidencia impuso, además de las 3 que el plan ya listaba:**
+> **(a) el orden de aplicación es por LONGITUD DESCENDENTE** — si el término corto se aplicara
+> primero, `DAMIAN HORACIO ISLA MATA` quedaría `DAMIAN HORACIO Isl### Mat###`: mitad enmascarado,
+> mitad expuesto. **(b) Las variantes de un nombre se generan pero se VERIFICAN contra el texto**,
+> y solo sobreviven si aparecen **más veces que el nombre completo** (o sea, tienen menciones
+> independientes). **(c) El motor NO barre "toda secuencia de mayúsculas"** — en un documento del
+> PJN casi todo está en mayúsculas y ese barrido enmascararía `JUZGADO FEDERAL DE RIO GALLEGOS`,
+> volviendo el archivo ilegible; el sesgo al falso positivo se aplica *dentro* de lo que es
+> plausiblemente un nombre de persona, no sobre el documento entero. **(d) La detección de terceros
+> es por marcador de rol** (`DR.`, `LETRADO APODERADO`, `DESTINATARIO:`…) con corte ante la primera
+> palabra procesal — sin ese corte, el caso real `DR. ISLA MATA POR PRESENTADO` daba el "nombre"
+> `ISLA MATA POR PRESENTADO`.
+>
+> **🚨 2 defectos reales encontrados LEYENDO A MANO la salida, que ningún test había cazado** — y
+> son la razón por la que este bloque llevaba Opus:
+>
+> 1. **Variantes basura con riesgo de sobre-enmascarado.** El criterio inicial ("la variante sirve
+>    si aparece en el texto") generaba `AGUA DEL`, `DEL CAMPO` y **`DE RESPONSABILIDAD`** a partir
+>    de una razón social larga — todo sub-fragmento de un nombre aparece siempre, porque el nombre
+>    completo está ahí. `DE RESPONSABILIDAD = Demandado` habría reemplazado esa frase en **cualquier
+>    otro contexto** del documento. Corregido con la regla de menciones independientes (b).
+> 2. **🚨 FUGA REAL: un nombre partido por el salto de línea de la cita.** El PDF envuelve la
+>    carátula por ancho, así que en el `.md` el nombre queda cortado con un `\n> ` en el medio. El
+>    término completo no matcheaba y el resultado era `> Actor c/ Demandado` / `> LICET s/…` — **con
+>    el segundo nombre de la demandada expuesto en el archivo "anonimizado"**. Lo más instructivo:
+>    **el test de integración tampoco lo detectaba, porque comparaba con el mismo criterio ciego que
+>    tenía el motor**. Se corrigieron los dos (se agregó `>` a los separadores tolerados, dejando el
+>    guion afuera para que `-> Ver documento` no pueda unir tokens) y se sumaron 2 casos al corpus:
+>    el del nombre partido y uno que vigila que el `>` no habilite matches a través de celdas de
+>    tabla.
+>
+> **Verificado además sobre los 4 informes reales completos:** 0 ocurrencias de cualquier nombre,
+> razón social o CUIT real en los `.md` anonimizados, con la estructura del documento intacta y las
+> instituciones (`JUZGADO FEDERAL DE RIO GALLEGOS`, `I.E.J. UNIDAD FISCAL RIO GALLEGOS`) sin tocar.
+> La **regla 4** (enlaces al SCW) está implementada como defensa en profundidad: hoy M2 no emite
+> URLs, pero si M5 decidiera incluirlas en la versión completa, la anonimizada ya las elimina.
+>
+> **⚠️ Limitación conocida, documentada y NO corregida a propósito:** el número de boleta de deuda
+> del actor (`(BD 7570/10/2017)`) sobrevive en la carátula anonimizada. Se quita del *nombre* del
+> actor al parsear, pero no se enmascara en el texto. No es un dato personal directo (no identifica
+> a una persona sin acceso al sistema de ARCA) y agregar una regla especulativa es justamente lo
+> que produce sobre-enmascarado — el usuario que lo quiera oculto agrega una línea al `mapping.txt`.
+> Candidato a revisar en **S10 de SEC-2**, con criterio de privacidad, no de implementación.
 
 ---
 
