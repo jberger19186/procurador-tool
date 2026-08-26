@@ -450,6 +450,7 @@
                         <span id="mexp-selection-count">0 seleccionados</span>
                         <div style="display:flex;gap:8px">
                             <button type="button" class="btn btn-outline btn-sm" onclick="mexpClearSelection()">Cancelar</button>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="mexpExportarSeleccionados()">⬇ Exportar seleccionados</button>
                             <button type="button" class="btn btn-outline btn-sm" style="color:#ef4444;border-color:#fecaca" onclick="mexpAskEliminarSeleccionados()">🗑 Eliminar seleccionados</button>
                         </div>
                     </div>
@@ -753,12 +754,13 @@
                     </div>
                     <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
                         <input type="radio" name="export-alcance" value="expediente" id="export-alcance-expediente">
-                        Solo un expediente
+                        Uno o varios expedientes
                     </label>
                     <div id="export-expediente-wrap" style="display:none;padding-left:26px">
                         <select id="export-expediente-id" style="width:100%">
                             <option value="">— Elegí un expediente —</option>
                         </select>
+                        <div id="export-expediente-resumen" style="display:none;font-size:13px;color:var(--text);background:var(--accent-light);border-radius:8px;padding:10px 12px;line-height:1.5"></div>
                     </div>
                 </div>
             </div>

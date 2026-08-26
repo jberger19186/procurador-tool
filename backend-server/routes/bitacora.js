@@ -161,14 +161,18 @@ async function recolectarDatosExport(db, userId, { alcance, expedienteId, desde,
         );
         datos.entradas = rows;
     } else if (alcance === 'expediente') {
+        // `expedienteId` es SIEMPRE un array acá (1 o varios ids, ya validados
+        // contra el usuario por el handler antes de llegar — ver `fichaDelUsuario`
+        // en cada uno). "Exportar este caso" manda un array de 1 elemento; el
+        // borrado/exportación en lote de Mis Expedientes manda varios.
         const [exp, ents, snaps] = await Promise.all([
-            db.query('SELECT * FROM expedientes_seguidos WHERE id = $1', [expedienteId]),
+            db.query('SELECT * FROM expedientes_seguidos WHERE id = ANY($1::int[])', [expedienteId]),
             db.query(
-                'SELECT * FROM bitacora_entries WHERE expediente_id = $1 AND user_id = $2 ORDER BY due_at ASC NULLS LAST, id',
+                'SELECT * FROM bitacora_entries WHERE expediente_id = ANY($1::int[]) AND user_id = $2 ORDER BY due_at ASC NULLS LAST, id',
                 [expedienteId, userId]
             ),
             db.query(
-                'SELECT * FROM expediente_snapshots WHERE expediente_id = $1 ORDER BY kind, created_at DESC',
+                'SELECT * FROM expediente_snapshots WHERE expediente_id = ANY($1::int[]) ORDER BY expediente_id, kind, created_at DESC',
                 [expedienteId]
             ),
         ]);
@@ -202,10 +206,12 @@ async function enviarExportXlsx(res, datos, alcance) {
     wb.creator = 'Procurador SCW';
     wb.created = new Date();
 
-    // Hoja "Expedientes": solo tiene sentido con el caso completo (alcance=todo);
-    // en "expediente" ya se sabe de qué caso se trata (es la ficha entera del export),
-    // y en "entradas" no hay fichas involucradas.
-    if (alcance === 'todo') {
+    // Hoja "Expedientes": tiene sentido con el caso completo (alcance=todo) o
+    // cuando "expediente" trae MÁS DE UN caso (exportación de una selección
+    // múltiple desde Mis Expedientes) — con un solo caso ya se sabe de cuál se
+    // trata (es la ficha entera del export) y la hoja sería redundante. En
+    // "entradas" no hay fichas involucradas.
+    if (alcance === 'todo' || datos.expedientes.length > 1) {
         const wsExp = wb.addWorksheet('Expedientes');
         wsExp.columns = [
             { header: 'Expediente', key: 'expediente', width: 22 },
@@ -437,10 +443,26 @@ router.get('/bitacora/export', authenticateToken, checkBitacoraPlan({ conGracia:
     // ternario anidado habría sido ilegible y frágil).
     const formato = ['xlsx', 'json', 'ics'].includes(req.query.formato) ? req.query.formato : 'xlsx';
 
-    let expedienteId = null;
+    // `expediente_id` acepta una lista separada por comas (exportación de una
+    // selección múltiple desde Mis Expedientes) además del caso de 1 solo id
+    // ("Exportar este caso"). CADA id se valida por separado contra el dueño
+    // (`fichaDelUsuario`) — no alcanza con que la lista "parezca" del usuario,
+    // es la misma defensa IDOR que ya usa el resto del archivo. Los ids que no
+    // pertenecen al usuario (o no existen) se descartan en silencio; solo se
+    // rechaza con 404 si NINGUNO de los ids pedidos es válido.
+    let expedienteId = null; // array de ids validados, o null si alcance !== 'expediente'
     if (alcance === 'expediente') {
-        expedienteId = await fichaDelUsuario(db, userId, req.query.expediente_id);
-        if (!expedienteId) return res.status(404).json({ error: 'Expediente no encontrado' });
+        const crudos = String(req.query.expediente_id || '').split(',').map(s => s.trim()).filter(Boolean);
+        if (crudos.length > MAX_CASOS_CAPTURE_LOTE) {
+            return res.status(400).json({ error: `Máximo ${MAX_CASOS_CAPTURE_LOTE} expedientes por exportación.` });
+        }
+        const validados = [];
+        for (const crudo of crudos) {
+            const id = await fichaDelUsuario(db, userId, crudo);
+            if (id) validados.push(id);
+        }
+        if (validados.length === 0) return res.status(404).json({ error: 'Expediente no encontrado' });
+        expedienteId = validados;
     }
 
     // Mismo criterio permisivo que GET /bitacora (arriba): `fecha()` devuelve

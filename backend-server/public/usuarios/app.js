@@ -43,6 +43,7 @@ const state = {
         selected: new Set(), // ids tildados en el listado, para borrado múltiple
         _visibleIds: [],      // ids que pasan el filtro vigente (para "seleccionar todo")
         _eliminarIds: null,   // ids objetivo del modal de eliminar abierto (1 o varios)
+        _exportMultiIds: null, // ids objetivo del modal de exportar, cuando viene de "Exportar seleccionados" (varios)
     },
     captureLote: null,      // { casos, origen, tipo } — pantalla de revisión del lote (F2.3)
 };
@@ -3890,6 +3891,12 @@ function mexpClearSelection() {
     renderMexpLista();
 }
 
+function mexpExportarSeleccionados() {
+    const ids = [...state.miExp.selected];
+    if (ids.length === 0) return;
+    openExportModal('expediente', ids);
+}
+
 function renderMexpLista() {
     const body = document.getElementById('mexp-lista-body');
     if (!body) return;
@@ -4333,6 +4340,7 @@ function openExportModal(presetAlcance, presetExpedienteId) {
     document.getElementById('export-formato-json').checked = true;
     document.getElementById('export-desde').value = '';
     document.getElementById('export-hasta').value = '';
+    state.miExp._exportMultiIds = null; // reset — por default manda el <select> de siempre
 
     // Reusa el listado ya cargado por Bitácora/Mis Expedientes (loadBitacoraExpedientes) —
     // sin pedirlo de nuevo.
@@ -4342,7 +4350,14 @@ function openExportModal(presetAlcance, presetExpedienteId) {
     ).join('');
     sel.innerHTML = '<option value="">— Elegí un expediente —</option>' + opts;
 
-    if (presetAlcance === 'expediente' && presetExpedienteId) {
+    // "Exportar seleccionados" (Mis Expedientes, Bloque B) manda un ARRAY de
+    // ids — se guarda en state y el <select> queda oculto a favor del resumen
+    // de exportUpdateSubfields(). "Exportar este caso" sigue mandando un id
+    // suelto, como siempre.
+    if (presetAlcance === 'expediente' && Array.isArray(presetExpedienteId)) {
+        document.getElementById('export-alcance-expediente').checked = true;
+        state.miExp._exportMultiIds = presetExpedienteId;
+    } else if (presetAlcance === 'expediente' && presetExpedienteId) {
         document.getElementById('export-alcance-expediente').checked = true;
         sel.value = presetExpedienteId;
     } else if (presetAlcance) {
@@ -4358,6 +4373,23 @@ function exportUpdateSubfields() {
     const alcance = document.querySelector('input[name="export-alcance"]:checked')?.value || 'todo';
     document.getElementById('export-rango-wrap').style.display = alcance === 'entradas' ? 'flex' : 'none';
     document.getElementById('export-expediente-wrap').style.display = alcance === 'expediente' ? 'block' : 'none';
+
+    // Con una selección múltiple (`_exportMultiIds`), el <select> de "elegí un
+    // expediente" no tiene sentido — ya está elegido desde la lista. Se oculta
+    // y se muestra un resumen de solo lectura con los expedientes incluidos.
+    const sel = document.getElementById('export-expediente-id');
+    const resumen = document.getElementById('export-expediente-resumen');
+    const multiIds = state.miExp._exportMultiIds;
+    if (alcance === 'expediente' && multiIds && multiIds.length > 0) {
+        sel.style.display = 'none';
+        resumen.style.display = 'block';
+        const expPorId = new Map((state.bitacora.expedientes || []).map(x => [x.id, x.expediente]));
+        const nombres = multiIds.map(id => expPorId.get(id) || `#${id}`);
+        resumen.innerHTML = `<strong>${multiIds.length}</strong> expediente(s) seleccionado(s): ${escapeHtml(nombres.join(', '))}`;
+    } else {
+        sel.style.display = '';
+        resumen.style.display = 'none';
+    }
 
     // .ics excluye las entradas sin fecha (notas, tareas de revisión de F3.3
     // sin plazo) — un VEVENT sin DTSTART es inválido por RFC 5545. El modal
@@ -4581,9 +4613,14 @@ async function descargarExportBitacora() {
     params.set('formato', formato);
 
     if (alcance === 'expediente') {
-        const expId = document.getElementById('export-expediente-id').value;
-        if (!expId) { showAlert(alertEl, 'error', 'Elegí un expediente.'); return; }
-        params.set('expediente_id', expId);
+        const multiIds = state.miExp._exportMultiIds;
+        if (multiIds && multiIds.length > 0) {
+            params.set('expediente_id', multiIds.join(','));
+        } else {
+            const expId = document.getElementById('export-expediente-id').value;
+            if (!expId) { showAlert(alertEl, 'error', 'Elegí un expediente.'); return; }
+            params.set('expediente_id', expId);
+        }
     }
     if (alcance === 'entradas') {
         const desde = document.getElementById('export-desde').value;
