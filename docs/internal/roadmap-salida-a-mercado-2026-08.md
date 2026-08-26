@@ -109,7 +109,8 @@ Cuatro razones, todas económicas — ninguna estética:
 > (≥27 días medidos). Un `.md` con los nombres enmascarados pero los **enlaces vivos entrega el
 > expediente sin anonimizar** a quien lo reciba. **La anonimización tiene que alcanzar a las URLs, no
 > solo al texto** — es la regla 4 de M4, con una decisión de producto pendiente del operador
-> (eliminar / referencia local / dejarlas; recomendación: referencia local). Su verificación es
+> (eliminar / referencia local / dejarlas). **✅ Decidido por el operador (2026-08-26): eliminar** —
+> en la versión anonimizada, el enlace se borra y solo queda el texto del anexo. Su verificación es
 > binaria y ya está incorporada al bloque **S10** de la Etapa 3.
 
 ### 1.3 — Landing + Términos y Condiciones + Privacidad

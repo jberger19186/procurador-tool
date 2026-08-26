@@ -170,18 +170,17 @@ plan ya identificaba para este módulo (riesgo **R6**), pero por una vía que no
 **Esto no es un problema del PJN que haya que reportar** — es una decisión de diseño de su visor. Es
 un problema **nuestro**, porque nuestro producto promete algo que ese comportamiento rompe.
 
-**Qué hay que decidir en M4** (es decisión de producto del operador, no de implementación). Las tres
-opciones, con su costo:
+**✅ Decidido por el operador (2026-08-26): opción A.** Las tres opciones evaluadas, con su costo:
 
 | Opción | Qué hace con el enlace en la versión anonimizada | Costo |
 |---|---|---|
-| **A — eliminar** | El texto del enlace queda, la URL se borra: `[Despacho 12/03/2026]` | Trivial. **Pierde** trazabilidad al original |
-| **B — reemplazar por referencia local** | Apunta al adjunto ya descargado y anonimizado: `[Despacho 12/03/2026](anexos/anexo-03.md)` | Bajo. **Es el más coherente con el módulo**: el adjunto ya se bajó y se anonimizó |
-| **C — dejar la URL** | Tal cual viene | Cero. **Rompe la promesa del módulo** — no debería ser el default |
+| **A — eliminar** ✅ **elegida** | El texto del enlace queda, la URL se borra: `[Despacho 12/03/2026]` | Trivial |
+| ~~B — reemplazar por referencia local~~ | ~~Apunta al adjunto ya descargado y anonimizado~~ | *(no implementada)* |
+| ~~C — dejar la URL~~ | ~~Tal cual viene~~ | *(descartada: rompe la promesa del módulo)* |
 
-**Recomendación: B como default, A como opción.** **C no debería ser posible sin una advertencia
-explícita en pantalla.** La versión *no anonimizada* sí conserva las URLs — ahí no hay problema,
-porque es para uso propio.
+En la versión anonimizada, todo `viewer.seam` se borra y queda solo el texto del enlace — se pierde
+la trazabilidad al original desde ese archivo, pero es aceptado: la versión *no anonimizada* sí
+conserva las URLs intactas, porque es para uso propio y ahí no hay problema de fuga.
 
 **Consecuencia para la Etapa 3:** esto entra en el bloque **S10** de SEC-2 como caso de verificación
 concreto — *"un `.md` anonimizado no debe contener ninguna URL de `viewer.seam` viva"* es una
@@ -220,7 +219,7 @@ visible. En esta carpeta eso convierte 30 entradas en 4.
 | **M3** — límites | Dimensionar sobre **1–37 adjuntos por informe**, no sobre 200 |
 | **M3** — dedup | Por URL dentro del informe; por `Content-Disposition filename` entre informes |
 | **M3** — páginas sin texto | Marcador descriptivo. Afecta al **14,6 %** de las páginas de adjuntos, **0 %** del informe |
-| **M4** — anonimización | **Debe alcanzar a las URLs** (§4). Default recomendado: referencia local |
+| **M4** — anonimización | **Debe alcanzar a las URLs** (§4). ✅ Decidido: opción A — eliminar el enlace |
 | **M5** — input | Drag & drop + lista de recientes **agrupada por expediente** |
 | **Alcance** | **6–10 sesiones.** La horquilla alta de 9–13 queda descartada |
 

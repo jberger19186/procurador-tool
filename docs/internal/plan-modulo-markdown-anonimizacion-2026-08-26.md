@@ -245,18 +245,20 @@ Las 3 reglas por defecto del brief, con lo que cada una esconde:
 | **Terceros** → `Jon### And### Ber###` | Regex de nombres propios | Es el caso difícil: acentos, apellidos con partículas (`de la Fuente`), nombres compuestos, MAYÚSCULAS (el PJN escribe casi todo en mayúsculas), y **falsos positivos** — `JUZGADO FEDERAL DE CALETA OLIVIA` no es una persona |
 | 🚨 **Enlaces al SCW** → *(ver abajo)* | *No estaba en el brief ni en este plan* | **Regla 4, agregada por M0.** Los `viewer.seam` del informe abren el documento original **sin autenticación** y sus tokens **no expiran** (≥27 días medidos). Un `.md` con los nombres enmascarados y los enlaces vivos **entrega el original sin anonimizar** |
 
-**🚨 La regla 4, en detalle — decisión de producto pendiente del operador.** Es el hallazgo de M0
-(§4 del spike) y es el que más barato sale de verificar y más caro sale de omitir: anonimizar el
+**🚨 La regla 4, en detalle — ✅ DECIDIDO por el operador (2026-08-26): opción A.** Es el hallazgo de
+M0 (§4 del spike) y es el que más barato sale de verificar y más caro sale de omitir: anonimizar el
 texto y dejar el link vivo produce un archivo que *parece* anonimizado y no lo está.
 
 | Opción | Qué hace con el enlace **en la versión anonimizada** | Costo |
 |---|---|---|
-| **A — eliminar** | Queda el texto, se borra la URL: `[Despacho 12/03/2026]` | Trivial. Pierde trazabilidad |
-| **B — referencia local** ⭐ | Apunta al adjunto ya descargado y anonimizado: `[Despacho 12/03/2026](anexos/anexo-03.md)` | Bajo. **El más coherente con el módulo** — el adjunto ya se bajó y se anonimizó en M3/M2 |
-| **C — dejar la URL** | Tal cual viene del informe | Cero, **pero rompe la promesa del módulo** |
+| **A — eliminar** ✅ **elegida** | Queda el texto, se borra la URL: `[Despacho 12/03/2026]` | Trivial |
+| ~~B — referencia local~~ | ~~Apunta al adjunto ya descargado y anonimizado~~ | *(no se implementa: no hace falta mantener la carpeta `anexos/` sincronizada con el `.md` al moverlo o compartirlo)* |
+| ~~C — dejar la URL~~ | ~~Tal cual viene del informe~~ | *(descartada: rompe la promesa del módulo)* |
 
-**Recomendación: B por defecto, A como opción, y C solo detrás de una advertencia explícita en
-pantalla.** La versión **no anonimizada** conserva las URLs sin problema — es para uso propio.
+**M4 implementa la opción A: en la versión anonimizada, todo enlace `viewer.seam` se elimina y solo
+queda el texto del anexo** (`[Despacho 12/03/2026]`, sin `[...](url)`). Se pierde la trazabilidad al
+original desde el `.md` anonimizado — es aceptado, porque la versión **no anonimizada** sí conserva
+las URLs intactas (es para uso propio del abogado, no para compartir) y ahí no hay problema.
 La verificación es binaria y va en el bloque **S10** de SEC-2: *un `.md` anonimizado no debe contener
 ninguna URL de `viewer.seam`*.
 

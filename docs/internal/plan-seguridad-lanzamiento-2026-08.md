@@ -423,9 +423,10 @@ hipotético: un expediente lo redacta una contraparte.
   días después, que es el máximo que la muestra permitió medir). Entonces un `.md` con los nombres
   enmascarados pero los enlaces intactos **entrega el expediente original sin anonimizar a quien lo
   reciba**. Es anonimización teatral. **La aserción es binaria y se comprueba con un grep:** un
-  archivo anonimizado no debe contener **ninguna** URL de `viewer.seam`. Verificar también qué hizo
-  M4 con ellas (eliminar / referencia local / dejarlas) y que la versión *no* anonimizada sí las
-  conserve — ahí es correcto, es para uso propio.
+  archivo anonimizado no debe contener **ninguna** URL de `viewer.seam`. **M4 implementa la decisión
+  del operador: eliminar el enlace** (queda solo el texto del anexo, sin `[...](url)`) — verificar
+  que efectivamente no quede rastro de la URL, y que la versión *no* anonimizada sí la conserve —
+  ahí es correcto, es para uso propio.
 - **⭐ Fuga por anonimización incompleta — el de mayor consecuencia.** Esto es **S3 aplicado al módulo**:
   datos personales de terceros (Ley 25.326) que el usuario cree anonimizados y comparte. A diferencia
   de F5 —que lee el motor buscando errores—, acá se construye un **corpus adversarial**: nombres con
