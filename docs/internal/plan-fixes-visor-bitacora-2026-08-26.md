@@ -502,9 +502,18 @@ julio (`efb0f4a6...`), sin cambios. `pm2 restart procurador-staging` (por la
 caché de firmas, mismo criterio que el resto del proyecto) sin loop
 (`↺`112→113), health/usuarios 200, log de errores sin entradas nuevas.
 
-**Pendiente:** reencrypt a **producción** (falta pedirlo explícitamente —
-sigue el mismo criterio de todo el plan: nunca saltar staging, pero tampoco
-avanzar a prod sin confirmación) + el release de Electron con B3+B4 juntos.
-**Orden que sigue importando:** reencrypt de prod antes que el release — si
-el release sale primero, el visor tendría la columna nueva pero el script
-viejo en prod seguiría sin mandar la carátula.
+**Reencrypt desplegado también a PRODUCCIÓN (2026-08-26).** Mismo protocolo:
+backup previo (`/tmp/informequickscwpjn.js.pre-B4-prod_*`), corrido desde el
+propio directorio de prod (su `.env` ya apunta a `procurador_db`, sin
+ambigüedad). Verificado por SQL: hash `27a60469...` — **idéntico al del
+archivo local y al que ya quedó en staging**, `updated_at` fresco, los otros
+18 scripts sin tocar. `pm2 restart procurador-api` sin loop (`↺`746→747),
+health/usuarios/dashboard/landing 200, `pm2-error.log` sin entradas nuevas
+desde el 15/08.
+
+**El script ya manda la carátula en producción.** Sin efecto visible para
+ningún usuario todavía — el visor que la mostraría (B3/B4 del lado Electron)
+sigue sin estar en ningún release.
+
+**Pendiente:** el release de Electron con B3+B4 juntos — el único paso que
+falta para que los 21 puntos del plan lleguen a un usuario real.
