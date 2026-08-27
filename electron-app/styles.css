@@ -129,7 +129,7 @@ body {
    creyendo que minimiza). */
 .topbar-support-btn {
   margin-right: 10px;
-  padding-right: 10px;
+  padding: 0 10px;
   border-right: 1px solid var(--border);
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   width: auto;
