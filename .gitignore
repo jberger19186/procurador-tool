@@ -97,3 +97,6 @@ extension-app/imagenes/old/
 
 # ─── Logs de auditoría de seguridad del cliente Electron (runtime, por máquina) ──
 electron-app/security-logs/
+
+# Artefactos de verificación con Playwright MCP (snapshots/console logs por sesión)
+.playwright-mcp/

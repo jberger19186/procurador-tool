@@ -20,12 +20,13 @@
 ```
   ETAPA 1 — MEJORAS DE PRODUCTO            ┌── CARRIL PARALELO ──────────────┐
   (lo que se muestra y se vende)           │  AZ — Azure Trusted Signing     │
-    1.1 Bitácora F3.4                      │  (trámite externo, 1-3 días      │
-    1.2 Módulo Markdown / anonimización    │   hábiles — ARRANCA EL DÍA 0)   │
-    1.3 Landing + TyC (beta, límites)      └─────────────────────────────────┘
-    1.4 Guía de backup y recuperación
-    1.5 Control periódico contra el PJN
-    1.6 Demo reproducible en la landing
+    1.1 Bitácora F3.4                  ✅  │  (trámite externo, 1-3 días      │
+    1.2 Módulo Markdown / anonimiz.    ⏳  │   hábiles — ARRANCA EL DÍA 0)   │
+    1.3 Landing + TyC (beta, límites)  ✅  └─────────────────────────────────┘
+    1.4 Guía de backup y recuperación  ✅
+    1.5 Control periódico contra PJN   ✅
+    1.6 Demo reproducible en landing   ⬜     ⏳ 1.2 = código M1-M6 listo,
+                                                 falta SOLO el release Electron
               │
               ▼
   ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
@@ -78,7 +79,7 @@ Cuatro razones, todas económicas — ninguna estética:
 > condicionamiento que sigue vivo dentro de la etapa es **M0**, el gate técnico interno de 1.2, que no
 > decide *si* se hace sino *de qué tamaño*.
 
-### 1.1 — Bitácora F3.4
+### 1.1 — Bitácora F3.4 ✅ CERRADO (2026-08-26)
 
 | | |
 |---|---|
@@ -93,7 +94,7 @@ Cuatro razones, todas económicas — ninguna estética:
 > del proyecto que ya produjo 3 bugs reales de timezone en producción**. Enumera las 6 trampas
 > concretas, cada una de las cuales produce un archivo que *parece* funcionar.
 
-### 1.2 — Módulo Markdown / anonimización judicial
+### 1.2 — Módulo Markdown / anonimización judicial ⏳ CÓDIGO COMPLETO (M1-M6), FALTA EL RELEASE
 
 | | |
 |---|---|
@@ -113,7 +114,7 @@ Cuatro razones, todas económicas — ninguna estética:
 > en la versión anonimizada, el enlace se borra y solo queda el texto del anexo. Su verificación es
 > binaria y ya está incorporada al bloque **S10** de la Etapa 3.
 
-### 1.3 — Landing + Términos y Condiciones + Privacidad
+### 1.3 — Landing + Términos y Condiciones + Privacidad ✅ CERRADO (2026-08-26)
 
 | | |
 |---|---|
@@ -145,7 +146,7 @@ todo lo de agosto). Despliegue estático vía Nginx, **sin `pm2 restart`**.
 > publicarse. Claude puede redactar el borrador y explicar qué cubre cada cláusula; no es asesoramiento
 > legal. El operador es abogado — esto es un recordatorio de que el borrador es un punto de partida.
 
-### 1.4 — Guía de backup y recuperación (operativa, para el administrador)
+### 1.4 — Guía de backup y recuperación (operativa, para el administrador) ✅ CERRADO (2026-08-26)
 
 | | |
 |---|---|
@@ -396,12 +397,12 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 
 | Etapa | Sesiones | Notas |
 |---|---|---|
-| **1** — Producto | **13–21** | Los 6 ítems confirmados. 1.1 (1–2) · **1.2 (6–10 — M0 ya cerrado, la horquilla alta de 9–13 queda descartada)** · 1.3 (1) · 1.4 (1) · 1.5 (1) · 1.6 (4–6) |
+| **1** — Producto | ~~13–21~~ → **4–7 restantes** | ✅ 1.1, 1.3, 1.4 y 1.5 **cerrados** (2026-08-26/27). ⏳ **1.2 con el código M1-M6 completo — solo falta el release de Electron** (≈0,5 sesión, no las 6–10 originales). ⬜ Queda **1.6** (4–6) |
 | **2** — Code review | **9–13** | 3 fases `xhigh` consumen sesión propia o más |
 | **3** — Security review | **7–11** | S1+S2 y S3+S4 agrupables. Incluye **S10** (+1–2), agregado el 26/08 |
 | **4** — MercadoPago | **3–5** | + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
-| **Total aproximado** | **32–50 sesiones** | Más las sesiones con operador presente de §9 |
+| **Total aproximado** | ~~32–50~~ → **23–36 restantes** | Más las sesiones con operador presente de §9. Actualizado 2026-08-27 tras cerrar 1.1/1.3/1.4/1.5 |
 
 **Después del lanzamiento** — son **exactamente estos tres** (sección "⚪ Post-lanzamiento" de
 `CLAUDE.md`, que hasta el 2026-08-26 se llamaba "Diferidos a decisión de negocio" y tenía además a
