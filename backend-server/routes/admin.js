@@ -3078,11 +3078,15 @@ const VERIFICATION_FILE = _path.join(__dirname, '..', 'data', 'verification-resu
 // bloque F2 de más abajo) porque la usan los DOS bloques — el de reporte y el de cupo.
 const VERIFICATION_TEST_CUIT = process.env.VERIFICATION_TEST_CUIT || '27320694359';
 const VERIFICATION_HISTORY_MAX = 30;
-const VERIFICATION_FLUJOS_VALIDOS = ['proc', 'batch', 'informe', 'informe_lote', 'monitor'];
+// 'monitor_inicial' se agregó el 2026-08-27 (propuesta del script de la prueba
+// diaria, §6.6) — la consulta inicial del Monitor no se ejercitaba desde el
+// 2026-07-23 pese a ser el camino de onboarding de un cliente nuevo. Aditivo:
+// no rompe reportes viejos, que nunca mandaron esta clave.
+const VERIFICATION_FLUJOS_VALIDOS = ['proc', 'batch', 'informe', 'informe_lote', 'monitor', 'monitor_inicial'];
 const VERIFICATION_FLUJO_NOMBRES = {
     proc: 'Procuración', batch: 'Procuración por lote',
     informe: 'Informe individual', informe_lote: 'Informe por lote',
-    monitor: 'Monitor — novedades'
+    monitor: 'Monitor — novedades', monitor_inicial: 'Monitor — consulta inicial'
 };
 const VERIFICATION_ESTADOS_FLUJO = ['ok', 'error', 'omitido'];
 

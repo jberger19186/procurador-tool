@@ -489,18 +489,79 @@ repo, funcionando.**
 
 ---
 
-### F2 — Conducción de los 6 flujos
-**Modelo: Sonnet · Esfuerzo: medio-alto · ~1,5-2 sesiones**
+### F2 — Conducción de los 6 flujos ✅ EJECUTADA (2026-08-27), con corrida real 6/6 OK
 
-El corazón. Reusa el fixture `electron_app`, agrega:
+**Modelo: Sonnet · Esfuerzo: medio-alto.** Código real: `electron_driver.py`
+(lanza el `.exe`, conecta CDP, resuelve login), `flujos.py` (los 6 flujos vía
+`window.electronAPI`, con los shapes exactos de cada IPC handler leídos de
+`main.js`/`renderer.js` antes de escribir una línea, no adivinados), y
+`ejecutar.py` (el orquestador: preflight → los 6 flujos → cierre/reporte de
+F1). No reusa `tests/conftest.py::electron_app` tal cual — ese fixture lanza
+desde `node_modules` (código), y F0 concluyó que corresponde usar el `.exe`
+real acá.
 
-- espera por estado real de cada flujo, con timeout duro (§6.5)
-- los 6 flujos vía `window.electronAPI` (§2) — incluida la **consulta inicial**
-  con parte descartable creada y borrada en la misma corrida (§6.6)
-- criterios de resultado por flujo — incluido el que **caza regresiones reales**:
-  en los 2 flujos de informe, verificar que **"Abrir PDF" quede activo**, no solo
-  que el PDF exista (es el criterio que detecta `822bf0d`/`debb503`)
-- clasificación `ok` / `error` / `omitido` con la señal de red de §6.3
+**🐛 2 bugs reales de arquitectura encontrados y corregidos ANTES de gastar
+cupo, en el smoke de conexión:**
+
+1. **`greenlet.error: Cannot switch to a different thread`.** El primer
+   diseño usaba la Playwright **sync API** con un timeout manual vía
+   `ThreadPoolExecutor` (mismo patrón usado sin problemas en scripts sueltos
+   de esta sesión). Rompió: la sync API de Playwright simula sincronía con
+   greenlets atados al hilo que abrió la conexión — no admite invocarse desde
+   un hilo worker distinto. Se migró todo el driver a la **async API** de
+   Playwright + `asyncio.wait_for()`, que resuelve el timeout sin cruzar
+   threads.
+2. Encoding de consola (mismo problema ya visto en F0/F1, repetido en los 2
+   scripts de diagnóstico ad-hoc que se usaron para reconectar a mitad de
+   la corrida).
+
+**🐛 1 bug real de calibración, encontrado a mitad de una corrida real (no en
+una prueba sintética) — y NO fue un fallo del producto:** el flujo 2
+(Procuración por lote) excedió el timeout de 180s que se le puso inicialmente
+y Python se desconectó reportando error. **La app, mientras tanto, siguió
+corriendo sola y terminó bien**: un expediente disparó el sistema de
+reintentos propio del producto (`"hard 1"`: cierra Chrome, relanza, reintenta)
+porque un selector del PJN tardó en aparecer — el lote completo dio **2/2
+exitosos a los 241s**, 61s más que el timeout que lo cortó. Se reconectó por
+CDP a la sesión ya viva (sin relanzar — el guard de instancia única lo habría
+impedido, y no hacía falta: la app seguía corriendo normal) para confirmar el
+estado real antes de seguir. **Los timeouts se subieron a 600-900s**, con el
+razonamiento documentado en el propio código: el histórico del proyecto
+registra hasta 5 reintentos por expediente en el peor caso.
+
+**🐛 1 bug real de contrato, encontrado en el primer POST del 6to flujo:**
+`POST /admin/diagnostics/verification/report` devolvió **400** — el backend
+(`VERIFICATION_FLUJOS_VALIDOS`) solo conocía 5 claves; `monitor_inicial` nunca
+se había mandado antes porque hasta ahora la prueba diaria (manual o F1) solo
+reportaba 5 flujos. Corregido en 2 lugares (aditivo, no rompe reportes
+viejos): la whitelist del backend, **y** una copia duplicada del lado del
+dashboard (`VERIF_FLUJOS_ORDEN`/`VERIF_FLUJO_NOMBRES` en `dashboard.js`) que
+define qué se renderiza en la tarjeta — sin ese segundo fix, el reporte se
+habría guardado bien pero el 6to flujo nunca habría aparecido en pantalla.
+Verificado en staging antes de producción, md5 servido = md5 local en los 2
+archivos.
+
+**🐛 1 bug cosmético, encontrado leyendo el resultado real:** el detalle de
+`monitor_inicial` mostraba `"? novedades"` — el parser de `results.py`
+buscaba siempre el label `"Novedades detectadas"`, pero la 3ra tarjeta del
+visor cambia de nombre según el modo: en `inicial` se llama **"Expedientes en
+base"** (la línea base recién escrita). Corregido buscando ambos labels y
+usando el que exista.
+
+**Verificado con una corrida real completa contra el PJN, sin código de
+producto tocado — los 6 flujos `ok`:** proc 2/2 (35s) · batch 2/2 (241s, con 1
+reintento real) · informe individual 1/1 con PDF enlazado · informe por lote
+2/2 con PDF enlazado · monitor novedades 3/3 partes, 0 novedades (esperado,
+las 2 partes reales ya tenían línea base) · monitor consulta inicial 1/1,
+**115 expedientes en base** (DON COCHO, creada id 118 — mismo id liberado por
+el setup — y borrada limpia al final, confirmado por SQL: 0 residuo). **El
+consumo de cupo coincidió exacto con el modelo documentado**: proc +1, batch
++1, informe +3, monitor_novedades +3 (3 partes activas en el momento de
+"novedades"), global +6. Confirmado leyendo `GET .../latest` y `GET
+.../quota` contra producción después de la corrida. Entorno cerrado limpio:
+0 procesos de la app, config sin tocar; **1 pestaña de Chrome quedó abierta**
+("Monitor - Consulta Inicial") — esperado, no se puede cerrar por código
+(§4).
 
 ---
 
@@ -560,9 +621,9 @@ y deja la cuenta sin poder correr.
 
 | # | Fase | Modelo | Esfuerzo | Sesiones | Superficie | ¿Vale sola? |
 |---|---|---|---|---|---|---|
-| **F0** | Spike / gate técnico (4 preguntas) | Sonnet | **bajo** | ~0,5 | — | gate |
-| **F1** | Pre-vuelo, reporte y cierre (sin GUI) | Sonnet | **bajo-medio** | ~1 | `tests/daily/` | ✅ **sí** |
-| **F2** | Conducción de los 6 flujos | Sonnet | **medio-alto** | ~1,5-2 | `tests/daily/` | parcial |
+| **F0** | ✅ Spike / gate técnico (4 preguntas) | Sonnet | bajo | ~0,5 | — | gate |
+| **F1** | ✅ Pre-vuelo, reporte y cierre (sin GUI) | Sonnet | bajo-medio | ~1 | `tests/daily/` | ✅ sí |
+| **F2** | ✅ Conducción de los 6 flujos — **corrida real 6/6 OK** | Sonnet | medio-alto | ~2 | `tests/daily/` | parcial |
 | **F3** | Orquestador + CLI + ejecutable | Sonnet | **medio** | ~1 | `tests/daily/` + `CLAUDE.md` | ✅ sí |
 | **F4** | Botón de ayuda + modal | Sonnet | **bajo** | ~0,5 | dashboard admin | ✅ sí |
 | **F5** | Desatendido *(opcional)* | Sonnet | **bajo** | ~0,5 | crontab / tarea | ✅ sí |
@@ -570,7 +631,8 @@ y deja la cuenta sin poder correr.
 
 **Orden y dependencias:** F0 es gate de todo. F1 → F2 → F3 es secuencial. **F4
 depende de F3** (el modal documenta el script). **F5 es opcional y no se
-recomienda todavía** (§7).
+recomienda todavía** (§7). **F0, F1 y F2 quedaron ejecutadas el 2026-08-27** —
+código real en `tests/daily/`, no diseño. Quedan F3 y F4.
 
 **Sin Opus en ninguna fase.** No toca cobranza, ni criptografía, ni código de
 producto: es un consumidor de APIs que ya existen y están probadas. El único
@@ -591,17 +653,21 @@ Para que "script hecho" no se confunda con "verificación resuelta":
 - **No ejercita la detección de novedades reales** — el flujo corre pero reporta
   `0` porque las líneas base están al día (§6.6, hallazgo relacionado). Se puede
   cubrir, pero es una decisión aparte.
+- **No fusiona el modo automático (F2) con el asistido (F1) en un solo CLI
+  pulido** — hoy son `ejecutar.py` y `run.py` separados. Es tarea de F3.
 
-> ✅ **Sí queda cubierto desde esta versión:** "Monitor — Consulta Inicial", que
-> era el hueco más viejo (sin correrse desde el 2026-07-23). Ver §6.6.
+> ✅ **Cubierto desde F2:** los 6 flujos se corren por código, sin clicks ni
+> diálogos nativos — incluida "Monitor — Consulta Inicial", que era el hueco
+> más viejo (sin correrse desde el 2026-07-23). Ver §6.6 y la entrada de F2.
 
 ---
 
 ## 10. Cómo arrancar
 
-Sesión nueva, Sonnet, esfuerzo bajo:
+**F0, F1 y F2 ya están ejecutadas y en el repo** (`tests/daily/`). Para seguir
+con F3:
 
-> «Ejecutá la F0 (spike) de
+> «Ejecutá la F3 del plan de
 > `docs/internal/propuesta-script-prueba-diaria-2026-08-27.md`.»
 
-Si el gate pasa, seguir por F1 — que es la que más ahorra por sí sola.
+Sonnet, esfuerzo medio.

@@ -48,3 +48,30 @@ NOMBRES_FLUJO = {
 }
 
 APP_PROCESS_NAME = "Procurador SCW"
+APP_EXE_PATH = os.path.join(
+    os.environ.get("LOCALAPPDATA", ""), "Programs", "Procurador SCW", "Procurador SCW.exe",
+)
+
+# Fixture de expedientes para Procuración por lote e Informe por lote — mismo
+# archivo que usa el procedimiento manual (dev-tools/batch-verificacion.txt).
+BATCH_EXPEDIENTES = ["FCR 18745/2017", "FCR 18745/2018"]
+INFORME_INDIVIDUAL_EXPEDIENTE = "FCR 18745/2017"
+
+# Defaults del modal de Informe — mismos valores que trae el HTML por defecto
+# (index.html: #informe-movact/#informe-movhist), sin secciones opcionales.
+CONFIG_INFORME_DEFAULT = {
+    "movimientosActuales": "mamhref",   # "Movimientos + href"
+    "movimientosHistoricos": "mhn",     # "Ninguno"
+    "intervinientes": False,
+    "vinculados": False,
+    "recursos": False,
+    "notas": False,
+}
+
+# Parte descartable del flujo 6 (§6.6 de la propuesta) — mismos datos que la
+# DON COCHO real, se crea y se borra dentro de la gracia de 24h en cada corrida.
+PARTE_DESCARTABLE = {
+    "nombre": "DON COCHO",
+    "jurisdiccionCodigo": "14",
+    "jurisdiccionSigla": "FCR",
+}

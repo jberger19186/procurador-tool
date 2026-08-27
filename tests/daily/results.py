@@ -141,11 +141,18 @@ def parse_informe_visor(path: str) -> ResultadoFlujo:
     return ResultadoFlujo("informe", estado, f"{ok_count}/{total} OK, todos con PDF enlazado", path)
 
 
-def parse_monitor_visor(path: str) -> ResultadoFlujo:
+def parse_monitor_visor(path: str, clave: str = "monitor") -> ResultadoFlujo:
     """
     Visor de Monitor — HTML server-rendered, sin objeto JS. Se leen los 3
     `stat-val` por su label adyacente (no por posición) para no depender del
     orden en que main.js los emite.
+
+    La 3ra tarjeta cambia de nombre según el modo — no es el mismo dato:
+    'novedades' muestra "Novedades detectadas"; 'inicial' muestra
+    "Expedientes en base" (la línea base recién escrita). Se buscan los dos
+    labels y se usa el que exista, en vez de asumir uno fijo — un primer
+    intento que solo buscaba "Novedades detectadas" daba "? novedades" en
+    los visores de consulta inicial, que nunca tienen esa tarjeta.
     """
     with open(path, encoding="utf-8") as f:
         html = f.read()
@@ -161,13 +168,19 @@ def parse_monitor_visor(path: str) -> ResultadoFlujo:
     procesadas = valor_de("Partes procesadas")
     exitosas = valor_de("Exitosas")
     novedades = valor_de("Novedades detectadas")
+    expedientes_base = valor_de("Expedientes en base")
 
     if procesadas is None or exitosas is None:
-        return ResultadoFlujo("monitor", "sin_datos", f"No se pudieron leer los stat-val de {path}", path)
+        return ResultadoFlujo(clave, "sin_datos", f"No se pudieron leer los stat-val de {path}", path)
 
     estado = "ok" if exitosas == procesadas and procesadas > 0 else "error"
-    detalle = f"{exitosas}/{procesadas} partes exitosas, {novedades if novedades is not None else '?'} novedades"
-    return ResultadoFlujo("monitor", estado, detalle, path)
+    if novedades is not None:
+        detalle = f"{exitosas}/{procesadas} partes exitosas, {novedades} novedades"
+    elif expedientes_base is not None:
+        detalle = f"{exitosas}/{procesadas} partes exitosas, {expedientes_base} expedientes en base"
+    else:
+        detalle = f"{exitosas}/{procesadas} partes exitosas"
+    return ResultadoFlujo(clave, estado, detalle, path)
 
 
 PARSERS = {

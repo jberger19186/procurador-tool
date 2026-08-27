@@ -4042,14 +4042,16 @@ window.diagCopyExtCmd = function() {
     });
 };
 
-// SEC-2·B.2 + Etapa 1.5 — el reporte hoy viene de la prueba diaria vía computer-use
-// (Claude, en un chat), no de la app: dailyVerification.js sigue apagado. El orden y los
-// nombres de los 5 flujos son los mismos que valida el backend (VERIFICATION_FLUJOS_VALIDOS).
-const VERIF_FLUJOS_ORDEN = ['proc', 'batch', 'informe', 'informe_lote', 'monitor'];
+// SEC-2·B.2 + Etapa 1.5 — el reporte hoy viene de la prueba diaria (script en
+// tests/daily/, o vía computer-use si se pide explícito), no de la app:
+// dailyVerification.js sigue apagado. El orden y los nombres de los flujos son
+// los mismos que valida el backend (VERIFICATION_FLUJOS_VALIDOS) — 'monitor_inicial'
+// se sumó el 2026-08-27 (propuesta del script de la prueba diaria, §6.6).
+const VERIF_FLUJOS_ORDEN = ['proc', 'batch', 'informe', 'informe_lote', 'monitor', 'monitor_inicial'];
 const VERIF_FLUJO_NOMBRES = {
     proc: 'Procuración', batch: 'Procuración por lote',
     informe: 'Informe individual', informe_lote: 'Informe por lote',
-    monitor: 'Monitor — novedades'
+    monitor: 'Monitor — novedades', monitor_inicial: 'Monitor — consulta inicial'
 };
 const VERIF_ESTADO_ICON = { ok: '✅', error: '❌', omitido: '⏭️' };
 
