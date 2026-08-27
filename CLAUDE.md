@@ -1503,29 +1503,67 @@ cp "$DEST/$(basename "$FOLDER").7z" "$REPOS/"
 > ⚠️ El `.7z` contiene claves privadas y un dump completo de la base de datos — la copia en `source\repos` queda fuera del repo git, pero **no es una ubicación cifrada**; tratarla con el mismo cuidado que el resto de los backups.
 
 ### Prueba diaria de la app Electron vía computer-use
-> Cuando el operador pide algo como **"corré la prueba diaria de la app"** (o "probá la app con computer-use"): ejecutar los 5 flujos reales contra el PJN descriptos abajo, controlando la UI de la app instalada con `computer-use`. Referencia de ejecución real: sesión 2026-07-31 (ver "Estado actual" — 5/5 OK).
+> Cuando el operador pide algo como **"corré la prueba diaria de la app"** (el comando que la propia tarjeta de Diagnóstico del dashboard sugiere copiar — Etapa 1.5): ejecutar los 5 flujos reales contra el PJN descriptos abajo, controlando la UI de la app instalada con `computer-use`, y **reportar el resultado al dashboard al final (paso 4)** — antes de la Etapa 1.5 esto se corría y quedaba solo en la prosa de este archivo, sin llegar nunca a Diagnóstico. Referencia de ejecución real: sesión 2026-07-31 (ver "Estado actual" — 5/5 OK).
 >
-> **0. Antes de arrancar — verificar cupo del usuario de prueba.** La cuenta es **`procuradortool@gmail.com`** (misma que usan las demás pruebas de este documento). El banner naranja de la app ("Usás tus usos de prueba: X/50") o una consulta rápida por SSH a `subscriptions.usage_count`/`usage_limit` alcanza. Si al usuario le quedan pocos usos para correr los 5 flujos (contá ~6-8 entre procuración individual, batch de 2, informe individual, informe batch de 2), **sumarle usos extra desde el admin** (`POST /admin/users/:id/extra-usage` o la ficha del dashboard) antes de arrancar — no tiene sentido que la prueba se corte por cupo a mitad de camino.
+> ### A — Preparación
 >
-> **1. `batch.txt` — puede no estar en la ruta de sesiones anteriores.** Si `C:\Users\JONATHAN\Desktop\PT\batch.txt` no existe, **crearlo** en el Desktop (`C:\Users\JONATHAN\Desktop\PT\batch.txt`) con estas 2 líneas exactas:
+> **0. Cupo** — llamar a `POST /admin/diagnostics/verification/quota/top-up` con un token admin (ver "Generar token JWT para Claude" más abajo en este archivo). Es idempotente: si ya alcanza, responde `aplicado:false` sin tocar nada; si no, suma solo lo que falta para dejar reserva de 2 corridas. Tiene cooldown de 1 recarga/día — si da 429, alcanza igual para correr esta vez (el cooldown es la prueba de que ya se recargó recientemente). Reemplaza al chequeo manual de usos que se hacía antes a mano.
+>
+> **1. `batch.txt`** — usar el fixture versionado del repo, **no crear uno nuevo en el Desktop**:
 > ```
-> FCR 18745/2017
-> FCR 18745/2018
+> C:\Users\JONATHAN\source\repos\ProcuradorTool\backend-server\dev-tools\batch-verificacion.txt
 > ```
-> (mismo contenido usado en la sesión de referencia — no inventar otros expedientes salvo que el operador pida otros explícitamente). **Limpieza al final:** si el archivo (y/o la carpeta `PT`) no existía y lo creaste vos para esta prueba, **borralo al terminar** (archivo, y la carpeta `PT` si quedó vacía) — no dejar residuos de testing en el Desktop. Si ya existía de antes de que arrancaras (como el original de la sesión que definió este playbook), **dejalo intacto**, no es tuyo para borrar.
+> Mismo contenido siempre (`FCR 18745/2017` / `FCR 18745/2018`) — sin paso de crear/borrar, sin variación entre corridas. El selector nativo de la app puede navegar directo a esa ruta (es la máquina del operador, el repo ya está clonado ahí). **No inventar otros expedientes** salvo que el operador lo pida explícitamente.
 >
-> **2. Abrir la app** (`mcp__computer-use__request_access` con `["Procurador SCW"]`, tier full — Chrome solo se otorga en tier "read": se ve en las capturas pero no se puede clickear/tipear ahí, la automatización de la app lo maneja sola) → `open_application` → login (email+contraseña vienen precargados, solo hace falta clickear "Iniciar Sesión") → maximizar ventana.
+> **2. Partes del Monitor** — el flujo 5 necesita al menos una parte con línea base. Dos escenarios:
+> - **Sin ninguna parte cargada** → agregar 2 nuevas, jurisdicción **FCR**, nombres **"DON COCHO"** y **"LA TOSTADORA MODERNA"** (botón "+ Agregar parte").
+> - **Con partes pero ninguna con línea base** → mismo resultado: "Buscar Novedades" filtra por línea base y no ejecuta nada si no hay ninguna.
 >
-> **3. Los 5 flujos y qué se genera en cada uno** (todo se abre solo en una pestaña nueva de Chrome al terminar — no se puede clickear ahí, permiso de solo lectura; leer con `screenshot` o verificar por archivo):
+> En cualquiera de los dos casos, correr primero **"Consulta Inicial"** sobre las partes sin línea base (no consume cupo) — **recién después** "Buscar Novedades". ⚠️ **No saltear este orden:** verificado en `procesarMonitoreo.js` — en modo `novedades` el script compara contra la línea base guardada en `monitor_expedientes`; si una parte nunca corrió `inicial`, esa base está vacía y **todos** sus expedientes reales aparecen como "novedad detectada" (falso positivo masivo, no un error técnico, pero un resultado engañoso que no sirve para verificar nada). ⚠️ **Crear partes tiene un costo oculto:** solo se pueden borrar dentro de las primeras 24 h o después de 30 días (`routes/monitor.js`) — si se crean para esta prueba y no se borran ese mismo día, quedan **trabadas 30 días** ocupando un slot (tope 20). Por eso conviene reusar las partes que ya existen en vez de crear nuevas cada vez.
+>
+> ### B — Ejecución
+>
+> **3. Abrir la app** (`mcp__computer-use__request_access` con `["Procurador SCW"]`, tier full — Chrome solo se otorga en tier "read": se ve en las capturas pero no se puede clickear/tipear ahí, la automatización de la app lo maneja sola) → `open_application` → login (email+contraseña vienen precargados, solo hace falta clickear "Iniciar Sesión") → maximizar ventana.
+>
+> **4. Los 5 flujos y qué se genera en cada uno** (todo se abre solo en una pestaña nueva de Chrome al terminar — no se puede clickear ahí, permiso de solo lectura; leer con `screenshot` o verificar por archivo):
 > 1. **Procuración común** — corregir "Fecha límite" a la fecha de HOY (no confiar en el valor guardado de una sesión anterior) → botón "Procurar". Genera un **"Visor de Novedades"** (HTML) con la tabla de expedientes con movimientos.
-> 2. **Procuración por lote** — sidebar "Por lote" → seleccionar `batch.txt` → "Procesar". Mismo tipo de salida: **"Visor de Novedades"**.
+> 2. **Procuración por lote** — sidebar "Por lote" → seleccionar `batch-verificacion.txt` (paso A.1) → "Procesar". Mismo tipo de salida: **"Visor de Novedades"**.
 > 3. **Informe individual** — tab "Informe" → pestaña "Individual" → expediente `FCR 18745/2017` (si el campo trae un valor recordado de otra sesión, seleccionar todo y retipear — a veces el valor pre-cargado no dispara la validación interna y tira "Ingresá el número de expediente") → "Ejecutar". Acá **no se abre un visor**: se abre directamente el **PDF del informe** (`informe_<expediente>_<timestamp>.pdf`).
-> 4. **Informe por lote** — tab "Informe" → pestaña "Batch (.txt)" → seleccionar el mismo `batch.txt` → "Ejecutar". Genera un **"Visor de Informes"** (HTML, distinto del "Visor de Novedades" de arriba) con un botón "Abrir PDF" por expediente + un link para descargar el Excel.
-> 5. **Monitor** — tab "Monitor" → si **ya hay partes cargadas** (aparecen con el tag "Base lista"), tildarlas y clickear directo **"Buscar Novedades"** → genera **"Monitor — Novedades"**. **Si NO hay ninguna cargada:** agregar 2 partes nuevas jurisdicción **FCR**, nombre **"DON COCHO"** y **"LA TOSTADORA MODERNA"** (botón "+ Agregar parte") y **correr primero "Consulta Inicial" sobre esas dos** (genera **"Monitor — Consulta Inicial"**, guarda la línea base, no consume cupo) — **recién después** correr "Buscar Novedades" sobre ellas. ⚠️ **No saltear este orden:** verificado en `procesarMonitoreo.js` — en modo `novedades` el script compara los expedientes encontrados contra la línea base guardada en `monitor_expedientes`; si una parte nunca corrió `inicial`, esa base está vacía y **todos** sus expedientes reales aparecen como "novedad detectada" (falso positivo masivo, no un error técnico, pero un resultado engañoso que no sirve para verificar nada).
+> 4. **Informe por lote** — tab "Informe" → pestaña "Batch (.txt)" → seleccionar el mismo `batch-verificacion.txt` → "Ejecutar". Genera un **"Visor de Informes"** (HTML, distinto del "Visor de Novedades" de arriba) con un botón "Abrir PDF" por expediente + un link para descargar el Excel.
+> 5. **Monitor** — tab "Monitor" → según el escenario de A.2: Consulta Inicial primero si hace falta, después "Buscar Novedades" sobre las partes tildadas → genera **"Monitor — Novedades"**.
 >
-> **Qué mirar en cada resultado:** confirmar "Exitosos" = total y "Fallidos" = 0 en los visores de Procuración/Informe/Monitor. Para el informe, además: que el botón "Abrir PDF" esté activo (no "N/A") — si algún expediente da error o el PDF no linkea, es una regresión a investigar antes de seguir, no un detalle a ignorar.
+> **Criterios de resultado por flujo** (no alcanza con "corrió sin tirar una excepción"):
+> | Estado | Cuándo |
+> |---|---|
+> | **ok** | "Exitosos" = total y "Fallidos" = 0 en el visor. En los 2 flujos de informe, además: botón **"Abrir PDF" activo** (no "N/A") — un PDF que se genera pero no se enlaza es una regresión real, ya pasó dos veces (`822bf0d`/`debb503`) |
+> | **omitido** | No corrió por una causa ajena al producto: sin cupo, sin partes con línea base, el operador lo salteó a propósito. **No es un fallo** |
+> | **error** | Corrió y falló por el producto o por el PJN — ⚠️ **antes de marcar error, chequear si el backend propio también estaba lento** (`api.procuradortool.com/health`). El 12/08 un expediente agotó sus 5 reintentos por **degradación de red**, no por el PJN ni el producto — confirmado porque el backend propio también daba timeouts esa tarde. Si el backend también estaba lento, es red, no un fallo real del flujo |
 >
-> **Duración aproximada:** ~10-12 min corriendo los 5 flujos en secuencia (cada consulta al PJN real toma entre 15s y 1 min). No apurar los `wait` — la app está usando Puppeteer contra el sitio real, no una simulación.
+> **Trampas operativas conocidas** (ya se repitieron en corridas previas, no hay que re-descubrirlas):
+> - **Re-logins entre flujos**: `open_application` suele traer una ventana de login nueva en vez de enfocar la principal. Es esperado — se vuelve a loguear (instantáneo) y **no duplica ejecuciones** (single-instance lock de Electron).
+> - **Foco de ventana**: si la app abre en un segundo monitor puede quedar sin foco real pese a verse al frente. Se destraba con un `left_click_drag` sobre la barra de título.
+> - **Duración esperada: ~10-12 min.** No apurar los `wait` — es Puppeteer contra el sitio real, no una simulación.
+>
+> ### C — Cierre
+>
+> **5. Reportar el resultado** — `POST /admin/diagnostics/verification/report` con token admin:
+> ```json
+> {
+>   "estado": "ok | parcial | error",
+>   "origen": "computer-use",
+>   "flujos": [
+>     { "clave": "proc", "estado": "ok|error|omitido", "tiempoMs": 41200, "detalle": "2/2 exitosos" },
+>     { "clave": "batch", "estado": "ok|error|omitido", "detalle": "2/2 exitosos" },
+>     { "clave": "informe", "estado": "ok|error|omitido", "detalle": "PDF 4 páginas" },
+>     { "clave": "informe_lote", "estado": "ok|error|omitido", "detalle": "2/2, PDFs enlazados" },
+>     { "clave": "monitor", "estado": "ok|error|omitido", "detalle": "N/N partes, M novedades" }
+>   ],
+>   "notas": "opcional, texto libre"
+> }
+> ```
+> `cuenta` no hace falta mandarlo — cae solo a `27320694359`. Confirmar con `GET /admin/diagnostics/verification/latest` (o mirando la tarjeta del dashboard) que quedó reflejado.
+>
+> Esto es lo que cierra el circuito de la Etapa 1.5 (F1-F4): sin este paso, la corrida fue real pero el dashboard sigue mostrando "hace N días".
 
 ### Backup de schema DB solamente
 ```bash
