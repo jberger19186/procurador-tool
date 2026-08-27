@@ -2960,20 +2960,136 @@ router.post('/smoke-tests/report-extension', authenticateAdmin, (req, res) => {
     res.json({ success: true });
 });
 
-// ==================== SEC-2·B.2: verificación diaria real (PJN) — lectura ====================
-// El reporte lo escribe POST /client/verification-report (routes/client.js), llamado
-// por la app Electron logueada con la cuenta de prueba dedicada. Acá solo se lee para
-// la tarjeta "Verificación funcional (PJN real)" de Diagnóstico.
+// ==================== SEC-2·B.2 + Etapa 1.5: verificación funcional (PJN) ====================
+// Dos escritores del MISMO archivo: POST /client/verification-report (routes/client.js,
+// restringido por CUIT, lo llama dailyVerification.js — hoy apagado, 0 reportes desde el
+// 2026-07-14) y el nuevo POST .../verification/report de acá abajo (admin-only, pensado para
+// reportar la prueba diaria real que SÍ se corre — vía computer-use, plan Etapa 1.5).
+//
+// Modelo viejo (2 campos fijos: procuracion/informe) → modelo nuevo (flujos[], N elementos,
+// con un 3er estado 'omitido' para no confundir "sin cupo" con "el PJN se rompió" — §6.1 del
+// plan). _normalizarEntry() convierte al vuelo el registro viejo en la LECTURA, sin migrar
+// el archivo ni tocar el endpoint de client.js que sigue escribiendo el formato viejo.
 const VERIFICATION_FILE = _path.join(__dirname, '..', 'data', 'verification-results.json');
+const VERIFICATION_HISTORY_MAX = 30;
+const VERIFICATION_FLUJOS_VALIDOS = ['proc', 'batch', 'informe', 'informe_lote', 'monitor'];
+const VERIFICATION_FLUJO_NOMBRES = {
+    proc: 'Procuración', batch: 'Procuración por lote',
+    informe: 'Informe individual', informe_lote: 'Informe por lote',
+    monitor: 'Monitor — novedades'
+};
+const VERIFICATION_ESTADOS_FLUJO = ['ok', 'error', 'omitido'];
 
-function _loadVerificationReport() {
+function _loadVerificationRaw() {
     try { if (_fs.existsSync(VERIFICATION_FILE)) return JSON.parse(_fs.readFileSync(VERIFICATION_FILE, 'utf8')); } catch (_) {}
     return { latest: null, history: [] };
 }
 
+function _saveVerificationRaw(data) {
+    const dir = _path.dirname(VERIFICATION_FILE);
+    if (!_fs.existsSync(dir)) _fs.mkdirSync(dir, { recursive: true });
+    _fs.writeFileSync(VERIFICATION_FILE, JSON.stringify(data, null, 2));
+}
+
+// Convierte un registro del formato viejo (procuracion/informe sueltos, sin `flujos`) al
+// nuevo — de solo lectura, el archivo en disco no se toca. El fallback de `cuenta` es exacto:
+// el guard por CUIT de client.js (VERIFICATION_TEST_CUIT) hacía imposible que cualquier otra
+// cuenta escribiera ahí, así que TODO registro viejo es, con certeza, de esa cuenta.
+function _normalizarEntry(entry) {
+    if (!entry) return entry;
+    if (Array.isArray(entry.flujos)) return entry; // ya está en formato nuevo
+
+    const flujos = [];
+    if (entry.procuracion) {
+        flujos.push({ clave: 'proc', nombre: VERIFICATION_FLUJO_NOMBRES.proc, estado: entry.procuracion.ok ? 'ok' : 'error', tiempoMs: entry.procuracion.tiempoMs ?? null, detalle: entry.procuracion.error || null });
+    }
+    if (entry.informe) {
+        flujos.push({ clave: 'informe', nombre: VERIFICATION_FLUJO_NOMBRES.informe, estado: entry.informe.ok ? 'ok' : 'error', tiempoMs: entry.informe.tiempoMs ?? null, detalle: entry.informe.error || null });
+    }
+    return {
+        timestamp: entry.timestamp,
+        origen: 'app-automatica',
+        cuenta: '27320694359', // única cuenta que el guard de client.js permitía reportar
+        estado: entry.estado,
+        tiempoTotalMs: entry.tiempoTotalMs ?? null,
+        flujos,
+        notas: null,
+        reportedBy: null,
+    };
+}
+
+function _loadVerificationReport() {
+    const raw = _loadVerificationRaw();
+    return {
+        latest: _normalizarEntry(raw.latest),
+        history: (raw.history || []).map(_normalizarEntry),
+    };
+}
+
 // GET /admin/diagnostics/verification/latest
+// Además del último reporte y el historial, calcula por cada flujo conocido cuándo fue la
+// última vez que estuvo 'ok' — así un flujo que hace tiempo no se verifica queda visible en
+// la tarjeta sin obligar a correr la prueba todos los días (§7 F1 del plan).
 router.get('/diagnostics/verification/latest', authenticateAdmin, (req, res) => {
-    res.json({ success: true, ...( _loadVerificationReport()) });
+    const { latest, history } = _loadVerificationReport();
+
+    const ultimaVezOk = {};
+    for (const entry of history) {
+        for (const f of (entry.flujos || [])) {
+            if (f.estado === 'ok' && !ultimaVezOk[f.clave]) ultimaVezOk[f.clave] = entry.timestamp;
+        }
+    }
+
+    res.json({ success: true, latest, history, ultimaVezOk });
+});
+
+// POST /admin/diagnostics/verification/report
+// Reporta el resultado de la prueba diaria real (hoy: corrida vía computer-use desde un chat
+// con Claude — ver el procedimiento en CLAUDE.md). Admin-only y NO otorga cupo ni toca
+// `subscriptions` de ninguna cuenta: es pura escritura de diagnóstico (la recarga de cupo,
+// que sí necesita estar atada a la cuenta de prueba, es un endpoint aparte — F2 del plan).
+router.post('/diagnostics/verification/report', authenticateAdmin, (req, res) => {
+    const { estado, flujos, cuenta, origen, notas, tiempoTotalMs } = req.body || {};
+
+    if (!estado || !['ok', 'parcial', 'error'].includes(estado)) {
+        return res.status(400).json({ success: false, error: 'estado inválido (ok|parcial|error)' });
+    }
+    if (!Array.isArray(flujos) || flujos.length === 0) {
+        return res.status(400).json({ success: false, error: 'flujos debe ser un array no vacío' });
+    }
+    for (const f of flujos) {
+        if (!f || !VERIFICATION_FLUJOS_VALIDOS.includes(f.clave)) {
+            return res.status(400).json({ success: false, error: `clave de flujo inválida: ${f?.clave}. Válidas: ${VERIFICATION_FLUJOS_VALIDOS.join(', ')}` });
+        }
+        if (!VERIFICATION_ESTADOS_FLUJO.includes(f.estado)) {
+            return res.status(400).json({ success: false, error: `estado de flujo inválido en '${f.clave}': ${f.estado}. Válidos: ${VERIFICATION_ESTADOS_FLUJO.join(', ')}` });
+        }
+    }
+
+    const entry = {
+        timestamp: new Date().toISOString(),
+        origen: origen === 'app-automatica' ? 'app-automatica' : 'computer-use',
+        cuenta: (typeof cuenta === 'string' && cuenta.trim()) ? cuenta.trim() : '27320694359',
+        estado,
+        tiempoTotalMs: Number.isFinite(tiempoTotalMs) ? tiempoTotalMs : null,
+        flujos: flujos.map(f => ({
+            clave: f.clave,
+            nombre: VERIFICATION_FLUJO_NOMBRES[f.clave],
+            estado: f.estado,
+            tiempoMs: Number.isFinite(f.tiempoMs) ? f.tiempoMs : null,
+            detalle: (typeof f.detalle === 'string' ? f.detalle.slice(0, 500) : null),
+        })),
+        notas: (typeof notas === 'string' ? notas.slice(0, 2000) : null),
+        reportedBy: req.user.email,
+    };
+
+    const raw = _loadVerificationRaw();
+    raw.latest = entry;
+    raw.history = [entry, ...(raw.history || [])].slice(0, VERIFICATION_HISTORY_MAX);
+    _saveVerificationRaw(raw);
+
+    console.log(`[verification] Reporte manual recibido de ${req.user.email}: ${estado} (${flujos.length} flujos)`);
+    res.json({ success: true, entry });
 });
 
 // ─── GET /admin/users/:userId/refund-preview ─────────────────────────────────
