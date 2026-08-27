@@ -3763,22 +3763,24 @@ async function renderDiagnostico() {
         .diag-btn.secondary:hover:not(:disabled) { background:#e5e7eb; }
         .diag-pjn-cmd { font-family:monospace; font-size:12px; background:#f3f4f6; padding:6px 12px; border-radius:6px; color:#1f2937; flex:1; overflow-x:auto; }
         .diag-verif-flujos { padding:6px 18px 2px; }
-        .diag-verif-flujo-row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:6px 0; font-size:13px; border-bottom:1px solid #f3f4f6; }
-        .diag-verif-flujo-row:last-child { border-bottom:none; }
+        .diag-verif-flujo { padding:7px 0; border-bottom:1px solid #f3f4f6; }
+        .diag-verif-flujo:last-child { border-bottom:none; }
+        .diag-verif-flujo-row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:13px; }
         .diag-verif-flujo-nombre { flex:0 0 auto; color:#374151; }
         .diag-verif-flujo-detalle { text-align:right; color:#374151; }
         .diag-verif-flujo-vieja { color:#b45309; font-size:11px; }
-        .diag-verif-cupo { margin:10px 18px 4px; padding:10px 12px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; font-size:12px; }
-        .diag-verif-cupo-titulo { font-weight:700; margin-bottom:6px; color:#1f2937; }
-        .diag-verif-cupo-row { display:flex; justify-content:space-between; padding:2px 0; color:#4b5563; }
-        .diag-verif-cupo-warn { color:#92400e; font-weight:600; margin-top:6px; }
-        .diag-verif-cmd-block { margin:12px 18px 16px; padding:12px 14px; border-radius:8px; font-size:12.5px; }
+        /* Cupo por módulo: va DEBAJO de su flujo y en menor jerarquía — es contexto
+           de la corrida, no su resultado. */
+        .diag-verif-flujo-cupo { text-align:right; font-size:11px; color:#9ca3af; margin-top:2px; }
+        .diag-verif-flujo-cupo.bajo { color:#b45309; font-weight:600; }
+        .diag-verif-cupo { margin:4px 18px 10px; font-size:11.5px; }
+        .diag-verif-cupo-row { display:flex; justify-content:space-between; padding:2px 0; color:#6b7280; }
+        .diag-verif-cupo-warn { color:#92400e; font-weight:600; margin-top:4px; }
+        .diag-verif-cmd-block { margin:12px 18px 4px; padding:12px 14px; border-radius:8px; font-size:12.5px; }
         .diag-verif-cmd-block.destacado { background:#fef3c7; border:1px solid #f59e0b; color:#78350f; }
         .diag-verif-cmd-block.discreto { background:#f9fafb; border:1px solid #e5e7eb; color:#6b7280; }
-        .diag-verif-cmd-line { display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap; }
+        .diag-verif-cmd-line { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
         .diag-verif-cmd-text { font-family:monospace; background:rgba(0,0,0,.06); padding:4px 10px; border-radius:6px; }
-        .diag-verif-req { margin-top:8px; font-size:11px; line-height:1.5; opacity:.9; }
-        .diag-verif-req code { background:rgba(0,0,0,.07); padding:1px 4px; border-radius:3px; }
     </style>
 
     <div class="diag-grid">
@@ -3833,17 +3835,15 @@ async function renderDiagnostico() {
         <!-- ── VERIFICACIÓN FUNCIONAL (PJN REAL) — SEC-2·B.2 + Etapa 1.5 ── -->
         <div class="diag-card">
             <div class="diag-card-header">
-                <div>
-                    <div class="diag-card-title">🔎 Verificación funcional (PJN real)</div>
-                    <div class="diag-last" id="diag-verif-last">Cargando...</div>
-                </div>
+                <div class="diag-card-title">🔎 Verificación funcional (PJN real)</div>
                 <span class="diag-badge none" id="diag-verif-badge">—</span>
             </div>
+            <div id="diag-verif-comando"></div>
+            <div class="diag-last" id="diag-verif-last" style="padding:0 18px 4px;">Cargando...</div>
             <div id="diag-verif-stale"></div>
             <div class="diag-verif-flujos" id="diag-verif-flujos">Cargando...</div>
-            <div class="diag-log" id="diag-verif-historial" style="min-height:auto;display:none;"></div>
             <div id="diag-verif-cupo"></div>
-            <div id="diag-verif-comando"></div>
+            <div class="diag-log" id="diag-verif-historial" style="min-height:auto;display:none;"></div>
         </div>
 
     </div>`;
@@ -3992,13 +3992,60 @@ const VERIF_FLUJO_NOMBRES = {
 };
 const VERIF_ESTADO_ICON = { ok: '✅', error: '❌', omitido: '⏭️' };
 
+// Mapeo flujo → submódulo de cupo. Informe individual y por lote COMPARTEN el mismo
+// contador (`informe_usage`), por eso no se muestra dos veces el mismo número.
+const VERIF_FLUJO_CUPO = {
+    proc: 'proc', batch: 'batch', informe: 'informe',
+    informe_lote: null, monitor: 'monitor_novedades',
+};
+
+// La tarjeta se arma con 2 consultas independientes (último reporte + cupo) y cualquiera
+// puede llegar primero, así que se guarda lo que va llegando y se repinta con lo que haya.
+let _verifState = { latest: null, history: [], ultimaVezOk: {}, cupo: null };
+
 function diagRenderVerification(latest, history, ultimaVezOk) {
-    ultimaVezOk = ultimaVezOk || {};
+    _verifState.latest      = latest;
+    _verifState.history     = history || [];
+    _verifState.ultimaVezOk = ultimaVezOk || {};
+    diagPaintVerif();
+}
+
+function diagRenderVerifCupo(cupo) {
+    _verifState.cupo = cupo || null;
+    diagPaintVerif();
+}
+
+// El reporte trae el detalle largo con la evidencia (expedientes, nombres de partes). En
+// la tarjeta importa el veredicto, no la evidencia: se corta en el primer paréntesis y el
+// texto completo queda en el tooltip, así no se pierde nada.
+function verifDetalleCorto(detalle) {
+    if (!detalle) return '';
+    let t = String(detalle).split('(')[0].trim().replace(/[\s,;.–—-]+$/, '');
+    if (t.length > 62) t = t.slice(0, 61).trimEnd() + '…';
+    return t;
+}
+
+function verifCupoDeFlujo(clave) {
+    const cupo = _verifState.cupo;
+    if (!cupo || !cupo.submodulos) return null;
+    if (clave === 'informe_lote') return { txt: 'Cupo: comparte con Informe individual', bajo: false };
+    const k = VERIF_FLUJO_CUPO[clave];
+    const s = k && cupo.submodulos[k];
+    if (!s) return null;
+    if (s.ilimitado) return { txt: 'Cupo: ilimitado', bajo: false };
+    const total = s.limit + s.bonus;
+    const costo = s.costoPorPrueba || 1;
+    return { txt: `Cupo: ${s.used}/${total} (quedan ${s.remaining})`, bajo: s.remaining < costo * 2 };
+}
+
+function diagPaintVerif() {
+    const { latest, history, ultimaVezOk } = _verifState;
     const flujosEl = document.getElementById('diag-verif-flujos');
     const histEl   = document.getElementById('diag-verif-historial');
     const badgeEl  = document.getElementById('diag-verif-badge');
     const lastEl   = document.getElementById('diag-verif-last');
     const staleEl  = document.getElementById('diag-verif-stale');
+    if (!flujosEl) return;
 
     if (!latest) {
         flujosEl.innerHTML = 'Sin verificaciones reportadas todavía.';
@@ -4008,6 +4055,7 @@ function diagRenderVerification(latest, history, ultimaVezOk) {
         lastEl.textContent  = 'Nunca reportado';
         staleEl.innerHTML   = '';
         diagRenderVerifComando(true);
+        diagPaintVerifCupoGlobal();
         return;
     }
 
@@ -4037,17 +4085,21 @@ function diagRenderVerification(latest, history, ultimaVezOk) {
         const nombre = VERIF_FLUJO_NOMBRES[clave];
         const f = porClave.get(clave);
         const vezOkTxt = ultimaVezOk[clave] ? `última vez OK: ${diagRelativeTime(ultimaVezOk[clave])}` : null;
+        const c = verifCupoDeFlujo(clave);
+        const cupoHtml = c ? `<div class="diag-verif-flujo-cupo${c.bajo ? ' bajo' : ''}">${escHtml(c.txt)}</div>` : '';
 
         if (!f) {
             const detalle = vezOkTxt ? `no corrió · <span class="diag-verif-flujo-vieja">${vezOkTxt}</span>` : 'no corrió';
-            return `<div class="diag-verif-flujo-row"><span class="diag-verif-flujo-nombre">${escHtml(nombre)}</span><span class="diag-verif-flujo-detalle" style="color:#9ca3af;">${detalle}</span></div>`;
+            return `<div class="diag-verif-flujo"><div class="diag-verif-flujo-row"><span class="diag-verif-flujo-nombre">${escHtml(nombre)}</span><span class="diag-verif-flujo-detalle" style="color:#9ca3af;">${detalle}</span></div>${cupoHtml}</div>`;
         }
 
         const icon = VERIF_ESTADO_ICON[f.estado] || '❓';
         const tiempo = f.tiempoMs ? ` · ${(f.tiempoMs / 1000).toFixed(1)}s` : '';
-        const detalleTxt = f.detalle ? ` — ${escHtml(f.detalle)}` : '';
+        const corto = verifDetalleCorto(f.detalle);
+        const detalleTxt = corto ? ` — ${escHtml(corto)}` : '';
+        const titleAttr = f.detalle ? ` title="${escAttr(f.detalle)}"` : '';
         const vezOkExtra = (f.estado !== 'ok' && vezOkTxt) ? ` · <span class="diag-verif-flujo-vieja">${vezOkTxt}</span>` : '';
-        return `<div class="diag-verif-flujo-row"><span class="diag-verif-flujo-nombre">${escHtml(nombre)}</span><span class="diag-verif-flujo-detalle">${icon}${tiempo}${detalleTxt}${vezOkExtra}</span></div>`;
+        return `<div class="diag-verif-flujo"><div class="diag-verif-flujo-row"><span class="diag-verif-flujo-nombre">${escHtml(nombre)}</span><span class="diag-verif-flujo-detalle"${titleAttr}>${icon}${tiempo}${detalleTxt}${vezOkExtra}</span></div>${cupoHtml}</div>`;
     }).join('');
 
     const historyHtml = (history || []).slice(0, 10).map(h =>
@@ -4063,20 +4115,17 @@ function diagRenderVerification(latest, history, ultimaVezOk) {
     }
 
     diagRenderVerifComando(vencida);
+    diagPaintVerifCupoGlobal();
 }
 
-// Cupo de la ÚNICA cuenta de verificación (VERIFICATION_TEST_CUIT) — F2 del plan.
-function diagRenderVerifCupo(cupo) {
+// El cupo POR MÓDULO se muestra bajo cada flujo; acá queda solo el global y la advertencia,
+// que no pertenecen a ningún módulo en particular.
+function diagPaintVerifCupoGlobal() {
     const el = document.getElementById('diag-verif-cupo');
     if (!el) return;
+    const cupo = _verifState.cupo;
     if (!cupo) { el.innerHTML = ''; return; }
 
-    const subs = [['proc', 'Procuración'], ['batch', 'Batch'], ['informe', 'Informe'], ['monitor_novedades', 'Monitor']];
-    const filas = subs.map(([k, label]) => {
-        const s = cupo.submodulos[k];
-        const txt = s.ilimitado ? 'ilimitado' : `${s.used}/${s.limit + s.bonus} (quedan ${s.remaining})`;
-        return `<div class="diag-verif-cupo-row"><span>${label}</span><span>${txt}</span></div>`;
-    }).join('');
     const g = cupo.global;
     const globalTxt = g.ilimitado ? 'ilimitado' : `${g.used}/${g.limit} (quedan ${g.remaining})`;
 
@@ -4089,45 +4138,32 @@ function diagRenderVerifCupo(cupo) {
 
     el.innerHTML = `
         <div class="diag-verif-cupo">
-            <div class="diag-verif-cupo-titulo">Cupo de la cuenta de verificación (${escHtml(cupo.email)})</div>
-            ${filas}
-            <div class="diag-verif-cupo-row"><span>Global</span><span>${globalTxt}</span></div>
+            <div class="diag-verif-cupo-row"><span>Cupo global — ${escHtml(cupo.email || '')}</span><span>${globalTxt}</span></div>
             ${warn}
-            <button class="diag-btn secondary" style="margin-top:8px;" id="diag-btn-recargar-cupo" onclick="diagRecargarCupoVerif()">🔋 Recargar cupo</button>
         </div>`;
 }
 
-// El comando queda SIEMPRE visible en la tarjeta (pedido del operador) — destacado si la
+// El comando queda SIEMPRE visible y ARRIBA de todo (pedido del operador) — destacado si la
 // verificación está vencida (>7 días o el último reporte fue error), discreto si está al día.
+// El botón de recarga de cupo va al lado del de copiar: son las 2 acciones de la tarjeta.
 function diagRenderVerifComando(vencida) {
     const el = document.getElementById('diag-verif-comando');
     if (!el) return;
     const tono = vencida ? 'destacado' : 'discreto';
-    // Los requisitos NO son decorativos: si la app no está abierta ANTES de pedir el
-    // comando, computer-use no la encuentra (su resolver busca entre apps instaladas y
-    // CORRIENDO) y la corrida no puede arrancar. Verificado el 2026-08-27.
     el.innerHTML = `
         <div class="diag-verif-cmd-block ${tono}">
-            ${vencida ? '<div>⚠️ Hace tiempo que no se verifica contra el PJN real, o el último resultado tuvo un error.</div>' : ''}
+            ${vencida ? '<div style="margin-bottom:6px;">⚠️ Hace tiempo que no se verifica contra el PJN real, o el último resultado tuvo un error.</div>' : ''}
             <div class="diag-verif-cmd-line">
-                <span>${vencida ? 'Pedile esto a Claude:' : 'Para volver a verificar:'}</span>
                 <span class="diag-verif-cmd-text">corré la prueba diaria de la app</span>
-                <button class="diag-btn secondary" onclick="diagCopyVerifCmd()" title="Copiar comando">📋</button>
-            </div>
-            <div class="diag-verif-req">
-                <strong>Antes de pedirlo:</strong>
-                1) Abrí la app <em>Procurador SCW</em> y dejala en la pantalla de login o ya logueada
-                (las credenciales de <code>procuradortool@gmail.com</code> están guardadas en la app —
-                alcanza con un clic en "Iniciar Sesión").
-                2) Aprobá el acceso de computer-use cuando aparezca el pedido.
-                <br><span style="opacity:.85">La app tiene que estar <strong>corriendo antes</strong> de pedir el comando: si está cerrada, computer-use no la detecta y la corrida no arranca.</span>
+                <button class="diag-btn secondary" id="diag-btn-copy-verif" onclick="diagCopyVerifCmd()" title="Copiar comando">📋</button>
+                <button class="diag-btn secondary" id="diag-btn-recargar-cupo" onclick="diagRecargarCupoVerif()" title="Recargar el cupo de la cuenta de verificación">🔋 Recargar cupo</button>
             </div>
         </div>`;
 }
 
 window.diagCopyVerifCmd = function() {
     navigator.clipboard.writeText('corré la prueba diaria de la app').then(() => {
-        const btn = document.querySelector('#diag-verif-comando .diag-btn');
+        const btn = document.getElementById('diag-btn-copy-verif');
         if (!btn) return;
         btn.textContent = '✅';
         setTimeout(() => { btn.textContent = '📋'; }, 1500);
@@ -4151,7 +4187,9 @@ window.diagRecargarCupoVerif = async function() {
     } catch (e) {
         showToast(e.message || 'Error de conexión.', 'error');
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '🔋 Recargar cupo'; }
+        // El repintado de arriba reemplaza el botón, así que se re-obtiene del DOM vivo.
+        const btnAhora = document.getElementById('diag-btn-recargar-cupo');
+        if (btnAhora) { btnAhora.disabled = false; btnAhora.textContent = '🔋 Recargar cupo'; }
     }
 };
 
