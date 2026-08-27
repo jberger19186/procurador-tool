@@ -248,6 +248,15 @@ if (DEMO_MODE) {
         })),
     }));
 
+    // Sugerencias y Partes de Monitor — sin fixture propio para D3, pero
+    // TIENEN que vaciarse igual: el seed de /verify (`FCR 99999/2026 DEMO
+    // c/ TEST s/ VERIFY`, `DON COCHO`, `LA TOSTADORA MODERNA`) se coló en
+    // la primera captura real de D3 (el panel de "El Monitor encontró 1
+    // caso nuevo" de Bitácora lo mostraba sin querer) — hallazgo real de
+    // esa verificación, no anticipado al escribir el resto de este bloque.
+    SUGERENCIAS.length = 0;
+    PARTES.length = 0;
+
     console.log('⚠ Modo DEMO activo — sirviendo el dataset de la demo (Etapa 1.6), no el seed de /verify.');
 }
 

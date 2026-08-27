@@ -20,7 +20,12 @@
 > reusable como estaba (privada, atrapada en `main.js`, que requiere Electron) — se extrajo a
 > `electron-app/monitor/generarVisorMonitoreo.js`, un cambio real de código de producto (verificado,
 > sin cambio de comportamiento).
-> Sigue D3 (pipeline de captura automatizada) — no se produjo ninguna captura de producción todavía.
+> **D3 EJECUTADA el mismo día** — 3 pipelines de captura (`backend-server/dev-tools/demo-capture/`),
+> 32/36 pasos automatizables capturados con Playwright real (visores, portal, y la app Electron viva
+> por CDP) y versionados en `backend-server/public/landing/demo/assets/`. Detalle completo en
+> [`demo-guion.md` §12](demo-guion.md#12-d3-ejecutado-2026-08-27--3236-pasos-capturados-3-pipelines-verificados).
+> Sigue D4 (capturas manuales de extensión + PJN) y D5 (construcción del tour, incluidos los 3
+> mockups de 6.6-6.8).
 
 ---
 
@@ -284,7 +289,7 @@ inexistente. Ver §0.1, hallazgo 2.
 
 ---
 
-### D3 — Pipeline de captura automatizado 🟢 *sin el operador*
+### D3 — Pipeline de captura automatizado ✅ EJECUTADA (2026-08-27, 32/36) *sin el operador*
 
 | | |
 |---|---|

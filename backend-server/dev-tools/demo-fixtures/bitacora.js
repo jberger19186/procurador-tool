@@ -21,6 +21,15 @@ function isoAt(diasOffset, hora = 12, minuto = 0) {
   return d.toISOString();
 }
 
+// El portal espera `situacion_fecha` como fecha ISO parseable (bitFormatUtcDate()
+// en app.js) — pasarle el string de display "DD/MM/AAAA" tal cual da una fecha
+// inválida que el portal renderiza como "()" vacío (hallazgo real de D3, visto
+// en la propia captura de la ficha de Mis Expedientes antes de este fix).
+function ddmmaaaaAIsoMediodia(ddmmaaaa) {
+  const [dd, mm, aaaa] = ddmmaaaa.split('/');
+  return new Date(`${aaaa}-${mm}-${dd}T12:00:00.000Z`).toISOString();
+}
+
 // Fichas de "Expedientes seguidos" — 3 de los 4 expedientes del set (el 4to,
 // FCR 00004/2024, se deja sin seguir a propósito para que en el capítulo 4
 // del Monitor se vea la diferencia entre "ya seguido" y "sin seguir").
@@ -32,7 +41,7 @@ const BITACORA_FICHAS = [
     caratula: EXPEDIENTES[0].caratula,
     dependencia: EXPEDIENTES[0].dependencia,
     situacion: EXPEDIENTES[0].situacion,
-    situacion_fecha: EXPEDIENTES[0].ultima_actuacion,
+    situacion_fecha: ddmmaaaaAIsoMediodia(EXPEDIENTES[0].ultima_actuacion),
     creado_en: isoAt(-30),
   },
   {
@@ -42,7 +51,7 @@ const BITACORA_FICHAS = [
     caratula: EXPEDIENTES[1].caratula,
     dependencia: EXPEDIENTES[1].dependencia,
     situacion: EXPEDIENTES[1].situacion,
-    situacion_fecha: EXPEDIENTES[1].ultima_actuacion,
+    situacion_fecha: ddmmaaaaAIsoMediodia(EXPEDIENTES[1].ultima_actuacion),
     creado_en: isoAt(-18),
   },
   {
@@ -52,7 +61,7 @@ const BITACORA_FICHAS = [
     caratula: EXPEDIENTES[2].caratula,
     dependencia: EXPEDIENTES[2].dependencia,
     situacion: EXPEDIENTES[2].situacion,
-    situacion_fecha: EXPEDIENTES[2].ultima_actuacion,
+    situacion_fecha: ddmmaaaaAIsoMediodia(EXPEDIENTES[2].ultima_actuacion),
     creado_en: isoAt(-60),
   },
 ];

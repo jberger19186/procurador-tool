@@ -488,3 +488,100 @@ no introducir una regresión en el andamio que ya usa la campaña `/verify`. `st
 sí (reusar `tests/daily/electron_driver.py` para conectar por CDP a la app real, recorrer los pasos
 del guion, aplicar la sustitución en el momento correcto — regla de oro §0.6 — y sacar los
 screenshots), más el driver equivalente para los stubs del portal.
+
+---
+
+## 12. D3 ejecutado (2026-08-27) — 32/36 pasos capturados, 3 pipelines verificados
+
+**Entregable real, en `backend-server/dev-tools/demo-capture/`:**
+- `capture_common.py` — constantes compartidas (viewport 1280×800 fijo, resolución de rutas de
+  salida a `backend-server/public/landing/demo/assets/<capítulo>/<paso>.png`).
+- `capture_visores.py` — pipeline 1: abre los visores YA generados por D2 (regenerándolos primero,
+  para que la captura siempre refleje el fixture actual) servidos por un HTTP simple local, sin
+  Electron ni cuenta real. Cubre 2.4-2.5, 3.3-3.4, 4.5-4.6, y **5.1** (la barra de 5 acciones del
+  modal de detalle vive DENTRO de este visor, no en el portal — hallazgo real: el primer intento de
+  D2 la había dejado con `BITACORA_RUNTIME.enabled=false`, corregido acá).
+- `capture_portal.py` — pipeline 2: conduce `stub-portal.js --demo` (D2). Cubre 5.2-5.7 y 7.1-7.5.
+- `capture_electron.py` — pipeline 3: la app Electron VIVA por CDP. Cubre 2.1-2.3, 3.1-3.2, 3.5,
+  4.1-4.3, 6.1-6.5.
+
+**32 de 36 pasos automatizables capturados.** Los 4 que faltan: 4.4 (deliberadamente NO se captura
+por separado — el propio §4 ya había decidido dejar esa demostración en 5.1, ver la nota "no en los
+dos, redundante") y **6.6-6.8, que no dependen de ningún sistema** (son mockups: un editor de texto
+genérico + una interfaz de chat de IA neutra) — quedan para D5, no son un pendiente de D3.
+
+**Decisión del operador, vía pregunta explícita:** no existe todavía una cuenta de demo dedicada en
+producción — D3 necesitaba loguearse de verdad contra el backend real para la mitad de la app
+Electron (no hay stub para el desktop). Ante la elección entre usar la cuenta de verificación ya
+logueada en esta máquina (con el riesgo de que sus partes/expedientes reales aparecieran en
+pantalla) o pausar a esperar una cuenta nueva, **el operador eligió la cuenta de verificación**,
+asumiendo que la sustitución por DOM cubriera lo que haga falta.
+
+**Hallazgo real, no cubierto por el spike de §0.1:** el spike había probado sustituir el chip de
+usuario y el login, pero el modal de Monitor de Partes muestra el estado REAL de la cuenta al
+abrirse — la pestaña Partes trae las partes que la cuenta de verificación tenga guardadas de verdad
+(potencialmente `DON COCHO`/`LA TOSTADORA MODERNA`, los mismos nombres que este guion ya había
+decidido no usar en material público — ver §10). `demo-anonimizar.js` no cubría este caso.
+**Resuelto reasignando la variable de caché `_monitorPartes` del propio `renderer.js` y llamando a
+la función REAL `renderizarListaPartes()`** — no una tabla hecha a mano, el mismo código que pinta
+en producción, con datos falsos — inmediatamente después de que el fetch real termina y ANTES de
+capturar (misma regla de oro del §0.1: sustituir después de llegar a la pantalla, nunca antes).
+Mismo mecanismo para la pestaña Expedientes, sobreescribiendo `#monitor-exp-tbody` directamente (acá
+sin variable de caché reasignable — el dato va derecho del IPC al DOM — así que se reconstruye el
+`<tr>` exacto que arma `verExpedientesMonitor()` en `renderer.js`, columna por columna).
+**Verificado visualmente que funcionó:** la captura de 4.2 muestra únicamente "FCR · LÓPEZ CARLOS",
+ningún nombre de la cuenta de verificación.
+
+**Segundo hallazgo real: ningún paso de "estado en curso" o "resultado" dispara nada real.** El
+guion ya pedía esto explícitamente para 2.3/6.3/6.4 ("evita gastar cupo", "no un GIF real de la
+corrida") — se extendió el mismo criterio a 2.2, 3.5 y 6.2 (archivo "cargado" sin diálogo nativo) y
+se aplicó de la forma más fiel posible: en vez de maquetar HTML a mano, se llama a las funciones
+reales del renderer con datos falsos — `addLog()` para las líneas de consola (la misma función que
+usa la app para cualquier log real), `markdownSetArchivo()` para el estado de dropzone cargado. Cero
+click en "▶ Procurar", "Confirmar", "▶ Ejecutar", "📥 Consulta Inicial", "🔍 Buscar Novedades", "▶
+Procesar" ni "📁 Seleccionar .txt/PDF" en todo el pipeline — confirmado por lectura del propio script
+antes de correrlo, no solo por resultado.
+
+**Detalle técnico: por qué el build usado es el LOCAL (`electron-app/dist/win-unpacked/`), no el
+instalado.** `tests/daily/electron_driver.py` lanza el `.exe` instalado (2.7.50, sin Markdown — ver
+§0.1 del plan). `capture_electron.py` reusa las piezas sueltas de ese módulo (`_esperar_cdp`,
+`_login_si_hace_falta`, `assert_no_instance_running`, `close_app`) pero lanza el build local 2.7.51
+en su lugar — la única forma de capturar el capítulo 6 (Markdown), que depende de ese release. Cero
+duplicación de la lógica de CDP/login en sí.
+
+**Verificado end-to-end, corrida real, primera vez sin iterar:** las 14 capturas de
+`capture_electron.py` salieron bien en la primera corrida completa (arranque del build local, login
+con la cuenta recordada, sustitución de chip aplicada, los 5 pasos de Procuración/Informe/Monitor/
+Markdown, cierre limpio de la app confirmado por `close_app()`). Las 18 de
+`capture_visores.py`/`capture_portal.py` necesitaron 2 rondas de fixes reales, encontrados
+verificando cada imagen (no solo corriendo el script):
+- El PDF placeholder de D2 salía en blanco en el Chromium que trae Playwright — **no tiene el visor
+  de PDF integrado** (confirmado con un PDF mínimo de referencia conocido-funcional, no solo con el
+  propio placeholder). Fix: `channel="chrome"` (el Chrome real instalado) en vez del Chromium por
+  defecto.
+- El mismo placeholder, ya con más contenido (carátula + movimientos, agregado en esta misma
+  verificación para que la captura 3.4 no fuera un ".pdf" de una sola línea), salía con las tildes
+  corrompidas (`GONZ\`LEZ` en vez de `GONZÁLEZ`) — el PDF no declaraba `/Encoding
+  /WinAnsiEncoding`, así que el visor interpretaba los bytes con la codificación propia de Helvetica
+  (sin acentos). Un em dash (fuera del rango Latin-1 con el que se escribe el archivo) se corrompía
+  igual — normalizado a un guion simple antes de escribir.
+- `stub-portal.js --demo` dejaba pasar el `SUGERENCIAS`/`PARTES` del seed de `/verify` sin vaciar
+  (`FCR 99999/2026 DEMO c/ TEST s/ VERIFY`, visible en la primera captura real de Bitácora) — D2 no
+  lo había cubierto porque esos 2 arrays no tienen fixture propio en la demo. Vaciados explícitamente
+  en el bloque `--demo`.
+- La ficha de "Mis Expedientes" mostraba "Situación actual: EN LETRA ()" con paréntesis vacíos — el
+  fixture pasaba `situacion_fecha` como el string de display `"20/08/2026"`, no como fecha ISO
+  parseable, y el portal la descarta silenciosamente. Agregado un conversor `DD/MM/AAAA → ISO` en
+  `bitacora.js`.
+- Un toast de "Vencimiento calculado" (de la calculadora de plazos, que sí funcionó correctamente en
+  vivo) quedaba colado encima de la siguiente captura (Mi Plan) por no esperar a que se fuera solo.
+
+**Higiene:** `.playwright-mcp/` y las capturas de diagnóstico (`_diag*.png`, PDFs/HTML de prueba)
+limpiadas del repo en cada verificación — ninguna quedó commiteada. `backend-server/public/landing/
+demo/assets/` **SÍ se versiona** (a diferencia de `demo-fixtures/output/`) — es el entregable final
+del bloque, no un scratch regenerable sin costo (regenerarlo requiere la app Electron real + la
+cuenta de verificación, no es gratis).
+
+**Pendiente real para D5 (no bloquea nada de D3):** los 3 mockups de 6.6-6.8, y la decisión de qué
+cuenta usar si se regenera esto más adelante (la de verificación sigue siendo la única disponible
+hasta que exista una cuenta de demo dedicada).

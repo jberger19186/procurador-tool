@@ -27,9 +27,12 @@ const path = require('path');
 const { generarVisorHTML } = require('../../../electron-app/informe/generador_visor');
 const { generarVisorMonitoreo } = require('../../../electron-app/monitor/generarVisorMonitoreo');
 
+const { EXPEDIENTES } = require('./expedientes');
 const { INFORME_INDIVIDUAL_RESUMEN, INFORME_LOTE_RESUMEN } = require('./informe');
 const { PROCURACION_INDIVIDUAL, PROCURACION_LOTE } = require('./procuracion');
+const { CUENTA_DEMO } = require('./cuenta');
 const {
+  PARTE_DEMO,
   MONITOR_RESULTADOS_INICIAL,
   MONITOR_RESULTADOS_NOVEDADES,
   BITACORA_INFO_MONITOR,
@@ -53,14 +56,41 @@ function asegurarDirectorio() {
 // Ningún generador de PDFs está disponible acá (backend-server no depende de
 // pdfkit/puppeteer para esto) — se arma el PDF a mano con sintaxis mínima.
 // ───────────────────────────────────────────────────────────────────────────
-function crearPdfPlaceholder(rutaDestino, tituloTexto) {
-  const textoEscapado = tituloTexto.replace(/[\\()]/g, (c) => `\\${c}`);
-  const contenidoStream = `BT /F1 18 Tf 50 700 Td (${textoEscapado}) Tj ET`;
+// El archivo se escribe con `fs.writeFileSync(..., 'latin1')`, que trunca a
+// 1 byte cualquier carácter fuera de Latin-1 (U+0000-U+00FF) — un em dash
+// (U+2014, fuera de rango) se convertía en basura silenciosa, confirmado
+// visualmente contra el PDF generado. Se normaliza ANTES de escapar.
+const NORMALIZAR_FUERA_DE_LATIN1 = { '—': '-', '–': '-', '‘': "'", '’': "'", '“': '"', '”': '"' };
+function normalizarParaLatin1(s) {
+  return String(s).replace(/[—–‘’“”]/g, (c) => NORMALIZAR_FUERA_DE_LATIN1[c]);
+}
+
+function crearPdfPlaceholder(rutaDestino, lineas) {
+  const escapar = (s) => normalizarParaLatin1(s).replace(/[\\()]/g, (c) => `\\${c}`);
+  // 1ra línea más grande (título), el resto en tamaño de cuerpo — para que
+  // la captura 3.4 del guion se vea como un informe real y no un test de
+  // "hola mundo" de una sola línea.
+  // Recorte simple por cantidad de caracteres — a 12pt Helvetica, ~90
+  // caracteres es lo máximo que entra en el ancho útil de la página
+  // (612pt - 2×50pt de margen) sin desbordar el borde derecho.
+  const recortar = (s) => (s.length > 82 ? `${s.slice(0, 79)}...` : s);
+  const comandos = lineas.map((linea, i) => {
+    const tam = i === 0 ? 18 : 12;
+    const salto = i === 0 ? 0 : 22;
+    return `/F1 ${tam} Tf 0 -${salto} Td (${escapar(recortar(linea))}) Tj`;
+  });
+  const contenidoStream = `BT 50 700 Td ${comandos.join(' ')} ET`;
   const objetos = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     '<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    // /Encoding explícito: sin esto, un visor de PDF usa la codificación
+    // PROPIA de Helvetica (StandardEncoding), que no tiene tildes/Ñ — el
+    // fixture tiene "GONZÁLEZ"/"JURÍDICO" reales y salían corrompidos
+    // ("GONZ`LEZ") hasta agregar esto, confirmado visualmente contra el PDF
+    // generado, no supuesto. WinAnsiEncoding sí cubre el rango acentuado
+    // español y coincide con cómo Node escribe el archivo ('latin1').
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
     `<< /Length ${contenidoStream.length} >>\nstream\n${contenidoStream}\nendstream`,
   ];
 
@@ -92,10 +122,16 @@ function crearPdfsParaResumen(resumen) {
   resumen.forEach((item) => {
     if (!item.ok) return;
     const nombre = nombrePdf(item.expediente);
-    crearPdfPlaceholder(
-      path.join(OUTPUT_DIR, nombre),
-      `Informe (demo) - ${item.expediente}`
-    );
+    const exp = EXPEDIENTES.find((e) => e.expediente === item.expediente);
+    const lineas = [`Informe de expediente (demo) — ${item.expediente}`];
+    if (item.caratula) lineas.push(item.caratula);
+    if (exp) {
+      lineas.push(`${exp.dependencia} · ${exp.situacion} · Últ. act.: ${exp.ultima_actuacion}`, '');
+      lineas.push('MOVIMIENTOS:');
+      exp.movimientos.forEach((m) => lineas.push(`${m.fecha}  ${m.tipo}  —  ${m.detalle}`));
+    }
+    lineas.push('', 'Generado por Procurador SCW — documento de demostración, sin validez procesal.');
+    crearPdfPlaceholder(path.join(OUTPUT_DIR, nombre), lineas);
   });
 }
 
@@ -192,11 +228,16 @@ function generarProcuracion() {
       `</script>`;
     let html = templateOriginal.replace('<!-- DATOS_EMBEBIDOS -->', bloqueDatos);
     // Mismo criterio que F2.1 en main.js: Bitácora se inyecta reemplazando su
-    // propio marcador, deshabilitada acá porque este capítulo no la necesita
-    // (Bitácora tiene su propio capítulo 5, con fixtures propios).
+    // propio marcador. HABILITADA (a diferencia del primer intento de D2):
+    // D3 (demo-guion.md §5.1) necesita capturar la barra de 5 acciones del
+    // modal de detalle DESDE este mismo visor — es donde vive de verdad, no
+    // en el capítulo 5 (que solo cubre el lado portal de Bitácora). Un caso
+    // ya "seguido" (CIV 00002/2024) para mostrar el badge 📁, el otro
+    // (FCR 00001/2024) sin seguir para que su modal muestre la barra
+    // completa de 5 botones, incluido "📌 Guardar caso".
     html = html.replace(
       '<!-- BITACORA_RUNTIME -->',
-      '<script>window.BITACORA_RUNTIME = { enabled: false, seguidos: [] };</script>'
+      `<script>window.BITACORA_RUNTIME = { enabled: true, seguidos: ${JSON.stringify(['CIV 00002/2024'])}, ssoToken: null };</script>`
     );
     const nombre = `${nombrePrefijo}_visor_${tsArchivo()}.html`;
     return escribirVisor(nombre, html);
@@ -210,6 +251,24 @@ function generarProcuracion() {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────
+// Volcado a JSON para capture_electron.py (D3, pipeline 3): los fixtures
+// están escritos en JS y ese script es Python — en vez de retipear los
+// mismos datos en 2 lenguajes (la misma clase de duplicación que ya
+// documentó 2 bugs reales en este proyecto — ver la cabecera de
+// generarVisorMonitoreo.js), se vuelcan acá una sola vez a JSON, que Python
+// lee tal cual. Va a `output/` (gitignored, se regenera en cada corrida).
+// ───────────────────────────────────────────────────────────────────────────
+function exportarFixturesParaElectron() {
+  const datos = {
+    cuenta: CUENTA_DEMO,
+    parteDemo: PARTE_DEMO,
+    expedientes: EXPEDIENTES,
+    monitorExpedientesInicial: MONITOR_RESULTADOS_INICIAL[0].expedientes,
+  };
+  fs.writeFileSync(path.join(OUTPUT_DIR, 'fixtures-electron.json'), JSON.stringify(datos, null, 2));
+}
+
 async function main() {
   asegurarDirectorio();
   console.log('Generando visores de la demo (fixtures sintéticos, funciones reales)…\n');
@@ -222,6 +281,8 @@ async function main() {
 
   console.log('\nMonitor de partes:');
   generarMonitor();
+
+  exportarFixturesParaElectron();
 
   console.log(`\nListo. Salida en: ${OUTPUT_DIR}`);
 }
