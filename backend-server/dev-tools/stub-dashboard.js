@@ -922,7 +922,10 @@ http.createServer(async (req, res) => {
         }
 
         // ── Diagnóstico ──
-        if (p === '/admin/smoke-tests/latest' && req.method === 'GET') return json(res, { success: true, results: { api: null, pjn: null, extension: null } });
+        if (p === '/admin/smoke-tests/latest' && req.method === 'GET') return json(res, { success: true, results: {
+            api: null, pjn: null, extension: null,
+            canary: { ok: true, timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), message: 'Todos los selectores presentes' },
+        } });
         if (p === '/admin/smoke-tests/run-api' && req.method === 'POST') {
             await readBody(req);
             const result = { ok: true, passed: 8, total: 8, timestamp: new Date().toISOString(), duration: 1200,

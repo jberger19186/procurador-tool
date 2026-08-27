@@ -3772,6 +3772,11 @@ async function renderDiagnostico() {
         .diag-btn.secondary { background:#f3f4f6; color:#374151; }
         .diag-btn.secondary:hover:not(:disabled) { background:#e5e7eb; }
         .diag-pjn-cmd { font-family:monospace; font-size:12px; background:#f3f4f6; padding:6px 12px; border-radius:6px; color:#1f2937; flex:1; overflow-x:auto; }
+        /* Estado del canary diario (canary-test.js, cron 07:00) — vive DENTRO de la
+           tarjeta "Portal PJN" en vez de una tarjeta propia: son 2 chequeos del mismo
+           portal (uno manual/48 checks, otro automático/3 selectores), no 2 sistemas. */
+        .diag-canary-line { padding:8px 18px; font-size:12px; color:#6b7280; border-bottom:1px solid #f3f4f6; display:flex; align-items:center; gap:6px; }
+        .diag-canary-line.fail { color:#b91c1c; background:#fef2f2; }
         .diag-verif-flujos { padding:6px 18px 2px; }
         .diag-verif-flujo { padding:7px 0; border-bottom:1px solid #f3f4f6; }
         .diag-verif-flujo:last-child { border-bottom:none; }
@@ -3822,6 +3827,7 @@ async function renderDiagnostico() {
                 </div>
                 <span class="diag-badge none" id="diag-pjn-badge">—</span>
             </div>
+            <div id="diag-pjn-canary" class="diag-canary-line">Cargando...</div>
             <div class="diag-log" id="diag-pjn-log">Esperando ejecución...</div>
             <div class="diag-footer" style="flex-wrap:wrap; gap:8px;">
                 <span class="diag-pjn-cmd">node scripts/smoke-test-pjn.js</span>
@@ -3883,7 +3889,7 @@ async function renderDiagnostico() {
         const data = await apiFetch('/admin/smoke-tests/latest');
         if (data.results) {
             diagRenderApi(data.results.api);
-            diagRenderPjn(data.results.pjn);
+            diagRenderPjn(data.results.pjn, data.results.canary);
             diagRenderExtension(data.results.extension);
         }
     } catch (e) {
@@ -3940,7 +3946,7 @@ function diagRenderApi(result) {
     lastEl.textContent  = `Última ejecución: ${diagRelativeTime(result.timestamp)}  —  ${(result.duration / 1000).toFixed(1)}s`;
 }
 
-function diagRenderPjn(result) {
+function diagRenderPjn(result, canary) {
     const logEl   = document.getElementById('diag-pjn-log');
     const badgeEl = document.getElementById('diag-pjn-badge');
     const lastEl  = document.getElementById('diag-pjn-last');
@@ -3949,14 +3955,31 @@ function diagRenderPjn(result) {
         logEl.innerHTML  = 'Sin ejecuciones previas.\n\nCorré el script local para ver resultados aquí:\n  node scripts/smoke-test-pjn.js';
         badgeEl.textContent = '—';
         lastEl.textContent  = 'Nunca ejecutado';
-        return;
+    } else {
+        logEl.innerHTML  = diagColorLog(result.logs.join('\n'));
+        logEl.scrollTop  = logEl.scrollHeight;
+        badgeEl.textContent = `${result.passed}/${result.total} ${result.ok ? '✅' : '❌'}`;
+        badgeEl.className   = `diag-badge ${result.ok ? 'ok' : 'fail'}`;
+        lastEl.textContent  = `Última ejecución: ${diagRelativeTime(result.timestamp)}  —  ${(result.duration / 1000).toFixed(1)}s`;
     }
 
-    logEl.innerHTML  = diagColorLog(result.logs.join('\n'));
-    logEl.scrollTop  = logEl.scrollHeight;
-    badgeEl.textContent = `${result.passed}/${result.total} ${result.ok ? '✅' : '❌'}`;
-    badgeEl.className   = `diag-badge ${result.ok ? 'ok' : 'fail'}`;
-    lastEl.textContent  = `Última ejecución: ${diagRelativeTime(result.timestamp)}  —  ${(result.duration / 1000).toFixed(1)}s`;
+    diagRenderCanary(canary);
+}
+
+// canary-test.js — cron diario 07:00, vigila los 3 selectores de login que también usa
+// testM2.js (el motor real de login de la automatización). Su resultado es un dato
+// aparte del smoke manual de arriba (result), por eso vive en su propia línea.
+function diagRenderCanary(canary) {
+    const el = document.getElementById('diag-pjn-canary');
+    if (!el) return;
+    if (!canary) {
+        el.textContent = '🐤 Canary diario: sin corridas reportadas todavía (cron 07:00).';
+        el.className = 'diag-canary-line';
+        return;
+    }
+    const icon = canary.ok ? '✅' : '❌';
+    el.innerHTML = `🐤 Canary diario: ${icon} ${escHtml(canary.message || '')} — ${diagRelativeTime(canary.timestamp)}`;
+    el.className = `diag-canary-line${canary.ok ? '' : ' fail'}`;
 }
 
 window.diagRunApi = async function() {

@@ -3,9 +3,17 @@
  *
  * Qué hace:
  *   1. Hace GET a la página de login del portal PJN
- *   2. Verifica que los selectores críticos existen en el HTML
+ *   2. Verifica que los selectores críticos existen en el HTML — son LOS MISMOS que
+ *      usa testM2.js (`input#kc-login`, `#username`, `#password`) para loguear en el
+ *      flujo real de procuración/informe/monitor; no es un check arbitrario, es la
+ *      única señal temprana de que el PJN cambió su login antes de que un cliente lo
+ *      reporte.
  *   3. Si algo falla → envía alerta por email
- *   4. Loggea el resultado (éxito o fallo)
+ *   4. Persiste el resultado en data/smoke-test-results.json (clave `canary`, mismo
+ *      archivo que maneja routes/admin.js) para que la tarjeta "Portal PJN" del
+ *      dashboard lo muestre — antes de esto, un fallo real solo se veía en el email
+ *      o leyendo el log del servidor a mano.
+ *   5. Loggea el resultado (éxito o fallo)
  *
  * Uso manual:   node canary-test.js
  * Cron diario:  0 7 * * * node /ruta/canary-test.js >> /var/log/procurador/canary.log 2>&1
@@ -16,6 +24,28 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const axios     = require('axios');
 const cheerio   = require('cheerio');
 const nodemailer = require('nodemailer');
+const fs        = require('fs');
+const path      = require('path');
+
+// Mismo archivo que _loadSmoke()/_saveSmoke() en routes/admin.js — escritura directa
+// por fs, no vía HTTP: este script corre desatendido por crontab, sin ningún token de
+// admin a mano (a diferencia de smoke-test-pjn.js, que lo corre un humano/Claude).
+const SMOKE_FILE = path.join(__dirname, '..', 'data', 'smoke-test-results.json');
+
+function guardarResultadoCanary(entry) {
+    let saved = { api: null, pjn: null, extension: null, canary: null };
+    try {
+        if (fs.existsSync(SMOKE_FILE)) saved = JSON.parse(fs.readFileSync(SMOKE_FILE, 'utf8'));
+    } catch (_) {}
+    saved.canary = entry;
+    try {
+        const dir = path.dirname(SMOKE_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(SMOKE_FILE, JSON.stringify(saved, null, 2));
+    } catch (err) {
+        log(`⚠️  No se pudo persistir el resultado en ${SMOKE_FILE}: ${err.message}`);
+    }
+}
 
 // ── URLs y selectores críticos del portal PJN ───────────────
 const PJN_LOGIN_URL = 'https://sso.pjn.gov.ar/auth/realms/pjn/protocol/openid-connect/auth?client_id=pjn-portal&redirect_uri=https%3A%2F%2Fportalpjn.pjn.gov.ar%2Fauth%2Fcallback&response_type=code&scope=openid';
@@ -89,6 +119,7 @@ async function runCanary() {
     } catch (err) {
         const msg = `❌ No se pudo acceder al portal PJN: ${err.message}`;
         log(msg);
+        guardarResultadoCanary({ ok: false, timestamp: new Date().toISOString(), message: `No se pudo acceder al portal: ${err.message}` });
         await enviarAlerta([{ nombre: 'Acceso al portal', selector: PJN_LOGIN_URL, error: err.message }]);
         process.exit(1);
     }
@@ -109,10 +140,15 @@ async function runCanary() {
 
     if (fallos.length > 0) {
         log(`\n⚠️  Canary FAIL — ${fallos.length} selector(es) no encontrado(s)`);
+        guardarResultadoCanary({
+            ok: false, timestamp: new Date().toISOString(),
+            message: `${fallos.length} selector(es) no encontrado(s): ${fallos.map(f => f.nombre).join(', ')}`,
+        });
         await enviarAlerta(fallos);
         process.exit(1);
     } else {
         log(`\n✅ Canary OK — todos los selectores presentes`);
+        guardarResultadoCanary({ ok: true, timestamp: new Date().toISOString(), message: 'Todos los selectores presentes' });
         process.exit(0);
     }
 }
