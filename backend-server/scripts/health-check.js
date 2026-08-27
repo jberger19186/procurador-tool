@@ -42,6 +42,7 @@ const execFileAsync = promisify(execFile);
 const { Pool } = require('pg');
 const mailer = require('../utils/mailer');
 const { decideHealthAlerts } = require('../utils/healthAlertCheck');
+const { checkIntegridadReferencial: checkIntegridadDb } = require('../utils/dbIntegrityChecks');
 
 const db = new Pool({
     user: process.env.DB_USER,
@@ -218,23 +219,9 @@ async function checkRestartsPm2(state) {
 
 async function checkIntegridadReferencial() {
     const id = 'integridad_referencial';
-    // Las 4 relaciones se verifican por LEFT JOIN (no information_schema): esto prueba
-    // el estado real de los datos, no solo que la constraint de FK exista en el schema.
-    const relaciones = [
-        { nombre: 'subscriptions.user_id → users', sql: `SELECT count(*) FROM subscriptions s LEFT JOIN users u ON u.id = s.user_id WHERE s.user_id IS NOT NULL AND u.id IS NULL` },
-        { nombre: 'payments.subscription_id → subscriptions', sql: `SELECT count(*) FROM payments p LEFT JOIN subscriptions s ON s.id = p.subscription_id WHERE p.subscription_id IS NOT NULL AND s.id IS NULL` },
-        { nombre: 'invoices.payment_id → payments', sql: `SELECT count(*) FROM invoices i LEFT JOIN payments p ON p.id = i.payment_id WHERE i.payment_id IS NOT NULL AND p.id IS NULL` },
-        { nombre: 'monitor_partes.user_id → users', sql: `SELECT count(*) FROM monitor_partes m LEFT JOIN users u ON u.id = m.user_id WHERE m.user_id IS NOT NULL AND u.id IS NULL` },
-    ];
     try {
-        const problemas = [];
-        for (const r of relaciones) {
-            const res = await db.query(r.sql);
-            const n = parseInt(res.rows[0].count, 10);
-            if (n > 0) problemas.push(`${r.nombre}: ${n} huérfano(s)`);
-        }
-        if (problemas.length > 0) return { id, ok: false, message: problemas.join(' · ') };
-        return { id, ok: true, message: '0 huérfanos en las 4 relaciones' };
+        const r = await checkIntegridadDb(db);
+        return { id, ...r };
     } catch (err) {
         return { id, ok: false, message: `error consultando la DB: ${err.message}` };
     }

@@ -2866,10 +2866,13 @@ router.get('/smoke-tests/latest', authenticateAdmin, (req, res) => {
 router.post('/smoke-tests/run-api', authenticateAdmin, async (req, res) => {
     const axios = require('axios');
     const https = require('https');
+    const jwt   = require('jsonwebtoken');
+    const { checkIntegridadReferencial } = require('../utils/dbIntegrityChecks');
 
     const t0Total = Date.now();
     const checks  = [];
     const logs    = [];
+    const db      = req.app.get('db');
 
     const BASE    = process.env.API_INTERNAL_URL || 'https://localhost:3443';
     const agent   = new https.Agent({ rejectUnauthorized: false });
@@ -2894,6 +2897,13 @@ router.post('/smoke-tests/run-api', authenticateAdmin, async (req, res) => {
         }
     }
 
+    // Checks de contenido (no solo status code) — Fase 2 de la mejora del smoke.
+    // Mismo array `checks`/`logs`, formato uniforme: `label` + `ok` + `detalle` en el log.
+    function pushContentCheck(label, ok, detalle) {
+        checks.push({ label, ok, detalle });
+        logs.push(`[${ts()}] ${ok ? '✅' : '❌'}  ${label.padEnd(42)} ${detalle}`);
+    }
+
     logs.push(`[${ts()}] ▶ Iniciando smoke tests API...`);
 
     await runCheck('GET',  '/health',                   null,                                200, '/health');
@@ -2907,7 +2917,7 @@ router.post('/smoke-tests/run-api', authenticateAdmin, async (req, res) => {
     // DB check
     const tDB = Date.now();
     try {
-        await req.app.get('db').query('SELECT 1');
+        await db.query('SELECT 1');
         const ms = Date.now() - tDB;
         checks.push({ label: 'PostgreSQL', ok: true, duration: ms });
         logs.push(`[${ts()}] ✅  PostgreSQL                               conectado  (${ms}ms)`);
@@ -2915,6 +2925,98 @@ router.post('/smoke-tests/run-api', authenticateAdmin, async (req, res) => {
         const ms = Date.now() - tDB;
         checks.push({ label: 'PostgreSQL', ok: false, duration: ms, error: err.message });
         logs.push(`[${ts()}] ❌  PostgreSQL                               ERROR: ${err.message}`);
+    }
+
+    // ── Fase 2 — checks de CONTENIDO, no solo status code ───────────────────
+    // Válidos en cualquier entorno (staging o prod) donde corra este endpoint — el CI
+    // los corre contra staging en cada push y debe poder fallar el build con ellos.
+
+    // 1. Camino feliz autenticado: firmar un token real para la cuenta de verificación
+    // (mismo CUIT que usa la Etapa 1.5, resuelto server-side — nunca hardcodear el id)
+    // y confirmar que /client/account responde con la FORMA esperada, no solo 200.
+    try {
+        const { rows } = await db.query(
+            'SELECT id, email, cuit FROM users WHERE cuit = $1',
+            [VERIFICATION_TEST_CUIT]
+        );
+        if (rows.length === 0) {
+            // La cuenta de verificación solo existe en producción — en staging (donde
+            // corre el CI en cada push) es un estado esperado, no un fallo: no puede
+            // romper el build por algo que nunca va a existir ahí.
+            pushContentCheck('Camino feliz: GET /client/account', true, `cuenta de verificación (CUIT ${VERIFICATION_TEST_CUIT}) no existe en este entorno — esperado fuera de producción`);
+        } else {
+            const testUser = rows[0];
+            const token = jwt.sign({ id: testUser.id, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '2m' });
+            const r = await ax({ method: 'GET', url: '/client/account', headers: { Authorization: `Bearer ${token}` } });
+            const acc = (r.data && r.data.account) || {};
+            const formaOk = r.status === 200
+                && r.data.success === true
+                && acc.email === testUser.email
+                && acc.cuit === testUser.cuit
+                && acc.plan && typeof acc.plan === 'object'
+                && acc.usage && typeof acc.usage === 'object';
+            pushContentCheck(
+                'Camino feliz: GET /client/account',
+                formaOk,
+                formaOk ? `200, email/cuit coinciden, forma correcta` : `status=${r.status}, body no tiene la forma esperada`
+            );
+        }
+    } catch (err) {
+        pushContentCheck('Camino feliz: GET /client/account', false, `error: ${err.message}`);
+    }
+
+    // 2. Contenido de /health — un 200 con el cuerpo roto (ej. database.status='error'
+    // pero el status HTTP quedó mal seteado) pasaría el check de status code igual.
+    try {
+        const r = await ax({ method: 'GET', url: '/health' });
+        const body = r.data || {};
+        const ok = body.status === 'ok' && body.database?.status === 'ok';
+        pushContentCheck('/health — contenido', ok, ok ? `status=ok, db=ok` : `status=${body.status}, db=${body.database?.status}`);
+    } catch (err) {
+        pushContentCheck('/health — contenido', false, `error: ${err.message}`);
+    }
+
+    // 3. Headers de seguridad (B-5): CSP tiene que seguir activa.
+    try {
+        const r = await ax({ method: 'GET', url: '/health' });
+        const csp = r.headers['content-security-policy'];
+        const ok = !!csp && csp.includes("default-src 'self'");
+        pushContentCheck('Headers de seguridad (CSP)', ok, ok ? 'Content-Security-Policy presente' : `CSP ausente o incompleta: "${csp || ''}"`);
+    } catch (err) {
+        pushContentCheck('Headers de seguridad (CSP)', false, `error: ${err.message}`);
+    }
+
+    // 4. Rate limiter (RI-3): el limiter corre ANTES del auth en /license, así que un
+    // request sin token igual debe traer los headers RateLimit-* (standardHeaders:true).
+    try {
+        const r = await ax({ method: 'GET', url: '/license/execution/start' });
+        const hasHeader = !!r.headers['ratelimit-limit'];
+        pushContentCheck('Rate limiter activo (/license)', hasHeader, hasHeader ? `RateLimit-Limit: ${r.headers['ratelimit-limit']}` : 'sin header RateLimit-Limit');
+    } catch (err) {
+        pushContentCheck('Rate limiter activo (/license)', false, `error: ${err.message}`);
+    }
+
+    // 5. Tablas críticas de Bitácora/Monitor responden (mismo patrón que
+    // dev-tools/smoke-payments.js, extendido a los módulos que ese script no cubre).
+    try {
+        const tablas = ['expedientes_seguidos', 'bitacora_entries', 'monitor_partes', 'monitor_expedientes'];
+        const fallidas = [];
+        for (const t of tablas) {
+            try { await db.query(`SELECT count(*) FROM ${t}`); }
+            catch (e) { fallidas.push(`${t} (${e.message})`); }
+        }
+        pushContentCheck('Tablas Bitácora/Monitor accesibles', fallidas.length === 0, fallidas.length === 0 ? `${tablas.length} tablas OK` : fallidas.join(' · '));
+    } catch (err) {
+        pushContentCheck('Tablas Bitácora/Monitor accesibles', false, `error: ${err.message}`);
+    }
+
+    // 6. Integridad referencial — mismas 4 relaciones que health-check.js (Fase 1),
+    // acá contra el entorno donde corre este endpoint (staging vía CI, prod vía tarjeta).
+    try {
+        const r = await checkIntegridadReferencial(db);
+        pushContentCheck('Integridad referencial (4 relaciones)', r.ok, r.message);
+    } catch (err) {
+        pushContentCheck('Integridad referencial (4 relaciones)', false, `error: ${err.message}`);
     }
 
     const totalMs = Date.now() - t0Total;
