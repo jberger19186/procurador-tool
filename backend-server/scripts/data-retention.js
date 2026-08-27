@@ -28,9 +28,14 @@ async function run() {
         console.log('🧹 Iniciando limpieza de datos...\n');
 
         // 1. Logs de ejecución > 90 días
+        // Bug real encontrado el 2026-08-27 al ejecutar este script por primera vez desde
+        // que se escribió: usage_logs NO tiene columna `created_at` — la columna real es
+        // `execution_date` (confirmado contra database/schema.sql). El script nunca había
+        // corrido hasta ahora (H-1 de SEC-2, no estaba en el crontab), así que el bug
+        // quedó sin detectar todo este tiempo.
         const logsResult = await client.query(`
             DELETE FROM usage_logs
-            WHERE created_at < NOW() - INTERVAL '90 days'
+            WHERE execution_date < NOW() - INTERVAL '90 days'
         `);
         console.log(`✅ usage_logs eliminados: ${logsResult.rowCount}`);
 

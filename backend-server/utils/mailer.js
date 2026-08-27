@@ -491,6 +491,33 @@ async function sendVerificationAlert(tipo, { latest, daysSince } = {}) {
     );
 }
 
+// Mejora del smoke backend, Fase 1 — chequeo de salud de producción (health-check.js,
+// crontab diario, corre FUERA del proceso de Express a propósito: así puede avisar
+// aunque el backend esté caído). Un email por episodio (dedup en healthAlertCheck.js),
+// no uno por check por día.
+async function sendHealthAlert(failedChecks) {
+    const to = process.env.ALERT_EMAIL_TO;
+    if (!to) return;
+
+    const dashboardUrl = `${process.env.BASE_URL || 'https://api.procuradortool.com'}/dashboard`;
+    const filas = failedChecks.map(c =>
+        `<tr style="border-top:1px solid #f3f4f6"><td style="padding:8px 0;color:#6b7280;width:180px">${escapeHtml(c.id)}</td><td style="padding:8px 0">${escapeHtml(c.message)}</td></tr>`
+    ).join('');
+
+    await sendEmail(
+        to,
+        `⚠️ Salud del backend — ${failedChecks.length} chequeo${failedChecks.length === 1 ? '' : 's'} en rojo`,
+        emailLayout(`
+          <h3 style="font-size:16px;font-weight:700;color:#1a1a1a;margin:0 0 18px">El chequeo de salud automático detectó un problema</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            ${filas}
+          </table>
+          ${infoBox('Este aviso no se repite mientras el mismo chequeo siga en rojo — vuelve a llegar recién si se resuelve y falla de nuevo.', '#dc2626')}
+          ${btnPrimary(dashboardUrl, 'Ver en el dashboard →')}
+        `, '#dc2626')
+    );
+}
+
 // ─── Fase 5 — Emails de cobranza ──────────────────────────────────────────────
 
 async function sendInvoiceEmail(email, pdfUrl, numero) {
@@ -593,6 +620,7 @@ module.exports = {
     sendTicketReplyEmail,
     sendPasswordResetEmail,
     sendVerificationAlert,
+    sendHealthAlert,
     // Fase 5
     sendInvoiceEmail,
     sendPaymentFailedEmail,
