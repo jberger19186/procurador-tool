@@ -26,8 +26,14 @@ from daily import quota as quota_mod
 from daily.config import VERIFICATION_USER_ID
 
 
-def run() -> bool:
-    """Devuelve True si está todo en orden para arrancar la corrida."""
+def run(retornar_detalle: bool = False):
+    """
+    Devuelve True/False si está todo en orden para arrancar la corrida.
+    Con `retornar_detalle=True` devuelve `(ok, detalle)`, donde `detalle`
+    trae el snapshot de cupo posterior a la recarga (si hubo) y las partes —
+    útil para el resumen final del CLI (F3), que compara cupo antes/después.
+    Retrocompatible: sin el flag, el contrato es exactamente el de antes.
+    """
     print("=== Pre-vuelo: prueba diaria de la app ===\n")
 
     print("1) Cupo de la cuenta de verificación")
@@ -38,7 +44,8 @@ def run() -> bool:
     if estado_cupo["bloqueado"]:
         print(f"\n❌ BLOQUEADO: {estado_cupo['motivo_bloqueo']}")
         print("   Salida inmediata: Usos Extra o Ajustes Manuales en la ficha del usuario 250.")
-        return False
+        detalle = {"cupo": estado_cupo["cupo"], "recargas_restantes": estado_cupo.get("recargas_restantes")}
+        return (False, detalle) if retornar_detalle else False
 
     print("\n2) Partes del Monitor")
     user_token = get_token_for_user_id(VERIFICATION_USER_ID, role="user")
@@ -51,6 +58,9 @@ def run() -> bool:
         print("   (F2 resuelve esto con la parte descartable DON COCHO — §6.6 de la propuesta)")
 
     print("\n✅ Pre-vuelo OK — se puede arrancar la corrida.")
+    if retornar_detalle:
+        detalle = {"cupo": estado_cupo["cupo"], "recargas_restantes": estado_cupo.get("recargas_restantes"), "partes": partes}
+        return True, detalle
     return True
 
 

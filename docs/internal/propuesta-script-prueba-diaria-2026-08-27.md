@@ -1,7 +1,11 @@
 # Propuesta — llevar la prueba diaria a un script
 
-> **Estado:** propuesta, NO aprobada, sin código escrito.
-> **Fecha:** 2026-08-27 · **Autor:** sesión de diseño (Opus, solo análisis).
+> **Estado:** aprobada y ejecutada — **F0, F1, F2 y F3 en código, verificadas
+> y (F2) confirmadas contra el PJN real.** Falta F4 (botón de ayuda en el
+> dashboard). F5 (desatendido) sigue sin recomendarse. Ver `tests/daily/README.md`
+> para el punto de entrada operativo.
+> **Fecha:** 2026-08-27 · **Autor:** sesión de diseño (Opus, solo análisis) +
+> sesiones de ejecución (Sonnet, F0-F3).
 > **Origen:** pedido del operador tras la corrida manual del 2026-08-27, para
 > aprovechar la experiencia de esa corrida (documentada en `CLAUDE.md`, entrada
 > "cont. 18") en vez de repetirla a mano cada vez.
@@ -565,22 +569,45 @@ consumo de cupo coincidió exacto con el modelo documentado**: proc +1, batch
 
 ---
 
-### F3 — Orquestador + CLI + ejecutable
+### F3 — Orquestador + CLI + ejecutable — ✅ EJECUTADA (2026-08-27)
 **Modelo: Sonnet · Esfuerzo: medio · ~1 sesión**
 
-- un comando que encadena F1 → F2 → F1(reporte)
-- guard de instancia única (§6.2) y guard de `pytest` (§5)
-- salida legible: tabla de los 6 flujos, consumo de cupo real vs. esperado,
-  recargas restantes si hubo recarga, y **las pestañas que quedaron abiertas**
-- **ejecutable para doble clic** (pedido del operador): un `.ps1`/`.bat`
-  versionado en `tests/daily/` que activa el entorno y dispara la corrida — mismo
-  patrón que `dev-tools/reset-panel.ps1`, que ya existe. El `.exe` vía `ps2exe`
-  queda opcional y **gitignored**, igual que el del panel de reset.
-- **doble disparador documentado** en `CLAUDE.md` (§6.7): la frase con «con
-  computer use» sigue llevando al procedimiento manual
-- **una corrida real completa** contra el PJN, comparada contra la corrida manual
-  del 2026-08-27 (mismos expedientes, mismo consumo esperado:
-  `proc +1 · batch +1 · informe +3 · monitor +3 · global +6`)
+**Lo que se construyó:** `tests/daily/cli.py`, punto de entrada único —
+`python tests/daily/cli.py` (automático, invoca `ejecutar.py`) o
+`--asistido` (invoca `run.py`). No duplica lógica, solo despacha; ambos
+módulos siguen siendo ejecutables por separado. `tests/daily/resumen.py`
+(nuevo) compara el cupo consumido real contra el modelo documentado
+(`diff_cupo()`, submódulo por submódulo + global) y arma la tabla de salida
+final (`imprimir_resumen_final()`): flujos ok/error, cupo real vs. esperado,
+recargas restantes en la ventana de 24h, y las pestañas de Chrome que
+quedaron abiertas. `preflight.run()` ganó un parámetro opcional
+`retornar_detalle=True` (retrocompatible, verificado con `pytest -m daily`
+sin tocar la firma que ya usaba `test_daily_preflight.py`) para que
+`ejecutar.py`/`run.py` capturen el snapshot de cupo *antes* de correr y lo
+comparen contra el de *después* sin una segunda llamada innecesaria a la API.
+
+**Ejecutable de doble clic:** `tests/daily/correr-diario.ps1` — ASCII puro
+(mismo criterio que `dev-tools/reset-panel.ps1`, PS 5.1 lee `.ps1` como ANSI
+y los acentos rompen el parser), resuelve su propio directorio con fallback
+para un futuro `.exe` compilado con `ps2exe` (opcional, gitignored). Invoca
+`cli.py` con o sin `-Asistido`, y termina con `Read-Host` para que la
+consola no se cierre antes de que el operador lea el resumen.
+
+**Doble disparador, documentado en `CLAUDE.md`:** "corré la prueba diaria de
+la app" dispara el script (`cli.py`/`correr-diario.ps1`); "...con computer
+use" sigue llevando al procedimiento manual de §6.a — el texto en `run.py`
+que invita a correr los flujos a mano ya sugería exactamente esa segunda
+frase.
+
+**Sobre "una corrida real completa":** no se ejecutó una corrida nueva
+contra el PJN. `flujos.py`/`electron_driver.py` (la lógica que golpea al
+PJN) **no cambiaron en F3** — es exactamente el mismo código que F2 ya
+verificó de punta a punta el 2026-08-27 (6/6 ok, consumo de cupo exacto al
+modelo). F3 solo fusiona el punto de entrada y agrega el resumen de salida;
+gastar cupo real para re-probar un wrapper que no toca la ejecución habría
+sido puro costo sin cobertura nueva. Verificado en su lugar con
+`python -m py_compile` en los 5 archivos tocados y `pytest -m daily`
+confirmando la retrocompatibilidad de `preflight.run()`.
 
 ---
 

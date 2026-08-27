@@ -1,8 +1,9 @@
 """
 tests/daily/ejecutar.py — F2: dispara los 6 flujos reales contra el PJN vía
 `window.electronAPI`, sin ningún click ni diálogo nativo. Es el módulo que
-hoy reemplaza la corrida manual con computer-use; el pulido final (guard de
-`pytest`, ejecutable de doble clic, salida más prolija) es tarea de F3.
+reemplaza la corrida manual con computer-use. El punto de entrada
+recomendado es `cli.py` (F3), que expone este módulo como el modo por
+defecto — este archivo sigue siendo ejecutable directo si hace falta.
 
 🚨 Consume cupo real: proc +1, batch +1, informe +3 (compartido individual y
 lote), monitor +3 (1 por parte activa en el momento de "novedades" — incluye
@@ -31,10 +32,14 @@ if sys.stdout.encoding != "utf-8":
 if str(_TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(_TESTS_DIR))
 
+from helpers.auth import get_admin_token
+
 from daily import cierre as cierre_mod
 from daily import electron_driver
 from daily import flujos
 from daily import preflight as preflight_mod
+from daily import quota as quota_mod
+from daily import resumen as resumen_mod
 
 FLUJOS_REPORTADOS = ["proc", "batch", "informe", "informe_lote", "monitor", "monitor_inicial"]
 
@@ -43,13 +48,15 @@ def _log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
 
-async def _run_async() -> int:
+async def run_async() -> int:
     print("=" * 60)
     print("  F2 — Ejecución real de los 6 flujos contra el PJN")
     print("=" * 60 + "\n")
 
-    if not preflight_mod.run():
+    ok, detalle_pre = preflight_mod.run(retornar_detalle=True)
+    if not ok:
         return 1
+    cupo_antes = detalle_pre["cupo"]
 
     print("\nLanzando la app real y conectando por CDP...")
     proc, pw, browser, page = await electron_driver.launch_and_connect()
@@ -106,14 +113,21 @@ async def _run_async() -> int:
         await electron_driver.disconnect(pw)
 
     print("\nCerrando la app y reportando (F1)...")
-    resultado = cierre_mod.run(FLUJOS_REPORTADOS, desde_epoch=marca, notas="Corrida real vía tests/daily/ejecutar.py (F2)")
+    resultado = cierre_mod.run(FLUJOS_REPORTADOS, desde_epoch=marca, notas="Corrida real vía tests/daily/ejecutar.py (F2/F3, modo automático)")
+
+    admin_token = get_admin_token()
+    cupo_despues = quota_mod.get_quota(admin_token)
+    resumen_mod.imprimir_resumen_final(
+        resultado["resultados"], cupo_antes, cupo_despues,
+        detalle_pre.get("recargas_restantes"), resultado["pestañas_abiertas"],
+    )
 
     hubo_error = any(r.estado == "error" for r in resultado["resultados"])
     return 1 if hubo_error else 0
 
 
 def run() -> int:
-    return asyncio.run(_run_async())
+    return asyncio.run(run_async())
 
 
 if __name__ == "__main__":

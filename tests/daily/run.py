@@ -23,8 +23,12 @@ if sys.stdout.encoding != 'utf-8':
 if str(_TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(_TESTS_DIR))
 
+from helpers.auth import get_admin_token
+
 from daily import cierre as cierre_mod
 from daily import preflight as preflight_mod
+from daily import quota as quota_mod
+from daily import resumen as resumen_mod
 from daily.close_env import assert_no_instance_running
 
 
@@ -39,8 +43,10 @@ def main() -> int:
         print(f"❌ {e}")
         return 1
 
-    if not preflight_mod.run():
+    ok, detalle_pre = preflight_mod.run(retornar_detalle=True)
+    if not ok:
         return 1
+    cupo_antes = detalle_pre["cupo"]
 
     marca = time.time()
     print(
@@ -52,7 +58,14 @@ def main() -> int:
     )
     input()
 
-    resultado = cierre_mod.run(cierre_mod.FLUJOS_DEFAULT, desde_epoch=marca, notas="Corrida vía tests/daily/run.py (F1)")
+    resultado = cierre_mod.run(cierre_mod.FLUJOS_DEFAULT, desde_epoch=marca, notas="Corrida vía tests/daily/run.py (F1, modo asistido)")
+
+    admin_token = get_admin_token()
+    cupo_despues = quota_mod.get_quota(admin_token)
+    resumen_mod.imprimir_resumen_final(
+        resultado["resultados"], cupo_antes, cupo_despues,
+        detalle_pre.get("recargas_restantes"), resultado["pestañas_abiertas"],
+    )
 
     hubo_error = any(r.estado == "error" for r in resultado["resultados"])
     return 1 if hubo_error else 0

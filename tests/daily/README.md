@@ -1,8 +1,26 @@
 # tests/daily/ — Prueba diaria de la app contra el PJN
 
 > Plan de origen: [`docs/internal/propuesta-script-prueba-diaria-2026-08-27.md`](../../docs/internal/propuesta-script-prueba-diaria-2026-08-27.md).
-> **Estado: F0, F1 y F2 hechas.** Falta F3 (orquestador pulido + ejecutable de
-> doble clic) y F4 (botón de ayuda en el dashboard).
+> **Estado: F0, F1, F2 y F3 hechas.** Falta F4 (botón de ayuda en el dashboard).
+> F5 (desatendido/programado) sigue sin recomendarse.
+
+## Punto de entrada recomendado: `cli.py` (F3)
+
+```bash
+# Doble clic (Windows) — modo automático
+tests\daily\correr-diario.ps1
+
+# Doble clic — modo asistido
+tests\daily\correr-diario.ps1 -Asistido
+
+# Línea de comandos — equivalentes
+python tests/daily/cli.py               # automático (F2)
+python tests/daily/cli.py --asistido    # asistido (F1)
+```
+
+`cli.py` no duplica la lógica de `ejecutar.py`/`run.py` — los invoca. Ambos
+siguen siendo ejecutables por separado si hace falta un modo puntual sin pasar
+por el menú de flags.
 
 ## ⚠️ Esto no es un test unitario — golpea el PJN real y consume cupo real
 
@@ -69,6 +87,9 @@ pytest -m daily tests/daily/
 | `preflight.py` | CLI — pre-vuelo solo |
 | `cierre.py` | CLI — cierre solo |
 | `run.py` | CLI — pre-vuelo + pausa manual + cierre (modo asistido, F1) |
+| `resumen.py` | Tabla final: flujos ok/error, cupo real vs. esperado, recargas restantes, pestañas abiertas (F3) |
+| `cli.py` | **Punto de entrada único** (F3) — `--asistido` alterna entre `run.py` y `ejecutar.py` |
+| `correr-diario.ps1` | Ejecutable de doble clic (F3) — invoca `cli.py`, mismo patrón que `dev-tools/reset-panel.ps1` |
 | `test_daily_preflight.py` | Wrapper pytest del pre-vuelo, marcado `daily` |
 
 ## Reusa, no duplica
@@ -148,10 +169,38 @@ borrar.
   real con el 6to flujo dio 400. Se amplió en los dos lugares (aditivo, no
   rompe reportes viejos) y se verificó en staging antes de producción.
 
+## F3 — qué agregó exactamente
+
+`cli.py` fusiona `ejecutar.py` (automático) y `run.py` (asistido) detrás de
+un solo comando con `--asistido`. `resumen.py` es nuevo: compara el cupo
+real consumido contra el modelo documentado (`proc +1 · batch +1 ·
+informe +3 · monitor +N partes · global +6`) submódulo por submódulo, y
+arma la tabla final (flujos, cupo, recargas restantes, pestañas abiertas)
+que antes solo vivía como texto suelto en la consola de `cierre.py`.
+`preflight.run()` ganó un parámetro opcional `retornar_detalle=True`
+(retrocompatible — sin el flag el contrato es exactamente el de antes,
+verificado con `pytest -m daily`) para que `cli.py`/`ejecutar.py`/`run.py`
+puedan capturar el snapshot de cupo *antes* de correr y comparar contra el
+de *después*. `correr-diario.ps1` es el ejecutable de doble clic pedido por
+el operador, ASCII puro, mismo patrón que `dev-tools/reset-panel.ps1`
+(resuelve su propio directorio con fallback para un futuro `.exe` vía
+`ps2exe`, gitignored si se genera).
+
+**No se corrió una corrida real nueva para verificar F3.** La lógica de
+ejecución de los 6 flujos (`flujos.py`, `electron_driver.py`) no cambió — es
+exactamente la misma que F2 ya verificó de punta a punta contra el PJN real
+el 2026-08-27 (6/6 ok, consumo de cupo exacto al modelo). F3 solo cambia el
+punto de entrada (fusión de 2 comandos en 1) y el formato de salida — se
+verificó con `python -m py_compile` en los 5 archivos tocados y con
+`pytest -m daily` confirmando que el cambio de firma de `preflight.run()`
+no rompe el test existente. Repetir la corrida real habría gastado cupo sin
+ejercitar código nuevo.
+
 ## Próximo paso
 
-**F3** — orquestador pulido (fusionar `ejecutar.py`/`run.py` en un solo CLI
-con más opciones), ejecutable de doble clic para `tests/daily/`, y guard de
-instancia única ya integrado end-to-end (hoy vive en `close_env.py`, probado
-por separado). **F4** — botón `?` en la tarjeta del dashboard con un modal de
-instrucciones. Ver la propuesta para el detalle completo de ambas.
+**F4** — botón `?` en la tarjeta "Verificación funcional (PJN real)" del
+dashboard, al lado del botón que copia el comando, con un modal de
+instrucciones (frases disparadoras, qué hace el script, que recarga cupo
+solo, que deja pestañas de Chrome abiertas). Depende de F3 (ya hecho) porque
+el modal documenta exactamente este script. Ver la propuesta para el
+detalle completo.
