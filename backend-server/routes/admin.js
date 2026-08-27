@@ -3092,6 +3092,256 @@ router.post('/diagnostics/verification/report', authenticateAdmin, (req, res) =>
     res.json({ success: true, entry });
 });
 
+// ==================== Etapa 1.5 F2: cupo de la cuenta de verificación ====================
+// 🔴 La ÚNICA parte de este bloque que otorga cupo. Todo lo de arriba solo escribe
+// diagnóstico. Las 7 protecciones del plan (§7 F2) están numeradas en el código.
+//
+// PROTECCIÓN 2 — la central: el user_id se resuelve SERVER-SIDE por CUIT y el endpoint
+// NUNCA acepta un user_id del cliente. Así ni un admin puede usar esto como atajo genérico
+// para recargarle cupo a un cliente cualquiera: para eso ya existen /users/:id/extra-usage
+// y /subscriptions/:userId/adjust, ambos con motivo obligatorio y su propia auditoría.
+const VERIFICATION_TEST_CUIT = process.env.VERIFICATION_TEST_CUIT || '27320694359';
+
+// Presupuesto de UNA prueba diaria completa — medido por SQL sobre usage_logs (2026-06-20,
+// reconfirmado el 12/08), no estimado:
+//   proc +1 · batch +1 · informe +3 (1 individual + 2 del lote) · monitor +1 POR PARTE
+//   global +6 (el monitor suma por parte en su contador pero +1 en el global por ejecución)
+// `monitor_novedades` es el único dinámico: depende de cuántas partes activas haya.
+const VERIF_COSTO_PRUEBA = { proc: 1, batch: 1, informe: 3, global: 6 };
+const VERIF_RESERVA_PRUEBAS = 2;      // objetivo: dejar cupo para 2 corridas, no 1
+const VERIF_UMBRAL_ILIMITADO = 100000; // mismo umbral que ya usa el portal para "X/999999"
+
+// PROTECCIÓN 4 — topes duros. Si el cálculo pide más que esto, algo se descontroló:
+// se recorta y se deja constancia, en vez de inflar la cuenta en silencio.
+const VERIF_MAX_SUMA_POR_LLAMADA = { proc: 20, batch: 20, informe: 30, monitor_novedades: 30, global: 60 };
+const VERIF_TECHO_BONUS = 200;         // techo absoluto acumulado por submódulo
+
+const VERIF_BONUS_COL = {
+    proc: 'proc_bonus', batch: 'batch_bonus',
+    informe: 'informe_bonus', monitor_novedades: 'monitor_novedades_bonus',
+};
+const VERIF_LIMIT_COL = {
+    proc: 'proc_executions_limit', batch: 'batch_executions_limit',
+    informe: 'informe_limit', monitor_novedades: 'monitor_novedades_limit',
+};
+const VERIF_USAGE_COL = {
+    proc: 'proc_usage', batch: 'batch_usage',
+    informe: 'informe_usage', monitor_novedades: 'monitor_novedades_usage',
+};
+
+/**
+ * Lee el estado real de cupo de la cuenta de verificación.
+ * El cálculo de `remaining` replica EXACTAMENTE el de GET /client/account
+ * (limit === -1 → ilimitado; si no, limit + bonus - used) — si divergiera, la recarga
+ * quedaría corta o larga respecto de lo que el enforcement realmente aplica.
+ */
+async function _verifLeerCupo(db) {
+    const { rows } = await db.query(
+        `SELECT u.id AS user_id, u.email, u.cuit,
+                s.payment_provider, s.usage_count, s.usage_limit,
+                s.proc_usage, s.batch_usage, s.informe_usage, s.monitor_novedades_usage,
+                s.proc_bonus, s.batch_bonus, s.informe_bonus, s.monitor_novedades_bonus,
+                p.proc_executions_limit, p.batch_executions_limit,
+                p.informe_limit, p.monitor_novedades_limit
+           FROM users u
+           JOIN subscriptions s ON s.user_id = u.id
+           LEFT JOIN plans p ON p.id = s.plan_id
+          WHERE u.cuit = $1`,
+        [VERIFICATION_TEST_CUIT]
+    );
+    if (rows.length === 0) return null;
+    const u = rows[0];
+
+    // Partes activas: define cuánto consume el flujo de Monitor en una prueba.
+    const { rows: pr } = await db.query(
+        'SELECT COUNT(*)::int AS total FROM monitor_partes WHERE user_id = $1 AND activo = true',
+        [u.user_id]
+    );
+    const partesActivas = pr[0]?.total || 0;
+
+    const costo = { ...VERIF_COSTO_PRUEBA, monitor_novedades: partesActivas };
+
+    const submodulos = {};
+    for (const k of Object.keys(VERIF_BONUS_COL)) {
+        const limit = u[VERIF_LIMIT_COL[k]];
+        const bonus = u[VERIF_BONUS_COL[k]] || 0;
+        const used  = u[VERIF_USAGE_COL[k]] || 0;
+        const ilimitado = limit === -1 || limit === null || limit === undefined;
+        const efectivo  = ilimitado ? null : limit + bonus;
+        submodulos[k] = {
+            used, limit, bonus, ilimitado,
+            remaining: ilimitado ? null : Math.max(0, efectivo - used),
+            costoPorPrueba: costo[k],
+        };
+    }
+
+    const globalIlimitado = (u.usage_limit || 0) >= VERIF_UMBRAL_ILIMITADO;
+    const global = {
+        used: u.usage_count || 0,
+        limit: u.usage_limit || 0,
+        ilimitado: globalIlimitado,
+        remaining: globalIlimitado ? null : Math.max(0, (u.usage_limit || 0) - (u.usage_count || 0)),
+        costoPorPrueba: costo.global,
+    };
+
+    // ¿Alcanza para N pruebas? Un contador ilimitado nunca frena.
+    const alcanzaPara = (n) => {
+        const okSub = Object.values(submodulos).every(s => s.ilimitado || s.remaining >= s.costoPorPrueba * n);
+        const okGlobal = global.ilimitado || global.remaining >= global.costoPorPrueba * n;
+        return okSub && okGlobal;
+    };
+
+    return {
+        userId: u.user_id, email: u.email, cuit: u.cuit,
+        esTrial: u.payment_provider === null,   // define qué mecanismo frena (§4.1 del plan)
+        partesActivas, submodulos, global,
+        alcanzaParaUnaPrueba: alcanzaPara(1),
+        alcanzaParaReserva: alcanzaPara(VERIF_RESERVA_PRUEBAS),
+        reservaObjetivo: VERIF_RESERVA_PRUEBAS,
+    };
+}
+
+// GET /admin/diagnostics/verification/quota
+// Solo lectura: el estado de cupo de la cuenta de prueba y si alcanza para correr.
+router.get('/diagnostics/verification/quota', authenticateAdmin, async (req, res) => {
+    try {
+        const cupo = await _verifLeerCupo(req.app.get('db'));
+        if (!cupo) return res.status(404).json({ success: false, error: `No existe una cuenta con CUIT ${VERIFICATION_TEST_CUIT}` });
+        res.json({ success: true, cupo });
+    } catch (error) {
+        console.error('Error leyendo cupo de verificación:', error);
+        res.status(500).json({ success: false, error: 'Error del servidor' });
+    }
+});
+
+// POST /admin/diagnostics/verification/quota/top-up
+// Suma SOLO lo faltante para dejar reserva de VERIF_RESERVA_PRUEBAS corridas.
+// PROTECCIÓN 7: nunca resta ni resetea contadores — solo sube `*_bonus` y `usage_limit`.
+router.post('/diagnostics/verification/quota/top-up', authenticateAdmin, async (req, res) => {
+    const db = req.app.get('db');
+    try {
+        const cupo = await _verifLeerCupo(db);
+        if (!cupo) return res.status(404).json({ success: false, error: `No existe una cuenta con CUIT ${VERIFICATION_TEST_CUIT}` });
+
+        // PROTECCIÓN 3 — idempotencia: si ya alcanza, no toca nada y lo dice.
+        if (cupo.alcanzaParaReserva) {
+            return res.json({ success: true, aplicado: false, motivo: 'ya_alcanza', cupo });
+        }
+
+        // PROTECCIÓN 5 — cooldown: como mucho 1 recarga EFECTIVA por día. Si se agota, el
+        // admin no queda sin salida: /users/:id/extra-usage y /subscriptions/:id/adjust
+        // siguen disponibles (con motivo obligatorio), este endpoint solo se auto-limita.
+        const { rows: prev } = await db.query(
+            `SELECT created_at FROM admin_events
+              WHERE action = 'verification_quota_topup' AND created_at > NOW() - INTERVAL '1 day'
+              ORDER BY created_at DESC LIMIT 1`
+        );
+        if (prev.length > 0) {
+            return res.status(429).json({
+                success: false, aplicado: false, motivo: 'cooldown',
+                error: `Ya se recargó el cupo de verificación en las últimas 24 h (${new Date(prev[0].created_at).toISOString()}). Para un ajuste adicional, usar el ajuste manual de la ficha del usuario.`,
+                cupo,
+            });
+        }
+
+        const aplicados = [];
+        const recortados = [];
+
+        // ── Submódulos (`*_bonus`) — funcionan SIEMPRE, con o sin payment_provider ──
+        for (const k of Object.keys(VERIF_BONUS_COL)) {
+            const s = cupo.submodulos[k];
+            if (s.ilimitado) continue;
+            const necesario = s.costoPorPrueba * VERIF_RESERVA_PRUEBAS;
+            let faltante = Math.max(0, necesario - s.remaining);
+            if (faltante === 0) continue;
+
+            // PROTECCIÓN 4 — topes duros
+            const tope = VERIF_MAX_SUMA_POR_LLAMADA[k];
+            if (faltante > tope) { recortados.push({ subsistema: k, pedido: faltante, aplicado: tope, motivo: 'tope_por_llamada' }); faltante = tope; }
+            if (s.bonus + faltante > VERIF_TECHO_BONUS) {
+                const permitido = Math.max(0, VERIF_TECHO_BONUS - s.bonus);
+                recortados.push({ subsistema: k, pedido: faltante, aplicado: permitido, motivo: 'techo_bonus_acumulado' });
+                faltante = permitido;
+            }
+            if (faltante === 0) continue;
+
+            const col = VERIF_BONUS_COL[k];
+            const upd = await db.query(
+                `UPDATE subscriptions SET ${col} = GREATEST(0, ${col} + $1) WHERE user_id = $2 RETURNING ${col}`,
+                [faltante, cupo.userId]
+            );
+            // §4.1.3 — nunca reportar éxito si el UPDATE no matcheó ninguna fila.
+            if (upd.rowCount === 0) {
+                aplicados.push({ subsistema: k, sumado: 0, error: 'el UPDATE no afectó ninguna fila' });
+                continue;
+            }
+            aplicados.push({ subsistema: k, sumado: faltante, nuevoBonus: upd.rows[0][col] });
+            await db.query(
+                `INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [cupo.userId, req.user.id, k, faltante, 'Recarga automática para la verificación funcional contra el PJN (Etapa 1.5 F2)']
+            );
+        }
+
+        // ── Cupo global (`usage_limit`) ──
+        // §4.1.1/§4.1.2: solo se toca si REALMENTE frena. Si ya es ilimitado (≥100.000,
+        // que es lo que deja applyTrialBonus en una cuenta paga), no hay nada que hacer —
+        // en esa cuenta el enforcement pasa a ser 100% por submódulo.
+        if (!cupo.global.ilimitado) {
+            const necesario = cupo.global.costoPorPrueba * VERIF_RESERVA_PRUEBAS;
+            let faltante = Math.max(0, necesario - cupo.global.remaining);
+            if (faltante > VERIF_MAX_SUMA_POR_LLAMADA.global) {
+                recortados.push({ subsistema: 'global', pedido: faltante, aplicado: VERIF_MAX_SUMA_POR_LLAMADA.global, motivo: 'tope_por_llamada' });
+                faltante = VERIF_MAX_SUMA_POR_LLAMADA.global;
+            }
+            if (faltante > 0) {
+                // A diferencia de /users/:id/extra-usage, este UPDATE NO lleva
+                // `WHERE payment_provider IS NULL`: esto no es una cortesía comercial del
+                // trial, es garantizar cupo para una prueba interna. Con esa condición, en
+                // una cuenta que pasara a paga el UPDATE sería un no-op silencioso (§4.1).
+                const upd = await db.query(
+                    'UPDATE subscriptions SET usage_limit = usage_limit + $1, updated_at = NOW() WHERE user_id = $2 RETURNING usage_limit',
+                    [faltante, cupo.userId]
+                );
+                if (upd.rowCount === 0) {
+                    aplicados.push({ subsistema: 'global', sumado: 0, error: 'el UPDATE no afectó ninguna fila' });
+                } else {
+                    aplicados.push({ subsistema: 'global', sumado: faltante, nuevoLimite: upd.rows[0].usage_limit });
+                    await db.query(
+                        `INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason)
+                         VALUES ($1, $2, 'global', $3, $4)`,
+                        [cupo.userId, req.user.id, faltante, 'Recarga automática para la verificación funcional contra el PJN (Etapa 1.5 F2)']
+                    );
+                }
+            }
+        }
+
+        const sumoAlgo = aplicados.some(a => a.sumado > 0);
+
+        // PROTECCIÓN 6 — auditoría. Solo se registra si realmente se aplicó algo: así el
+        // cooldown de arriba no se dispara por una llamada que no cambió nada.
+        if (sumoAlgo) {
+            await db.query(
+                `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'verification_quota_topup', $3)`,
+                [req.user.id, cupo.userId, JSON.stringify({ aplicados, recortados, cuit: VERIFICATION_TEST_CUIT })]
+            );
+            console.log(`[verification] Cupo recargado por ${req.user.email}: ${JSON.stringify(aplicados)}`);
+        }
+
+        const cupoFinal = await _verifLeerCupo(db);
+        res.json({
+            success: true,
+            aplicado: sumoAlgo,
+            motivo: sumoAlgo ? 'recargado' : 'nada_para_aplicar',
+            aplicados, recortados,
+            cupo: cupoFinal,
+        });
+    } catch (error) {
+        console.error('Error recargando cupo de verificación:', error);
+        res.status(500).json({ success: false, error: 'Error del servidor' });
+    }
+});
+
 // ─── GET /admin/users/:userId/refund-preview ─────────────────────────────────
 // Calcula el monto de reembolso proporcional por días restantes en el período actual
 router.get('/users/:userId/refund-preview', authenticateAdmin, async (req, res) => {
