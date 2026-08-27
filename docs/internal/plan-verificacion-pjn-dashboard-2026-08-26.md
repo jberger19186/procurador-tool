@@ -124,6 +124,32 @@ finito. Y la cuenta 250 tiene `payment_provider = NULL`. Por eso la recarga nece
 
 Tocar solo uno de los dos **no** destraba la prueba.
 
+### 4.1 🚨 Qué pasa si la cuenta deja de estar en trial
+
+La cuenta de prueba hoy tiene `payment_provider = NULL`. **Si algún día pasa a tener método
+de pago** —y es probable: la Etapa 4 (B3, MercadoPago producción) va a necesitar una cuenta
+para probar un checkout real— el camino de recarga **cambia por completo**:
+
+| Estado de la cuenta | Qué frena la prueba | Cómo se recarga |
+|---|---|---|
+| **`payment_provider IS NULL`** (hoy) | El cupo global **y** los submódulos | `usage_limit` (vía el camino de `extra-usage`) **+** los `*_bonus` |
+| **`payment_provider` seteado** | **Solo** los submódulos — `applyTrialBonus` deja `usage_limit` en 999999, así que el global deja de ser un freno | **Solo** los `*_bonus` |
+
+**El riesgo concreto:** el `UPDATE` de `extra-usage` lleva `WHERE payment_provider IS NULL`.
+Si la cuenta pasa a paga, ese camino se vuelve **un no-op silencioso** — el `INSERT` en
+`usage_extras` igual se hace, el endpoint devuelve `aplicado: false`, y quien lo llamó puede
+creer que recargó cuando no recargó nada.
+
+**Por eso F2 debe:**
+1. **Leer el estado de la cuenta y elegir el camino**, nunca asumir uno.
+2. **Saltear el cupo global** si ya es efectivamente ilimitado (≥100.000 — el mismo umbral que
+   el portal ya usa para no mostrar "X/999999").
+3. **Nunca reportar éxito si no aplicó nada.** Si un `UPDATE` no matcheó ninguna fila, la
+   respuesta lo dice explícitamente en vez de devolver un OK genérico.
+
+Los `*_bonus` (vía `POST /admin/subscriptions/:userId/adjust`) **funcionan en los dos casos** —
+ese endpoint no filtra por `payment_provider`. Son el único camino que siempre sirve.
+
 ---
 
 ## 5. Qué pasa si falta cupo (y por qué importa)
@@ -177,6 +203,26 @@ historial ni hace falta tocar el `POST /client/verification-report` existente.
 `estado` por flujo tiene **3 valores**, no 2: `ok` · `error` · `omitido`. El tercero es el
 que evita el falso positivo de §5.
 
+### 6.1 Criterios de resultado — qué es `ok`, `error` y `omitido`
+
+Sin esto, dos personas reportando la misma corrida escriben cosas distintas.
+
+| Estado | Cuándo |
+|---|---|
+| **`ok`** | El visor muestra **"Exitosos" = total y "Fallidos" = 0**. En los dos flujos de informe, además: el botón **"Abrir PDF" activo** (no "N/A") — un PDF que se genera pero no se enlaza es una regresión real, ya pasó (`822bf0d`/`debb503`) |
+| **`omitido`** | No se ejecutó por una causa **ajena al producto**: sin cupo · no había partes con línea base · el operador lo salteó. **No es un fallo** |
+| **`error`** | Se ejecutó y falló por el producto o por el PJN |
+
+⚠️ **La distinción más difícil, y ya pasó:** el 12/08 un expediente agotó sus **5 reintentos**
+y falló, mientras otro se recuperó en el 4º intento — la causa era **degradación de la red**,
+no el PJN ni el producto (se confirmó revisando que también fallaban las llamadas al backend
+propio). Un fallo así **no debería reportarse como `error` a secas**: va con el motivo en
+`detalle` (*"5 reintentos agotados — timeouts también contra el backend propio, red
+degradada"*), para que la tarjeta no acuse un problema que no existe.
+
+Regla práctica: **antes de marcar `error`, chequear si el backend propio también estaba
+lento.** Si sí, es red.
+
 ---
 
 ## 7. Fases
@@ -200,7 +246,9 @@ volumen — equivocarse acá es caro.
 - `GET /admin/diagnostics/verification/quota` → estado de los 5 contadores de la cuenta de
   prueba + un booleano `alcanzaParaUnaPrueba` calculado contra el presupuesto de §4.
 - `POST /admin/diagnostics/verification/quota/top-up` → suma **solo lo faltante** para dejar
-  reserva de **2 pruebas**, tocando los dos mecanismos de §4.
+  reserva de **2 pruebas**, tocando los dos mecanismos de §4 y **eligiendo el camino según el
+  estado de la cuenta** (§4.1) — nunca asumiendo que está en trial. Si un `UPDATE` no matcheó
+  ninguna fila, la respuesta lo dice; no devuelve un OK genérico.
 
 **Las 7 protecciones, todas obligatorias:**
 
@@ -262,12 +310,68 @@ Reescribir `diagRenderVerification()` para:
 
 ### F5 — Documentación + primera corrida real · Sonnet · **bajo**
 
-- Agregar al procedimiento de `CLAUDE.md` el **paso final**: al terminar los 5 flujos,
-  postear el resultado al endpoint de F1 (con el token admin, cuyo procedimiento de
-  generación ya está documentado).
-- Agregar el **paso 0 bis**: llamar a la recarga de cupo de F2 antes de arrancar.
-- **Correr una prueba real y reportarla**, para que la tarjeta deje de decir "hace 43 días" y
-  quede validado el circuito completo de punta a punta.
+El procedimiento de `CLAUDE.md` ("Prueba diaria de la app Electron vía computer-use") ya
+existe, pero **le faltan pasos de preparación que hoy se resuelven de memoria en cada
+corrida**. F5 los deja escritos, más los dos pasos nuevos de este plan.
+
+**A — Preparación (antes de abrir la app):**
+
+1. **Cupo** — llamar al `top-up` de F2 (reemplaza el "verificar y sumar cortesía a mano" del
+   paso 0 actual).
+2. **`batch.txt`** — ⚠️ **verificado: hoy no existe.** Se crea y se borra en cada corrida, lo
+   que agrega un paso manual y deja lugar a que el contenido varíe entre pruebas.
+   **Propuesta: versionarlo en el repo** como `dev-tools/batch-verificacion.txt` con las 2
+   líneas estándar. Deja de ser un residuo de testing en el Desktop y pasa a ser un fixture
+   del procedimiento, igual que los stubs de `dev-tools/`. El selector de la app apunta
+   siempre al mismo archivo y desaparece el crear/borrar.
+   **Formato que acepta el parser** (`parseExpedienteStr`, regex `/^(\w+)\s+(\d+)\/(\d{4})$/`):
+   `SIGLA<espacio>NÚMERO/AÑO` — sigla entre las **28 jurisdicciones** del `JURISDICCION_MAP`
+   (se normaliza a mayúsculas), número **solo dígitos** (sin puntos), año de **4 dígitos**,
+   una por línea. Las líneas inválidas **no rompen la corrida**: `select-batch-file` las
+   clasifica y el modal muestra *"N válidos — M omitidos por formato inválido"*.
+   ✅ `FCR 18745/2017` · `fcr 9078/2021` ❌ `FCR 18.745/2017` · `FCR 18745/17` · `XXX 100/2024`
+3. **Partes del Monitor** — el flujo 5 necesita **al menos una parte con línea base**. Dos
+   escenarios, y el procedimiento actual solo cubre el primero:
+   - **Sin ninguna parte** → agregar 2 (FCR / DON COCHO / LA TOSTADORA MODERNA) y correr
+     **Consulta Inicial** antes de "Buscar Novedades".
+   - **Con partes pero ninguna con línea base** → `handleBuscarNovedades()` filtra por
+     `tiene_linea_base`, así que la selección queda vacía y no ejecuta nada. Misma salida:
+     Consulta Inicial primero.
+   - 🚨 **No saltear el orden:** correr "novedades" sin línea base compara contra una base
+     vacía y marca **todos** los expedientes como novedad. No es un error técnico, pero es un
+     resultado engañoso que no verifica nada.
+   - ⚠️ **Crear partes tiene un costo que no se ve:** una parte solo se puede borrar dentro de
+     las **primeras 24 h** o **después de 30 días** (`routes/monitor.js:395-409`). Si se crean
+     para una prueba y no se borran ese mismo día, **quedan trabadas 30 días** ocupando slots
+     (tope: 20). Por eso crear partes nuevas **no sirve como rutina** — se reusan las que hay.
+   - Estado hoy: la cuenta tiene **3 partes, las 3 con línea base** → escenario feliz.
+
+**B — Trampas operativas conocidas (que se repiten y conviene no re-descubrir):**
+
+- **`request_access`** con `["Procurador SCW"]` da tier **full**; Chrome se otorga en tier
+  **"read"** (se ve en las capturas pero no se puede clickear ni tipear ahí) — la
+  automatización de la app lo maneja sola.
+- **Fecha límite = HOY** en Procuración: el campo conserva el valor de la corrida anterior.
+  Si no se corrige, la procuración trae otro rango y el resultado no es comparable.
+- **Retipear el expediente del informe**: si el campo trae un valor recordado, seleccionar
+  todo y volver a tipearlo — el precargado a veces no dispara la validación interna y tira
+  *"Ingresá el número de expediente"*.
+- **Re-logins entre flujos**: documentado en 3 corridas seguidas — `open_application` suele
+  traer una ventana de login nueva en vez de enfocar la principal. Es esperado, se vuelve a
+  loguear (instantáneo) y **no duplica ejecuciones** (el single-instance lock lo impide).
+- **Foco de ventana**: si la app abre en un segundo monitor puede quedar sin foco real pese a
+  verse al frente. Se destraba con un `left_click_drag` sobre la barra de título.
+- **Duración esperada: ~10-12 min.** No apurar los `wait` — es Puppeteer contra el sitio real.
+
+**C — Cierre:**
+
+4. **Reportar** al endpoint de F1, aplicando los criterios de §6.1 (`ok` / `error` /
+   `omitido`, con el motivo en `detalle`).
+5. **Limpieza**: si se creó `batch.txt`/la carpeta `PT`, borrarlos (si se adopta el fixture
+   versionado del punto 2, este paso desaparece).
+
+**D — Primera corrida real:** correr la prueba y reportarla, para que la tarjeta deje de decir
+"hace 43 días" y quede validado el circuito de punta a punta.
 
 ---
 
@@ -304,6 +408,7 @@ sin tocar `/client/*`.** Staging → prod con el procedimiento estándar.
 - **Higiene de métricas, no seguridad:** la cuenta de prueba usa el plan COMBO_PROMO real y
   recibe recargas repetidas, así que en las métricas es indistinguible de un cliente real. El
   día que se quiera medir "uso real de clientes", va a contaminar el número. No se aborda acá.
+- **El `batch.txt` versionado (F5.A.2) es una propuesta, no una decisión tomada.** Si se prefiere seguir creándolo y borrándolo en cada corrida, el procedimiento funciona igual — solo conserva ese paso manual.
 - `VERIFICATION_TEST_CUIT` **no está en el `.env` de producción** — funciona por el fallback
   hardcodeado `'27320694359'`. Conviene agregarla al `.env` como parte de F2 (2 minutos, sin
   riesgo) para que la cuenta de prueba sea configurable sin tocar código.
@@ -318,7 +423,7 @@ sin tocar `/client/*`.** Staging → prod con el procedimiento estándar.
 | **F2** | Cupo: lectura + recarga segura (7 protecciones) | 🔴 **Opus** | medio |
 | **F3** | Tarjeta del dashboard (flujos, cupo, comando) | Sonnet | medio |
 | **F4** | Alerta por email (cron + dedup) | Sonnet | bajo |
-| **F5** | Documentación + primera corrida real | Sonnet | bajo |
+| **F5** | Documentación (preparación completa + trampas conocidas) + primera corrida real | Sonnet | bajo |
 
 **Total estimado: ~2 sesiones.** Orden obligatorio F1 → F2 → F3 (F3 consume los dos
 endpoints anteriores); F4 y F5 pueden ir en cualquier momento después de F1.
