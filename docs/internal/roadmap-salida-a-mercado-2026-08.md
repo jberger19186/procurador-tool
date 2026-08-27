@@ -228,7 +228,7 @@ consumo de cupo cuadrando exacto con el modelo documentado.
 | | |
 |---|---|
 | **Plan** | [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md) — revisado el 2026-08-27 con un spike de capacidad |
-| **Guion** | ✅ **[`demo-guion.md`](demo-guion.md)** (D1, 2026-08-27, revisado contra 34 capturas reales) — 7 capítulos, 38 pasos (31 D3 / 7 D4) |
+| **Guion** | ✅ **[`demo-guion.md`](demo-guion.md)** (D1, 2026-08-27, revisado contra 34 capturas reales + capítulo de Portal agregado) — 8 capítulos, 43 pasos (36 D3 / 7 D4) |
 | **Qué es** | Tour guiado en HTML estático servido desde `/demo/`, con capturas reales anonimizadas + clips cortos, un capítulo por módulo, linkeable desde cada tarjeta de la landing |
 | **Fases** | **6 (D1–D6)** · **D1 ✅** · sigue **D2** (fixtures + capa de sustitución) |
 | **Modelo / esfuerzo** | Sonnet en las 6 · `alto` solo en D3 (volumen: ~40 pantallas) |

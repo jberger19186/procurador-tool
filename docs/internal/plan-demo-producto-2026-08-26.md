@@ -196,7 +196,7 @@ material estático a partir de superficies que ya existen. El único tramo con e
 | | |
 |---|---|
 | **Modelo / esfuerzo** | Sonnet · **medio** |
-| **Entregable** | [`demo-guion.md`](demo-guion.md) — 7 capítulos, 38 pasos (31 automatizables en D3, 7 manuales de D4), tabla de dependencias D3/D4 al cierre |
+| **Entregable** | [`demo-guion.md`](demo-guion.md) — 8 capítulos, 43 pasos (36 automatizables en D3, 7 manuales de D4), tabla de dependencias D3/D4 al cierre |
 
 > ✅ **La carpeta de referencia apareció** en `Pictures\Screenshots\imagenes_pt` (34 capturas del
 > 2026-08-25, no en `Desktop\ordenar\imagenes` como decía este plan) y **ya se revisó completa**
