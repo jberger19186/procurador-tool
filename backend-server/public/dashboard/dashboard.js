@@ -4220,6 +4220,7 @@ function diagRenderVerifComando(vencida) {
             <div class="diag-verif-cmd-line">
                 <span class="diag-verif-cmd-text">corré la prueba diaria de la app</span>
                 <button class="diag-btn secondary" id="diag-btn-copy-verif" onclick="diagCopyVerifCmd()" title="Copiar comando">📋</button>
+                <button class="diag-btn secondary" onclick="diagOpenVerifHelp()" title="Cómo funciona esta verificación">❓</button>
             </div>
         </div>`;
 }
@@ -4231,6 +4232,43 @@ window.diagCopyVerifCmd = function() {
         btn.textContent = '✅';
         setTimeout(() => { btn.textContent = '📋'; }, 1500);
     });
+};
+
+// F4 del script de prueba diaria (docs/internal/propuesta-script-prueba-diaria-2026-08-27.md).
+// Modal de instrucciones, sin lógica de negocio propia — solo documenta lo que ya existe.
+window.diagOpenVerifHelp = function() {
+    _injectModal(`${_modalHeader('❓ Verificación funcional (PJN real)')}
+        <div style="padding:22px;font-size:13px;line-height:1.6;color:#374151">
+            <p style="margin-top:0"><strong>Dos frases, dos caminos distintos.</strong> Lo que se le pida a Claude decide cuál corre:</p>
+            <table style="width:100%;border-collapse:collapse;margin:10px 0 18px">
+                <tr style="border-bottom:1px solid #e5e7eb">
+                    <td style="padding:6px 8px 6px 0;font-weight:600;white-space:nowrap;vertical-align:top">"corré la prueba diaria de la app"</td>
+                    <td style="padding:6px 0">Corre el <strong>script</strong> (<code>tests/daily/cli.py</code>, o doble clic en <code>correr-diario.ps1</code>). Automático, sin clicks ni diálogos — es el camino recomendado.</td>
+                </tr>
+                <tr>
+                    <td style="padding:6px 8px 6px 0;font-weight:600;white-space:nowrap;vertical-align:top">"...con computer use"</td>
+                    <td style="padding:6px 0">Corre el procedimiento <strong>manual</strong>, controlando la app real con computer-use. Sirve de respaldo si el script falla por algo puntual del producto (un selector cambió, un IPC nuevo) que el script no puede diagnosticar solo.</td>
+                </tr>
+            </table>
+
+            <p><strong>Qué hace el script, paso a paso:</strong></p>
+            <ol style="margin:0 0 18px;padding-left:20px">
+                <li>Verifica el cupo de la cuenta de verificación (<code>procuradortool@gmail.com</code>, CUIT 27320694359) — <strong>lo recarga solo si hace falta</strong>, sin preguntar (hasta 5 recargas por ventana móvil de 24h).</li>
+                <li>Chequea que no haya otra instancia de la app corriendo (evita el modo de falla silencioso de 2 instancias a la vez).</li>
+                <li>Lanza la app real instalada y corre los 6 flujos por código, vía la misma superficie que usa el renderer — sin clicks ni diálogos nativos: Procuración, Procuración por lote, Informe individual, Informe por lote, Monitor (consulta inicial sobre una parte descartable) y Monitor (buscar novedades).</li>
+                <li>Lee los resultados reales de <code>descargas/</code> (no asume éxito por falta de error) y reporta a esta misma tarjeta.</li>
+                <li>Cierra la app.</li>
+            </ol>
+
+            <p><strong>Qué NO hace por vos:</strong></p>
+            <ul style="margin:0 0 18px;padding-left:20px">
+                <li>No cierra las pestañas de Chrome que abren los visores/PDF — quedan para que las cierres a mano al terminar.</li>
+                <li>No corre desatendido ni programado — siempre hay que pedirlo.</li>
+            </ul>
+
+            <p style="margin-bottom:0;color:#6b7280">Detalle completo: <code>tests/daily/README.md</code> y
+                <code>docs/internal/propuesta-script-prueba-diaria-2026-08-27.md</code> en el repo.</p>
+        </div>`, 560);
 };
 
 window.diagRecargarCupoVerif = async function() {

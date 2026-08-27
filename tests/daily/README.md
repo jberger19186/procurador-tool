@@ -1,8 +1,9 @@
 # tests/daily/ — Prueba diaria de la app contra el PJN
 
 > Plan de origen: [`docs/internal/propuesta-script-prueba-diaria-2026-08-27.md`](../../docs/internal/propuesta-script-prueba-diaria-2026-08-27.md).
-> **Estado: F0, F1, F2 y F3 hechas.** Falta F4 (botón de ayuda en el dashboard).
-> F5 (desatendido/programado) sigue sin recomendarse.
+> **Estado: F0-F4 completas.** Botón `❓` en la tarjeta "Verificación funcional
+> (PJN real)" del dashboard admin explica el doble disparador y qué hace el
+> script. F5 (desatendido/programado) sigue sin recomendarse.
 
 ## Punto de entrada recomendado: `cli.py` (F3)
 
@@ -196,11 +197,18 @@ verificó con `python -m py_compile` en los 5 archivos tocados y con
 no rompe el test existente. Repetir la corrida real habría gastado cupo sin
 ejercitar código nuevo.
 
+## F4 — qué agregó exactamente
+
+Botón `❓` en `dashboard.js` (`.diag-verif-cmd-line`, junto al `📋`), abre un
+modal (`diagOpenVerifHelp()`) vía la infraestructura genérica `_injectModal()`
+que ya usaban Pagos/Facturación — sin componentes nuevos. Documenta el doble
+disparador (qué frase corre qué camino), los 6 flujos paso a paso, que el
+cupo se recarga solo, y que las pestañas de Chrome no se cierran por código.
+Verificado con Playwright contra `dev-tools/stub-dashboard.js` (skill
+`verify`) y desplegado staging→prod.
+
 ## Próximo paso
 
-**F4** — botón `?` en la tarjeta "Verificación funcional (PJN real)" del
-dashboard, al lado del botón que copia el comando, con un modal de
-instrucciones (frases disparadoras, qué hace el script, que recarga cupo
-solo, que deja pestañas de Chrome abiertas). Depende de F3 (ya hecho) porque
-el modal documenta exactamente este script. Ver la propuesta para el
-detalle completo.
+**F5** (opcional, sin recomendarse todavía) — tarea programada de Windows +
+alerta por email, para correr la prueba de forma desatendida. Ver la
+propuesta §7 para el detalle y las razones de por qué esperar.

@@ -1,8 +1,9 @@
 # Propuesta — llevar la prueba diaria a un script
 
-> **Estado:** aprobada y ejecutada — **F0, F1, F2 y F3 en código, verificadas
-> y (F2) confirmadas contra el PJN real.** Falta F4 (botón de ayuda en el
-> dashboard). F5 (desatendido) sigue sin recomendarse. Ver `tests/daily/README.md`
+> **Estado:** aprobada y ejecutada — **F0-F4 completas.** Los 6 flujos
+> verificados de punta a punta contra el PJN real (F2), punto de entrada
+> único con CLI + doble clic (F3), y modal de ayuda en el dashboard (F4).
+> Solo F5 (desatendido) sigue sin recomendarse. Ver `tests/daily/README.md`
 > para el punto de entrada operativo.
 > **Fecha:** 2026-08-27 · **Autor:** sesión de diseño (Opus, solo análisis) +
 > sesiones de ejecución (Sonnet, F0-F3).
@@ -611,24 +612,34 @@ confirmando la retrocompatibilidad de `preflight.run()`.
 
 ---
 
-### F4 — Botón de ayuda en la tarjeta del dashboard
+### F4 — Botón de ayuda en la tarjeta del dashboard — ✅ EJECUTADA (2026-08-27)
 **Modelo: Sonnet · Esfuerzo: bajo · ~0,5 sesión · Superficie: dashboard admin**
 
-Pedido del operador: un **`?`** al lado del `📋` que ya copia el comando
-(`dashboard.js:4219`, dentro de `.diag-verif-cmd-line`), que abra un modal chico
-con las instrucciones.
+Botón `❓` agregado en `.diag-verif-cmd-line`, junto al `📋` que ya copia el
+comando, mismo estilo `.diag-btn secondary`. Abre un modal (`diagOpenVerifHelp()`)
+que reusa `_injectModal()`/`_modalHeader()` — la misma infraestructura que ya
+usan los modales de Pagos, sin componentes nuevos. Contenido: tabla con las 2
+frases de disparo y qué hace cada una · los 6 flujos que corre el script paso
+a paso · que **recarga cupo solo** (hasta 5 recargas/24h) · que **no** cierra
+las pestañas de Chrome de los visores/PDF (quedan para cerrar a mano) · y que
+no corre desatendido — siempre hay que pedirlo.
 
-- botón `?` en la misma línea del comando, mismo estilo `.diag-btn secondary`
-- modal reusando la infraestructura que el dashboard ya tiene (`_injectModal`,
-  el mismo patrón de Pagos)
-- **contenido:** las 2 frases de disparo y qué hace cada una · los prerequisitos
-  (app cerrada — §6.2; perfil de Chrome con credenciales del PJN) · qué hace el
-  script paso a paso · que **recarga cupo solo** · y que **al terminar quedan
-  pestañas de Chrome para cerrar a mano**
+**Verificado con Playwright contra el stub del dashboard** (`stub-dashboard.js`,
+mismo andamio del skill `verify`): el botón renderiza en la línea del comando
+· el modal se abre con el contenido esperado (verificado por `textContent`
+que incluye "cli.py", "computer use" y la aclaración de las pestañas) · cierra
+con `closeDynModal()` sin dejar el DOM residual · 0 errores de consola nuevos
+(el único error es el 404 del favicon del stub, sin relación).
 
-**Va después de F3 a propósito:** el modal documenta el script, así que primero
-tiene que existir. Es independiente del resto — se puede hacer en cualquier
-momento posterior, o saltear.
+**Desplegado staging→prod** con backup previo en ambos entornos, md5 servido
+= md5 local en los 2, smoke health/landing/portal/dashboard 200,
+`pm2-error.log` sin entradas nuevas atribuibles al deploy (las únicas
+entradas recientes son ruido de rate-limiting de login preexistente, con
+timestamp anterior al restart). Sin migración, sin release de Electron — solo
+el estático `public/dashboard/dashboard.js`.
+
+**Con esto, el plan completo (F0-F4) del script de prueba diaria queda
+cerrado.** Solo resta F5 (desatendido), opcional y sin recomendarse todavía.
 
 ---
 
