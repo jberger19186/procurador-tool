@@ -1,9 +1,16 @@
+// Uso: node create-admin.js <email> <password>
+// No lleva credenciales hardcodeadas — ver CLAUDE.md § Regla de secretos.
 const bcrypt = require('bcrypt');
 
-const EMAIL = 'admin@procurador.com';
-const PASSWORD = 'Admin2024!';
+const EMAIL = process.argv[2];
+const PASSWORD = process.argv[3];
 
-bcrypt.hash(PASSWORD, 10).then(hash => {
+if (!EMAIL || !PASSWORD) {
+    console.error('Uso: node create-admin.js <email> <password>');
+    process.exit(1);
+}
+
+bcrypt.hash(PASSWORD, 12).then(hash => {
     console.log('\n=== EJECUTA ESTE SQL EN PGADMIN ===\n');
     console.log(`INSERT INTO users (email, password_hash, role)`);
     console.log(`VALUES ('${EMAIL}', '${hash}', 'admin')`);

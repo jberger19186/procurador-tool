@@ -4,14 +4,15 @@ Módulo 9 — Panel admin /dashboard/ (I-01 a I-20).
 Usa Playwright para navegar y verificar el panel de administración.
 """
 
+import os
 import pytest
 from playwright.sync_api import Page, expect
 
 DASHBOARD = "https://api.procuradortool.com/dashboard/"
 ADMIN_EMAIL = "admin@procurador.com"
-ADMIN_PASSWORD = "Admin2025!"
+ADMIN_PASSWORD = os.environ.get("QA_TEST_ADMIN_PASSWORD")
 USER_EMAIL_NORMAL = "procuradortool@gmail.com"
-USER_PASSWORD_NORMAL = "TestPass2025!"
+USER_PASSWORD_NORMAL = os.environ.get("QA_TEST_USER_PASSWORD")
 
 
 # ─── I-01: Sin sesión → pantalla de login ─────────────────────────────────────

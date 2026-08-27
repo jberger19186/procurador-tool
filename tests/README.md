@@ -19,6 +19,22 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
+## Credenciales de las cuentas de prueba
+
+Las contraseñas de `admin@procurador.com` y `procuradortool@gmail.com` **no están
+en el repo** (quedaron expuestas en el historial de git hasta 2026-08-27, ver
+`CLAUDE.md` § Regla de secretos) — se leen de variables de entorno. Pedirle el
+valor actual al equipo y setearlas antes de correr cualquier test que loguee:
+
+```powershell
+$env:QA_TEST_USER_PASSWORD  = "..."   # procuradortool@gmail.com
+$env:QA_TEST_ADMIN_PASSWORD = "..."   # admin@procurador.com
+```
+
+Sin esto, cualquier test que dependa de `TEST_USERS` en `helpers/auth.py` (o de
+las constantes que lo importan) falla al loguear — es un fallo esperado, no un
+bug de la suite.
+
 ## Ejecutar los tests
 
 ### Menú interactivo

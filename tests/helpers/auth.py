@@ -25,10 +25,15 @@ SSH_KEY = "C:/Users/JONATHAN/.ssh/do_procurador"
 SSH_HOST = "root@142.93.64.94"
 BACKEND_PATH = "/var/www/procurador/backend-server"
 
-# Credenciales de los usuarios de prueba que deben existir en la DB
+# Credenciales de los usuarios de prueba que deben existir en la DB.
+# Las contraseñas NUNCA van hardcodeadas acá (quedaron expuestas en el
+# historial de git hasta 2026-08-27, ver CLAUDE.md § Regla de secretos) —
+# se leen de variables de entorno. Setearlas antes de correr la suite:
+#   $env:QA_TEST_USER_PASSWORD  = "..."   (PowerShell)
+#   $env:QA_TEST_ADMIN_PASSWORD = "..."
 TEST_USERS = {
-    "user":  {"email": "procuradortool@gmail.com", "password": "TestPass2025!", "machine_id": "TEST-CLAUDE-QA"},
-    "admin": {"email": "admin@procurador.com",      "password": "Admin2025!",   "machine_id": "TEST-CLAUDE-ADMIN"},
+    "user":  {"email": "procuradortool@gmail.com", "password": os.environ.get("QA_TEST_USER_PASSWORD"),  "machine_id": "TEST-CLAUDE-QA"},
+    "admin": {"email": "admin@procurador.com",      "password": os.environ.get("QA_TEST_ADMIN_PASSWORD"), "machine_id": "TEST-CLAUDE-ADMIN"},
 }
 
 

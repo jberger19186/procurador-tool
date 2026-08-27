@@ -6,6 +6,7 @@ La app puede arrancar en login.html o en index.html (si tiene sesión guardada).
 Cada test detecta en qué ventana está y adapta su comportamiento.
 """
 
+import os
 import time
 import urllib.request
 import json as _json
@@ -13,7 +14,7 @@ import pytest
 from playwright.sync_api import Page
 
 USER_EMAIL = "procuradortool@gmail.com"
-USER_PASSWORD = "TestPass2025!"
+USER_PASSWORD = os.environ.get("QA_TEST_USER_PASSWORD")
 DEBUG_PORT = 9222
 
 

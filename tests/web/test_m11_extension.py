@@ -6,6 +6,7 @@ Requiere: extension instalada localmente en extension-app/
 SKIPS: K-07 a K-09 requieren sesion PJN activa.
 """
 
+import os
 import sys
 import time
 import requests
@@ -24,9 +25,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 EXTENSION_PATH = "C:/Users/JONATHAN/source/repos/ProcuradorTool/extension-app"
 API_URL = "https://api.procuradortool.com"
 USER_EMAIL = "procuradortool@gmail.com"
-USER_PASSWORD = "TestPass2025!"
+USER_PASSWORD = os.environ.get("QA_TEST_USER_PASSWORD")
 ADMIN_EMAIL = "admin@procurador.com"
-ADMIN_PASSWORD = "Admin2025!"
+ADMIN_PASSWORD = os.environ.get("QA_TEST_ADMIN_PASSWORD")
 
 POPUP_TIMEOUT = 10_000   # ms
 LOGIN_TIMEOUT = 15_000   # ms

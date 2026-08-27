@@ -19,7 +19,7 @@ import pytest
 import requests
 from playwright.sync_api import sync_playwright, Browser, Page, Playwright
 
-from helpers.auth import get_user_token, get_admin_token, API_URL
+from helpers.auth import get_user_token, get_admin_token, API_URL, TEST_USERS
 from helpers.db import ensure_special_users
 
 # Silenciar warnings de SSL (usamos verify=False en tests)
@@ -31,10 +31,12 @@ PORTAL_URL = f"{API_URL}/usuarios/"
 DASHBOARD_URL = f"{API_URL}/dashboard/"
 ELECTRON_APP_PATH = "C:/Users/JONATHAN/source/repos/ProcuradorTool/electron-app"
 
-USER_EMAIL = "procuradortool@gmail.com"
-USER_PASSWORD = "TestPass2025!"
-ADMIN_EMAIL = "admin@procurador.com"
-ADMIN_PASSWORD = "Admin2025!"
+# Únicas de verdad: helpers/auth.py::TEST_USERS (lee de env vars). Se reexportan
+# acá tal cual para no duplicar las credenciales en un segundo lugar.
+USER_EMAIL = TEST_USERS["user"]["email"]
+USER_PASSWORD = TEST_USERS["user"]["password"]
+ADMIN_EMAIL = TEST_USERS["admin"]["email"]
+ADMIN_PASSWORD = TEST_USERS["admin"]["password"]
 
 
 # ─── Fixtures de API ───────────────────────────────────────────────────────────

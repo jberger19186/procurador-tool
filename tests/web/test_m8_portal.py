@@ -5,12 +5,13 @@ Usa Playwright para navegar, interactuar y verificar la UI.
 Los fixtures `page` y `logged_in_user_page` vienen de conftest.py.
 """
 
+import os
 import pytest
 from playwright.sync_api import Page, expect
 
 PORTAL = "https://api.procuradortool.com/usuarios/"
 USER_EMAIL = "procuradortool@gmail.com"
-USER_PASSWORD = "TestPass2025!"
+USER_PASSWORD = os.environ.get("QA_TEST_USER_PASSWORD")
 
 
 # ─── H-01: Sin sesión → pantalla de login ──────────────────────────────────────
