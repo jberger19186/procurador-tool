@@ -422,23 +422,70 @@ del modo de falla que previene, no solo por lectura de código.
 
 ---
 
-### F1 — Pre-vuelo, reporte y cierre (sin GUI)
-**Modelo: Sonnet · Esfuerzo: bajo-medio · ~1 sesión**
+### F1 — Pre-vuelo, reporte y cierre (sin GUI) ✅ EJECUTADA (2026-08-27)
 
-Todo lo que hoy son ~6 llamadas manuales con `scp` de scripts temporales:
+**Modelo: Sonnet · Esfuerzo: bajo-medio.** Código real en `tests/daily/` (no
+diseño — 9 archivos, ver el `README.md` del propio directorio para el mapa
+completo). Reemplaza las ~6 llamadas manuales con `scp` de scripts temporales
+de la corrida de hoy por 3 comandos: `preflight.py` (cupo + partes),
+`cierre.py` (leer resultados + reportar + cerrar), `run.py` (los dos
+encadenados con una pausa para la corrida manual en el medio).
 
-- verificar cupo contra los 4 submódulos + global, con el costo real por flujo
-- `--recargar-cupo` opcional (§6.1)
-- verificar partes activas con línea base
-- leer los resultados desde `descargas/` (los visores traen el resumen embebido —
-  ⚠️ **por `grep` del JSON, nunca contando las palabras "Exitoso"/"Error", que
-  son clases CSS y dan un conteo falso**)
-- postear el reporte a `/admin/diagnostics/verification/report`
-- cerrar la app y enumerar las pestañas que quedaron abiertas
+**Simplificación real encontrada al construirla, no anticipada en el diseño:**
+el token que arma `tests/helpers/auth.py::get_admin_token()` (ya existente,
+reusado tal cual) **funciona directo contra `https://api.procuradortool.com`
+desde la máquina local** — sin túnel SSH por cada llamada. Solo hace falta SSH
+una vez, para mintear el token; todo lo demás (`GET quota`, `POST top-up`,
+`GET /monitor/partes`, `POST report`) es `requests` normal. Esto tira abajo el
+80% del baile de subir-y-borrar scripts temporales que documentaba el
+procedimiento manual — la limitación de "no se puede mandar por curl desde la
+máquina local" no era del token, era de cómo se firmaba antes.
 
-**Valor solo:** convierte el ceremonial de pre-vuelo y cierre en un comando,
-incluso si los flujos se siguen corriendo a mano. **Es la fase con mejor relación
-valor/riesgo de todo el plan.**
+**Verificado de punta a punta contra producción real** (sin correr ningún
+flujo — cupo consumido: 0):
+- `preflight.py`: cupo real leído (`alcanzaParaUnaPrueba=True`,
+  `alcanzaParaReserva=True`, sin necesitar recarga) + las 3 partes con línea
+  base listadas correctamente.
+- `cierre.py`: **reusó los visores reales de la corrida manual de esta misma
+  mañana** (sesión "cont. 18") para probar el parseo + reporte end-to-end sin
+  gastar cupo de nuevo. El reporte posteado coincidió **exacto** con lo que se
+  reportó a mano esa mañana (proc 2/2, batch 2/2, informe individual OK,
+  informe por lote 2/2, monitor 3/3 con 0 novedades) — confirmado leyendo
+  `GET /admin/diagnostics/verification/latest` después.
+- Guard de instancia única (§6.2): probado con una instancia real corriendo —
+  `assert_no_instance_running()` la detectó y abortó con el mensaje correcto;
+  y pasó limpio con 0 procesos.
+- `list_chrome_tab_titles()`: probado con una pestaña real de Chrome abierta —
+  la detectó por título; y con Chrome sin ventanas visibles, devolvió vacío
+  sin romper.
+- `pytest -m daily tests/daily/` → **1 passed**. `pytest` sin filtro →
+  **0 selected, 1 deselected** (el guard de `pytest.ini` funciona). El resto
+  de la suite sigue colectando igual: **154/155**, sin romper nada.
+
+**🐛 1 bug real encontrado y corregido en el camino — no en una prueba
+sintética, en el primer visor real que se intentó parsear:** el extractor de
+`const datosEmbebidos = {...}` usaba una regex que tolera 1 nivel de objetos
+anidados (mismo criterio simplificado que usa `generador_visor.js` del lado
+de Electron, para SU propio problema más chico). El visor real de Procuración
+tiene **3+ niveles** (`expedientes[].movimientos[].{...}`), así que la regex
+cortaba a mitad de camino y `json.loads` fallaba en silencio — los flujos
+`proc`/`batch` se reportaban como `omitido` con cupo real ya consumido en la
+corrida de esta mañana. Corregido con un extractor que cuenta llaves
+balanceadas carácter por carácter (respetando strings/escapes), no una regex
+con tope fijo. Verificado contra los 5 archivos reales tras el fix: los 5
+parsean `ok` con el detalle exacto.
+
+**Hallazgo menor, documentado y no bloqueante:** el backend
+(`routes/admin.js`) solo distingue `origen: 'app-automatica'` vs. cualquier
+otra cosa, que cae a `'computer-use'` — el `'script-daily'` que manda este
+módulo se pisa en silencio. Las `notas` sí quedan tal cual, así que el origen
+real sigue siendo legible en el detalle. Ampliar la whitelist queda como
+candidato de F3, no de F1.
+
+**Valor solo, confirmado:** convierte el ceremonial de pre-vuelo y cierre en
+un comando, incluso si los flujos se siguen corriendo a mano. **Sigue siendo
+la fase con mejor relación valor/riesgo de todo el plan — y ya está en el
+repo, funcionando.**
 
 ---
 
