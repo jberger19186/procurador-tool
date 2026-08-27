@@ -3748,7 +3748,14 @@ async function renderDiagnostico() {
         .diag-stale-warning { margin:0 18px 14px; padding:10px 12px; background:#fef3c7; color:#92400e; border-radius:8px; font-size:12.5px; }
         .diag-verif-row { display:flex; justify-content:space-between; padding:6px 0; font-size:13px; border-bottom:1px solid #f3f4f6; }
         .diag-verif-row:last-child { border-bottom:none; }
-        .diag-log { font-family:'Cascadia Code',Consolas,monospace; font-size:12px; padding:14px 18px; background:#1a1a1a; color:#d1d5db; min-height:160px; max-height:340px; overflow-y:auto; line-height:1.7; white-space:pre; }
+        /* pre-wrap (no pre): conserva los saltos de línea reales (\n) que ya
+           traen los logs, pero envuelve las líneas largas dentro del ancho de
+           la consola en vez de forzar scroll horizontal. */
+        .diag-log { font-family:'Cascadia Code',Consolas,monospace; font-size:12px; padding:14px 18px; background:#1a1a1a; color:#d1d5db; min-height:160px; max-height:340px; overflow-y:auto; overflow-x:hidden; line-height:1.7; white-space:pre-wrap; word-break:break-word; scrollbar-width:thin; scrollbar-color:#4b5563 #1a1a1a; }
+        .diag-log::-webkit-scrollbar { width:6px; }
+        .diag-log::-webkit-scrollbar-track { background:#1a1a1a; }
+        .diag-log::-webkit-scrollbar-thumb { background:#4b5563; border-radius:3px; }
+        .diag-log::-webkit-scrollbar-thumb:hover { background:#6b7280; }
         .diag-log .ok  { color:#34d399; }
         .diag-log .err { color:#f87171; }
         .diag-log .sep { color:#6b7280; }
@@ -3781,6 +3788,9 @@ async function renderDiagnostico() {
         .diag-verif-cmd-block.discreto { background:#f9fafb; border:1px solid #e5e7eb; color:#6b7280; }
         .diag-verif-cmd-line { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
         .diag-verif-cmd-text { font-family:monospace; background:rgba(0,0,0,.06); padding:4px 10px; border-radius:6px; }
+        /* Mismo contenedor visual que el bloque del comando (fondo/borde "discreto"),
+           pero va debajo del historial y con el botón centrado — es una acción aparte. */
+        .diag-verif-recarga-block { margin:12px 18px 16px; padding:12px 14px; border-radius:8px; font-size:12.5px; background:#f9fafb; border:1px solid #e5e7eb; text-align:center; }
     </style>
 
     <div class="diag-grid">
@@ -3839,11 +3849,14 @@ async function renderDiagnostico() {
                 <span class="diag-badge none" id="diag-verif-badge">—</span>
             </div>
             <div id="diag-verif-comando"></div>
-            <div class="diag-last" id="diag-verif-last" style="padding:0 18px 4px;">Cargando...</div>
+            <div class="diag-last" id="diag-verif-last" style="padding:0 18px 4px; font-size:13px; color:#6b7280;">Cargando...</div>
             <div id="diag-verif-stale"></div>
             <div class="diag-verif-flujos" id="diag-verif-flujos">Cargando...</div>
             <div id="diag-verif-cupo"></div>
             <div class="diag-log" id="diag-verif-historial" style="min-height:auto;display:none;"></div>
+            <div class="diag-verif-recarga-block">
+                <button class="diag-btn secondary" id="diag-btn-recargar-cupo" onclick="diagRecargarCupoVerif()" title="Recargar el cupo de la cuenta de verificación">🔋 Recargar cupo</button>
+            </div>
         </div>
 
     </div>`;
@@ -4145,7 +4158,8 @@ function diagPaintVerifCupoGlobal() {
 
 // El comando queda SIEMPRE visible y ARRIBA de todo (pedido del operador) — destacado si la
 // verificación está vencida (>7 días o el último reporte fue error), discreto si está al día.
-// El botón de recarga de cupo va al lado del de copiar: son las 2 acciones de la tarjeta.
+// El botón de recarga de cupo vive en su propio bloque, DEBAJO del historial (ver el HTML
+// estático de la tarjeta) — no se re-renderiza acá.
 function diagRenderVerifComando(vencida) {
     const el = document.getElementById('diag-verif-comando');
     if (!el) return;
@@ -4156,7 +4170,6 @@ function diagRenderVerifComando(vencida) {
             <div class="diag-verif-cmd-line">
                 <span class="diag-verif-cmd-text">corré la prueba diaria de la app</span>
                 <button class="diag-btn secondary" id="diag-btn-copy-verif" onclick="diagCopyVerifCmd()" title="Copiar comando">📋</button>
-                <button class="diag-btn secondary" id="diag-btn-recargar-cupo" onclick="diagRecargarCupoVerif()" title="Recargar el cupo de la cuenta de verificación">🔋 Recargar cupo</button>
             </div>
         </div>`;
 }
@@ -4187,9 +4200,9 @@ window.diagRecargarCupoVerif = async function() {
     } catch (e) {
         showToast(e.message || 'Error de conexión.', 'error');
     } finally {
-        // El repintado de arriba reemplaza el botón, así que se re-obtiene del DOM vivo.
-        const btnAhora = document.getElementById('diag-btn-recargar-cupo');
-        if (btnAhora) { btnAhora.disabled = false; btnAhora.textContent = '🔋 Recargar cupo'; }
+        // El botón es estático (vive en el HTML de la tarjeta, no se re-renderiza) —
+        // el mismo nodo que se deshabilitó arriba sigue siendo válido acá.
+        if (btn) { btn.disabled = false; btn.textContent = '🔋 Recargar cupo'; }
     }
 };
 
