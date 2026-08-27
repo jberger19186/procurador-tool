@@ -4242,11 +4242,21 @@ window.diagRecargarCupoVerif = async function() {
         if (!data.aplicado) {
             showToast(data.motivo === 'ya_alcanza' ? 'El cupo ya alcanza — no hizo falta recargar.' : 'No se aplicó ninguna recarga.', 'info');
         } else {
-            showToast('Cupo recargado.', 'success');
+            const rest = typeof data.recargasRestantes === 'number'
+                ? ` Quedan ${data.recargasRestantes} de ${data.recargasMaximo} recargas en las próximas 24 h.`
+                : '';
+            showToast(`Cupo recargado.${rest}`, 'success');
         }
         diagRenderVerifCupo(data.cupo);
     } catch (e) {
         showToast(e.message || 'Error de conexión.', 'error');
+        // El backend devuelve el cupo actualizado incluso al rechazar por cooldown (429),
+        // pero apiFetch lanza y ese payload se pierde — se relee para que la tarjeta no
+        // quede mostrando números viejos después de un rechazo.
+        try {
+            const qdata = await apiFetch('/admin/diagnostics/verification/quota');
+            diagRenderVerifCupo(qdata.cupo);
+        } catch (_) { /* si tampoco se puede leer, se deja lo que ya estaba en pantalla */ }
     } finally {
         // El botón es estático (vive en el HTML de la tarjeta, no se re-renderiza) —
         // el mismo nodo que se deshabilitó arriba sigue siendo válido acá.

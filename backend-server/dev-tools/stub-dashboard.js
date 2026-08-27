@@ -66,6 +66,7 @@ const VERIF_STATE = {
 };
 VERIF_STATE.history = [VERIF_STATE.latest];
 
+let VERIF_TOPUP_USADAS = 0;   // recargas simuladas en la ventana (tope 5, igual que el backend real)
 const VERIF_CUPO = {
     userId: 250, email: 'procuradortool@gmail.com', cuit: '27320694359', esTrial: true,
     partesActivas: 3,
@@ -949,6 +950,21 @@ http.createServer(async (req, res) => {
         }
         if (p === '/admin/diagnostics/verification/quota/top-up' && req.method === 'POST') {
             await readBody(req);
+            // Cooldown simulado (backend real: hasta 5 recargas efectivas por ventana de 24 h).
+            // El escape `?forzarCooldown=1` va ANTES del chequeo de "ya alcanza" a propósito:
+            // en el backend real el orden es al revés, pero acá si fuera después nunca se
+            // llegaría a ejercitar el 429 con el cupo ya recargado.
+            if (VERIF_TOPUP_USADAS >= 5 || /forzarCooldown=1/.test(req.url)) {
+                const libera = new Date(Date.now() + 13 * 3600 * 1000);
+                // json() lleva el status como 3er argumento y por defecto pisa con 200 —
+                // setear res.statusCode a mano acá no sirve de nada.
+                return json(res, {
+                    success: false, aplicado: false, motivo: 'cooldown',
+                    usadas: 5, maximo: 5, disponibleDesde: libera.toISOString(),
+                    error: `Se agotaron las 5 recargas permitidas en las últimas 24 h. La próxima se libera el ${libera.toLocaleString('es-AR')}. Para un ajuste inmediato, usar Usos Extra o Ajustes Manuales en la ficha del usuario.`,
+                    cupo: VERIF_CUPO,
+                }, 429);
+            }
             if (VERIF_CUPO.alcanzaParaReserva) return json(res, { success: true, aplicado: false, motivo: 'ya_alcanza', cupo: VERIF_CUPO });
             const aplicados = [];
             const s = VERIF_CUPO.submodulos.informe;
@@ -958,7 +974,12 @@ http.createServer(async (req, res) => {
             const faltanteG = Math.max(0, g.costoPorPrueba * VERIF_CUPO.reservaObjetivo - g.remaining);
             if (faltanteG > 0) { g.limit += faltanteG; g.remaining += faltanteG; aplicados.push({ subsistema: 'global', sumado: faltanteG }); }
             VERIF_CUPO.alcanzaParaReserva = true;
-            return json(res, { success: true, aplicado: true, aplicados, recortados: [], cupo: VERIF_CUPO });
+            VERIF_TOPUP_USADAS++;
+            return json(res, {
+                success: true, aplicado: true, aplicados, recortados: [],
+                recargasRestantes: Math.max(0, 5 - VERIF_TOPUP_USADAS), recargasMaximo: 5,
+                cupo: VERIF_CUPO,
+            });
         }
 
         // ── Scripts ──

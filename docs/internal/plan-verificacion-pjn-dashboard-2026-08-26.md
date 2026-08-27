@@ -265,7 +265,7 @@ volumen — equivocarse acá es caro.
 | 2 | **Solo la cuenta de verificación** — `user_id` fijo, resuelto server-side por `VERIFICATION_TEST_CUIT`; **no acepta un `user_id` del cliente** | Que ni un admin pueda usarlo como atajo genérico para recargar a un cliente. Para eso ya existe `extra-usage`, con su motivo obligatorio y su auditoría |
 | 3 | **Solo suma lo faltante** (idempotente) | Llamarlo 10 veces seguidas no acumula 10 recargas |
 | 4 | **Tope duro por submódulo** (p. ej. ≤20 por llamada) y **techo absoluto** de bonus acumulado | Un bug de cálculo no puede inflar la cuenta sin límite |
-| 5 | **Cooldown**: máximo 1 recarga efectiva por día | Una prueba diaria = una recarga diaria como mucho |
+| 5 | **Cooldown**: máximo **5** recargas efectivas por ventana móvil de 24 h | ~~Una prueba diaria = una recarga diaria como mucho~~ — **corregido el 2026-08-27**: el supuesto de "una prueba por día" no se sostuvo. Verificando un cambio se corren 2+ pruebas el mismo día, y con el tope en 1 la reserva se agotaba con el botón todavía bloqueado hasta la hora exacta del día siguiente. Subirlo **no afloja el techo real**: `VERIF_TECHO_BONUS` (200 acumulado por submódulo) no se toca y no se resetea, y cada recarga suma solo lo que falta para la reserva de 2 corridas. Las llamadas `ya_alcanza` retornan antes y no consumen lugar |
 | 6 | **Auditoría** en `admin_events` con `action:'verification_quota_topup'` y el detalle de lo sumado | Queda rastro de cada recarga, quién y cuánto |
 | 7 | **Nunca resta ni resetea contadores** — solo sube `*_bonus` y `usage_limit` | No puede usarse para borrar el uso real de nadie |
 

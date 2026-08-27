@@ -3246,6 +3246,14 @@ const VERIF_UMBRAL_ILIMITADO = 100000; // mismo umbral que ya usa el portal para
 const VERIF_MAX_SUMA_POR_LLAMADA = { proc: 20, batch: 20, informe: 30, monitor_novedades: 30, global: 60 };
 const VERIF_TECHO_BONUS = 200;         // techo absoluto acumulado por submódulo
 
+// PROTECCIÓN 5 — cuántas recargas EFECTIVAS se admiten por ventana móvil de 24 h.
+// Era 1 y se subió a 5 el 2026-08-27: con 1 sola, correr 2 pruebas en el mismo día
+// (que es lo normal cuando se está verificando un cambio) agotaba la reserva y dejaba
+// el botón bloqueado hasta la hora exacta del día siguiente. No afloja el techo real:
+// VERIF_TECHO_BONUS (200 acumulado por submódulo) sigue igual y NO se resetea, y cada
+// recarga suma solo lo que falta para la reserva de VERIF_RESERVA_PRUEBAS corridas.
+const VERIF_TOPUP_MAX_POR_DIA = 5;
+
 const VERIF_BONUS_COL = {
     proc: 'proc_bonus', batch: 'batch_bonus',
     informe: 'informe_bonus', monitor_novedades: 'monitor_novedades_bonus',
@@ -3358,18 +3366,27 @@ router.post('/diagnostics/verification/quota/top-up', authenticateAdmin, async (
             return res.json({ success: true, aplicado: false, motivo: 'ya_alcanza', cupo });
         }
 
-        // PROTECCIÓN 5 — cooldown: como mucho 1 recarga EFECTIVA por día. Si se agota, el
-        // admin no queda sin salida: /users/:id/extra-usage y /subscriptions/:id/adjust
-        // siguen disponibles (con motivo obligatorio), este endpoint solo se auto-limita.
+        // PROTECCIÓN 5 — cooldown: hasta VERIF_TOPUP_MAX_POR_DIA recargas EFECTIVAS por
+        // ventana móvil de 24 h. Si se agota, el admin no queda sin salida:
+        // /users/:id/extra-usage y /subscriptions/:id/adjust siguen disponibles (con
+        // motivo obligatorio), este endpoint solo se auto-limita.
+        // Nota: las llamadas que no aplican nada (PROTECCIÓN 3, `ya_alcanza`) retornan
+        // ANTES de este punto y no se auditan, así que no consumen ningún lugar.
         const { rows: prev } = await db.query(
             `SELECT created_at FROM admin_events
               WHERE action = 'verification_quota_topup' AND created_at > NOW() - INTERVAL '1 day'
-              ORDER BY created_at DESC LIMIT 1`
+              ORDER BY created_at ASC`
         );
-        if (prev.length > 0) {
+        if (prev.length >= VERIF_TOPUP_MAX_POR_DIA) {
+            // Ventana móvil: el próximo lugar se libera cuando la recarga más vieja que
+            // todavía cuenta sale de las 24 h. Con prev.length === MAX es la primera.
+            const libera = new Date(prev[prev.length - VERIF_TOPUP_MAX_POR_DIA].created_at);
+            libera.setTime(libera.getTime() + 24 * 60 * 60 * 1000);
             return res.status(429).json({
                 success: false, aplicado: false, motivo: 'cooldown',
-                error: `Ya se recargó el cupo de verificación en las últimas 24 h (${new Date(prev[0].created_at).toISOString()}). Para un ajuste adicional, usar el ajuste manual de la ficha del usuario.`,
+                usadas: prev.length, maximo: VERIF_TOPUP_MAX_POR_DIA,
+                disponibleDesde: libera.toISOString(),
+                error: `Se agotaron las ${VERIF_TOPUP_MAX_POR_DIA} recargas permitidas en las últimas 24 h. La próxima se libera el ${libera.toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}. Para un ajuste inmediato, usar Usos Extra o Ajustes Manuales en la ficha del usuario.`,
                 cupo,
             });
         }
@@ -3464,6 +3481,10 @@ router.post('/diagnostics/verification/quota/top-up', authenticateAdmin, async (
             aplicado: sumoAlgo,
             motivo: sumoAlgo ? 'recargado' : 'nada_para_aplicar',
             aplicados, recortados,
+            // Cuántas recargas quedan en la ventana de 24 h. `prev` se leyó antes de
+            // aplicar, así que esta suma cuenta la de recién solo si realmente aplicó.
+            recargasRestantes: Math.max(0, VERIF_TOPUP_MAX_POR_DIA - (prev.length + (sumoAlgo ? 1 : 0))),
+            recargasMaximo: VERIF_TOPUP_MAX_POR_DIA,
             cupo: cupoFinal,
         });
     } catch (error) {
