@@ -3777,7 +3777,8 @@ async function renderDiagnostico() {
         .diag-verif-cmd-block.discreto { background:#f9fafb; border:1px solid #e5e7eb; color:#6b7280; }
         .diag-verif-cmd-line { display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap; }
         .diag-verif-cmd-text { font-family:monospace; background:rgba(0,0,0,.06); padding:4px 10px; border-radius:6px; }
-        .diag-verif-req { margin-top:6px; font-size:11px; }
+        .diag-verif-req { margin-top:8px; font-size:11px; line-height:1.5; opacity:.9; }
+        .diag-verif-req code { background:rgba(0,0,0,.07); padding:1px 4px; border-radius:3px; }
     </style>
 
     <div class="diag-grid">
@@ -4102,6 +4103,9 @@ function diagRenderVerifComando(vencida) {
     const el = document.getElementById('diag-verif-comando');
     if (!el) return;
     const tono = vencida ? 'destacado' : 'discreto';
+    // Los requisitos NO son decorativos: si la app no está abierta ANTES de pedir el
+    // comando, computer-use no la encuentra (su resolver busca entre apps instaladas y
+    // CORRIENDO) y la corrida no puede arrancar. Verificado el 2026-08-27.
     el.innerHTML = `
         <div class="diag-verif-cmd-block ${tono}">
             ${vencida ? '<div>⚠️ Hace tiempo que no se verifica contra el PJN real, o el último resultado tuvo un error.</div>' : ''}
@@ -4110,7 +4114,14 @@ function diagRenderVerifComando(vencida) {
                 <span class="diag-verif-cmd-text">corré la prueba diaria de la app</span>
                 <button class="diag-btn secondary" onclick="diagCopyVerifCmd()" title="Copiar comando">📋</button>
             </div>
-            ${vencida ? '<div class="diag-verif-req">Requisitos: la app Electron abierta y logueada con la cuenta de prueba, y aprobar el acceso de computer-use cuando lo pida.</div>' : ''}
+            <div class="diag-verif-req">
+                <strong>Antes de pedirlo:</strong>
+                1) Abrí la app <em>Procurador SCW</em> y dejala en la pantalla de login o ya logueada
+                (las credenciales de <code>procuradortool@gmail.com</code> están guardadas en la app —
+                alcanza con un clic en "Iniciar Sesión").
+                2) Aprobá el acceso de computer-use cuando aparezca el pedido.
+                <br><span style="opacity:.85">La app tiene que estar <strong>corriendo antes</strong> de pedir el comando: si está cerrada, computer-use no la detecta y la corrida no arranca.</span>
+            </div>
         </div>`;
 }
 

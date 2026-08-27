@@ -2971,6 +2971,10 @@ router.post('/smoke-tests/report-extension', authenticateAdmin, (req, res) => {
 // plan). _normalizarEntry() convierte al vuelo el registro viejo en la LECTURA, sin migrar
 // el archivo ni tocar el endpoint de client.js que sigue escribiendo el formato viejo.
 const VERIFICATION_FILE = _path.join(__dirname, '..', 'data', 'verification-results.json');
+// La ÚNICA cuenta con la que puede correrse la verificación: sus expedientes de batch,
+// sus partes de Monitor y su cupo pertenecen a este CUIT. Se declara acá (y no en el
+// bloque F2 de más abajo) porque la usan los DOS bloques — el de reporte y el de cupo.
+const VERIFICATION_TEST_CUIT = process.env.VERIFICATION_TEST_CUIT || '27320694359';
 const VERIFICATION_HISTORY_MAX = 30;
 const VERIFICATION_FLUJOS_VALIDOS = ['proc', 'batch', 'informe', 'informe_lote', 'monitor'];
 const VERIFICATION_FLUJO_NOMBRES = {
@@ -3009,7 +3013,7 @@ function _normalizarEntry(entry) {
     return {
         timestamp: entry.timestamp,
         origen: 'app-automatica',
-        cuenta: '27320694359', // única cuenta que el guard de client.js permitía reportar
+        cuenta: VERIFICATION_TEST_CUIT, // única cuenta que el guard de client.js permitía reportar
         estado: entry.estado,
         tiempoTotalMs: entry.tiempoTotalMs ?? null,
         flujos,
@@ -3066,10 +3070,21 @@ router.post('/diagnostics/verification/report', authenticateAdmin, (req, res) =>
         }
     }
 
+    // La prueba SOLO puede correrse con la cuenta de verificación: sus expedientes de
+    // batch, sus partes de Monitor y su cupo (el que recarga F2) pertenecen a ese CUIT.
+    // Aceptar un `cuenta` distinto guardaría un reporte que no corresponde a ninguna
+    // corrida posible — se rechaza en vez de persistir algo engañoso.
+    if (typeof cuenta === 'string' && cuenta.trim() && cuenta.trim() !== VERIFICATION_TEST_CUIT) {
+        return res.status(400).json({
+            success: false,
+            error: `La verificación solo se reporta para la cuenta de prueba (CUIT ${VERIFICATION_TEST_CUIT}). Recibido: ${cuenta.trim()}`,
+        });
+    }
+
     const entry = {
         timestamp: new Date().toISOString(),
         origen: origen === 'app-automatica' ? 'app-automatica' : 'computer-use',
-        cuenta: (typeof cuenta === 'string' && cuenta.trim()) ? cuenta.trim() : '27320694359',
+        cuenta: VERIFICATION_TEST_CUIT,
         estado,
         tiempoTotalMs: Number.isFinite(tiempoTotalMs) ? tiempoTotalMs : null,
         flujos: flujos.map(f => ({
@@ -3100,7 +3115,6 @@ router.post('/diagnostics/verification/report', authenticateAdmin, (req, res) =>
 // NUNCA acepta un user_id del cliente. Así ni un admin puede usar esto como atajo genérico
 // para recargarle cupo a un cliente cualquiera: para eso ya existen /users/:id/extra-usage
 // y /subscriptions/:userId/adjust, ambos con motivo obligatorio y su propia auditoría.
-const VERIFICATION_TEST_CUIT = process.env.VERIFICATION_TEST_CUIT || '27320694359';
 
 // Presupuesto de UNA prueba diaria completa — medido por SQL sobre usage_logs (2026-06-20,
 // reconfirmado el 12/08), no estimado:
