@@ -3762,6 +3762,22 @@ async function renderDiagnostico() {
         .diag-btn.secondary { background:#f3f4f6; color:#374151; }
         .diag-btn.secondary:hover:not(:disabled) { background:#e5e7eb; }
         .diag-pjn-cmd { font-family:monospace; font-size:12px; background:#f3f4f6; padding:6px 12px; border-radius:6px; color:#1f2937; flex:1; overflow-x:auto; }
+        .diag-verif-flujos { padding:6px 18px 2px; }
+        .diag-verif-flujo-row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:6px 0; font-size:13px; border-bottom:1px solid #f3f4f6; }
+        .diag-verif-flujo-row:last-child { border-bottom:none; }
+        .diag-verif-flujo-nombre { flex:0 0 auto; color:#374151; }
+        .diag-verif-flujo-detalle { text-align:right; color:#374151; }
+        .diag-verif-flujo-vieja { color:#b45309; font-size:11px; }
+        .diag-verif-cupo { margin:10px 18px 4px; padding:10px 12px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; font-size:12px; }
+        .diag-verif-cupo-titulo { font-weight:700; margin-bottom:6px; color:#1f2937; }
+        .diag-verif-cupo-row { display:flex; justify-content:space-between; padding:2px 0; color:#4b5563; }
+        .diag-verif-cupo-warn { color:#92400e; font-weight:600; margin-top:6px; }
+        .diag-verif-cmd-block { margin:12px 18px 16px; padding:12px 14px; border-radius:8px; font-size:12.5px; }
+        .diag-verif-cmd-block.destacado { background:#fef3c7; border:1px solid #f59e0b; color:#78350f; }
+        .diag-verif-cmd-block.discreto { background:#f9fafb; border:1px solid #e5e7eb; color:#6b7280; }
+        .diag-verif-cmd-line { display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap; }
+        .diag-verif-cmd-text { font-family:monospace; background:rgba(0,0,0,.06); padding:4px 10px; border-radius:6px; }
+        .diag-verif-req { margin-top:6px; font-size:11px; }
     </style>
 
     <div class="diag-grid">
@@ -3813,7 +3829,7 @@ async function renderDiagnostico() {
             </div>
         </div>
 
-        <!-- ── VERIFICACIÓN FUNCIONAL (PJN REAL) — SEC-2·B.2 ── -->
+        <!-- ── VERIFICACIÓN FUNCIONAL (PJN REAL) — SEC-2·B.2 + Etapa 1.5 ── -->
         <div class="diag-card">
             <div class="diag-card-header">
                 <div>
@@ -3823,7 +3839,10 @@ async function renderDiagnostico() {
                 <span class="diag-badge none" id="diag-verif-badge">—</span>
             </div>
             <div id="diag-verif-stale"></div>
-            <div class="diag-log" id="diag-verif-log" style="min-height:auto;">Esperando ejecución...</div>
+            <div class="diag-verif-flujos" id="diag-verif-flujos">Cargando...</div>
+            <div class="diag-log" id="diag-verif-historial" style="min-height:auto;display:none;"></div>
+            <div id="diag-verif-cupo"></div>
+            <div id="diag-verif-comando"></div>
         </div>
 
     </div>`;
@@ -3842,9 +3861,16 @@ async function renderDiagnostico() {
 
     try {
         const vdata = await apiFetch('/admin/diagnostics/verification/latest');
-        diagRenderVerification(vdata.latest, vdata.history || []);
+        diagRenderVerification(vdata.latest, vdata.history || [], vdata.ultimaVezOk || {});
     } catch (e) {
         document.getElementById('diag-verif-last').textContent = 'Error cargando resultados';
+    }
+
+    try {
+        const qdata = await apiFetch('/admin/diagnostics/verification/quota');
+        diagRenderVerifCupo(qdata.cupo);
+    } catch (e) {
+        document.getElementById('diag-verif-cupo').innerHTML = '';
     }
 }
 
@@ -3954,24 +3980,38 @@ window.diagCopyExtCmd = function() {
     });
 };
 
-// SEC-2·B.2 — reportado por la app Electron de la cuenta de prueba dedicada (oculto,
-// sin botón acá: no corre desde el dashboard, corre en la PC del operador).
-function diagRenderVerification(latest, history) {
-    const logEl    = document.getElementById('diag-verif-log');
+// SEC-2·B.2 + Etapa 1.5 — el reporte hoy viene de la prueba diaria vía computer-use
+// (Claude, en un chat), no de la app: dailyVerification.js sigue apagado. El orden y los
+// nombres de los 5 flujos son los mismos que valida el backend (VERIFICATION_FLUJOS_VALIDOS).
+const VERIF_FLUJOS_ORDEN = ['proc', 'batch', 'informe', 'informe_lote', 'monitor'];
+const VERIF_FLUJO_NOMBRES = {
+    proc: 'Procuración', batch: 'Procuración por lote',
+    informe: 'Informe individual', informe_lote: 'Informe por lote',
+    monitor: 'Monitor — novedades'
+};
+const VERIF_ESTADO_ICON = { ok: '✅', error: '❌', omitido: '⏭️' };
+
+function diagRenderVerification(latest, history, ultimaVezOk) {
+    ultimaVezOk = ultimaVezOk || {};
+    const flujosEl = document.getElementById('diag-verif-flujos');
+    const histEl   = document.getElementById('diag-verif-historial');
     const badgeEl  = document.getElementById('diag-verif-badge');
     const lastEl   = document.getElementById('diag-verif-last');
     const staleEl  = document.getElementById('diag-verif-stale');
 
     if (!latest) {
-        logEl.innerHTML  = 'Sin verificaciones reportadas todavía.\n\nSe reportan automáticamente desde la app Electron del operador (módulo oculto, ver docs/internal).';
+        flujosEl.innerHTML = 'Sin verificaciones reportadas todavía.';
+        histEl.style.display = 'none';
         badgeEl.textContent = '—';
         badgeEl.className   = 'diag-badge none';
         lastEl.textContent  = 'Nunca reportado';
         staleEl.innerHTML   = '';
+        diagRenderVerifComando(true);
         return;
     }
 
     const daysSince = (Date.now() - new Date(latest.timestamp).getTime()) / 86400000;
+    const vencida = daysSince > 7 || latest.estado === 'error';
     let badgeClass = 'ok', badgeText = '✅ OK';
     if (latest.estado === 'error') {
         badgeClass = 'fail'; badgeText = '❌ Error';
@@ -3982,28 +4022,127 @@ function diagRenderVerification(latest, history) {
     }
     badgeEl.textContent = badgeText;
     badgeEl.className   = `diag-badge ${badgeClass}`;
-    lastEl.textContent  = `Última verificación: ${diagRelativeTime(latest.timestamp)}`;
+
+    const origenTxt = latest.origen === 'app-automatica' ? 'app automática' : 'computer-use';
+    const cuentaTxt = latest.cuenta ? ` · cuenta ${latest.cuenta}` : '';
+    lastEl.textContent = `Última verificación: ${diagRelativeTime(latest.timestamp)} · origen: ${origenTxt}${cuentaTxt}`;
 
     staleEl.innerHTML = (daysSince > 7)
         ? `<div class="diag-stale-warning">⚠️ Hace más de 7 días que no se verifica el funcionamiento contra el PJN real — te recomendamos correr una verificación.</div>`
         : '';
 
-    const rowsHtml = ['procuracion', 'informe'].map(k => {
-        const d = latest[k];
-        if (!d) return `<div class="diag-verif-row"><span>${k === 'procuracion' ? 'Procuración' : 'Informe'}</span><span style="color:#9ca3af;">no corrió</span></div>`;
-        const tiempo = d.tiempoMs ? `${(d.tiempoMs / 1000).toFixed(1)}s` : '';
-        const errTxt = escHtml(d.error || 'error');
-        return `<div class="diag-verif-row"><span>${k === 'procuracion' ? 'Procuración' : 'Informe'}</span><span>${d.ok ? '✅ OK' : '❌ ' + errTxt} ${tiempo ? '· ' + tiempo : ''}</span></div>`;
+    const porClave = new Map((latest.flujos || []).map(f => [f.clave, f]));
+    flujosEl.innerHTML = VERIF_FLUJOS_ORDEN.map(clave => {
+        const nombre = VERIF_FLUJO_NOMBRES[clave];
+        const f = porClave.get(clave);
+        const vezOkTxt = ultimaVezOk[clave] ? `última vez OK: ${diagRelativeTime(ultimaVezOk[clave])}` : null;
+
+        if (!f) {
+            const detalle = vezOkTxt ? `no corrió · <span class="diag-verif-flujo-vieja">${vezOkTxt}</span>` : 'no corrió';
+            return `<div class="diag-verif-flujo-row"><span class="diag-verif-flujo-nombre">${escHtml(nombre)}</span><span class="diag-verif-flujo-detalle" style="color:#9ca3af;">${detalle}</span></div>`;
+        }
+
+        const icon = VERIF_ESTADO_ICON[f.estado] || '❓';
+        const tiempo = f.tiempoMs ? ` · ${(f.tiempoMs / 1000).toFixed(1)}s` : '';
+        const detalleTxt = f.detalle ? ` — ${escHtml(f.detalle)}` : '';
+        const vezOkExtra = (f.estado !== 'ok' && vezOkTxt) ? ` · <span class="diag-verif-flujo-vieja">${vezOkTxt}</span>` : '';
+        return `<div class="diag-verif-flujo-row"><span class="diag-verif-flujo-nombre">${escHtml(nombre)}</span><span class="diag-verif-flujo-detalle">${icon}${tiempo}${detalleTxt}${vezOkExtra}</span></div>`;
     }).join('');
 
     const historyHtml = (history || []).slice(0, 10).map(h =>
         `${diagRelativeTime(h.timestamp)} — ${h.estado === 'ok' ? '✅' : h.estado === 'parcial' ? '⚠️' : '❌'} ${h.estado}`
     ).join('\n');
+    const notasHtml = latest.notas ? `<div style="margin-top:8px;"><strong>Notas:</strong> ${escHtml(latest.notas)}</div>` : '';
+    if (historyHtml || notasHtml) {
+        histEl.style.display = 'block';
+        histEl.innerHTML = (historyHtml ? `<div style="white-space:pre-line;">Historial reciente:\n${historyHtml}</div>` : '') + notasHtml;
+    } else {
+        histEl.style.display = 'none';
+        histEl.innerHTML = '';
+    }
 
-    logEl.innerHTML = rowsHtml + (historyHtml
-        ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid #f3f4f6; font-size:11.5px; color:#6b7280; white-space:pre-line;">Historial reciente:\n${historyHtml}</div>`
-        : '');
+    diagRenderVerifComando(vencida);
 }
+
+// Cupo de la ÚNICA cuenta de verificación (VERIFICATION_TEST_CUIT) — F2 del plan.
+function diagRenderVerifCupo(cupo) {
+    const el = document.getElementById('diag-verif-cupo');
+    if (!el) return;
+    if (!cupo) { el.innerHTML = ''; return; }
+
+    const subs = [['proc', 'Procuración'], ['batch', 'Batch'], ['informe', 'Informe'], ['monitor_novedades', 'Monitor']];
+    const filas = subs.map(([k, label]) => {
+        const s = cupo.submodulos[k];
+        const txt = s.ilimitado ? 'ilimitado' : `${s.used}/${s.limit + s.bonus} (quedan ${s.remaining})`;
+        return `<div class="diag-verif-cupo-row"><span>${label}</span><span>${txt}</span></div>`;
+    }).join('');
+    const g = cupo.global;
+    const globalTxt = g.ilimitado ? 'ilimitado' : `${g.used}/${g.limit} (quedan ${g.remaining})`;
+
+    let warn = '';
+    if (!cupo.alcanzaParaUnaPrueba) {
+        warn = `<div class="diag-verif-cupo-warn">⚠️ No alcanza para correr una prueba completa.</div>`;
+    } else if (!cupo.alcanzaParaReserva) {
+        warn = `<div class="diag-verif-cupo-warn">⚠️ Alcanza para una prueba, pero no para la reserva de ${cupo.reservaObjetivo}.</div>`;
+    }
+
+    el.innerHTML = `
+        <div class="diag-verif-cupo">
+            <div class="diag-verif-cupo-titulo">Cupo de la cuenta de verificación (${escHtml(cupo.email)})</div>
+            ${filas}
+            <div class="diag-verif-cupo-row"><span>Global</span><span>${globalTxt}</span></div>
+            ${warn}
+            <button class="diag-btn secondary" style="margin-top:8px;" id="diag-btn-recargar-cupo" onclick="diagRecargarCupoVerif()">🔋 Recargar cupo</button>
+        </div>`;
+}
+
+// El comando queda SIEMPRE visible en la tarjeta (pedido del operador) — destacado si la
+// verificación está vencida (>7 días o el último reporte fue error), discreto si está al día.
+function diagRenderVerifComando(vencida) {
+    const el = document.getElementById('diag-verif-comando');
+    if (!el) return;
+    const tono = vencida ? 'destacado' : 'discreto';
+    el.innerHTML = `
+        <div class="diag-verif-cmd-block ${tono}">
+            ${vencida ? '<div>⚠️ Hace tiempo que no se verifica contra el PJN real, o el último resultado tuvo un error.</div>' : ''}
+            <div class="diag-verif-cmd-line">
+                <span>${vencida ? 'Pedile esto a Claude:' : 'Para volver a verificar:'}</span>
+                <span class="diag-verif-cmd-text">corré la prueba diaria de la app</span>
+                <button class="diag-btn secondary" onclick="diagCopyVerifCmd()" title="Copiar comando">📋</button>
+            </div>
+            ${vencida ? '<div class="diag-verif-req">Requisitos: la app Electron abierta y logueada con la cuenta de prueba, y aprobar el acceso de computer-use cuando lo pida.</div>' : ''}
+        </div>`;
+}
+
+window.diagCopyVerifCmd = function() {
+    navigator.clipboard.writeText('corré la prueba diaria de la app').then(() => {
+        const btn = document.querySelector('#diag-verif-comando .diag-btn');
+        if (!btn) return;
+        btn.textContent = '✅';
+        setTimeout(() => { btn.textContent = '📋'; }, 1500);
+    });
+};
+
+window.diagRecargarCupoVerif = async function() {
+    const ok = await showConfirm('¿Recargar el cupo de la cuenta de verificación para poder correr una prueba real contra el PJN?');
+    if (!ok) return;
+
+    const btn = document.getElementById('diag-btn-recargar-cupo');
+    if (btn) { btn.disabled = true; btn.textContent = 'Recargando...'; }
+    try {
+        const data = await apiFetch('/admin/diagnostics/verification/quota/top-up', 'POST', {});
+        if (!data.aplicado) {
+            showToast(data.motivo === 'ya_alcanza' ? 'El cupo ya alcanza — no hizo falta recargar.' : 'No se aplicó ninguna recarga.', 'info');
+        } else {
+            showToast('Cupo recargado.', 'success');
+        }
+        diagRenderVerifCupo(data.cupo);
+    } catch (e) {
+        showToast(e.message || 'Error de conexión.', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔋 Recargar cupo'; }
+    }
+};
 
 function diagRelativeTime(iso) {
     if (!iso) return '—';

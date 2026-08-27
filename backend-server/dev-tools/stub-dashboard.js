@@ -46,6 +46,39 @@ let nextExtraId = 1;
 let nextBenefitId = 1;
 let nextAdjId = 1;
 
+// Etapa 1.5 (F1/F2) — seed que refleja el estado REAL medido en producción el 2026-08-26:
+// informe en 46/50 (alcanza para 1 prueba pero no para la reserva de 2), 3 partes activas.
+const VERIF_STATE = {
+    latest: {
+        timestamp: new Date(Date.now() - 3 * 86400000).toISOString(),
+        origen: 'computer-use', cuenta: '27320694359', estado: 'parcial', tiempoTotalMs: 640000,
+        flujos: [
+            { clave: 'proc', nombre: 'Procuración', estado: 'ok', tiempoMs: 41200, detalle: '2/2 exitosos' },
+            { clave: 'batch', nombre: 'Procuración por lote', estado: 'ok', tiempoMs: 21000, detalle: '2/2 exitosos' },
+            { clave: 'informe', nombre: 'Informe individual', estado: 'ok', tiempoMs: 71300, detalle: 'PDF 4 páginas' },
+            { clave: 'informe_lote', nombre: 'Informe por lote', estado: 'omitido', tiempoMs: null, detalle: 'sin cupo de informes' },
+            { clave: 'monitor', nombre: 'Monitor — novedades', estado: 'ok', tiempoMs: 18500, detalle: '3/3 partes, 0 novedades' },
+        ],
+        notas: 'Corrida de seed del stub-dashboard.',
+        reportedBy: 'admin@stub.local',
+    },
+    history: [],
+};
+VERIF_STATE.history = [VERIF_STATE.latest];
+
+const VERIF_CUPO = {
+    userId: 250, email: 'procuradortool@gmail.com', cuit: '27320694359', esTrial: true,
+    partesActivas: 3,
+    submodulos: {
+        proc: { used: 24, limit: 50, bonus: 0, ilimitado: false, remaining: 26, costoPorPrueba: 1 },
+        batch: { used: 10, limit: 20, bonus: 0, ilimitado: false, remaining: 10, costoPorPrueba: 1 },
+        informe: { used: 46, limit: 50, bonus: 0, ilimitado: false, remaining: 4, costoPorPrueba: 3 },
+        monitor_novedades: { used: 26, limit: 50, bonus: 0, ilimitado: false, remaining: 24, costoPorPrueba: 3 },
+    },
+    global: { used: 97, limit: 110, ilimitado: false, remaining: 13, costoPorPrueba: 6 },
+    alcanzaParaUnaPrueba: true, alcanzaParaReserva: false, reservaObjetivo: 2,
+};
+
 const PLANS = [
     { id: 1, name: 'COMBO_PROMO', display_name: 'Combo Beta', description: 'Plan combo de seed.',
       plan_type: 'combo', price_usd: null, price_ars: 15000, visibility: 'public', bitacora_enabled: true,
@@ -876,7 +909,31 @@ http.createServer(async (req, res) => {
                 logs: ['[stub] ▶ Corriendo checks...', '✅ health', '✅ landing', '✅ portal', '[stub] RESULTADO: 8/8'] };
             return json(res, { success: true, result });
         }
-        if (p === '/admin/diagnostics/verification/latest' && req.method === 'GET') return json(res, { success: true, latest: null, history: [] });
+        if (p === '/admin/diagnostics/verification/latest' && req.method === 'GET') {
+            const ultimaVezOk = {};
+            for (const entry of VERIF_STATE.history) {
+                for (const f of (entry.flujos || [])) {
+                    if (f.estado === 'ok' && !ultimaVezOk[f.clave]) ultimaVezOk[f.clave] = entry.timestamp;
+                }
+            }
+            return json(res, { success: true, latest: VERIF_STATE.latest, history: VERIF_STATE.history, ultimaVezOk });
+        }
+        if (p === '/admin/diagnostics/verification/quota' && req.method === 'GET') {
+            return json(res, { success: true, cupo: VERIF_CUPO });
+        }
+        if (p === '/admin/diagnostics/verification/quota/top-up' && req.method === 'POST') {
+            await readBody(req);
+            if (VERIF_CUPO.alcanzaParaReserva) return json(res, { success: true, aplicado: false, motivo: 'ya_alcanza', cupo: VERIF_CUPO });
+            const aplicados = [];
+            const s = VERIF_CUPO.submodulos.informe;
+            const faltanteS = Math.max(0, s.costoPorPrueba * VERIF_CUPO.reservaObjetivo - s.remaining);
+            if (faltanteS > 0) { s.bonus += faltanteS; s.remaining += faltanteS; aplicados.push({ subsistema: 'informe', sumado: faltanteS }); }
+            const g = VERIF_CUPO.global;
+            const faltanteG = Math.max(0, g.costoPorPrueba * VERIF_CUPO.reservaObjetivo - g.remaining);
+            if (faltanteG > 0) { g.limit += faltanteG; g.remaining += faltanteG; aplicados.push({ subsistema: 'global', sumado: faltanteG }); }
+            VERIF_CUPO.alcanzaParaReserva = true;
+            return json(res, { success: true, aplicado: true, aplicados, recortados: [], cupo: VERIF_CUPO });
+        }
 
         // ── Scripts ──
         if (p === '/admin/scripts' && req.method === 'GET') return json(res, { success: true, scripts: SCRIPTS });
