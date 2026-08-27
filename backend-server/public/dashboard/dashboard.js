@@ -38,16 +38,17 @@ async function doLogin() {
         localStorage.setItem('admin_token', token);
         localStorage.setItem('admin_email', email);
 
-        // Recordar credenciales
+        // Recordar SOLO el email — nunca la contraseña. Es la cuenta de mayor
+        // privilegio del sistema; antes se guardaba con btoa() ("ofuscación
+        // básica"), que es Base64 trivialmente reversible, no cifrado real.
         if (remember) {
             localStorage.setItem('admin_remember', '1');
             localStorage.setItem('admin_saved_email', email);
-            localStorage.setItem('admin_saved_pass',  btoa(password));  // ofuscación básica
         } else {
             localStorage.removeItem('admin_remember');
             localStorage.removeItem('admin_saved_email');
-            localStorage.removeItem('admin_saved_pass');
         }
+        localStorage.removeItem('admin_saved_pass'); // migración: limpia lo ya guardado
 
         showApp();
         navFromHash();
@@ -96,13 +97,15 @@ function showApp() {
     document.getElementById('admin-email').textContent  = localStorage.getItem('admin_email') || 'Admin';
 }
 
-// Pre-llenar credenciales recordadas
+// Pre-llenar SOLO el email recordado — nunca la contraseña (ver doLogin()).
+// El removeItem de admin_saved_pass es la migración: si el navegador del admin
+// todavía tenía una contraseña vieja guardada de antes de este cambio, se borra
+// acá también, no solo en el próximo login exitoso.
 window.addEventListener('load', () => {
+    localStorage.removeItem('admin_saved_pass');
     if (localStorage.getItem('admin_remember') === '1') {
         const savedEmail = localStorage.getItem('admin_saved_email') || '';
-        const savedPass  = localStorage.getItem('admin_saved_pass')  || '';
-        document.getElementById('login-email').value    = savedEmail;
-        document.getElementById('login-password').value = savedPass ? atob(savedPass) : '';
+        document.getElementById('login-email').value = savedEmail;
         document.getElementById('login-remember').checked = true;
     }
 });
