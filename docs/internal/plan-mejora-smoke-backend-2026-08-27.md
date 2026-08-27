@@ -1,8 +1,14 @@
 # Plan — Mejora de la verificación automática del backend
 
-> Escrito: 2026-08-27 · Estado: **propuesta, sin ejecutar**
+> Escrito: 2026-08-27 · **Estado: ✅ LAS 3 FASES EJECUTADAS, VERIFICADAS Y DESPLEGADAS A PRODUCCIÓN (2026-08-27)**
 > Origen: pedido del operador — *"revisá el smoke test de backend API con la finalidad de
 > establecer un plan de mejora para anticiparse a fallas, o determiná si conviene dejarlo así"*.
+>
+> **Fase 1** (`health-check.js`, 7 checks, cron 08:00, alerta por email con dedup, cierra H-1)
+> · **Fase 2** (`run-api` de 8 checks triviales a 14, incluido el primer camino feliz autenticado
+> de todo el smoke) · **Fase 3** (tarjeta "🩺 Salud automática" en Diagnóstico, con alarma de
+> "desactualizado"). Commits `94a756d` (F1) · `9bfc26a` (F2) · `b75bcfa` (F3). Detalle completo
+> de la ejecución en `CLAUDE.md`, sesión 2026-08-27.
 > Todo lo que dice §1 está **medido en vivo** el 2026-08-27, no estimado.
 
 ---
