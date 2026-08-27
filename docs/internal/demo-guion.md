@@ -2,18 +2,22 @@
 
 > **Origen:** [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md), bloque D1.
 > **Fecha:** 2026-08-27. **Autor:** sesión D1 (Sonnet, esfuerzo medio).
-> **Estado:** guion completo, sin capturas todavía (eso es D3/D4).
+> **Estado:** guion completo, **revisado contra 34 capturas de referencia reales**. Sin capturas de
+> producción todavía (eso es D3/D4).
 >
-> ⚠️ **Nota sobre la fuente de referencia del plan:** D1 debía mirar primero "las 36 capturas de
-> referencia en `C:\Users\JONATHAN\Desktop\ordenar\imagenes`". **Esa carpeta ya no existe en la
-> máquina** — se buscó en todo el Desktop y en OneDrive sin encontrarla (probablemente movida o
-> borrada desde el 2026-08-26). Este guion se armó en su lugar a partir de: (a) el copy real de
-> `backend-server/public/landing/index.html` (secciones `#features`, `#extension`, `#planes`), que
-> ya describe cada módulo con el lenguaje que el operador aprobó para vender el producto, y (b) la
-> estructura real de pantallas/modales del código (Electron `index.html`, portal `index.html`),
-> confirmada por id, no supuesta. **Si la carpeta de referencia reaparece, revisar el encuadre de
-> cada capítulo contra esas capturas antes de D3** — puede haber composiciones puntuales que el
-> operador ya había elegido y que este guion no conoce.
+> **La carpeta de referencia apareció en una ubicación distinta a la del plan** —
+> `C:\Users\JONATHAN\Pictures\Screenshots\imagenes_pt` (no `Desktop\ordenar\imagenes`), 34 capturas
+> del 2026-08-25, un recorrido real y coherente del operador por la app + el portal + el sitio del
+> PJN + la extensión. **Las 34 se revisaron una por una** contra el borrador inicial de este guion.
+> Resultado: **confirma la estructura de 7 capítulos punto por punto**, y agrega hallazgos reales
+> que el borrador (armado solo desde código y landing) no podía anticipar — documentados capítulo
+> por capítulo abajo, marcados **🔍 hallazgo de la revisión**.
+>
+> 🚨 **Ninguna de las 34 capturas es reutilizable tal cual en la demo** — todas tienen datos reales
+> sensibles (CUIT `27320694359` visible en al menos 6 pantallas distintas: login, SSO ×2, gestor de
+> contraseñas ×2, topbar del SCW ×2; email real; carátulas y nombres de partes reales de expedientes
+> reales; el nombre de usuario de Windows `JONATHAN` en una ruta de archivo). Sirven **solo como
+> referencia de encuadre y composición** para D2/D3/D4 — nunca como asset final.
 
 ---
 
@@ -40,6 +44,24 @@ cada uno y un menú superior fijo para saltar a cualquiera. Deep-link por capít
 
 ---
 
+## 0.5. Onboarding — material real disponible, decisión pendiente
+
+**🔍 Hallazgo de la revisión:** las capturas incluyen la secuencia completa del **wizard de
+configuración inicial** (`#modalOnboarding` o equivalente) — 4 pasos con progreso visual: (1)
+*Verificando conexión al servidor* → (2) *Iniciar sesión* → (3) *Configurar perfil de Chrome* → (4)
+*Configurar acceso al portal PJN* → pantalla de cierre *"¡Configuración completada!"* con botones
+"Ver tour rápido" / "Entrar a la aplicación".
+
+Es una secuencia limpia y vendible (transmite "en 4 pasos estás usando la app"), pero **no estaba en
+el guion original** porque no es un módulo de la landing — es onboarding puro. **Decisión pendiente
+para D1→D2:** ¿se agrega como un capítulo 0 corto ("Así de fácil es empezar") antes de "El
+problema", o se deja fuera para no diluir el foco en valor de producto? **Recomendación: dejarlo
+fuera del tour principal** — el wizard vende "fácil de instalar", no "resuelve tu problema", y el
+plan ya prioriza mostrar valor rápido. Si se quiere igual, es material de bajo costo para un capítulo
+opcional corto al final, no al principio.
+
+---
+
 ## 1. Capítulo — El problema
 
 **Objetivo narrativo:** anclar la demo en el dolor real antes de mostrar la solución. Sin esto, los
@@ -57,6 +79,14 @@ capítulos siguientes son una galería de features sin contexto.
 
 **Nota:** este capítulo es el único 100% manual del guion completo (D4). Es corto a propósito — una
 sola pantalla del PJN alcanza, no hace falta una galería del dolor.
+
+**🔍 Hallazgo de la revisión — confirma una exclusión ya recomendada por el plan:** las capturas
+incluyen la pantalla de login SSO del PJN (`sso.pjn.gov.ar`) **con el CUIT real precargado en el
+campo Usuario**, en dos instantes distintos del recorrido. Es la prueba visual directa de por qué el
+plan (§4, punto 3) ya recomendaba **no incluirla en la demo**: el campo autocompletado no se puede
+"vaciar" en una captura real sin herramientas de edición, y aporta poco valor comercial frente al
+riesgo. **Confirmado: esta pantalla queda fuera del guion**, en el problema y en cualquier otro
+capítulo.
 
 ---
 
@@ -113,16 +143,26 @@ PDF" queda **activo**, no "N/A", porque es justo el detalle que un visitante rea
 
 | Paso | Pantalla | Elemento real | D3/D4 | Dato sintético |
 |---|---|---|---|---|
-| 4.1 | Modal **Monitor**, formulario de alta de parte (nombre + jurisdicción) | `#modalMonitor` | **D3** | `"ESTUDIO DEMO S.A."`, jurisdicción `FCR` |
-| 4.2 | Listado de partes con badge "Base lista" / "Sin base" | mismo modal | **D3** | 2-3 partes ficticias |
-| 4.3 | Resultado de **Consulta Inicial** — "N expedientes en base" (server-rendered, `stat-val`/`stat-label`) | `generarVisorMonitoreo()` en `main.js` | **D3** | N inventado, ej. `18` |
-| 4.4 | Resultado de **Buscar Novedades** — "Novedades detectadas: 2" con las filas resaltadas | mismo generador, otra corrida | **D3** | 1-2 expedientes nuevos ficticios |
+| 4.1 | Modal **Monitor**, pestaña **Partes** — formulario de alta (jurisdicción + nombre, con placeholder `EJ: PEREZ JUAN CARLOS`) | `#modalMonitor`, pestaña `Partes` | **D3** | `"ESTUDIO DEMO S.A."`, jurisdicción `FCR` |
+| 4.2 | Listado de partes con badge "Base lista" / "Sin base", cupo `N de 20 parte(s)` | mismo modal, pestaña `Partes` | **D3** | 2-3 partes ficticias |
+| 4.3 | **🔍 Pestaña Expedientes** — tabla real con columnas Expediente/Dependencia/Carátula/Situación/Últ. actuación, filtrable por parte, con checkboxes de selección | `#modalMonitor`, pestaña `Expedientes` (3ra pestaña, no estaba en el guion original) | **D3** | carátulas ficticias, misma forma que §2 |
+| 4.4 | **🔍 Barra de selección masiva** al tildar filas: `"N seleccionado(s)"` + botones **`📌 Guardar casos`** y **`+ Crear entradas...`** | misma pestaña `Expedientes` | **D3** | — |
+| 4.5 | Resultado de **Consulta Inicial** — "N expedientes en base" (server-rendered, 3 tarjetas: Partes procesadas / Exitosas / Expedientes en base) | `generarVisorMonitoreo()` en `main.js` | **D3** | N inventado, ej. `18` |
+| 4.6 | Resultado de **Buscar Novedades** — "Novedades detectadas: N" con las filas resaltadas | mismo generador, otra corrida | **D3** | 1-2 expedientes nuevos ficticios |
 
-⚠️ **Trampa ya documentada en el proyecto** (`tests/daily/README.md`): la 3ra tarjeta cambia de
-label según el modo — *"Expedientes en base"* en `inicial`, *"Novedades detectadas"* en `novedades`.
-Al armar el fixture del visor, generar **los dos estados reales**, no un mismo HTML con el número
-cambiado a mano — si no, la captura puede mostrar la combinación label+dato que en producción nunca
-ocurre junta.
+⚠️ **Trampa ya documentada en el proyecto** (`tests/daily/README.md`): la 3ra tarjeta del visor de
+Monitor cambia de label según el modo — *"Expedientes en base"* en `inicial`, *"Novedades
+detectadas"* en `novedades`. Al armar el fixture del visor, generar **los dos estados reales**, no
+un mismo HTML con el número cambiado a mano — si no, la captura puede mostrar la combinación
+label+dato que en producción nunca ocurre junta.
+
+**🔍 Hallazgo de la revisión, no anticipado en el borrador original:** el modal Monitor tiene **3
+pestañas**, no 2 como asumía la primera versión de este guion — `Partes` / `Expedientes` /
+`Novedades`. La pestaña `Expedientes` (4.3-4.4) es en sí misma una demostración fuerte del puente
+hacia Bitácora (botón `📌 Guardar casos` con selección múltiple) — más contundente que mostrar el
+puente solo desde el visor de procuración del capítulo 5. Vale la pena mostrarla acá o en el
+capítulo 5, pero **no en los dos** (redundante) — decisión para D5: se deja en el capítulo 5 (§5.1),
+que ya conecta narrativamente los 4 módulos previos.
 
 **Pills a reforzar:** *Multi-jurisdicción · Civil, Laboral, Federal y más · Línea base por parte ·
 Confirmación masiva · Notificaciones Windows.*
@@ -137,7 +177,7 @@ Confirmación masiva · Notificaciones Windows.*
 
 | Paso | Pantalla | Elemento real | D3/D4 | Dato sintético |
 |---|---|---|---|---|
-| 5.1 | El botón **📌 Guardar caso** en la barra de selección de un visor (el "clic" que vende la landing) | botonera de captura de F2.1-F2.2, visible en los visores | **D3** | expediente de §2 |
+| 5.1 | **🔍 La barra de 5 acciones al pie del modal de detalle** de un movimiento (dentro del visor de procuración): **`+ Vencimiento`**, **`+ Tarea`**, **`+ Nota`**, **`📌 Guardar caso`**, **`💾 Guardar procuración`** — confirmado el set exacto en la captura real, no solo "un botón guardar" como asumía el borrador | modal de detalle del visor de novedades, footer de acciones | **D3** | expediente de §2 |
 | 5.2 | La sección **Bitácora** del portal, vista **Mes** — calendario con 2-3 entradas coloreadas por tipo | `#section-bitacora`, `#bitacora-vista-mes` | **D3**, Playwright contra el stub de V0 | Vencimiento `Contestar demanda — FCR 00001/2024`, audiencia, nota |
 | 5.3 | La vista **Semana** (F3.4, Bloque A) | `#bitacora-vista-semana` | **D3** | mismo fixture |
 | 5.4 | La ficha de un caso en **Mis Expedientes** — historial de entradas + snapshots | `#section-mis-expedientes`, `#mexp-ficha-body` | **D3** | mismo expediente, 2-3 entradas vinculadas |
@@ -206,13 +246,21 @@ posterior** (ver Riesgo R6 del plan, ya resuelto).
 
 | Paso | Pantalla | Fuente | D3/D4 | Dato sintético |
 |---|---|---|---|---|
-| 7.1 | El popup de la extensión, con los 5 flujos listados (SCW, Escritos ×2, Notificaciones, DEOX) | Extensión real en Chrome | **D4** (operador) | — |
-| 7.2 | El autocompletado en acción en **Consulta SCW** — jurisdicción/número/año cargados solos | Sitio real del PJN | **D4** | **Sustitución**: expediente real → sintético en la redacción de D4 |
-| 7.3 | El autocompletado en **Escritos** (`escritos.pjn.gov.ar`) | Sitio real del PJN | **D4** | mismo tratamiento |
-| 7.4 | El menú contextual "Enviar expediente a PJN" desde cualquier página de Chrome | Extensión real | **D4** | — |
+| 7.1 | El popup de la extensión — header **"Procurador TOOL v1.3.x"** + chip de cuenta (email · plan · "Salir") + grilla de **5 flujos** (Consulta / Escritos 1 / Escritos 2 / Notificaciones / DEOX) + campo "Ingresá el expediente" con placeholder `Ej.: FCR 18745/2017` | Extensión real en Chrome | **D4** (operador) | Email/plan de la cuenta demo en el chip |
+| 7.2 | El mismo popup con el campo **ya completado** (ej. tras usar el menú contextual) — confirma que el flujo funciona de punta a punta | Extensión real | **D4** | **Sustitución**: expediente real → sintético en la redacción de D4 |
+| 7.3 | El autocompletado en acción en **Consulta SCW** — jurisdicción/número/año cargados solos en el sitio real | Sitio real del PJN | **D4** | mismo tratamiento |
+| 7.4 | El autocompletado en **Escritos** (`escritos.pjn.gov.ar`) | Sitio real del PJN | **D4** | mismo tratamiento |
+| 7.5 | **🔍 El menú contextual "Enviar expediente a PJN"** — click derecho sobre el número de expediente **seleccionado** en la página real del SCW, con el menú nativo de Chrome desplegado y la opción de la extensión (ícono propio) resaltada | Sitio real del PJN + extensión | **D4** | mismo tratamiento — confirma exactamente la composición: expediente resaltado en azul + menú contextual con "Copiar / Copiar el vínculo / Preguntale a Gemini / ... / Enviar expediente a PJN / Inspeccionar" |
 
 **Pills a reforzar:** *Consulta de expedientes · Presentación de escritos · Notificaciones y DEOX ·
 Lanzá flujos desde cualquier página de Chrome.*
+
+**🔍 Hallazgo de la revisión:** las capturas confirman la composición exacta de 7.1/7.2/7.5 con
+detalle que el borrador no podía tener (versión de la extensión visible en el header, el orden de
+las 5 tarjetas de flujo, el texto exacto del placeholder, las opciones del menú contextual nativo
+alrededor de la propia). **7.5 es el paso más fuerte de todo el capítulo** — muestra en una sola
+imagen la promesa completa ("seleccioná el número, click derecho, listo") sin necesitar abrir nada
+manualmente.
 
 **Motivo de que sea 100% D4** (confirmado, no supuesto, en §0.1/§4 del plan): `list_connected_browsers`
 da `[]` — no hay Chrome conectado por Claude-in-Chrome — y aunque computer-use *vea* un navegador,
@@ -229,25 +277,36 @@ del operador, no una limitación técnica a resolver en D1-D6.
 | 1. El problema | — | 1.1, 1.2 |
 | 2. Procuración | 2.1–2.5 | — |
 | 3. Informe | 3.1–3.5 | — |
-| 4. Monitor | 4.1–4.4 | — |
+| 4. Monitor | 4.1–4.6 | — |
 | 5. Bitácora | 5.1–5.7 | — |
 | 6. Markdown | 6.1–6.8 | — |
-| 7. Extensión | — | 7.1–7.4 |
+| 7. Extensión | — | 7.1–7.5 |
 
-**26 pasos automatizables (D3), 6 manuales (D4)** — coincide con la cifra de §0.1 del plan
-(~90% automatizable). Los 6 de D4 son ~15 minutos de captura real, siguiendo esta tabla como
-checklist.
+**31 pasos automatizables (D3), 7 manuales (D4) — 38 pasos totales.** Subió respecto de la primera
+versión de este guion (26/6/32) al incorporar 2 hallazgos reales de la revisión de capturas: la
+pestaña "Expedientes" del Monitor con su barra de selección masiva (4.3-4.4, nuevos) y el desglose
+más preciso del capítulo Extensión (7.2 y 7.5, antes uno solo). Sigue siendo **~82% automatizable**
+— los 7 de D4 son ~15-20 minutos de captura real, siguiendo esta tabla como checklist.
 
 ---
 
 ## 9. Qué falta para pasar a D2
 
+✅ **Resuelto por la revisión de capturas del 2026-08-27:**
+- ~~Confirmar si la carpeta de referencia reaparece~~ — apareció (`Pictures\Screenshots\imagenes_pt`)
+  y ya se revisó completa contra este guion. No hay una segunda ronda de revisión pendiente.
+- ~~La pantalla de SSO del PJN, ¿se incluye?~~ — confirmado que no, con evidencia directa del
+  problema (CUIT real precargado en dos capturas distintas).
+
+**Sigue abierto:**
 - **Confirmar el set de expedientes ficticios** que atraviesa toda la demo (D2 los construye, pero
   el nombre/carátula exacta puede ajustarse — ver §2-§6, todos reusan los mismos 1-2 expedientes
-  para dar coherencia).
+  para dar coherencia). Los nombres que aparecen en las capturas de referencia (`DON COCHO`, `LA
+  TOSTADORA MODERNA`, `ALVAREZ MARTA FABIANA`) **no se reusan** — son datos de fixtures/pruebas del
+  proyecto real, no inventados a propósito para una demo pública.
 - **Decidir el mock de IA del paso 6.7-6.8**: ¿una interfaz neutra genérica, o directamente una
   captura de texto plano sin chrome de ventana? Recomiendo la segunda opción — es más barata de
   mantener y no corre riesgo de parecerse a la UI real de un producto de terceros que cambie de
   diseño.
-- **Confirmar si la carpeta `Desktop\ordenar\imagenes` reaparece** — si sí, pasar una revisión de
-  encuadre contra este guion antes de que D3 arranque a capturar en serio.
+- **Decidir si el capítulo 0 de onboarding (§0.5) se incluye** — hay material real disponible, pero
+  la recomendación de esta revisión es dejarlo fuera del tour principal (ver §0.5).

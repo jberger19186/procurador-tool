@@ -11,7 +11,8 @@
 > ya existan para poder mostrarlos.
 >
 > **Estado:** plan **revisado el 2026-08-27** con un spike ejecutado (§0.1), que cambió la premisa
-> más cara del plan original. **D1 ejecutada** (guion completo, ver [`demo-guion.md`](demo-guion.md)).
+> más cara del plan original. **D1 ejecutada y revisada contra 34 capturas reales** (guion completo,
+> ver [`demo-guion.md`](demo-guion.md)).
 > No se produjo ninguna captura de producción ni código de D2-D6 todavía.
 
 ---
@@ -195,13 +196,18 @@ material estático a partir de superficies que ya existen. El único tramo con e
 | | |
 |---|---|
 | **Modelo / esfuerzo** | Sonnet · **medio** |
-| **Entregable** | [`demo-guion.md`](demo-guion.md) — 7 capítulos, 32 pasos (26 automatizables en D3, 6 manuales de D4), tabla de dependencias D3/D4 al cierre |
+| **Entregable** | [`demo-guion.md`](demo-guion.md) — 7 capítulos, 38 pasos (31 automatizables en D3, 7 manuales de D4), tabla de dependencias D3/D4 al cierre |
 
-> ⚠️ **La carpeta de referencia `Desktop\ordenar\imagenes` (36 capturas) ya no existe en la
-> máquina** — se buscó en Desktop y OneDrive sin resultado. El guion se armó con el copy real de la
-> landing (`#features`/`#extension`/`#planes`) y la estructura real de pantallas/modales del código
-> (ids confirmados, no supuestos). Si la carpeta reaparece, revisar el encuadre contra el guion
-> antes de que D3 capture en serio — puede haber composiciones que el operador ya había elegido.
+> ✅ **La carpeta de referencia apareció** en `Pictures\Screenshots\imagenes_pt` (34 capturas del
+> 2026-08-25, no en `Desktop\ordenar\imagenes` como decía este plan) y **ya se revisó completa**
+> contra el guion. Confirmó la estructura punto por punto y agregó hallazgos reales: 2 pasos nuevos
+> en el capítulo Monitor (pestaña "Expedientes" con selección masiva, `📌 Guardar casos`), la
+> composición exacta del capítulo Extensión (menú contextual "Enviar expediente a PJN" sobre el
+> texto seleccionado), el set exacto de 5 botones del puente Procuración→Bitácora, y confirmó con
+> evidencia directa por qué excluir la pantalla de login SSO del PJN (CUIT real precargado, visible
+> en 2 capturas distintas). También reveló material real de onboarding (4-5 pantallas) no
+> contemplado en el guion original — decisión de dejarlo fuera del tour principal, ver §0.5 del
+> guion. Ninguna de las 34 capturas es reutilizable tal cual (todas con datos reales sensibles).
 
 Un guion, no una galería. La demo tiene que contar el recorrido de un usuario, no enumerar
 pantallas. Estructura propuesta (6 capítulos, ~20 pasos):
