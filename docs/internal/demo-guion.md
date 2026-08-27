@@ -392,15 +392,99 @@ sobre esa misma revisión:**
   se agregó como capítulo 7 nuevo (§0.7), apoyado en la tarjeta real "Dashboard y Gestión" de la
   landing.
 
-**Sigue abierto:**
-- **Confirmar el set de expedientes ficticios** que atraviesa toda la demo (D2 los construye, pero
-  el nombre/carátula exacta puede ajustarse — ver §2-§6, todos reusan los mismos 1-2 expedientes
-  para dar coherencia). Los nombres que aparecen en las capturas de referencia (`DON COCHO`, `LA
-  TOSTADORA MODERNA`, `ALVAREZ MARTA FABIANA`) **no se reusan** — son datos de fixtures/pruebas del
-  proyecto real, no inventados a propósito para una demo pública.
+✅ **Resuelto por D2 (2026-08-27) — ver §11:**
+- ~~Confirmar el set de expedientes ficticios~~ — construido en
+  `backend-server/dev-tools/demo-fixtures/expedientes.js`: 4 casos + 1 "novedad", con nombres
+  deliberadamente distintos de `DON COCHO`/`LA TOSTADORA MODERNA`/`ALVAREZ MARTA FABIANA` (fixtures
+  del propio proyecto, no pensados para exhibición pública).
+
+**Sigue abierto (no bloquea D2, son decisiones de D3/D5):**
 - **Decidir el mock de IA del paso 6.7-6.8**: ¿una interfaz neutra genérica, o directamente una
   captura de texto plano sin chrome de ventana? Recomiendo la segunda opción — es más barata de
   mantener y no corre riesgo de parecerse a la UI real de un producto de terceros que cambie de
   diseño.
 - **Decidir si el capítulo 0 de onboarding (§0.5) se incluye** — hay material real disponible, pero
   la recomendación de esta revisión es dejarlo fuera del tour principal (ver §0.5).
+
+---
+
+## 11. D2 ejecutado (2026-08-27) — fixtures + capa de sustitución, verificados
+
+**Entregable real, en `backend-server/dev-tools/demo-fixtures/`:**
+- `expedientes.js` — el set coherente de 4 expedientes ficticios (+ 1 "novedad" para el capítulo de
+  Monitor) que atraviesa Procuración → Informe → Monitor → Bitácora.
+- `procuracion.js`, `informe.js`, `monitor.js` — los mismos 4 casos, adaptados a la forma exacta de
+  dato que espera cada generador real (`datosEmbebidos` del visor de Procuración, `resumenJSON` de
+  `generarVisorHTML()`, `resultados` de `generarVisorMonitoreo()` — las 3 formas confirmadas por
+  lectura directa del código real, no supuestas).
+- `bitacora.js` — 3 fichas de "Expedientes seguidos" + 5 entradas de agenda con fechas CALCULADAS
+  relativas a "hoy" (no hardcodeadas), para que la vista Mes/Semana muestre una vencida/una de
+  hoy/una próxima sin importar qué día se regenere la demo.
+- `cuenta.js` — cuenta sintética con cupo deliberadamente lejos de cualquier umbral de aviso (§0.6):
+  las 3 barras de progreso quedan en verde, para que ningún banner aparezca sin querer en medio de
+  una captura.
+- `portal.js` — 2 facturas emitidas + 1 ticket resuelto con hilo real, para el capítulo 7.
+- `generar-visores.js` — genera los 6 visores (Procuración ind./lote, Informe ind./lote, Monitor
+  inicial/novedades) invocando las funciones REALES del producto, no maquetando HTML.
+- `demo-anonimizar.js` — la capa de sustitución por DOM (Parte B), con los entry points
+  `aplicarSustitucionLoginElectron`/`aplicarSustitucionPrincipalElectron`/`aplicarSustitucionPortal`.
+
+**Hallazgo real, no anticipado por el plan: `generarVisorMonitoreo()` NO era reusable como estaba.**
+El plan asumía que "reusar `generarVisorHTML()`/`generarVisorMonitoreo()` reales" era simétrico para
+las dos funciones — no lo era. `generarVisorHTML()` (`electron-app/informe/generador_visor.js`) ya
+era una función exportada, sin dependencia de Electron. `generarVisorMonitoreo()` en cambio era una
+función PRIVADA, sin exportar, definida adentro de `electron-app/main.js` — que en su primera línea
+hace `require('electron')`, así que ni siquiera se podía `require()` ese archivo desde un script Node
+plano. Se extrajo a su propio módulo, **`electron-app/monitor/generarVisorMonitoreo.js`** (301 líneas,
+copiadas byte a byte, verificadas antes de tocar `main.js`), siguiendo el mismo patrón que el proyecto
+ya usa en `electron-app/informe/motivoInformeSinPDF.js` — y por la misma razón que el propio historial
+del proyecto documenta dos veces como causa de bugs reales: la búsqueda de PDF duplicada entre
+`generador_visor.js`/`generador_excel.js`, y `VERIF_FLUJOS_ORDEN` duplicado entre backend y dashboard.
+`main.js` quedó con un `require()` a ese módulo nuevo en vez de la definición inline — verificado que
+los 2 call sites no cambiaron, que `node --check` pasa en ambos archivos, y que `npm start` arranca
+limpio 20s sin `uncaughtException`/`Cannot find module`.
+
+**Bug real encontrado en la propia verificación de D2, corregido antes de seguir:** el visor de
+Procuración usa un marcador `<!-- DATOS_EMBEBIDOS -->` que en el template queda ANTES del `<script>`
+que define `cargarDatosEmbebidos()` (línea 345 vs. 348). El primer intento de `generar-visores.js`
+llamaba a esa función inmediatamente dentro del bloque inyectado — reventaba con
+`cargarDatosEmbebidos is not defined`, confirmado con un error real de consola en Playwright, no
+supuesto. Fix: diferir la llamada con `document.addEventListener('DOMContentLoaded', ...)`, que
+garantiza que el resto del documento (incluida la función) ya corrió. Como el template no tiene
+NINGÚN otro call site de esa función (grep completo, cero coincidencias), esto es probablemente
+también cómo lo resuelve el script encriptado real que arma este HTML en producción — no se pudo
+confirmar contra ese código (zona protegida), pero es la única forma consistente con lo que el
+template realmente expone.
+
+**Verificado end-to-end con Playwright real, no solo por lectura de código:**
+- `generar-visores.js` corrido de punta a punta: genera 6 visores + 2 PDFs de placeholder (armados a
+  mano con sintaxis PDF mínima, sin depender de ninguna librería — `backend-server` no tiene
+  `pdfkit`/`puppeteer` como dependencia).
+- **Informe por lote:** navegado en un navegador real — 2/2 exitosos, 0 fallidos, **los 2 botones
+  "📄 Abrir PDF" activos y con el href correcto** (el criterio exacto que ya cazó 2 regresiones reales
+  en producción — `822bf0d`/`debb503` — confirmado que no se repite acá).
+- **Procuración por lote:** navegado real, 0 errores de consola tras el fix de `DOMContentLoaded`,
+  stats correctos (2/2/0/38s), tabla con los datos reales del fixture.
+- **Monitor — Consulta Inicial:** navegado real, stats correctos (1 parte/1 exitosa/4 expedientes en
+  base — el label "Expedientes en base" y no "Novedades detectadas", el hallazgo de la sesión
+  2026-08-27 cont. 21, confirmado vigente), badge "📁 ya seguido" presente para el expediente marcado
+  como seguido en `BITACORA_INFO_MONITOR`.
+- **`demo-anonimizar.js`:** un primer diseño componía `aplicarSustitucionElectron()` llamando a
+  funciones hermanas del mismo módulo — se descartó al confirmar que ni `page.evaluate(fn, args)`
+  (Playwright JS) ni el `.toString()` que consume un driver Python arrastran funciones hermanas al
+  inyectar una función sola. Los 2 entry points reales (`aplicarSustitucionLoginElectron`,
+  `aplicarSustitucionPrincipalElectron`) quedaron autocontenidos. Verificado el de login contra el
+  HTML REAL de `electron-app/renderer/login.html` (servido tal cual, sin mocks): sustituye
+  `#email.value` y `#machineIdDisplay` (texto truncado + `title` completo) correctamente.
+
+**Extensión de `stub-portal.js` (V0), con flag opcional `--demo`:** `node stub-portal.js [puerto]
+--demo` reemplaza el seed de la campaña `/verify` por el dataset de la demo (cuenta, fichas,
+entradas de Bitácora, facturas, ticket). **Sin el flag, el archivo queda exactamente como estaba**
+— verificado explícitamente corriendo ambos modos y comparando la cuenta/expedientes servidos, para
+no introducir una regresión en el andamio que ya usa la campaña `/verify`. `stub-dashboard.js`
+**no se tocó** — ninguno de los 8 capítulos de la demo pasa por el panel de administración.
+
+**Pendiente real para D3, ninguno bloqueante de lo ya hecho:** el pipeline de captura automatizada en
+sí (reusar `tests/daily/electron_driver.py` para conectar por CDP a la app real, recorrer los pasos
+del guion, aplicar la sustitución en el momento correcto — regla de oro §0.6 — y sacar los
+screenshots), más el driver equivalente para los stubs del portal.

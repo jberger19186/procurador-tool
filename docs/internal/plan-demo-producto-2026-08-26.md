@@ -12,8 +12,15 @@
 >
 > **Estado:** plan **revisado el 2026-08-27** con un spike ejecutado (§0.1), que cambió la premisa
 > más cara del plan original. **D1 ejecutada y revisada contra 34 capturas reales** (guion completo,
-> ver [`demo-guion.md`](demo-guion.md)).
-> No se produjo ninguna captura de producción ni código de D2-D6 todavía.
+> ver [`demo-guion.md`](demo-guion.md)). **D2 EJECUTADA el mismo día** — fixtures + generador +
+> capa de sustitución, los 6 visores generados con las funciones reales del producto y verificados
+> con Playwright (0 errores de consola, stats correctos, "Abrir PDF" activo). Detalle completo en
+> [`demo-guion.md` §11](demo-guion.md#11-d2-ejecutado-2026-08-27--fixtures--capa-de-sustitución-verificados).
+> **Hallazgo real de D2, fuera del alcance previsto por el plan:** `generarVisorMonitoreo()` no era
+> reusable como estaba (privada, atrapada en `main.js`, que requiere Electron) — se extrajo a
+> `electron-app/monitor/generarVisorMonitoreo.js`, un cambio real de código de producto (verificado,
+> sin cambio de comportamiento).
+> Sigue D3 (pipeline de captura automatizada) — no se produjo ninguna captura de producción todavía.
 
 ---
 
@@ -237,13 +244,13 @@ desde la tarjeta de Bitácora, y cada módulo se regenera solo cuando cambia.
 
 ---
 
-### D2 — Fixtures sintéticos + capa de sustitución 🟢
+### D2 — Fixtures sintéticos + capa de sustitución ✅ EJECUTADA (2026-08-27)
 
 | | |
 |---|---|
 | **Modelo / esfuerzo** | Sonnet · **medio-alto** |
 | **Depende de** | D1 |
-| **Entregable** | `backend-server/dev-tools/demo-fixtures/` (datos) + `demo-anonimizar.js\|py` (la capa de sustitución por DOM) |
+| **Entregable** | `backend-server/dev-tools/demo-fixtures/` (datos + generador) + `demo-anonimizar.js` (la capa de sustitución por DOM), los 2 ejecutados y verificados con Playwright — detalle completo en [`demo-guion.md` §11](demo-guion.md#11-d2-ejecutado-2026-08-27--fixtures--capa-de-sustitución-verificados) |
 
 **Parte A — fixtures de datos** (como en la versión original):
 - Un set coherente: los mismos 4–5 expedientes ficticios atraviesan toda la demo (procuración →

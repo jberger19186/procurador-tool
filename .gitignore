@@ -100,3 +100,8 @@ electron-app/security-logs/
 
 # Artefactos de verificación con Playwright MCP (snapshots/console logs por sesión)
 .playwright-mcp/
+
+# Salida regenerable de los fixtures de la demo (D2, Etapa 1.6) — visores/PDFs
+# de prueba que genera generar-visores.js; se recrean con cada corrida, no
+# tiene sentido versionarlos (mismo criterio que tests/*.png de arriba).
+backend-server/dev-tools/demo-fixtures/output/

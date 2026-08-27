@@ -168,6 +168,89 @@ const SUGERENCIAS = [
       dependencia: 'Juzgado Federal 1', situacion: 'EN TRAMITE', nombre_parte: 'DEMO PARTE SA' },
 ];
 
+// ─── D2 (demo Etapa 1.6, 2026-08-27): modo demo opcional ───────────────────
+// Reemplaza el seed de /verify de arriba por el dataset coherente de la demo
+// (backend-server/dev-tools/demo-fixtures/) — SOLO si se corre con --demo.
+// Sin el flag, este archivo queda exactamente como estaba: 0 regresión para
+// la campaña /verify, que sigue usando su propio seed sin tocar.
+// Uso: node backend-server/dev-tools/stub-portal.js [puerto] --demo
+const DEMO_MODE = process.argv.includes('--demo');
+if (DEMO_MODE) {
+    const { CUENTA_DEMO } = require('./demo-fixtures/cuenta');
+    const { BITACORA_FICHAS, BITACORA_ENTRADAS } = require('./demo-fixtures/bitacora');
+    const { PORTAL_FACTURAS, PORTAL_TICKETS } = require('./demo-fixtures/portal');
+
+    Object.assign(ACCOUNT_STATE, {
+        email: CUENTA_DEMO.email,
+        nombre: CUENTA_DEMO.nombre,
+        apellido: CUENTA_DEMO.apellido,
+        cuit: CUENTA_DEMO.cuit,
+        plan: CUENTA_DEMO.plan,
+        planType: 'combo',
+        registrationStatus: CUENTA_DEMO.registrationStatus,
+        paymentProvider: CUENTA_DEMO.paymentProvider,
+        bitacoraEnabled: CUENTA_DEMO.bitacoraEnabled,
+        markdownEnabled: CUENTA_DEMO.markdownEnabled,
+        usage: {
+            proc:              { used: CUENTA_DEMO.usage.proc.usado,              limit: CUENTA_DEMO.usage.proc.limite,              unlimited: false },
+            batch:             { used: CUENTA_DEMO.usage.batch.usado,             limit: CUENTA_DEMO.usage.batch.limite,             unlimited: false },
+            informe:           { used: CUENTA_DEMO.usage.informe.usado,           limit: CUENTA_DEMO.usage.informe.limite,           unlimited: false },
+            monitor_novedades: { used: CUENTA_DEMO.usage.monitor_novedades.usado, limit: CUENTA_DEMO.usage.monitor_novedades.limite, unlimited: false },
+            monitor_partes:    { used: CUENTA_DEMO.usage.monitor_partes.usado,    limit: CUENTA_DEMO.usage.monitor_partes.limite,    unlimited: false },
+        },
+    });
+
+    // Fichas de "Mis expedientes" / Bitácora — mismo shape que ya arma el
+    // resto de este archivo (situacion_actual, no situacion; snapshots:[]).
+    EXPEDIENTES.length = 0;
+    BITACORA_FICHAS.forEach((f) => EXPEDIENTES.push({
+        id: f.id,
+        expediente: f.expediente,
+        jurisdiccion: null,
+        dependencia: f.dependencia,
+        caratula: f.caratula,
+        situacion_actual: f.situacion,
+        situacion_fecha: f.situacion_fecha,
+        notas: null,
+        updated_at: f.creado_en,
+        snapshots: [],
+    }));
+
+    BITACORA.length = 0;
+    BITACORA_ENTRADAS.forEach((e) => BITACORA.push({ ...e }));
+
+    // Facturación — el capítulo 7 solo necesita "Facturas emitidas", no un
+    // historial de pagos crudo por separado.
+    PAYMENTS.length = 0;
+    INVOICES.length = 0;
+    PORTAL_FACTURAS.forEach((f) => INVOICES.push({
+        id: f.id,
+        amount: f.amount,
+        status: f.status === 'issued' ? 'emitida' : f.status,
+        issued_at: f.issued_at,
+        pdf_url: f.pdf_url,
+    }));
+
+    // Soporte — un ticket ya resuelto con hilo real (ver demo-fixtures/portal.js).
+    TICKETS.length = 0;
+    PORTAL_TICKETS.forEach((t) => TICKETS.push({
+        id: t.id,
+        title: t.subject,
+        category: t.category,
+        status: t.status,
+        description: t.comments[0] ? t.comments[0].body : '',
+        created_at: t.created_at,
+        comments: t.comments.map((c, i) => ({
+            id: i + 1,
+            author_role: c.author_role,
+            message: c.body,
+            created_at: c.created_at,
+        })),
+    }));
+
+    console.log('⚠ Modo DEMO activo — sirviendo el dataset de la demo (Etapa 1.6), no el seed de /verify.');
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const MIME = {
     '.html': 'text/html; charset=utf-8',
