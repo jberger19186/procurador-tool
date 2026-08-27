@@ -195,36 +195,32 @@ deducirlo" no es un plan de recuperación.
 6. Cerrar el hueco 1: extender `backup-db.js` para incluir `storage/invoices/`, o justificar por
    escrito por qué no.
 
-### 1.5 — Control periódico de funcionamiento contra el PJN
+### 1.5 — Control periódico de funcionamiento contra el PJN ✅ CERRADO (2026-08-27)
 
 | | |
 |---|---|
-| **Plan** | no requiere documento propio — el alcance está acá |
-| **Modelo / esfuerzo** | Sonnet · **bajo-medio** |
-| **Sesiones** | 1 |
-| **Buena noticia** | **El 80% ya está construido** |
+| **Plan** | [`plan-verificacion-pjn-dashboard-2026-08-26.md`](plan-verificacion-pjn-dashboard-2026-08-26.md) |
+| **Estado** | ✅ **Cerrado** — 5 fases ejecutadas + primera corrida real reportada |
 
-El operador pidió *"controles de funcionamiento periódico de la aplicación para con el sitio del PJN,
-con mi usuario"*. Eso es exactamente **SEC-2·B.2**, implementado en julio y publicado en el release
-v2.7.38: el módulo oculto `electron-app/src/verification/dailyVerification.js` corre procuración e
-informe reales contra el PJN con la cuenta de prueba, reusando los mismos flujos que dispara un
-usuario (`runProcessLogic` / `runInformeLogic`), reporta a
-`POST /client/verification-report`, y el dashboard admin lo muestra con semáforo en la sección
-Diagnóstico (verde / amarillo a los 7 días sin correr / rojo).
+**Se resolvió con un enfoque distinto al que describía este roadmap.** El plan original era
+reactivar `dailyVerification.js` (el módulo oculto de SEC-2·B.2, apagado desde el 2026-07-14) y
+extenderlo al Monitor. **El operador propuso otra cosa y es mejor en casi todo:** reportar al
+dashboard la *prueba diaria vía computer-use*, que ya se corría 6 veces por mes cubriendo **los 5
+flujos reales** — y cuyo resultado se perdía en la prosa de `CLAUDE.md` sin llegar nunca a
+Diagnóstico. Cubre 5 flujos en vez de 3, no necesita release de Electron, y **no agrega ni un solo
+endpoint en `/client/*`** (el router que usan las apps de todos los usuarios).
 
-**Lo que falta, medido:**
-- **Está apagado.** `habilitado: false` por defecto. Se activó en la máquina del operador en julio y
-  **no corre desde el 2026-07-14** (detectado en la revisión de salud del 25/07). Un semáforo que
-  nadie mira no es un control.
-- **Cubre 2 de los 5 flujos** — procuración e informe. **No cubre Monitor** (novedades), que es el
-  que más contacto tiene con cambios del PJN, ni la extensión.
-- **No avisa.** El semáforo vive en el dashboard; si el operador no entra, no se entera. Falta un
-  aviso real (email al `ALERT_EMAIL_TO`, que ya existe y ya se usa para altas de usuarios).
-- **No está documentado como rutina.** Nadie sabe que existe salvo leyendo el `runbook`.
+`dailyVerification.js` **quedó sin tocar, apagado** — si algún día se prende, reporta a la misma
+tarjeta con `origen:'app-automatica'`.
 
-**El bloque, entonces:** reactivarlo, extenderlo al Monitor, agregarle el aviso por email ante rojo o
-ante 7 días sin correr, y **escribir el procedimiento** (cada cuánto, quién mira, qué se hace si da
-rojo). Es barato y es lo que evita enterarse de un cambio del PJN por un cliente enojado.
+**Lo entregado:** modelo `flujos[]` con 3 estados (`ok`/`error`/**`omitido`**, para no confundir
+"sin cupo" con "el PJN se rompió") · recarga acotada del cupo de la cuenta de prueba con 7
+protecciones · tarjeta reescrita en Diagnóstico con el comando de computer-use siempre visible ·
+**alerta por email con deduplicación por episodio** · y el procedimiento completo documentado en
+`CLAUDE.md` con las 3 trampas operativas del entorno ya medidas.
+
+**La primera corrida real** (app v2.7.50 contra el PJN) dio **los 5 flujos en `ok`**, con el
+consumo de cupo cuadrando exacto con el modelo documentado.
 
 ### 1.6 — Demo reproducible del producto en la landing
 
