@@ -364,21 +364,61 @@ estado. El script espera por **esa** señal, con un timeout duro por flujo.
 > Las fases están ordenadas para que **cada una entregue valor sola**. Si el
 > proyecto se detiene después de F1, F1 ya ahorra trabajo real.
 
-### F0 — Spike / gate técnico
-**Modelo: Sonnet · Esfuerzo: bajo · ~0,5 sesión · No escribe código de producto**
+### F0 — Spike / gate técnico ✅ EJECUTADO (2026-08-27) — las 4 preguntas responden GO
 
-Responde 4 preguntas contra la app real. Si alguna falla, el plan cambia de forma:
+**Modelo: Sonnet · Esfuerzo: bajo · Sin escribir código de producto.** Corrido
+contra el `.exe` instalado (v2.7.50), conectando por CDP con Playwright (Python
+`sync_api`, el mismo motor que ya usa `tests/conftest.py`). **No se disparó
+ningún flujo real** — solo llamadas IPC de solo lectura (`getAppVersion`,
+`verifySession`), así que no consumió cupo.
 
-1. ¿`window.electronAPI` es alcanzable desde `page.evaluate()` por CDP?
-   (Debería: `contextBridge.exposeInMainWorld` publica en el main world, que es
-   donde corre `evaluate` — pero se confirma, no se asume.)
-2. ¿`runProcessCustomDate(...)` devuelve el resultado a `evaluate` o solo emite
-   eventos? Define cómo se espera cada flujo.
-3. ¿El `.exe` instalado acepta `--remote-debugging-port`? (§6.4)
-4. ¿Conviven dos instancias o hay colisión de `userData`? (§6.2)
+**1. ¿`window.electronAPI` es alcanzable desde `page.evaluate()` por CDP?**
+**✅ SÍ, confirmado.** `contextBridge` lo publica incluso en `login.html` (antes
+de loguearse) — se listaron los **85 métodos** expuestos, incluidos los 5 de
+ejecución (`runProcess`, `runProcessCustomDate`, `runProcessCustom`, `runInforme`,
+`runMonitoreo`) más los de Monitor (`monitorAgregarParte`, `monitorEliminarParte`,
+etc., que hacen falta para el flujo 6 de §6.6).
 
-**Entregable:** nota corta con las 4 respuestas medidas. **Gate:** si (1) falla,
-el enfoque entero se cae y hay que volver a computer-use.
+**2. ¿Una llamada IPC devuelve la promesa resuelta a `evaluate()`?**
+**✅ SÍ.** `await window.electronAPI.getAppVersion()` devolvió `"2.7.50"` limpio
+dentro del propio `evaluate()` — confirma que el patrón `await ipc(...)` funciona
+igual desde Playwright que desde el renderer real, sin necesitar `onXxx` como
+único mecanismo de espera.
+
+**3. ¿El `.exe` instalado acepta `--remote-debugging-port`?**
+**✅ SÍ.** `Procurador SCW.exe --remote-debugging-port=9222` respondió CDP real
+(`Electron/43.1.0`, `Chrome/150.0.7871.47`) en ~4 segundos. **Se usa el `.exe`
+instalado, no el lanzamiento desde código** — verifica lo que el usuario final
+corre, no una aproximación (cierra §6.4 a favor de la opción más fuerte).
+
+**4. ¿Conviven dos instancias o hay colisión de `userData`?**
+**⚠️ CONFIRMADO EL RIESGO — conviven, y colisionan en silencio.** Se lanzó una
+segunda instancia (`--remote-debugging-port=9223`) con la primera todavía
+arriba: **no hubo lock, arrancó sin error**, los procesos pasaron de 4 a 8
+(el modelo multiproceso de Electron ×2 ventanas), y **ambos puertos CDP
+respondieron de forma independiente** — coincide exacto con el `grep` de código
+del 2026-08-27 (`requestSingleInstanceLock` no existe en `electron-app/*.js`).
+
+Lo nuevo que aportó el spike: **el mecanismo exacto de la colisión.** Un
+marcador escrito en `localStorage` de la instancia 1 **no apareció** en la
+instancia 2 — a primera vista parecería "perfiles aislados", pero **no lo son**:
+en disco hay un solo directorio `procurador-electron/` (no se creó un perfil
+alternativo) y **sin ningún `SingletonLock`**. La explicación real: Chromium no
+pudo tomar el lock exclusivo de LevelDB que la instancia 1 ya tenía abierto sobre
+`Local Storage/`, así que la instancia 2 **cayó a almacenamiento en memoria sin
+avisar** — sus escrituras nunca llegan a disco y se pierden al cerrarla. **Es un
+modo de falla más peligroso que un choque limpio**, porque no da ningún error:
+si el script corriera con la app real ya abierta, podría operar sobre un estado
+que jamás se persiste, sin que nada lo señale.
+
+**Entorno cerrado limpio:** ambas instancias cerradas con `CloseMainWindow()`,
+0 procesos residuales, `config_proceso.json` sin tocar (mismo timestamp de la
+sesión anterior — confirma que el spike no escribió nada).
+
+**Gate: PASA — F1 puede arrancar.** El único punto que exige diseño (no cambia
+el veredicto) es la pregunta 4: **F3 debe llevar el guard de instancia única de
+§6.2 como control de entrada obligatorio**, verificado ahora con evidencia real
+del modo de falla que previene, no solo por lectura de código.
 
 ---
 
