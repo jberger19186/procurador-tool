@@ -227,13 +227,15 @@ consumo de cupo cuadrando exacto con el modelo documentado.
 
 | | |
 |---|---|
-| **Plan** | [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md) ⭐ **nuevo** |
+| **Plan** | [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md) — **revisado el 2026-08-27 con un spike de capacidad** |
 | **Qué es** | Tour guiado en HTML estático servido desde `/demo/`, con capturas reales anonimizadas + clips cortos, un capítulo por módulo, linkeable desde cada tarjeta de la landing |
-| **Modelo / esfuerzo** | Sonnet · medio (alto en el bloque de captura) |
-| **Sesiones** | 4–6 + 1 con el operador presente |
-| **Depende de** | **1.1 y 1.2 terminadas** (hay que poder mostrarlas) y de 1.3 (para no tocar la landing dos veces) |
-| **El hallazgo que abarata el bloque** | Los **stubs de V0** (`dev-tools/stub-portal.js` y `stub-dashboard.js`) sirven los archivos reales del portal y el dashboard contra una API falsa. **Las capturas web salen sin un solo dato real que esfumar** — la anonimización deja de ser un problema para media demo |
-| **Lo que el operador tiene que capturar a mano** | **Extensión Chrome y sitio del PJN.** No hay Chrome conectado por Claude-in-Chrome, y computer-use otorga los navegadores en tier "read" (se ven, no se pueden clickear). Ver §4 del plan de la demo para el detalle |
+| **Fases** | **6 (D1–D6)**, con grilla de modelo/esfuerzo/dependencias en §3.0 del plan |
+| **Modelo / esfuerzo** | Sonnet en las 6 · `alto` solo en D3 (volumen: ~40 pantallas) |
+| **Sesiones** | **~5,5** + **~15 min del operador** (ya no una sesión conjunta) |
+| **Depende de** | 1.1 ✅ · 1.3 ✅ · **1.2 y su release de Electron** ⏳ — sin el release, el capítulo de Markdown no se puede capturar (el botón no existe en el binario instalado) |
+| **🎯 El hallazgo que reduce el costo, verificado el 2026-08-27** | **Playwright captura la app Electron vía CDP**, reusando `tests/daily/electron_driver.py`: screenshot, viewport fijo, los 9 modales abribles por código, y **sustitución de datos sensibles antes de capturar**. La superficie más grande pasó de *"requiere al operador"* a **totalmente automatizable**, y el pipeline reproducible cubre **~90%** de las pantallas en vez de ~60% |
+| **El otro hallazgo (sigue vigente)** | Los **stubs de V0** sirven los archivos reales del portal y el dashboard contra una API falsa → esas capturas salen **sin un solo dato real que esfumar** |
+| **Lo único que el operador captura a mano** | **Extensión Chrome y sitio del PJN** (bloque D4, ~15 min). No hay Chrome conectado por Claude-in-Chrome, y computer-use otorga los navegadores en tier "read" |
 
 ---
 
@@ -351,14 +353,15 @@ Las que este roadmap existe para hacer visibles. Cada una es un error concreto q
 |---|---|---|
 | **1** | **S8 de SEC-2 se ejecuta en la Etapa 4, no en la 3** | Se da "SEC-2 ejecutado" por cerrado con el bloque de fraude con dinero real sin correr |
 | **2** | **La demo debe ser regenerable por script, no un set de PNG** | Las Etapas 2 y 3 cambian la UI **después** de armar la demo. En 11 días de agosto se publicaron 3 releases que cambiaron los visores y el topbar |
-| **3** | **Todo lo que necesita escritorio real se agrupa en las mismas sesiones** | Ver §9. Son 4 trabajos distintos que hoy están en 3 planes distintos y necesitan exactamente el mismo handle |
+| **3** | **Todo lo que necesita escritorio real se agrupa en las mismas sesiones** | Ver §9. Eran 4 trabajos en 3 planes distintos; **desde el 2026-08-27 son 3** — las capturas de la demo se automatizaron con Playwright vía CDP y salieron de la lista |
 | **4** | **F7 (cobranza) es el gate de B3, y va al final de la Etapa 2** | Correrla al principio y entrar a B3 ocho sesiones después obliga a revalidarla |
 | **5** | **Los TyC de beta se publican antes del primer cobro real** | Se cobra con términos que no dicen que el producto está en prueba |
-| **6** | **1.3 (landing) y 1.6 (demo) tocan el mismo archivo** | Dos sesiones editando `landing/index.html` en paralelo = conflicto. 1.3 primero, 1.6 después |
+| **6** | ~~**1.3 (landing) y 1.6 (demo) tocan el mismo archivo**~~ — ✅ **resuelto**: 1.3 se cerró el 2026-08-26, así que 1.6 ya no compite con nadie por `landing/index.html` | (era: dos sesiones editando el mismo archivo en paralelo = conflicto) |
 | **7** | **AZ arranca el día 0** | El lanzamiento queda esperando un trámite de 3 días que podría haber corrido en paralelo desde el principio |
 | **8** | ~~**El módulo Markdown tiene su propio gate (M0) antes de M1**~~ ✅ **resuelto 2026-08-26** | Se construían 6 sesiones de módulo para descubrir recién ahí que los adjuntos necesitan sesión del PJN. **M0 se ejecutó y devolvió escenario A** — el riesgo no se materializó, y el arranque de 1.2 pasa a ser M1. En el camino apareció **una dependencia nueva hacia la Etapa 3**: la anonimización debe alcanzar a las URLs (fila 10) |
 | **9** | **Lo que la Etapa 1 construye, las Etapas 2 y 3 tienen que revisarlo** | Es la dependencia que se destapó el 2026-08-26 al confirmar 1.1 y 1.2. El code-review ya la tenía cubierta (**F5** = módulo Markdown; **F1** declara depender de Etapa 1 porque F3.4 toca `routes/bitacora.js`). La seguridad **no**: SEC-2 se escribió el 24/08, cuando 1.2 todavía era una decisión de negocio sin resolver → se le agregó el bloque **S10**. Sin eso, se cierra la Etapa 3 con un módulo entero sin auditar, y encima el que más promete al usuario (*"esto no tiene datos personales"*) |
 | **10** | **Un `.md` "anonimizado" con enlaces del SCW vivos entrega el original sin anonimizar** | Hallazgo de **M0** (2026-08-26): esos enlaces **no requieren login** y **no expiran** (≥27 días medidos). Si M4 no los trata, el módulo cumple su promesa solo en apariencia — y el usuario se entera después de mandar el archivo. La verificación es binaria (un grep de `viewer.seam`) y vive en **S10**, Etapa 3 |
+| **11** | **1.6 (demo) no puede capturar el capítulo de Markdown hasta que se corte el release de Electron** | Detectado en el spike del 2026-08-27: el binario instalado (**v2.7.50**) no tiene el botón de Markdown — M2–M5 están commiteados **sin release**. Si D3 corre antes, ese capítulo sale vacío y hay que rehacer la captura. Además la cuenta de demo necesita `markdown_enabled=true` |
 
 ---
 
@@ -372,9 +375,20 @@ Chrome— un navegador real con la extensión cargada.
 |---|---|---|
 | **V4 + V5** (Electron sin/con PJN) | Etapa 2, fase F9 | computer-use con handle real de la app · V5 consume cupo del PJN |
 | **V6** (extensión Chrome) | Etapa 2, fase F9 | Chrome real con la extensión + credenciales PJN |
-| **Capturas de la demo** (app Electron) | Etapa 1.6, bloque D3 | el mismo handle que V4 |
-| **Capturas de la demo** (extensión + PJN) | Etapa 1.6, bloque D3 | el operador saca las capturas a mano — **no es automatizable** |
+| ~~**Capturas de la demo** (app Electron)~~ | ~~Etapa 1.6, bloque D3~~ | ✅ **YA NO** — ver la nota de abajo |
+| **Capturas de la demo** (extensión + PJN) | Etapa 1.6, bloque **D4** | el operador saca las capturas a mano (~15 min) — **no es automatizable** |
 | **Fase C de B3** (primer cobro real) | Etapa 4 | el operador completando un checkout real |
+
+> ✅ **Actualización 2026-08-27 — las capturas de la app Electron salieron de esta lista.** Un spike
+> verificó que **Playwright captura la app vía CDP**, reusando `tests/daily/electron_driver.py` (el
+> driver que construyó el script de prueba diaria): `screenshot()`, viewport fijo, apertura de los 9
+> modales por código y **sustitución de datos sensibles por sintéticos antes de capturar** — todo
+> funcionando, sin computer-use y sin el operador. El diagnóstico de `notInstalled` de abajo sigue
+> siendo correcto **sobre computer-use**; lo que cambió es que para este trabajo ya no hace falta.
+> Detalle en §0.1 de [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md).
+>
+> **V4/V5/V6 NO se destraban con esto** — son verificación *conducida* (clicks reales, diálogos
+> nativos, la extensión en un Chrome real), no captura de pantallas. Siguen necesitando al operador.
 
 **La causa del bloqueo, acotada (no es prioridad ni tiempo):** `request_access` de computer-use
 devuelve `notInstalled` para "Procurador SCW" **incluso con la app abierta** — aislamiento de sesiones

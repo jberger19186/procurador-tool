@@ -10,7 +10,8 @@
 > el último bloque de la etapa de producto, porque necesita que Bitácora F3.4 y el módulo Markdown
 > ya existan para poder mostrarlos.
 >
-> **Estado:** plan. No se produjo ninguna captura ni código todavía.
+> **Estado:** plan **revisado el 2026-08-27** con un spike ejecutado (§0.1). La revisión cambió la
+> premisa más cara del plan original. No se produjo ninguna captura de producción ni código todavía.
 
 ---
 
@@ -21,13 +22,62 @@
 | **Formato recomendado** | **Tour guiado en HTML estático** servido desde la landing (`/demo/`), con capturas + texto + navegación por pasos, y GIF/MP4 cortos solo donde el movimiento aporte |
 | **Por qué no un video** | Ver §1 — un video no se regenera, no se indexa, no se traduce, y queda obsoleto en el primer release |
 | **Superficies a mostrar** | App Electron (procuración, informe, monitor) · Visores · Bitácora (app + portal) · Módulo Markdown · Extensión Chrome · Portal de usuarios |
-| **Anonimización** | **Dos estrategias, y la buena es la primera**: datos sintéticos *antes* de capturar (sin redacción) · redacción irreversible *después* solo donde no haya alternativa |
-| **Automatizable hoy** | Portal, dashboard y landing: **sí, 100%** (Playwright contra los stubs de V0 — que ya traen datos falsos por construcción) |
-| **Automatizable con el operador presente** | App Electron y visores: **sí** — mismo handle que V4 (ver §4) |
-| **NO automatizable** | **Extensión Chrome y sitio del PJN** — el operador tiene que capturarlas. Ver §4 |
-| **Bloques** | 5 (D1–D5) |
-| **Modelo / esfuerzo** | Sonnet en todos. `medio` salvo D3 (captura, `alto` por volumen de conducción) |
-| **Sesiones estimadas** | 4–6, más una sesión con el operador presente para D3 |
+| **Anonimización** | **Sustitución por datos sintéticos, no redacción.** Verificado que funciona *también en la app Electron* (§0.1) — no hace falta tapar nada con barras negras |
+| **Automatizable hoy, sin el operador** | **Portal, dashboard, landing, visores, Y LA APP ELECTRON** — todo con Playwright. ~90% de la demo. Ver §0.1 y §4 |
+| **NO automatizable** | **Solo extensión Chrome y sitio del PJN** — el operador las captura a mano (~15 min). Ver §4 |
+| **Bloques** | 6 (D1–D6) |
+| **Modelo / esfuerzo** | Sonnet en los 6. Ver la grilla de §3.0 |
+| **Sesiones estimadas** | **4–6**, más ~15 min del operador para las capturas de extensión/PJN (ya no una sesión completa con él) |
+
+---
+
+## 0.1. Spike de capacidad (2026-08-27) — invalida el supuesto más caro del plan original
+
+El plan se escribió el **2026-08-26**. Al día siguiente, las fases F0–F5 del script de prueba diaria
+([`propuesta-script-prueba-diaria-2026-08-27.md`](propuesta-script-prueba-diaria-2026-08-27.md))
+descubrieron un camino que este plan no contemplaba: **el `.exe` instalado acepta
+`--remote-debugging-port` y Playwright se conecta por CDP**. Eso convierte a la app Electron en una
+superficie web más, conducible con la misma herramienta que el portal.
+
+La versión original de §4 afirmaba que las pantallas de la app **solo se podían capturar con el
+operador presente**, porque `request_access` de computer-use devuelve `notInstalled`. **Eso ya no es
+cierto — y no por un cambio de prioridad, sino porque apareció un mecanismo mejor.**
+
+**Verificado empíricamente el 2026-08-27, sin consumir cupo** (solo lanzar, loguear y capturar —
+ningún flujo real contra el PJN, mismo criterio que el spike F0):
+
+| # | Pregunta | Resultado |
+|---|---|---|
+| 1 | ¿`page.screenshot()` funciona sobre la app vía CDP? | ✅ **Sí** — PNG real de 43–65 KB, nítido, con contenido completo |
+| 2 | ¿Se puede fijar el viewport para capturas reproducibles? | ✅ **Sí** — `set_viewport_size({1280, 800})` respetado |
+| 3 | ¿Se puede manipular el DOM antes de capturar? | ✅ **Sí** — `evaluate()` funciona igual que en un navegador |
+| 4 | ¿Se puede **sustituir datos sensibles** antes de capturar? | ✅ **Sí** — email real e **ID del dispositivo** reemplazados por sintéticos; captura publicable, sin blur ni barras |
+| 5 | ¿Se llega a la ventana principal automáticamente? | ✅ **Sí** — login resuelto, ventana principal a los ~4 s |
+| 6 | ¿Se pueden abrir los modales por código? | ✅ **Sí** — 9 modales detectados por id (`modalConfig`, `modalStats`, `modalAsistente`, `modalCustomDate`, `modalProcurarCustom`, `modalNotificaciones`, `modalCuenta`, `modalInforme`, `modalMonitor`), abribles con `classList.remove('hidden')` |
+| 7 | ¿Captura a nivel de elemento (recortes limpios)? | ✅ **Sí** — `locator.screenshot()` disponible |
+
+**Consecuencia para el plan:** el bloque de captura deja de ser *"alto esfuerzo + requiere una sesión
+con el operador"* y pasa a ser **un solo script de Playwright que cubre app + web + visores**. La
+propiedad que el plan declaraba más valiosa —que la demo se **regenere** en vez de pudrirse— pasa de
+cubrir ~60% de las pantallas a cubrir **~90%**.
+
+**Lo que el spike NO cambia (sigue igual):** la extensión Chrome y el sitio del PJN. Ahí los motivos
+son duros y no dependen de computer-use: `list_connected_browsers` devuelve `[]`, y los navegadores
+se otorgan en tier *"read"*. Ver §4.
+
+### Dos hallazgos secundarios, ambos accionables
+
+1. **🚨 El botón de Markdown NO aparece en la app instalada.** La captura de la ventana principal
+   muestra el topbar con `Procurar · Informe · Monitor · Descargas · Bitácora` — **sin Markdown**.
+   No es un bug: **M2–M5 están commiteados sin release** (ver el encabezado de estado de
+   `CLAUDE.md`), así que el binario instalado (v2.7.50) no tiene el módulo. **D3 no puede capturar
+   el capítulo de Markdown hasta que se corte el release de Electron** — es una dependencia dura,
+   no un detalle. Y además la cuenta de demo necesitará `markdown_enabled=true`.
+2. **Lección de método, aprendida rompiéndolo:** el primer intento del spike falló porque **sustituí
+   el email *antes* de clickear "Iniciar Sesión"** — la app intentó loguearse con una cuenta
+   inexistente y no abrió la ventana principal. No era un límite del mecanismo, era mi propia
+   instrumentación. **Regla para D3: la sustitución de datos va SIEMPRE después de llegar a la
+   pantalla y justo antes del `screenshot()`, nunca antes de una acción que dependa del valor real.**
 
 ---
 
@@ -108,6 +158,37 @@ mejor como material comercial que una barra negra, que transmite "acá hay algo 
 
 ## 3. Bloques
 
+### 3.0. Grilla de fases — modelo, esfuerzo y dependencias
+
+| # | Fase | Modelo | Esfuerzo | Sesiones | Superficie | Depende de | ¿Vale sola? |
+|---|---|---|---|---|---|---|---|
+| **D1** | Guion y selección de flujos | Sonnet | **medio** | ~1 | `docs/internal/` | — | ✅ sí — ordena el pedido aunque no se capture nada |
+| **D2** | Fixtures sintéticos + capa de sustitución | Sonnet | **medio-alto** | ~1 | `dev-tools/demo-fixtures/` | D1 | parcial |
+| **D3** | Pipeline de captura automatizado | Sonnet | **alto** | ~1,5 | script + `assets/` | D2 · **release de Electron** (ver §0.1) | ✅ sí — el activo reutilizable |
+| **D4** | Capturas manuales (extensión + PJN) | Sonnet | **bajo** | ~0,5 | `assets/` | D1 · **~15 min del operador** | parcial |
+| **D5** | Construcción del tour | Sonnet | **medio** | ~1 | `landing/demo/` | D3 (D4 puede llegar después) | ✅ sí |
+| **D6** | Integración en la landing + despliegue | Sonnet | **bajo** | ~0,5 | `landing/` | D5 · Etapa **1.3** | ✅ sí |
+| | **Total** | | | **~5,5** | | | |
+
+**Sin Opus en ninguna fase.** No toca cobranza, criptografía, ni código de producto: produce
+material estático a partir de superficies que ya existen. El único tramo con esfuerzo `alto` es
+**D3**, y es por **volumen** (~40 pantallas, 3 pipelines), no por dificultad conceptual.
+
+**Cambios respecto de la versión del 2026-08-26** (a raíz del spike de §0.1):
+- El bloque de captura se **partió en dos** (D3 automatizado / D4 manual) porque ahora son trabajos
+  de naturaleza distinta: uno es un script reproducible, el otro es una pasada corta del operador.
+- **D3 dejó de necesitar una sesión con el operador presente.** Antes era el motivo principal por el
+  que este plan aparecía en la lista de "4 trabajos que necesitan al operador" del roadmap §9.
+- **D4 bajó de `alto` a `bajo`**: solo extensión + PJN, y el operador aporta ~15 min, no una sesión.
+- Apareció una **dependencia dura nueva**: D3 no puede capturar Markdown hasta el release de Electron.
+
+> ⚠️ **Orden recomendado y por qué.** D1 → D2 → D3 es secuencial de verdad (no se captura sin
+> fixtures, no hay fixtures sin guion). **D4 se puede lanzar en paralelo apenas D1 esté listo** — el
+> operador necesita el guion para saber qué sacar, pero no depende de D2/D3. **D5 puede arrancar con
+> las capturas de D3 y sumar las de D4 después**, así que un retraso del operador no bloquea el tour.
+
+---
+
 ### D1 — Guion y selección de flujos 🟢
 
 | | |
@@ -143,14 +224,15 @@ desde la tarjeta de Bitácora, y cada módulo se regenera solo cuando cambia.
 
 ---
 
-### D2 — Fixtures sintéticos y siembra 🟢
+### D2 — Fixtures sintéticos + capa de sustitución 🟢
 
 | | |
 |---|---|
-| **Modelo / esfuerzo** | Sonnet · **medio** |
+| **Modelo / esfuerzo** | Sonnet · **medio-alto** |
 | **Depende de** | D1 |
-| **Entregable** | `backend-server/dev-tools/demo-fixtures/` — expedientes, carátulas, partes, entradas de bitácora y un informe PDF de ejemplo, todos inventados |
+| **Entregable** | `backend-server/dev-tools/demo-fixtures/` (datos) + `demo-anonimizar.js\|py` (la capa de sustitución por DOM) |
 
+**Parte A — fixtures de datos** (como en la versión original):
 - Un set coherente: los mismos 4–5 expedientes ficticios atraviesan toda la demo (procuración →
   informe → bitácora → markdown). La coherencia es lo que hace que se vea real.
 - Carátulas con la forma real del PJN pero con partes obviamente ficticias.
@@ -159,42 +241,97 @@ desde la tarjeta de Bitácora, y cada módulo se regenera solo cuando cambia.
 - Un generador que produzca los visores desde el fixture, reusando `generarVisorHTML()` /
   `generarVisorMonitoreo()` reales — no una maqueta.
 
+**Parte B — capa de sustitución por DOM** (nueva, habilitada por el spike de §0.1):
+
+Un módulo con **un mapa de sustituciones declarativo** (`dato real → dato sintético`) que se inyecta
+con `page.evaluate()` inmediatamente antes de cada `screenshot()`. Ya está **probado que funciona en
+la app Electron**, no solo en el navegador.
+
+Lo que el spike identificó como sustituible en la app, mirando las capturas reales:
+
+| Pantalla | Dato a sustituir | Verificado |
+|---|---|---|
+| Login | email real del operador | ✅ probado |
+| Login | **ID del dispositivo** (hardware binding) | ✅ probado |
+| Ventana principal | chip de usuario (`procuradortool` / `COMBO_PROMO`) | pendiente, mismo mecanismo |
+| Ventana principal | banner de cupo (`116/128 (incluye +90 de cortesía)`) | pendiente, mismo mecanismo |
+| Ventana principal | badge de pendientes de Bitácora | decidir en D1 si se muestra o se normaliza |
+
+🚨 **Regla de oro del bloque, aprendida rompiéndola en el spike:** la sustitución se aplica **después
+de llegar a la pantalla y justo antes de capturar** — nunca antes de una acción que dependa del
+valor real. Sustituir el email antes del login hizo que la app intentara autenticarse con una cuenta
+inexistente. Ver §0.1, hallazgo 2.
+
 ---
 
-### D3 — Captura 🟠 *requiere al operador para una parte*
+### D3 — Pipeline de captura automatizado 🟢 *sin el operador*
 
 | | |
 |---|---|
-| **Modelo / esfuerzo** | Sonnet · **alto** (volumen de conducción, no dificultad) |
-| **Depende de** | D2, y de que Etapa 1.1 + 1.2 estén terminadas |
-| **Entregable** | `backend-server/public/landing/demo/assets/` + el script que las regenera |
+| **Modelo / esfuerzo** | Sonnet · **alto** (volumen: ~40 pantallas en 3 pipelines) |
+| **Depende de** | D2 · Etapa **1.1** ✅ (ya cerrada) · Etapa **1.2** ⏳ **y su release de Electron** (ver §0.1) |
+| **Entregable** | `backend-server/public/landing/demo/assets/` + **el script que las regenera** |
 
-Tres pipelines, según la superficie. **Ver §4 para qué se puede y qué no.**
+**Un solo mecanismo — Playwright — para las 3 superficies.** Ésa es la simplificación que trajo el
+spike: antes eran dos herramientas distintas (Playwright para web, computer-use para la app), con
+dos conjuntos de convenciones y una de ellas bloqueada.
 
-| Superficie | Herramienta | Datos | Automatizable |
+| Superficie | Cómo | Datos | Automatizable |
 |---|---|---|---|
-| Portal de usuarios, dashboard, landing | **Playwright** contra los stubs | sintéticos | ✅ **totalmente** |
-| Visores (procuración / informe / monitor) | **Playwright** sobre el HTML generado del fixture | sintéticos | ✅ **totalmente** |
-| App Electron (ventanas, modales, consola) | **computer-use** | cuenta demo sembrada | ⚠️ con el operador (ver §4) |
-| Extensión Chrome + sitio del PJN | **operador, a mano** | reales → redacción B | ❌ ver §4 |
+| Portal de usuarios, dashboard, landing | Playwright contra los **stubs de V0** | sintéticos por construcción | ✅ **totalmente** |
+| Visores (procuración / informe / monitor) | Playwright sobre el HTML generado del fixture | sintéticos | ✅ **totalmente** |
+| **App Electron** (ventanas, modales, consola, tour) | **Playwright vía CDP** — `electron_driver.launch_and_connect()` de `tests/daily/` | cuenta demo + sustitución de D2 | ✅ **totalmente** *(cambio del 2026-08-27)* |
+| Extensión Chrome + sitio del PJN | — | — | ❌ **es D4** |
 
-**Requisito de reproducibilidad:** todo lo de las dos primeras filas tiene que quedar como **un
-script que se corre y regenera las imágenes**, con tamaño de viewport fijo y sin dependencias del
-entorno. Ese script es el entregable más valioso del bloque — es lo que hace que la demo no se
-pudra en el próximo release.
+**Reusa `tests/daily/electron_driver.py`, no lo reimplementa.** Ese módulo ya resuelve el guard de
+instancia única, el lanzamiento del `.exe` con `--remote-debugging-port`, la espera de CDP y el
+login — todo verificado en la corrida real 6/6 de F2. La demo solo necesita agregarle
+`screenshot()`. **Duplicar esa lógica sería el mismo error que el proyecto ya documentó dos veces**
+(la búsqueda de PDF duplicada en `generador_visor.js`/`generador_excel.js`, y `VERIF_FLUJOS_ORDEN`
+duplicado entre backend y dashboard — los dos produjeron bugs reales).
 
-**Higiene, con antecedente:** las capturas de Playwright **no se dejan sueltas en el repo**. Ya es
-una de las 5 trampas documentadas en `.claude/skills/verify/SKILL.md` ("capturas que ensucian el
-repo"). Salida a una carpeta dedicada y versionada a propósito, o `.gitignore` + build.
+**Los modales son la mitad de la demo, y se abren por código.** El spike detectó **9 modales por id**
+(`modalConfig`, `modalStats`, `modalAsistente`, `modalCustomDate`, `modalProcurarCustom`,
+`modalNotificaciones`, `modalCuenta`, `modalInforme`, `modalMonitor`), todos abribles con
+`classList.remove('hidden')` — sin clicks, sin timing frágil, sin diálogos nativos de por medio.
+
+**Requisito de reproducibilidad (no negociable):** viewport fijo (1280×800 verificado), sin
+dependencias del entorno, y **una sola invocación regenera todo**. Ese script es el entregable más
+valioso del bloque — es lo que hace que la demo no se pudra en el próximo release.
+
+**Higiene, con antecedente:** las capturas de Playwright **no se dejan sueltas en el repo**. Es una
+de las 5 trampas documentadas en `.claude/skills/verify/SKILL.md`. Salida a una carpeta dedicada y
+versionada a propósito, y limpieza de `.playwright-mcp/` al cerrar.
 
 ---
 
-### D4 — Construcción del tour 🟢
+### D4 — Capturas manuales: extensión Chrome + sitio del PJN 🟠 *~15 min del operador*
+
+| | |
+|---|---|
+| **Modelo / esfuerzo** | Sonnet · **bajo** (el trabajo de captura es del operador; acá se procesa) |
+| **Depende de** | D1 (el operador necesita el guion para saber qué sacar) |
+| **Entregable** | Las capturas del operador, ya redactadas por sustitución, en `assets/` |
+
+**Es lo único que el spike NO destrabó**, y por motivos que no dependen de computer-use — ver §4.
+
+- El operador saca las capturas siguiendo la lista del guion de D1 (popup de la extensión,
+  autocompletado en Escritos/Notificaciones/DEOX, SCW).
+- Este bloque hace la **redacción por sustitución** (§2, estrategia B) sobre esos archivos:
+  rectángulo del color de fondo + texto sintético encima, **nunca blur**.
+- Queda documentado en el guion **cuáles capturas son manuales**, para que quien regenere la demo
+  dentro de seis meses sepa exactamente cuáles tiene que volver a pedir.
+
+**Se puede lanzar en paralelo con D2/D3** — no depende de los fixtures.
+
+---
+
+### D5 — Construcción del tour 🟢
 
 | | |
 |---|---|
 | **Modelo / esfuerzo** | Sonnet · **medio** |
-| **Depende de** | D3 |
+| **Depende de** | D3 (puede arrancar sin D4 y sumar esas capturas después) |
 | **Entregable** | `backend-server/public/landing/demo/index.html` (+ CSS/JS propios) |
 
 - HTML estático, **sistema de diseño de la landing** (ámbar `#d97706`, Inter, Crimson Pro).
@@ -207,12 +344,12 @@ repo"). Salida a una carpeta dedicada y versionada a propósito, o `.gitignore` 
 
 ---
 
-### D5 — Integración en la landing + despliegue 🟢
+### D6 — Integración en la landing + despliegue 🟢
 
 | | |
 |---|---|
 | **Modelo / esfuerzo** | Sonnet · **bajo** |
-| **Depende de** | D4, y de la **Etapa 1.3** (TyC/landing) para no tocar el mismo archivo dos veces |
+| **Depende de** | D5, y de la **Etapa 1.3** ✅ (ya cerrada el 2026-08-26 — sin conflicto de archivo) |
 
 - Entrada en el navbar ("Ver demo") + botón en el hero + link desde cada tarjeta de "Funciones" al
   capítulo correspondiente.
@@ -224,27 +361,31 @@ repo"). Salida a una carpeta dedicada y versionada a propósito, o `.gitignore` 
 
 ## 4. Qué se puede capturar automáticamente y qué no — respuesta directa
 
-El operador preguntó explícitamente cuáles no se pueden obtener con computer-use. Con el estado
-del entorno **medido el 2026-08-24**:
+El operador preguntó explícitamente cuáles no se pueden obtener automáticamente. **Actualizado el
+2026-08-27 con el spike de §0.1**, que cambió la respuesta para la superficie más grande.
 
-### ✅ Sí, y sin ninguna anonimización necesaria
+### ✅ Sí, sin el operador y sin anonimización manual
 
-**Portal de usuarios, dashboard admin, landing, y los 4 visores.** Playwright contra los stubs de
-V0 y contra HTML generado de fixtures. Datos falsos por construcción. Esto cubre, mirando las 36
-capturas de referencia, **buena parte de las pantallas web**.
+**Portal de usuarios, dashboard admin, landing, los 4 visores, Y LA APP ELECTRON COMPLETA** (login,
+ventana principal, los 9 modales, consola, Mi Cuenta, tour).
 
-### ⚠️ Sí, pero solo con el operador presente en la máquina
+- Web y visores: Playwright contra los stubs de V0 / HTML de fixtures — datos falsos por
+  construcción.
+- **App Electron: Playwright vía CDP**, reusando `tests/daily/electron_driver.py`. Los datos reales
+  que sí aparecen (email, ID de dispositivo, cupo, chip de usuario) se **sustituyen por sintéticos
+  con `evaluate()` antes de capturar** — verificado funcionando, resultado publicable sin blur.
 
-**La app Electron** (login, dashboard, modales de Procurar/Informe/Monitor, consola, Mi Cuenta,
-tour). Es el mismo handle que bloquea **V4** de la campaña `/verify`: `request_access` de
-computer-use devuelve `notInstalled` para "Procurador SCW" **incluso con la app abierta**, por el
-aislamiento de sesiones de Windows — una app lanzada desde la shell vive en una sesión que la
-herramienta no ve.
-
-**No es un límite permanente:** el 2026-07-23 una sesión condujo la instalación NSIS completa con
-computer-use sin problema. La condición se reproduce lanzando la app **desde la sesión visible al
-agente**. Por eso D3 y V4 **deben ejecutarse en la misma sesión con el operador** (ver el roadmap,
-§ sesiones con operador).
+> **Corrección respecto de la versión del 2026-08-26.** Esta sección afirmaba que la app Electron
+> requería al operador presente, porque `request_access` de computer-use devuelve `notInstalled` por
+> el aislamiento de sesiones de Windows. **Ese diagnóstico sigue siendo correcto sobre computer-use
+> — lo que cambió es que ya no hace falta computer-use.** El camino CDP+Playwright que descubrió F0
+> del script de prueba diaria no tiene ese problema: no depende del índice de aplicaciones de
+> Windows ni de qué sesión ve la herramienta, porque habla con el proceso por un puerto de depuración
+> que la propia app abre.
+>
+> **Efecto en el roadmap §9:** este plan sale de la lista de "4 trabajos que necesitan el mismo
+> handle de escritorio con el operador presente". Lo que queda del operador acá son ~15 min de
+> capturas (D4), no una sesión conjunta.
 
 ### ❌ No — las tiene que sacar el operador
 
@@ -261,7 +402,7 @@ agente**. Por eso D3 y V4 **deben ejecutarse en la misma sesión con el operador
    aporta poco comercialmente y es la pantalla más delicada del set.
 
 **Cómo se resuelve:** el operador saca esas capturas (una pasada de ~15 min siguiendo el guion de
-D1), y el bloque D3 se encarga de la **redacción por sustitución** (§2, estrategia B) sobre esos
+D1), y el bloque **D4** se encarga de la **redacción por sustitución** (§2, estrategia B) sobre esos
 archivos. Es la única parte de la demo que no es reproducible por script — y hay que asumirlo:
 quedará documentado en el guion qué capturas son manuales, para que quien regenere la demo dentro
 de seis meses sepa cuáles tiene que volver a pedir.
@@ -272,19 +413,34 @@ de seis meses sepa cuáles tiene que volver a pedir.
 
 | # | Riesgo | Mitigación |
 |---|---|---|
-| **R1** | Una captura se publica con un dato real que se pasó por alto | Estrategia A (datos sintéticos) elimina la clase entera. Para lo manual: **revisión explícita del operador antes de publicar**, sobre el archivo final, no sobre el proceso |
-| **R2** | La demo queda obsoleta al siguiente release | Es la razón del pipeline reproducible (D3). Agregar la regeneración al **checklist de release de Electron** |
+| **R1** | Una captura se publica con un dato real que se pasó por alto | Estrategia A (sustitución sintética) elimina la clase entera, **y ahora también en la app Electron** (§0.1). Para lo manual de D4: **revisión explícita del operador antes de publicar**, sobre el archivo final, no sobre el proceso |
+| **R2** | La demo queda obsoleta al siguiente release | Es la razón del pipeline reproducible (D3), que tras el spike cubre **~90% de las pantallas** en vez de ~60%. Agregar la regeneración al **checklist de release de Electron** |
 | **R3** | Se muestra una feature que el plan del visitante no incluye | Cada capítulo indica el plan que la incluye. Bitácora y Markdown son gateados por plan |
 | **R4** | La demo promete un resultado que el producto no garantiza (anonimización) | La leyenda de "ayuda automática, no garantía" del módulo Markdown va también en su capítulo |
 | **R5** | Las capturas del PJN muestran una versión vieja del sitio del PJN | Fuera de nuestro control. Fecharlas en el guion |
+| **R6** | **D3 se ejecuta antes del release de Electron y el capítulo de Markdown sale vacío** | Dependencia dura detectada en el spike (§0.1, hallazgo 1): la app instalada **no tiene el botón de Markdown** porque M2–M5 están commiteados sin release. **Verificar la versión instalada antes de arrancar D3**, y que la cuenta de demo tenga `markdown_enabled=true` |
+| **R7** | La sustitución de datos rompe el flujo en vez de solo la captura | Regla de D2: sustituir **después** de llegar a la pantalla, nunca antes de una acción que dependa del valor. Ya pasó una vez en el spike (§0.1, hallazgo 2) |
 
 ---
 
-## 6. Prompt de arranque
+## 6. Prompts de arranque
+
+**D1 (arrancar por acá):**
 
 > Ejecutá el bloque **D1** de `docs/internal/plan-demo-producto-2026-08-26.md` — guion de la demo.
 > **Sonnet, esfuerzo medio.** Mirá primero las 36 capturas de referencia en
 > `C:\Users\JONATHAN\Desktop\ordenar\imagenes` para entender el encuadre que quiere el operador, y
 > las secciones "Funciones" y "Planes" de `backend-server/public/landing/index.html` para que el
-> guion hable el mismo idioma que la landing. Entregable: `docs/internal/demo-guion.md`. **No
-> saques capturas todavía** — eso es D3 y necesita los fixtures de D2.
+> guion hable el mismo idioma que la landing. Entregable: `docs/internal/demo-guion.md`, que debe
+> marcar explícitamente **qué capturas son automatizables (D3) y cuáles las tiene que sacar el
+> operador (D4)**. **No saques capturas todavía** — eso es D3 y necesita los fixtures de D2.
+
+**D3 (cuando D2 esté listo):**
+
+> Ejecutá el bloque **D3** de `docs/internal/plan-demo-producto-2026-08-26.md` — pipeline de
+> captura. **Sonnet, esfuerzo alto.** Leé primero **§0.1** (el spike que habilitó capturar la app
+> Electron con Playwright vía CDP) y `tests/daily/electron_driver.py`, que ya resuelve lanzamiento,
+> guard de instancia única y login — **reusalo, no lo reimplementes**. 🚨 Antes de arrancar,
+> verificá que la app instalada tenga el módulo Markdown (ver R6) y que la cuenta de demo tenga el
+> flag encendido. Regla de oro: sustituir datos sintéticos **después** de llegar a cada pantalla,
+> nunca antes de una acción que dependa del valor real (R7).
