@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict IkbNfLm6fzWH34eHWJL7pb8qzJtFKbMfiTclC6cXKeRBpyig9HBnA9vkfKEX8JT
+\restrict ZKbyfaniSbMUNzsuTnSgaLnn92maEucBGOgzmWXSJ1gYPeE0IHv2blLpzVZtTl6
 
--- Dumped from database version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
--- Dumped by pg_dump version 14.23 (Ubuntu 14.23-0ubuntu0.22.04.1)
+-- Dumped from database version 14.24 (Ubuntu 14.24-0ubuntu0.22.04.1)
+-- Dumped by pg_dump version 14.24 (Ubuntu 14.24-0ubuntu0.22.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -936,6 +936,7 @@ CREATE TABLE public.plans (
     plan_expiry_date timestamp without time zone,
     visibility character varying(10) DEFAULT 'public'::character varying NOT NULL,
     bitacora_enabled boolean DEFAULT false,
+    markdown_enabled boolean DEFAULT false,
     CONSTRAINT plans_plan_type_check CHECK (((plan_type)::text = ANY ((ARRAY['electron'::character varying, 'extension'::character varying, 'combo'::character varying])::text[]))),
     CONSTRAINT plans_promo_type_check CHECK (((promo_type)::text = ANY ((ARRAY['date'::character varying, 'quota'::character varying])::text[]))),
     CONSTRAINT plans_visibility_check CHECK (((visibility)::text = ANY ((ARRAY['public'::character varying, 'private'::character varying])::text[])))
@@ -949,6 +950,13 @@ ALTER TABLE public.plans OWNER TO procurador_user;
 --
 
 COMMENT ON COLUMN public.plans.bitacora_enabled IS 'Gate por plan. FALSE por defecto — el módulo se enciende plan por plan desde el dashboard admin';
+
+
+--
+-- Name: COLUMN plans.markdown_enabled; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.plans.markdown_enabled IS 'Gate por plan del módulo Markdown/Anonimización. FALSE por defecto — se enciende plan por plan desde el dashboard admin. No consume cupo (decisión del operador, 2026-08-26): procesamiento 100% local, no toca el PJN ni gasta recursos del servidor.';
 
 
 --
@@ -1127,7 +1135,7 @@ CREATE TABLE public.support_tickets (
     priority_notes text,
     priority_set_at timestamp without time zone,
     priority_set_by integer,
-    CONSTRAINT support_tickets_category_check CHECK (((category)::text = ANY ((ARRAY['technical'::character varying, 'billing'::character varying, 'commercial'::character varying])::text[]))),
+    CONSTRAINT support_tickets_category_check CHECK (((category)::text = ANY (ARRAY[('technical'::character varying)::text, ('billing'::character varying)::text, ('commercial'::character varying)::text, ('feedback'::character varying)::text]))),
     CONSTRAINT support_tickets_priority_check CHECK (((priority)::text = ANY ((ARRAY['low'::character varying, 'medium'::character varying, 'high'::character varying, 'urgent'::character varying])::text[]))),
     CONSTRAINT support_tickets_priority_source_check CHECK (((priority_source IS NULL) OR ((priority_source)::text = ANY ((ARRAY['manual'::character varying, 'ai'::character varying, 'ai_overridden'::character varying])::text[])))),
     CONSTRAINT support_tickets_status_check CHECK (((status)::text = ANY ((ARRAY['open'::character varying, 'in_progress'::character varying, 'resolved'::character varying, 'closed'::character varying])::text[])))
@@ -1135,6 +1143,13 @@ CREATE TABLE public.support_tickets (
 
 
 ALTER TABLE public.support_tickets OWNER TO procurador_user;
+
+--
+-- Name: COLUMN support_tickets.category; Type: COMMENT; Schema: public; Owner: procurador_user
+--
+
+COMMENT ON COLUMN public.support_tickets.category IS 'technical | billing | commercial | feedback — "feedback" (Enviar comentario) se agregó el 2026-08-27 junto con el botón de comentario del topbar de la app Electron y del portal.';
+
 
 --
 -- Name: support_tickets_id_seq; Type: SEQUENCE; Schema: public; Owner: procurador_user
@@ -3347,5 +3362,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES 
 -- PostgreSQL database dump complete
 --
 
-\unrestrict IkbNfLm6fzWH34eHWJL7pb8qzJtFKbMfiTclC6cXKeRBpyig9HBnA9vkfKEX8JT
+\unrestrict ZKbyfaniSbMUNzsuTnSgaLnn92maEucBGOgzmWXSJ1gYPeE0IHv2blLpzVZtTl6
 

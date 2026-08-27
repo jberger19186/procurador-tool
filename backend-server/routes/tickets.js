@@ -17,7 +17,10 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Categoría, título y descripción son obligatorios' });
     }
 
-    if (!['technical', 'billing', 'commercial'].includes(category)) {
+    // Debe coincidir con el CHECK de support_tickets.category (ver la migración
+    // 20260827_ticket_category_feedback.sql) — si se agrega un valor acá sin ampliar
+    // el constraint, el INSERT falla recién en la DB con un 500 en vez de un 400.
+    if (!['technical', 'billing', 'commercial', 'feedback'].includes(category)) {
         return res.status(400).json({ error: 'Categoría inválida' });
     }
 

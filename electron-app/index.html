@@ -133,6 +133,13 @@
 
     <div class="topbar-spacer"></div>
 
+    <!-- Atajo a "Enviar comentario": abre el portal en Soporte → nuevo ticket con la
+         categoría ya elegida. Va FUERA de .win-controls y con un separador propio
+         (.topbar-support) para que no se lea como un control de ventana más. -->
+    <button class="win-btn topbar-support-btn" id="btnTopbarSoporte" title="Enviar comentario" aria-label="Enviar comentario">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 9.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 2.5V4a1.5 1.5 0 0 1 1.5-1.5h9A1.5 1.5 0 0 1 14 4v5.5z"/><path d="M5.5 5.5h5M5.5 8h3"/></svg>
+    </button>
+
     <!-- Controles de ventana (min / max / close) -->
     <div class="win-controls">
         <button class="win-btn win-btn-min" id="btnWinMin" title="Minimizar">

@@ -1422,6 +1422,7 @@ async function renderTickets() {
                 <option value="technical">Técnico</option>
                 <option value="billing">Facturación</option>
                 <option value="commercial">Comercial</option>
+                <option value="feedback">Comentario</option>
             </select>
             <select id="f-pri" onchange="applyTicketFilters()">
                 <option value="">Todas las prioridades</option>
@@ -2213,11 +2214,11 @@ function priorityBadge(p, source, notes) {
     return `<span class="badge ${m[p] || 'badge-gray'}"${tooltip}>${srcIcon}${l[p] || p}</span>`;
 }
 function catBadge(c) {
-    const m = { technical: 'badge-blue', billing: 'badge-purple', commercial: 'badge-green' };
+    const m = { technical: 'badge-blue', billing: 'badge-purple', commercial: 'badge-green', feedback: 'badge-yellow' };
     return `<span class="badge ${m[c] || 'badge-gray'}">${catLabel(c)}</span>`;
 }
 function catLabel(c) {
-    return { technical: 'Técnico', billing: 'Facturación', commercial: 'Comercial' }[c] || c;
+    return { technical: 'Técnico', billing: 'Facturación', commercial: 'Comercial', feedback: 'Comentario' }[c] || c;
 }
 function benefitLabel(b) {
     return { discount: 'Extensión de suscripción', plan_upgrade: 'Upgrade de plan', usage_reset: 'Reset de uso' }[b] || b;

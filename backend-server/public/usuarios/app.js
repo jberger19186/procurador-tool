@@ -394,12 +394,17 @@ async function initDashboard() {
     // Consumir pending_goto (de SSO o de ?goto= persistido en sessionStorage)
     const pendingGoto = sessionStorage.getItem('pending_goto');
     const pendingGotoExp = sessionStorage.getItem('pending_goto_exp');
+    const pendingGotoCat = sessionStorage.getItem('pending_goto_cat');
     sessionStorage.removeItem('pending_goto_exp');
+    sessionStorage.removeItem('pending_goto_cat');
     if (pendingGoto) {
         sessionStorage.removeItem('pending_goto');
         if (pendingGoto === 'nuevo-ticket') {
             navigateTo('soporte');
-            setTimeout(() => openNewTicketModal(), 300);
+            // openNewTicketModal ignora una categoría que no exista en el <select>
+            // (busca la option y solo asigna si la encuentra), así que un `cat`
+            // inválido en la URL abre el modal sin preselección en vez de romper.
+            setTimeout(() => openNewTicketModal(pendingGotoCat || null), 300);
             return;
         }
         // `expediente` NO es una sección del portal — es el pedido "abrime la ficha de
@@ -1446,13 +1451,14 @@ function renderTicketsList() {
         technical: 'Técnico',
         billing: 'Facturación',
         commercial: 'Comercial',
+        feedback: 'Comentario',
     };
 
     container.innerHTML = `<div class="tickets-list">
         ${state.tickets.map(t => {
             const statusClass = `badge badge-${t.status}`;
             const statusLabel = { open: 'Abierto', closed: 'Cerrado', in_progress: 'En progreso', resolved: 'Resuelto' }[t.status] || t.status;
-            const catIcon = { technical: '🔧', billing: '💳', commercial: '📋' }[t.category] || '🎫';
+            const catIcon = { technical: '🔧', billing: '💳', commercial: '📋', feedback: '💬' }[t.category] || '🎫';
 
             return `<div class="ticket-item" onclick="openTicketDetail(${t.id})">
                 <div class="ticket-item-icon">${catIcon}</div>
@@ -1500,7 +1506,7 @@ async function openTicketDetail(ticketId) {
 function renderTicketDetail(ticket) {
     const statusClass = `badge badge-${ticket.status}`;
     const statusLabel = { open: 'Abierto', closed: 'Cerrado', in_progress: 'En progreso', resolved: 'Resuelto' }[ticket.status] || ticket.status;
-    const categoryLabels = { technical: 'Técnico', billing: 'Facturación', commercial: 'Comercial' };
+    const categoryLabels = { technical: 'Técnico', billing: 'Facturación', commercial: 'Comercial', feedback: 'Comentario' };
 
     const comments = ticket.comments || [];
 
@@ -2744,6 +2750,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Marcar todas las notificaciones como leídas
     document.getElementById('btn-mark-all-notifs')?.addEventListener('click', markAllNotificationsRead);
 
+    // Botón de comentario del topbar — mismo destino que "Nuevo ticket" pero con la
+    // categoría ya elegida. Va por navigateTo + openNewTicketModal (no por el
+    // deep-link) porque acá ya estamos dentro del portal, con sesión activa.
+    document.getElementById('btn-feedback')?.addEventListener('click', () => {
+        navigateTo('soporte');
+        setTimeout(() => openNewTicketModal('feedback'), 300);
+    });
+
     // Logout button
     document.getElementById('btn-logout').addEventListener('click', doLogout);
 
@@ -2885,6 +2899,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const incomingExp = urlParams.get('exp');
     if (incomingExp) {
         sessionStorage.setItem('pending_goto_exp', incomingExp);
+    }
+    // `?goto=nuevo-ticket&cat=<categoria>`: el botón de comentario de la app Electron
+    // manda la categoría a preseleccionar. Se persiste igual que pending_goto_exp para
+    // sobrevivir el ciclo de login. Sin `cat`, el goto sigue valiendo — abre el modal
+    // sin categoría elegida (que es lo que mandan los clientes ya instalados).
+    const incomingCat = urlParams.get('cat');
+    if (incomingCat) {
+        sessionStorage.setItem('pending_goto_cat', incomingCat);
     }
 
     // Deep-link de captura desde un visor (F2.2/F2.3): POST /usuarios/capture redirige

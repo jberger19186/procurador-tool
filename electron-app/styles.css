@@ -123,6 +123,23 @@ body {
 .win-btn:hover            { background: var(--bg-hover);  color: var(--text-1); }
 .win-btn-close:hover      { background: var(--error-bg);  color: var(--error);  }
 
+/* Botón de "Enviar comentario" — reusa .win-btn para el tamaño/hover, pero vive
+   fuera de .win-controls con un separador vertical: la distancia + la línea son lo
+   que evita que se lea como un cuarto control de ventana (y que alguien lo clickee
+   creyendo que minimiza). */
+.topbar-support-btn {
+  margin-right: 10px;
+  padding-right: 10px;
+  border-right: 1px solid var(--border);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  width: auto;
+  min-width: 26px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;   /* sin esto el click arrastra la ventana, no dispara */
+}
+.topbar-support-btn svg { width: 15px; height: 15px; }
+.topbar-support-btn:hover { color: var(--accent); }
+
 .logo-area {
   display: flex;
   align-items: center;

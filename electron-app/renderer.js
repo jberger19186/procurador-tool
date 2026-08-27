@@ -199,6 +199,10 @@ function initializeButtons() {
     // M5 (Markdown): a diferencia de Bitácora, abre un modal LOCAL — el módulo
     // es 100% procesamiento en el equipo, no hay nada que navegar en el portal.
     bind('btnTopbarMarkdown', openMarkdownModal);
+    // Botón de comentario del topbar: mismo destino que "Nuevo ticket" del portal,
+    // con la categoría ya elegida (el `cat` viaja como query param y el portal lo
+    // persiste igual que el goto — ver pending_goto_cat en usuarios/app.js).
+    bind('btnTopbarSoporte', () => openPortalSection('nuevo-ticket', { cat: 'feedback' }));
 
     // ── Sidebar toggle (colapsar / expandir) ──
     const mainLayout = document.querySelector('.main-layout');
@@ -2377,11 +2381,20 @@ async function openPortal() {
 // Abre el portal web en una sección específica con auto-login.
 // Secciones válidas: 'ia', 'soporte', 'nuevo-ticket', 'perfil', 'plan', 'facturacion', null (home)
 // URL generada: /usuarios/?goto=<section>#sso=<token>
-async function openPortalSection(section) {
+// `extra` (opcional) son query params adicionales que acompañan al goto — hoy solo
+// lo usa el botón de comentario, con { cat: 'feedback' }. Los 10 call sites que
+// llaman con un solo argumento no cambian de comportamiento: sin `extra`, la URL
+// queda idéntica a la de antes.
+async function openPortalSection(section, extra = null) {
     const PORTAL_BASE = 'https://api.procuradortool.com/usuarios/';
     try {
         const token = await window.electronAPI.getAuthToken();
-        const query = section ? `?goto=${encodeURIComponent(section)}` : '';
+        let query = section ? `?goto=${encodeURIComponent(section)}` : '';
+        if (query && extra) {
+            for (const [k, v] of Object.entries(extra)) {
+                if (v != null) query += `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`;
+            }
+        }
         const url   = token ? `${PORTAL_BASE}${query}#sso=${token}` : PORTAL_BASE;
         await window.electronAPI.openExternalUrl(url);
     } catch (_) {
@@ -2650,7 +2663,7 @@ async function loadTicketList() {
             resolved:    '<span class="ticket-badge badge-resolved">Resuelto</span>',
             closed:      '<span class="ticket-badge badge-closed">Cerrado</span>'
         };
-        const catLabelMap = { technical: 'Técnico', billing: 'Pagos', commercial: 'Beneficio' };
+        const catLabelMap = { technical: 'Técnico', billing: 'Pagos', commercial: 'Beneficio', feedback: 'Comentario' };
 
         listEl.innerHTML = tickets.map(t => {
             const badge   = statusBadgeMap[t.status] || `<span class="ticket-badge">${t.status}</span>`;
@@ -2700,7 +2713,7 @@ async function showTicketDetail(ticketId) {
         const { ticket, comments } = result;
 
         const statusLabel = { open: 'Abierto', in_progress: 'En progreso', resolved: 'Resuelto', closed: 'Cerrado' }[ticket.status] || ticket.status;
-        const catLabel    = { technical: 'Técnico', billing: 'Pagos', commercial: 'Beneficio comercial' }[ticket.category] || ticket.category;
+        const catLabel    = { technical: 'Técnico', billing: 'Pagos', commercial: 'Beneficio comercial', feedback: 'Comentario' }[ticket.category] || ticket.category;
         const date        = new Date(ticket.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
         headerEl.innerHTML = `

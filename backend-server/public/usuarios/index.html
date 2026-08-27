@@ -138,6 +138,11 @@
             <div class="topbar-right">
                 <span class="user-email" id="topbar-email"></span>
                 <span class="plan-badge" id="topbar-plan">Cargando...</span>
+                <!-- Atajo a "nuevo ticket" con la categoría Enviar comentario ya elegida.
+                     Mismo ícono que el botón del topbar de la app Electron. -->
+                <button class="btn-feedback" id="btn-feedback" title="Enviar comentario" aria-label="Enviar comentario">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 9.5a1.5 1.5 0 0 1-1.5 1.5H5l-3 2.5V4a1.5 1.5 0 0 1 1.5-1.5h9A1.5 1.5 0 0 1 14 4v5.5z"/><path d="M5.5 5.5h5M5.5 8h3"/></svg>
+                </button>
                 <button class="btn btn-secondary btn-sm" id="btn-logout">Cerrar sesión</button>
             </div>
         </header>
@@ -622,6 +627,7 @@
                         <option value="technical">🔧 Soporte Técnico</option>
                         <option value="billing">💳 Facturación</option>
                         <option value="commercial">📋 Consulta Comercial / Cambio de Plan</option>
+                        <option value="feedback">💬 Enviar comentario</option>
                     </select>
                 </div>
                 <div class="form-group">
