@@ -972,6 +972,41 @@ if (process.env.PAYMENT_MODULE_ENABLED === 'true') {
     logger.info('💳 Módulo de pagos DESHABILITADO (PAYMENT_MODULE_ENABLED=false)');
 }
 
+// ─── Etapa 1.5 (F4) — alerta de la verificación funcional contra el PJN real ──
+// Corre siempre (no depende de PAYMENT_MODULE_ENABLED — es un check de salud del
+// producto, no de cobranza). Relee el MISMO archivo que escriben/leen los endpoints
+// de routes/admin.js (POST .../verification/report, GET .../latest) — se lee el
+// archivo tal cual queda en disco en vez de importar esa lógica, para no acoplar
+// un router a un cron.
+//
+// Dedup con memoria propia en el mismo archivo (_lastErrorAlertFor / _lastStaleAlertAt):
+// sin esto, un silencio de 3 semanas mandaría 21 emails idénticos y el aviso se
+// volvería ruido que se ignora (§7 F4 del plan).
+const { decideVerificationAlert } = require('./utils/verificationAlertCheck');
+const VERIFICATION_ALERT_FILE = path.join(__dirname, 'data', 'verification-results.json');
+
+cron.schedule('0 12 * * *', async () => {
+    try {
+        let raw;
+        try { raw = JSON.parse(fs.readFileSync(VERIFICATION_ALERT_FILE, 'utf8')); }
+        catch (_) { raw = { latest: null, history: [] }; }
+
+        const { tipo, cambio, daysSince } = decideVerificationAlert(raw);
+
+        if (tipo === 'error') {
+            await mailerCron.sendVerificationAlert('error', { latest: raw.latest });
+            logger.warn('[CRON] verification-alert: alerta de ERROR enviada');
+        } else if (tipo === 'stale') {
+            await mailerCron.sendVerificationAlert('stale', { latest: raw.latest, daysSince: raw.latest ? Math.floor(daysSince) : null });
+            logger.warn('[CRON] verification-alert: alerta de DESACTUALIZADO enviada');
+        }
+
+        if (cambio) fs.writeFileSync(VERIFICATION_ALERT_FILE, JSON.stringify(raw, null, 2));
+    } catch (err) {
+        logger.error('[CRON] verification-alert error:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
 // Manejo de shutdown graceful
 process.on('SIGINT', async () => {
     console.log('\n🛑 Cerrando servidor...');

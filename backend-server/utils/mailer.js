@@ -443,6 +443,54 @@ async function sendAdminReactivationRequest(nombre, apellido, email, suspensionR
     );
 }
 
+// ─── Etapa 1.5 (F4) — alerta de la verificación funcional contra el PJN real ──
+// Llamada por el cron nuevo de server.js (no por el módulo apagado dailyVerification.js).
+// `tipo` distingue las 2 causas que justifican avisar aunque nadie mire el dashboard:
+// un reporte que vino en error, o silencio prolongado (nadie corrió la prueba en +7 días).
+async function sendVerificationAlert(tipo, { latest, daysSince } = {}) {
+    const to = process.env.ALERT_EMAIL_TO;
+    if (!to) return;
+
+    const dashboardUrl = `${process.env.BASE_URL || 'https://api.procuradortool.com'}/dashboard`;
+
+    if (tipo === 'error') {
+        const flujosFallidos = (latest?.flujos || []).filter(f => f.estado === 'error');
+        const filas = flujosFallidos.map(f =>
+            `<tr style="border-top:1px solid #f3f4f6"><td style="padding:8px 0;color:#6b7280">${escapeHtml(f.nombre || f.clave)}</td><td style="padding:8px 0">${escapeHtml(f.detalle || 'sin detalle')}</td></tr>`
+        ).join('');
+        await sendEmail(
+            to,
+            '⚠️ Verificación contra el PJN real reportó un error',
+            emailLayout(`
+              <h3 style="font-size:16px;font-weight:700;color:#1a1a1a;margin:0 0 18px">La última verificación funcional falló</h3>
+              <table style="width:100%;border-collapse:collapse;font-size:14px">
+                <tr><td style="padding:8px 0;color:#6b7280;width:140px">Fecha</td><td style="padding:8px 0"><strong>${escapeHtml(latest?.timestamp || '-')}</strong></td></tr>
+                <tr style="border-top:1px solid #f3f4f6"><td style="padding:8px 0;color:#6b7280">Origen</td><td style="padding:8px 0">${escapeHtml(latest?.origen || '-')}</td></tr>
+                ${filas}
+              </table>
+              ${infoBox('Para volver a verificar, pedile a Claude: <strong>"corré la prueba diaria de la app"</strong> — el comando también está siempre visible en la tarjeta de Diagnóstico.', '#dc2626')}
+              ${btnPrimary(dashboardUrl, 'Ver en el dashboard →')}
+            `, '#dc2626')
+        );
+        return;
+    }
+
+    // tipo === 'stale'
+    await sendEmail(
+        to,
+        '⚠️ Hace más de 7 días que no se verifica contra el PJN real',
+        emailLayout(`
+          <h3 style="font-size:16px;font-weight:700;color:#1a1a1a;margin:0 0 18px">Verificación funcional desactualizada</h3>
+          <p>${latest
+              ? `La última verificación fue hace <strong>${daysSince ?? '7+'} días</strong> (${escapeHtml(latest.timestamp)}).`
+              : 'Todavía no se reportó ninguna verificación.'
+          }</p>
+          ${infoBox('Para verificar ahora, pedile a Claude: <strong>"corré la prueba diaria de la app"</strong> — el comando también está siempre visible en la tarjeta de Diagnóstico.')}
+          ${btnPrimary(dashboardUrl, 'Ver en el dashboard →')}
+        `)
+    );
+}
+
 // ─── Fase 5 — Emails de cobranza ──────────────────────────────────────────────
 
 async function sendInvoiceEmail(email, pdfUrl, numero) {
@@ -544,6 +592,7 @@ module.exports = {
     sendAdminReactivationRequest,
     sendTicketReplyEmail,
     sendPasswordResetEmail,
+    sendVerificationAlert,
     // Fase 5
     sendInvoiceEmail,
     sendPaymentFailedEmail,
