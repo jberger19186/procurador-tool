@@ -115,7 +115,7 @@ curl -sk https://api.procuradortool.com/health
 # 2. Login funciona
 curl -sk -X POST https://api.procuradortool.com/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"procuradortool@gmail.com","password":"TestPass2025!","machineId":"TEST"}' | head -c 200
+  -d '{"email":"procuradortool@gmail.com","password":"<password>","machineId":"TEST"}' | head -c 200
 
 # 3. Cantidad de usuarios coincide con backup
 ssh -i C:/Users/JONATHAN/.ssh/do_procurador root@142.93.64.94 \
