@@ -20,9 +20,27 @@ from daily.config import API_URL, NOMBRES_FLUJO
 from daily.results import ResultadoFlujo
 
 
-def build_payload(resultados: list[ResultadoFlujo], notas: str = "") -> dict:
+def build_payload(
+    resultados: list[ResultadoFlujo],
+    notas: str = "",
+    origen: str = "script-daily",
+    forzar_error: bool = False,
+) -> dict:
+    """
+    `forzar_error=True` es para F5 (desatendido): si `ejecutar.py` capturó una
+    excepción no manejada a mitad de la corrida, la mayoría de los flujos
+    quedan `sin_datos`→`omitido` — sin ningún `error`, el cálculo normal de
+    abajo da `estado_general='parcial'`, que NO dispara la alerta por email
+    del cron `0 12 * * *` (`decideVerificationAlert` solo mira `estado==='error'`
+    o desactualización). Un crash silencioso reportado como "parcial" es
+    exactamente el modo de falla invisible que hace peligroso el modo
+    desatendido — forzar 'error' asegura que el cron lo detecte el mismo día,
+    no recién a los 7 días de "desactualizado".
+    """
     estados = {r.estado for r in resultados}
-    if estados <= {"ok"}:
+    if forzar_error:
+        estado_general = "error"
+    elif estados <= {"ok"}:
         estado_general = "ok"
     elif "error" in estados:
         estado_general = "parcial" if "ok" in estados else "error"
@@ -40,21 +58,28 @@ def build_payload(resultados: list[ResultadoFlujo], notas: str = "") -> dict:
 
     return {
         "estado": estado_general,
-        # El backend solo distingue 2 valores de origen: 'app-automatica' (F5,
-        # desatendido) y cualquier otra cosa cae a 'computer-use' (routes/admin.js,
-        # el reporte no valida contra una lista abierta). 'script-daily' se pisa en
-        # silencio con 'computer-use' — hallazgo de F1, no bloqueante: las `notas`
-        # SÍ quedan tal cual, así que el origen real sigue siendo legible en el
-        # detalle. Ampliar la whitelist del backend queda como candidato de F3 si
-        # se quiere distinguir en la propia tarjeta, no en las notas.
-        "origen": "script-daily",
+        # El backend distingue 2 valores de origen: 'app-automatica' (F5,
+        # desatendido — pasado explícito por ejecutar.py cuando corre sin
+        # operador) y cualquier otra cosa cae a 'computer-use'
+        # (routes/admin.js, el reporte no valida contra una lista abierta).
+        # 'script-daily' (el default de una corrida disparada a mano) se pisa
+        # en silencio con 'computer-use' — hallazgo de F1, no bloqueante: las
+        # `notas` SÍ quedan tal cual, así que el origen real sigue siendo
+        # legible en el detalle.
+        "origen": origen,
         "flujos": flujos,
         "notas": notas,
     }
 
 
-def post_report(admin_token: str, resultados: list[ResultadoFlujo], notas: str = "") -> dict:
-    payload = build_payload(resultados, notas)
+def post_report(
+    admin_token: str,
+    resultados: list[ResultadoFlujo],
+    notas: str = "",
+    origen: str = "script-daily",
+    forzar_error: bool = False,
+) -> dict:
+    payload = build_payload(resultados, notas, origen=origen, forzar_error=forzar_error)
     r = requests.post(
         f"{API_URL}/admin/diagnostics/verification/report",
         headers={"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"},

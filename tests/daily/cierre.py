@@ -34,7 +34,13 @@ from daily.results import leer_ultimo_resultado
 FLUJOS_DEFAULT = ["proc", "batch", "informe", "informe_lote", "monitor"]
 
 
-def run(flujos: list[str], desde_epoch: float | None, notas: str = "") -> dict:
+def run(
+    flujos: list[str],
+    desde_epoch: float | None,
+    notas: str = "",
+    origen: str = "script-daily",
+    forzar_error: bool = False,
+) -> dict:
     print("=== Cierre: leyendo resultados y reportando ===\n")
 
     resultados = [leer_ultimo_resultado(clave, desde_epoch) for clave in flujos]
@@ -47,7 +53,7 @@ def run(flujos: list[str], desde_epoch: float | None, notas: str = "") -> dict:
 
     print("\nPosteando a Verificación funcional (PJN real)...")
     admin_token = get_admin_token()
-    resp = report_mod.post_report(admin_token, resultados, notas)
+    resp = report_mod.post_report(admin_token, resultados, notas, origen=origen, forzar_error=forzar_error)
     print(f"  ✅ Reportado. estado general: {resp['entry']['estado']}")
 
     print("\nCerrando la app...")

@@ -1,10 +1,11 @@
 # Propuesta — llevar la prueba diaria a un script
 
-> **Estado:** aprobada y ejecutada — **F0-F4 completas.** Los 6 flujos
-> verificados de punta a punta contra el PJN real (F2), punto de entrada
-> único con CLI + doble clic (F3), y modal de ayuda en el dashboard (F4).
-> Solo F5 (desatendido) sigue sin recomendarse. Ver `tests/daily/README.md`
-> para el punto de entrada operativo.
+> **Estado:** aprobada y ejecutada — **F0-F5 completas en código.** Los 6
+> flujos verificados de punta a punta contra el PJN real (F2), punto de
+> entrada único con CLI + doble clic (F3), modal de ayuda en el dashboard
+> (F4), y modo desatendido + tarea programada listos pero **NO activados**
+> (F5, decisión explícita del operador). Ver `tests/daily/README.md` para el
+> punto de entrada operativo.
 > **Fecha:** 2026-08-27 · **Autor:** sesión de diseño (Opus, solo análisis) +
 > sesiones de ejecución (Sonnet, F0-F3).
 > **Origen:** pedido del operador tras la corrida manual del 2026-08-27, para
@@ -643,15 +644,58 @@ cerrado.** Solo resta F5 (desatendido), opcional y sin recomendarse todavía.
 
 ---
 
-### F5 — Desatendido *(opcional, solo si se pide)*
+### F5 — Desatendido *(opcional, solo si se pide)* — ✅ CONSTRUIDA, NO ACTIVADA (2026-08-27)
 **Modelo: Sonnet · Esfuerzo: bajo · ~0,5 sesión**
 
 Tarea programada de Windows + alerta por email reusando el mecanismo de
 deduplicación por episodio que ya existe (`utils/verificationAlertCheck.js`).
 
-⚠️ **No recomendado todavía.** Conviene acumular varias corridas asistidas antes
-de soltarlo: un script desatendido que falla a mitad de camino **quema cupo real**
-y deja la cuenta sin poder correr.
+⚠️ **La cautela original ("no recomendado todavía") se respetó pidiendo
+confirmación explícita antes de tocar código.** El operador la decidió:
+**construir el código, pero dejarlo desactivado** — ni el modo desatendido
+del script queda como default, ni la tarea programada queda registrada. Sigue
+requiriendo un paso deliberado del operador para prender.
+
+**Lo construido:**
+- `ejecutar.py::run_async(desatendido=True)` con una red de seguridad real:
+  ante cualquier excepción no manejada, igual llega al cierre/reporte de la
+  app, con `forzar_error=True` — sin esto, un crash antes de correr ningún
+  flujo reportaba `estado='parcial'` (todos los flujos `omitido`), que **no**
+  dispara la alerta del cron `0 12 * * *` (`decideVerificationAlert` solo
+  mira `estado==='error'` o desactualización). Era exactamente el modo de
+  falla invisible que el propio riesgo documentado describía: un crash
+  desatendido pasaría desapercibido hasta 7 días después.
+- **🔒 Hallazgo de seguridad real al construir esto, no anticipado en el
+  diseño original:** `close_env.close_app()` mata procesos por **nombre**,
+  sin distinguir dueño. Si el guard de instancia única
+  (`assert_no_instance_running()`) falla porque hay OTRA instancia real
+  corriendo — alguien usando la app en ese momento —, la red de seguridad
+  de arriba **no debe intervenir**: cerrarla mataría la sesión de otra
+  persona. Se corrigió moviendo ese chequeo específico **antes** y **fuera**
+  de cualquier código envuelto en la red de seguridad, con salida inmediata
+  sin cierre ni reporte si detecta una instancia ajena.
+- `report.py`/`cierre.py` ganan un parámetro `origen` real — en modo
+  desatendido manda `'app-automatica'` (el backend ya lo distinguía desde
+  antes de F1, solo faltaba que algo lo mandara).
+- `cli.py --desatendido`: modo automático + log a archivo con rotación
+  (últimos 30, `tests/daily/logs/`, ya cubierto por `.gitignore`) — nadie
+  mira la consola de una tarea programada.
+- `correr-diario.ps1 -Desatendido`: sin la pausa `Read-Host` final (colgaría
+  para siempre sin sesión interactiva).
+- `registrar-tarea-programada.ps1` (nuevo archivo, **NO ejecutado**):
+  registra la tarea de Windows Task Scheduler que correría
+  `correr-diario.ps1 -Desatendido` a diario. Confirmado con
+  `Get-ScheduledTask` que la tarea **no existe** en el sistema.
+
+**Verificado sin gastar cupo ni tocar la app real:** compile-check en los 5
+archivos Python + el `.ps1` nuevo (parseado con
+`[System.Management.Automation.Language.Parser]::ParseFile`, sin ejecutar) ·
+test aislado de `build_payload()` confirmando `parcial`→`error` con
+`forzar_error` · test aislado del tee+rotación de logs de `cli.py` (mockeando
+`ejecutar.run_async`, sin lanzar la app) · `pytest -m daily` sigue en verde.
+
+**Para activarlo:** correr `registrar-tarea-programada.ps1` como
+administrador, decisión exclusiva del operador. Nadie lo hizo todavía.
 
 ---
 
@@ -662,15 +706,17 @@ y deja la cuenta sin poder correr.
 | **F0** | ✅ Spike / gate técnico (4 preguntas) | Sonnet | bajo | ~0,5 | — | gate |
 | **F1** | ✅ Pre-vuelo, reporte y cierre (sin GUI) | Sonnet | bajo-medio | ~1 | `tests/daily/` | ✅ sí |
 | **F2** | ✅ Conducción de los 6 flujos — **corrida real 6/6 OK** | Sonnet | medio-alto | ~2 | `tests/daily/` | parcial |
-| **F3** | Orquestador + CLI + ejecutable | Sonnet | **medio** | ~1 | `tests/daily/` + `CLAUDE.md` | ✅ sí |
-| **F4** | Botón de ayuda + modal | Sonnet | **bajo** | ~0,5 | dashboard admin | ✅ sí |
-| **F5** | Desatendido *(opcional)* | Sonnet | **bajo** | ~0,5 | crontab / tarea | ✅ sí |
+| **F3** | ✅ Orquestador + CLI + ejecutable | Sonnet | medio | ~1 | `tests/daily/` + `CLAUDE.md` | ✅ sí |
+| **F4** | ✅ Botón de ayuda + modal | Sonnet | bajo | ~0,5 | dashboard admin | ✅ sí |
+| **F5** | ✅ Desatendido *(construido, NO activado)* | Sonnet | bajo | ~0,5 | `tests/daily/` + Task Scheduler | ✅ sí |
 | | **Total** | | | **~5-5,5** | | |
 
 **Orden y dependencias:** F0 es gate de todo. F1 → F2 → F3 es secuencial. **F4
-depende de F3** (el modal documenta el script). **F5 es opcional y no se
-recomienda todavía** (§7). **F0, F1 y F2 quedaron ejecutadas el 2026-08-27** —
-código real en `tests/daily/`, no diseño. Quedan F3 y F4.
+dependía de F3** (el modal documenta el script) — cumplido. **F5 se construyó
+con la cautela del diseño original respetada mediante confirmación explícita
+del operador**: código listo, tarea programada **sin registrar**. **Las 6
+fases quedaron ejecutadas el 2026-08-27** — código real en `tests/daily/`, no
+diseño.
 
 **Sin Opus en ninguna fase.** No toca cobranza, ni criptografía, ni código de
 producto: es un consumidor de APIs que ya existen y están probadas. El único
@@ -691,12 +737,16 @@ Para que "script hecho" no se confunda con "verificación resuelta":
 - **No ejercita la detección de novedades reales** — el flujo corre pero reporta
   `0` porque las líneas base están al día (§6.6, hallazgo relacionado). Se puede
   cubrir, pero es una decisión aparte.
-- **No fusiona el modo automático (F2) con el asistido (F1) en un solo CLI
-  pulido** — hoy son `ejecutar.py` y `run.py` separados. Es tarea de F3.
+- **No corre desatendido por defecto** — F5 construyó el modo y la tarea
+  programada, pero **nadie la activó**. Sigue siendo una corrida disparada a
+  mano (script o computer-use) hasta que el operador decida lo contrario.
 
 > ✅ **Cubierto desde F2:** los 6 flujos se corren por código, sin clicks ni
 > diálogos nativos — incluida "Monitor — Consulta Inicial", que era el hueco
 > más viejo (sin correrse desde el 2026-07-23). Ver §6.6 y la entrada de F2.
+>
+> ✅ **Cubierto desde F3:** el modo automático (F2) y el asistido (F1) quedaron
+> fusionados en un solo CLI (`cli.py`), sin duplicar lógica.
 
 ---
 

@@ -1,9 +1,12 @@
 # tests/daily/ — Prueba diaria de la app contra el PJN
 
 > Plan de origen: [`docs/internal/propuesta-script-prueba-diaria-2026-08-27.md`](../../docs/internal/propuesta-script-prueba-diaria-2026-08-27.md).
-> **Estado: F0-F4 completas.** Botón `❓` en la tarjeta "Verificación funcional
-> (PJN real)" del dashboard admin explica el doble disparador y qué hace el
-> script. F5 (desatendido/programado) sigue sin recomendarse.
+> **Estado: F0-F5 completas EN CÓDIGO — F5 construida pero NO ACTIVADA.** El
+> modo desatendido (`--desatendido`) y el script que registra la tarea
+> programada existen y están verificados, pero **nadie corrió
+> `registrar-tarea-programada.ps1` todavía** — es una decisión explícita del
+> operador, a tomar cuando decida soltarlo. Ver "F5 — qué agregó exactamente"
+> más abajo.
 
 ## Punto de entrada recomendado: `cli.py` (F3)
 
@@ -89,8 +92,9 @@ pytest -m daily tests/daily/
 | `cierre.py` | CLI — cierre solo |
 | `run.py` | CLI — pre-vuelo + pausa manual + cierre (modo asistido, F1) |
 | `resumen.py` | Tabla final: flujos ok/error, cupo real vs. esperado, recargas restantes, pestañas abiertas (F3) |
-| `cli.py` | **Punto de entrada único** (F3) — `--asistido` alterna entre `run.py` y `ejecutar.py` |
+| `cli.py` | **Punto de entrada único** (F3) — `--asistido`/`--desatendido` alternan modo |
 | `correr-diario.ps1` | Ejecutable de doble clic (F3) — invoca `cli.py`, mismo patrón que `dev-tools/reset-panel.ps1` |
+| `registrar-tarea-programada.ps1` | (F5, sin ejecutar) Registra la tarea de Windows que corre `-Desatendido` a diario — hay que correrlo a mano para activarlo |
 | `test_daily_preflight.py` | Wrapper pytest del pre-vuelo, marcado `daily` |
 
 ## Reusa, no duplica
@@ -207,8 +211,58 @@ cupo se recarga solo, y que las pestañas de Chrome no se cierran por código.
 Verificado con Playwright contra `dev-tools/stub-dashboard.js` (skill
 `verify`) y desplegado staging→prod.
 
-## Próximo paso
+## F5 — qué agregó exactamente
 
-**F5** (opcional, sin recomendarse todavía) — tarea programada de Windows +
-alerta por email, para correr la prueba de forma desatendida. Ver la
-propuesta §7 para el detalle y las razones de por qué esperar.
+**Construido, verificado, NO activado.** El plan marcaba F5 como "no
+recomendado todavía": una corrida desatendida que falla a mitad de camino
+consume cupo real sin que nadie esté para detectarlo. Se resolvió construir
+el código con esa cautela explícita — queda listo para prender, no prendido.
+
+- **`ejecutar.py::run_async(desatendido=True)`** gana una red de seguridad
+  real, no cosmética: si CUALQUIER excepción no manejada interrumpe la
+  corrida (la app no conecta, un flujo revienta), igual se llega al cierre y
+  al reporte — con `forzar_error=True`. **Por qué importa:** sin esto, un
+  crash antes de que corra ningún flujo deja los 6 en `sin_datos`→`omitido`,
+  que el cálculo normal de `report.py::build_payload()` traduce a
+  `estado_general='parcial'` — y la alerta por email del cron backend
+  (`0 12 * * *`, `decideVerificationAlert`) **solo mira `estado==='error'`**
+  o desactualización. Un "parcial" silencioso es exactamente el modo de
+  falla invisible que hace peligroso el modo desatendido: el crash queda sin
+  reportarse como problema hasta que pasen 7 días de "desactualizado".
+  Verificado con un test aislado de `build_payload()`: sin `forzar_error` da
+  `parcial`, con `forzar_error=True` da `error` — confirmado antes de tocar
+  nada más.
+- **🔒 Guard de seguridad crítico, encontrado al construir esto:**
+  `close_env.close_app()` mata procesos **por nombre**, sin distinguir
+  dueño. Si `assert_no_instance_running()` falla porque hay OTRA instancia
+  real corriendo (alguien usando la app en ese momento), la red de
+  seguridad de arriba **no debe** intentar cerrar nada — cerraría la sesión
+  de otra persona. Por eso el chequeo de instancia única se hace explícito
+  **antes** de cualquier código envuelto en la red de seguridad, con
+  `return 1` inmediato si falla, sin pasar por cierre ni reporte.
+- **`origen` real en el reporte:** `report.py`/`cierre.py` ganaron un
+  parámetro `origen`, que en modo desatendido manda `'app-automatica'` (el
+  backend ya lo distinguía — `routes/admin.js`, hallazgo documentado desde
+  F1 — solo hacía falta que algo lo mandara).
+- **`cli.py --desatendido`**: modo automático + todo el output logueado a
+  `tests/daily/logs/daily-<timestamp>.log` (nadie mira la consola de una
+  tarea programada) con rotación de los últimos 30 archivos (gitignored,
+  `logs/` ya cubierto en `.gitignore`). Verificado con un test aislado
+  (mockeando el flujo real): tee a consola+archivo funciona, rotación
+  conserva 30+1, `stdout` se restaura correctamente al terminar.
+- **`correr-diario.ps1 -Desatendido`**: la variante que invocaría la tarea
+  programada — sin la pausa `Read-Host` final (colgaría para siempre sin
+  sesión interactiva).
+- **`registrar-tarea-programada.ps1`** (nuevo, NO ejecutado): registra una
+  tarea de Windows Task Scheduler que corre `correr-diario.ps1 -Desatendido`
+  a diario a una hora configurable, con `LogonType Interactive` (necesita
+  sesión de escritorio real para que Chrome/la app abran ventanas — si la
+  máquina está deslogueada a esa hora, esa corrida simplemente no pasa; el
+  cron de alertas del backend igual avisa si pasan 7 días sin corrida nueva).
+  Confirmado con `Get-ScheduledTask` que la tarea **no existe** — nadie la
+  registró.
+
+**Para activarlo cuando se decida:** correr
+`powershell -ExecutionPolicy Bypass -File tests\daily\registrar-tarea-programada.ps1`
+como administrador. Para desactivarlo:
+`Unregister-ScheduledTask -TaskName "ProcuradorSCW-PruebaDiaria" -Confirm:$false`.
