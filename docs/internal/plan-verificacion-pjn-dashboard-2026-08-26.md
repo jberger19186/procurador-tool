@@ -180,6 +180,7 @@ Se generaliza a un array:
   "latest": {
     "timestamp": "2026-08-26T22:40:00.000Z",
     "origen": "computer-use",            // | "app-automatica"
+    "cuenta": "27320694359",              // CUIT con el que se corrió la prueba
     "estado": "ok",                       // ok | parcial | error
     "tiempoTotalMs": 640000,
     "flujos": [
@@ -202,6 +203,12 @@ historial ni hace falta tocar el `POST /client/verification-report` existente.
 
 `estado` por flujo tiene **3 valores**, no 2: `ok` · `error` · `omitido`. El tercero es el
 que evita el falso positivo de §5.
+
+**`cuenta` queda registrado a propósito.** Hoy la prueba se corre siempre con
+`27320694359`, pero el reporte **no está atado a esa cuenta** (es admin-only, y reportar no
+otorga nada). Guardar el CUIT permite que, si algún día se verifica con una segunda cuenta
+—otro fuero, por ejemplo— el historial las distinga sin cambiar nada. **La recarga de cupo
+(F2) sí está atada exclusivamente a esa cuenta**, y ahí es donde importa el guard.
 
 ### 6.1 Criterios de resultado — qué es `ok`, `error` y `omitido`
 
