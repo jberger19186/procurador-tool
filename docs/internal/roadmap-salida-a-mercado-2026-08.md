@@ -25,7 +25,7 @@
     1.3 Landing + TyC (beta, límites)  ✅  └─────────────────────────────────┘
     1.4 Guía de backup y recuperación  ✅
     1.5 Control periódico contra PJN   ✅
-    1.6 Demo reproducible en landing   ⬜
+    1.6 Demo reproducible en landing   🔄  (D1 guion ✅, sigue D2)
               │
               ▼
   ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
@@ -223,16 +223,17 @@ protecciones · tarjeta reescrita en Diagnóstico con el comando de computer-use
 **La primera corrida real** (app v2.7.50 contra el PJN) dio **los 5 flujos en `ok`**, con el
 consumo de cupo cuadrando exacto con el modelo documentado.
 
-### 1.6 — Demo reproducible del producto en la landing
+### 1.6 — Demo reproducible del producto en la landing ⏳ D1 EJECUTADA, EN CURSO
 
 | | |
 |---|---|
-| **Plan** | [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md) — **revisado el 2026-08-27 con un spike de capacidad** |
+| **Plan** | [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md) — revisado el 2026-08-27 con un spike de capacidad |
+| **Guion** | ✅ **[`demo-guion.md`](demo-guion.md)** (D1, 2026-08-27) — 7 capítulos, 32 pasos (26 D3 / 6 D4) |
 | **Qué es** | Tour guiado en HTML estático servido desde `/demo/`, con capturas reales anonimizadas + clips cortos, un capítulo por módulo, linkeable desde cada tarjeta de la landing |
-| **Fases** | **6 (D1–D6)**, con grilla de modelo/esfuerzo/dependencias en §3.0 del plan |
+| **Fases** | **6 (D1–D6)** · **D1 ✅** · sigue **D2** (fixtures + capa de sustitución) |
 | **Modelo / esfuerzo** | Sonnet en las 6 · `alto` solo en D3 (volumen: ~40 pantallas) |
 | **Sesiones** | **~5,5** + **~15 min del operador** (ya no una sesión conjunta) |
-| **Depende de** | 1.1 ✅ · 1.3 ✅ · **1.2 y su release de Electron** ⏳ — sin el release, el capítulo de Markdown no se puede capturar (el botón no existe en el binario instalado) |
+| **Depende de** | 1.1 ✅ · 1.2 ✅ (con su release, `electron-v2.7.51`) · 1.3 ✅ — **sin dependencias pendientes** para arrancar D2 |
 | **🎯 El hallazgo que reduce el costo, verificado el 2026-08-27** | **Playwright captura la app Electron vía CDP**, reusando `tests/daily/electron_driver.py`: screenshot, viewport fijo, los 9 modales abribles por código, y **sustitución de datos sensibles antes de capturar**. La superficie más grande pasó de *"requiere al operador"* a **totalmente automatizable**, y el pipeline reproducible cubre **~90%** de las pantallas en vez de ~60% |
 | **El otro hallazgo (sigue vigente)** | Los **stubs de V0** sirven los archivos reales del portal y el dashboard contra una API falsa → esas capturas salen **sin un solo dato real que esfumar** |
 | **Lo único que el operador captura a mano** | **Extensión Chrome y sitio del PJN** (bloque D4, ~15 min). No hay Chrome conectado por Claude-in-Chrome, y computer-use otorga los navegadores en tier "read" |

@@ -10,8 +10,9 @@
 > el último bloque de la etapa de producto, porque necesita que Bitácora F3.4 y el módulo Markdown
 > ya existan para poder mostrarlos.
 >
-> **Estado:** plan **revisado el 2026-08-27** con un spike ejecutado (§0.1). La revisión cambió la
-> premisa más cara del plan original. No se produjo ninguna captura de producción ni código todavía.
+> **Estado:** plan **revisado el 2026-08-27** con un spike ejecutado (§0.1), que cambió la premisa
+> más cara del plan original. **D1 ejecutada** (guion completo, ver [`demo-guion.md`](demo-guion.md)).
+> No se produjo ninguna captura de producción ni código de D2-D6 todavía.
 
 ---
 
@@ -189,12 +190,18 @@ material estático a partir de superficies que ya existen. El único tramo con e
 
 ---
 
-### D1 — Guion y selección de flujos 🟢
+### D1 — Guion y selección de flujos ✅ EJECUTADO (2026-08-27)
 
 | | |
 |---|---|
 | **Modelo / esfuerzo** | Sonnet · **medio** |
-| **Entregable** | `docs/internal/demo-guion.md` — la lista ordenada de pantallas, con el texto de cada paso y qué dato sintético lleva cada una |
+| **Entregable** | [`demo-guion.md`](demo-guion.md) — 7 capítulos, 32 pasos (26 automatizables en D3, 6 manuales de D4), tabla de dependencias D3/D4 al cierre |
+
+> ⚠️ **La carpeta de referencia `Desktop\ordenar\imagenes` (36 capturas) ya no existe en la
+> máquina** — se buscó en Desktop y OneDrive sin resultado. El guion se armó con el copy real de la
+> landing (`#features`/`#extension`/`#planes`) y la estructura real de pantallas/modales del código
+> (ids confirmados, no supuestos). Si la carpeta reaparece, revisar el encuadre contra el guion
+> antes de que D3 capture en serio — puede haber composiciones que el operador ya había elegido.
 
 Un guion, no una galería. La demo tiene que contar el recorrido de un usuario, no enumerar
 pantallas. Estructura propuesta (6 capítulos, ~20 pasos):
