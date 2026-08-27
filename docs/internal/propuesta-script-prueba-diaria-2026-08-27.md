@@ -60,6 +60,20 @@ que ya recibe `lines` directamente.
 
 ---
 
+### ✅ Sí — el script reporta a "Verificación funcional (PJN real)"
+
+Pregunta del operador, confirmada: el script **postea al mismo endpoint que se usó
+a mano hoy**, `POST /admin/diagnostics/verification/report`, con los 6 flujos y su
+estado (`ok` / `error` / `omitido`). O sea, **la tarjeta del dashboard se
+actualiza igual que en una corrida manual** — cambia cómo se corre, no qué se
+informa ni dónde se ve. Eso es parte de **F1**, y por eso F1 entrega valor incluso
+si los flujos se siguen corriendo a mano.
+
+También sigue alimentando el historial de la tarjeta y `ultimaVezOk` por flujo, y
+por lo tanto la alerta por email con deduplicación por episodio (Etapa 1.5 F4).
+
+---
+
 ## 3. Lo que ya existe y se reusa (no se parte de cero)
 
 Este es el segundo motivo por el que la propuesta es barata:
@@ -259,10 +273,39 @@ Ventajas sobre borrar DON COCHO, todas concretas:
 - **Cupo: 0** (la inicial no consume).
 - **Residuo: 0** — ocupa 1 de 20 slots de `monitor_partes` por ~2 minutos.
 
-🚨 **Necesita 1 dato del operador:** qué **nombre de parte** usar. Conviene una
-parte real con **pocos expedientes** (5-30): suficiente para ejercitar el paginado
-y la escritura de la línea base, rápida de correr. Si no hay un candidato a mano,
-el fallback es usar DON COCHO cuando se abra su ventana de 30 días.
+#### ✅ RESUELTO — la parte descartable es DON COCHO
+
+**Decisión del operador (2026-08-27).** Y encaja mejor de lo que parecía: el
+problema de repetibilidad que describí arriba **desaparece si la parte se borra al
+final de la misma corrida**, porque así nunca envejece. Cada corrida es
+`crear → inicial → (novedades) → borrar`, siempre dentro de la gracia de 24 h.
+
+**Setup, una sola vez:** borrar la DON COCHO real que existe hoy (id 118, creada
+el 2026-07-23, con línea base de 115 expedientes). El endpoint lo permite —
+justamente porque pasó los 30 días.
+
+**Secuencia recomendada dentro de la corrida** (importa el orden):
+
+1. **Crear** la parte `FCR / DON COCHO`
+2. **Flujo 6 — consulta inicial** sobre ella → construye la línea base
+3. **Flujo 5 — buscar novedades** sobre **las 3** (incluida la recién creada)
+4. **Borrar** DON COCHO
+
+> 💡 **Por qué novedades va DESPUÉS y sobre las 3, y no sobre las 2 estables:**
+> una parte recién baselineada debe dar **0 novedades**. Si diera 115, significa
+> que la consulta inicial **no escribió la línea base** — o sea, el paso 3 es una
+> **verificación de integridad gratis del paso 2**, no solo un flujo más. Y de
+> paso mantiene el consumo en el modelo ya documentado (`monitor +3`), sin tener
+> que recalibrar el chequeo de consumo esperado.
+
+**Lo que hay que aceptar, dicho explícito:**
+
+- **DON COCHO deja de ser una parte monitoreada de verdad.** Su línea base se
+  reconstruye y se descarta en cada corrida. Es una cuenta de prueba, así que el
+  costo real es nulo — pero conviene saberlo.
+- **La corrida se alarga ~1-1,5 min**: la consulta inicial de DON COCHO recorre
+  **115 expedientes**. No consume cupo, pero sí tiempo.
+- Ocupa 1 de los 20 slots de `monitor_partes` durante esos minutos.
 
 #### 💡 Hallazgo relacionado: hoy el flujo de novedades siempre da 0
 
@@ -276,6 +319,27 @@ La técnica para ejercitarlo ya está documentada (sesión de F3.3): **borrar 1-
 filas de la línea base** hace que la próxima corrida las redetecte como novedades,
 con datos genuinos del PJN. Queda como **candidato opcional para F2**, no incluido
 por defecto: es más invasivo y merece decisión aparte.
+
+### 6.7 ✅ Los 2 caminos conviven — el manual NO se elimina
+
+**Decisión del operador (2026-08-27).** Dos frases de disparo distintas:
+
+| Lo que pide el operador | Qué corre |
+|---|---|
+| «**corré la prueba diaria de la app**» | El **script** (`tests/daily/`) |
+| «**corré la prueba diaria de la app con computer use**» | El **procedimiento manual** de `CLAUDE.md` |
+
+**No es redundancia, el manual sigue siendo necesario por 3 razones concretas:**
+
+1. **Es el único que verifica el `.exe` empaquetado.** El script lanza desde
+   código (§6.4), así que no ejercita rutas de `resources/` ni `isPackaged`.
+2. **Es el fallback cuando el script se rompe.** Si un cambio de la app mueve un
+   selector o una firma de IPC, el manual sigue andando mientras se arregla.
+3. **Ya está escrito y probado.** Borrarlo para "limpiar" sería tirar la red de
+   seguridad justo cuando se estrena la automatización.
+
+El paso 6.a de `CLAUDE.md` (procedimiento manual) queda **tal cual**, y se le
+agrega arriba una nota de una línea aclarando cuál de las dos frases lo dispara.
 
 ### 6.4 Desde código vs. el `.exe` instalado
 
@@ -353,20 +417,47 @@ El corazón. Reusa el fixture `electron_app`, agrega:
 
 ---
 
-### F3 — Orquestador + CLI
+### F3 — Orquestador + CLI + ejecutable
 **Modelo: Sonnet · Esfuerzo: medio · ~1 sesión**
 
 - un comando que encadena F1 → F2 → F1(reporte)
 - guard de instancia única (§6.2) y guard de `pytest` (§5)
 - salida legible: tabla de los 6 flujos, consumo de cupo real vs. esperado,
-  pestañas abiertas
+  recargas restantes si hubo recarga, y **las pestañas que quedaron abiertas**
+- **ejecutable para doble clic** (pedido del operador): un `.ps1`/`.bat`
+  versionado en `tests/daily/` que activa el entorno y dispara la corrida — mismo
+  patrón que `dev-tools/reset-panel.ps1`, que ya existe. El `.exe` vía `ps2exe`
+  queda opcional y **gitignored**, igual que el del panel de reset.
+- **doble disparador documentado** en `CLAUDE.md` (§6.7): la frase con «con
+  computer use» sigue llevando al procedimiento manual
 - **una corrida real completa** contra el PJN, comparada contra la corrida manual
   del 2026-08-27 (mismos expedientes, mismo consumo esperado:
   `proc +1 · batch +1 · informe +3 · monitor +3 · global +6`)
 
 ---
 
-### F4 — Desatendido *(opcional, solo si se pide)*
+### F4 — Botón de ayuda en la tarjeta del dashboard
+**Modelo: Sonnet · Esfuerzo: bajo · ~0,5 sesión · Superficie: dashboard admin**
+
+Pedido del operador: un **`?`** al lado del `📋` que ya copia el comando
+(`dashboard.js:4219`, dentro de `.diag-verif-cmd-line`), que abra un modal chico
+con las instrucciones.
+
+- botón `?` en la misma línea del comando, mismo estilo `.diag-btn secondary`
+- modal reusando la infraestructura que el dashboard ya tiene (`_injectModal`,
+  el mismo patrón de Pagos)
+- **contenido:** las 2 frases de disparo y qué hace cada una · los prerequisitos
+  (app cerrada — §6.2; perfil de Chrome con credenciales del PJN) · qué hace el
+  script paso a paso · que **recarga cupo solo** · y que **al terminar quedan
+  pestañas de Chrome para cerrar a mano**
+
+**Va después de F3 a propósito:** el modal documenta el script, así que primero
+tiene que existir. Es independiente del resto — se puede hacer en cualquier
+momento posterior, o saltear.
+
+---
+
+### F5 — Desatendido *(opcional, solo si se pide)*
 **Modelo: Sonnet · Esfuerzo: bajo · ~0,5 sesión**
 
 Tarea programada de Windows + alerta por email reusando el mecanismo de
@@ -380,14 +471,19 @@ y deja la cuenta sin poder correr.
 
 ## 8. Resumen de esfuerzo
 
-| Fase | Modelo | Esfuerzo | Sesiones | Entrega valor sola |
-|---|---|---|---|---|
-| F0 — Spike | Sonnet | bajo | ~0,5 | gate |
-| F1 — Pre-vuelo y reporte | Sonnet | bajo-medio | ~1 | ✅ sí |
-| F2 — Los 6 flujos | Sonnet | medio-alto | ~1,5-2 | parcial |
-| F3 — Orquestador + CLI | Sonnet | medio | ~1 | ✅ sí |
-| F4 — Desatendido *(opcional)* | Sonnet | bajo | ~0,5 | ✅ sí |
-| **Total** | | | **~4-5,5** | |
+| # | Fase | Modelo | Esfuerzo | Sesiones | Superficie | ¿Vale sola? |
+|---|---|---|---|---|---|---|
+| **F0** | Spike / gate técnico (4 preguntas) | Sonnet | **bajo** | ~0,5 | — | gate |
+| **F1** | Pre-vuelo, reporte y cierre (sin GUI) | Sonnet | **bajo-medio** | ~1 | `tests/daily/` | ✅ **sí** |
+| **F2** | Conducción de los 6 flujos | Sonnet | **medio-alto** | ~1,5-2 | `tests/daily/` | parcial |
+| **F3** | Orquestador + CLI + ejecutable | Sonnet | **medio** | ~1 | `tests/daily/` + `CLAUDE.md` | ✅ sí |
+| **F4** | Botón de ayuda + modal | Sonnet | **bajo** | ~0,5 | dashboard admin | ✅ sí |
+| **F5** | Desatendido *(opcional)* | Sonnet | **bajo** | ~0,5 | crontab / tarea | ✅ sí |
+| | **Total** | | | **~5-5,5** | | |
+
+**Orden y dependencias:** F0 es gate de todo. F1 → F2 → F3 es secuencial. **F4
+depende de F3** (el modal documenta el script). **F5 es opcional y no se
+recomienda todavía** (§7).
 
 **Sin Opus en ninguna fase.** No toca cobranza, ni criptografía, ni código de
 producto: es un consumidor de APIs que ya existen y están probadas. El único
