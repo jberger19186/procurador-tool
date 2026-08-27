@@ -3862,6 +3862,20 @@ async function renderDiagnostico() {
             </div>
         </div>
 
+        <!-- ── SALUD AUTOMÁTICA (health-check.js) — mejora del smoke backend, Fase 3 ── -->
+        <div class="diag-card">
+            <div class="diag-card-header">
+                <div>
+                    <div class="diag-card-title">🩺 Salud automática (producción)</div>
+                    <div class="diag-last" id="diag-health-last">Cargando...</div>
+                </div>
+                <span class="diag-badge none" id="diag-health-badge">—</span>
+            </div>
+            <div id="diag-health-stale"></div>
+            <div class="diag-verif-flujos" id="diag-health-checks">Cargando...</div>
+            <div class="diag-log" id="diag-health-historial" style="min-height:auto;display:none;"></div>
+        </div>
+
     </div>`;
 
     // Cargar últimos resultados
@@ -3888,6 +3902,13 @@ async function renderDiagnostico() {
         diagRenderVerifCupo(qdata.cupo);
     } catch (e) {
         document.getElementById('diag-verif-cupo').innerHTML = '';
+    }
+
+    try {
+        const hdata = await apiFetch('/admin/diagnostics/health-check/latest');
+        diagRenderHealthCheck(hdata.latest, hdata.history || []);
+    } catch (e) {
+        document.getElementById('diag-health-last').textContent = 'Error cargando resultados';
     }
 }
 
@@ -4208,6 +4229,78 @@ window.diagRecargarCupoVerif = async function() {
         if (btn) { btn.disabled = false; btn.textContent = '🔋 Recargar cupo'; }
     }
 };
+
+// Nombres legibles para los ids de checks que emite health-check.js — si se agrega un
+// check nuevo al script y no está acá, se muestra el id crudo (no rompe, solo es menos
+// prolijo), así que no hace falta que las dos listas viajen sincronizadas a la fuerza.
+const HEALTH_CHECK_NOMBRES = {
+    cron_heartbeat: 'Crons activos',
+    backup_reciente: 'Backup reciente',
+    cert_ssl: 'Certificado SSL',
+    disco_ram: 'Disco / RAM',
+    restarts_pm2: 'Estabilidad (PM2)',
+    integridad_referencial: 'Integridad de datos',
+    error_log_reciente: 'Sin errores nuevos',
+};
+
+// health-check.js corre solo, vía crontab, una vez por día (08:00) — si la última corrida
+// tiene más de 30h, el cron dejó de dispararse (mismo umbral que usa el propio script para
+// el check de "backup reciente"), y hay que decirlo con la misma fuerza visual que la
+// tarjeta de verificación funcional usa para "hace más de 7 días".
+const HEALTH_CHECK_STALE_HOURS = 30;
+
+function diagRenderHealthCheck(latest, history) {
+    const badgeEl = document.getElementById('diag-health-badge');
+    const lastEl  = document.getElementById('diag-health-last');
+    const staleEl = document.getElementById('diag-health-stale');
+    const listEl  = document.getElementById('diag-health-checks');
+    const histEl  = document.getElementById('diag-health-historial');
+    if (!listEl) return;
+
+    if (!latest) {
+        listEl.innerHTML = 'Sin corridas reportadas todavía — health-check.js corre solo a las 08:00.';
+        histEl.style.display = 'none';
+        badgeEl.textContent = '—';
+        badgeEl.className   = 'diag-badge none';
+        lastEl.textContent  = 'Nunca reportado';
+        staleEl.innerHTML   = '';
+        return;
+    }
+
+    const hoursSince = (Date.now() - new Date(latest.timestamp).getTime()) / 3600000;
+    const stale = hoursSince > HEALTH_CHECK_STALE_HOURS;
+
+    let badgeClass = latest.ok ? 'ok' : 'fail';
+    let badgeText  = latest.ok ? '✅ OK' : `❌ ${latest.passed}/${latest.total}`;
+    if (stale) { badgeClass = 'warn'; badgeText = '⚠️ Desactualizado'; }
+    badgeEl.textContent = badgeText;
+    badgeEl.className   = `diag-badge ${badgeClass}`;
+
+    lastEl.textContent = `Última corrida: ${diagRelativeTime(latest.timestamp)}`;
+
+    staleEl.innerHTML = stale
+        ? `<div class="diag-stale-warning">⚠️ El cron de las 08:00 no corrió en las últimas ${Math.floor(hoursSince)}h — el chequeo automático puede estar caído.</div>`
+        : '';
+
+    listEl.innerHTML = (latest.checks || []).map(c => {
+        const nombre = HEALTH_CHECK_NOMBRES[c.id] || c.id;
+        const icon = c.ok ? '✅' : '❌';
+        const detalleCorto = c.message && c.message.length > 70 ? c.message.slice(0, 69).trimEnd() + '…' : (c.message || '');
+        const titleAttr = c.message ? ` title="${escAttr(c.message)}"` : '';
+        return `<div class="diag-verif-flujo"><div class="diag-verif-flujo-row"><span class="diag-verif-flujo-nombre">${escHtml(nombre)}</span><span class="diag-verif-flujo-detalle"${titleAttr}>${icon} ${escHtml(detalleCorto)}</span></div></div>`;
+    }).join('');
+
+    const historyHtml = (history || []).slice(0, 10).map(h =>
+        `${diagRelativeTime(h.timestamp)} — ${h.ok ? '✅' : '❌'} ${h.passed}/${h.total}`
+    ).join('\n');
+    if (historyHtml) {
+        histEl.style.display = 'block';
+        histEl.innerHTML = `<div style="white-space:pre-line;">Historial reciente:\n${historyHtml}</div>`;
+    } else {
+        histEl.style.display = 'none';
+        histEl.innerHTML = '';
+    }
+}
 
 function diagRelativeTime(iso) {
     if (!iso) return '—';

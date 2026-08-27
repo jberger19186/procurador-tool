@@ -79,6 +79,26 @@ const VERIF_CUPO = {
     alcanzaParaUnaPrueba: true, alcanzaParaReserva: false, reservaObjetivo: 2,
 };
 
+// Seed de health-check.js (Fase 1/3 de la mejora del smoke) — un check en rojo real
+// (error_log_reciente) para verificar el estado 'fail' de la tarjeta, no solo el 'ok'.
+const HEALTH_CHECK_STATE = {
+    latest: {
+        timestamp: new Date(Date.now() - 5 * 3600000).toISOString(),
+        ok: false, passed: 6, total: 7,
+        checks: [
+            { id: 'cron_heartbeat', ok: true, message: 'último heartbeat hace 3.5h' },
+            { id: 'backup_reciente', ok: true, message: 'procurador_db_20260827_030001.sql.gz, 491KB, hace 9.5h' },
+            { id: 'cert_ssl', ok: true, message: 'vence en 60 días' },
+            { id: 'disco_ram', ok: true, message: 'disco 15%, RAM disponible 1349MB' },
+            { id: 'restarts_pm2', ok: true, message: 'online, 761 restarts acumulados' },
+            { id: 'integridad_referencial', ok: true, message: '0 huérfanos en las 4 relaciones' },
+            { id: 'error_log_reciente', ok: false, message: '2 entrada(s) nueva(s) desde el último chequeo — primera: "Payment not found for id 123456"' },
+        ],
+    },
+    history: [],
+};
+HEALTH_CHECK_STATE.history = [HEALTH_CHECK_STATE.latest];
+
 const PLANS = [
     { id: 1, name: 'COMBO_PROMO', display_name: 'Combo Beta', description: 'Plan combo de seed.',
       plan_type: 'combo', price_usd: null, price_ars: 15000, visibility: 'public', bitacora_enabled: true,
@@ -920,6 +940,9 @@ http.createServer(async (req, res) => {
         }
         if (p === '/admin/diagnostics/verification/quota' && req.method === 'GET') {
             return json(res, { success: true, cupo: VERIF_CUPO });
+        }
+        if (p === '/admin/diagnostics/health-check/latest' && req.method === 'GET') {
+            return json(res, { success: true, latest: HEALTH_CHECK_STATE.latest, history: HEALTH_CHECK_STATE.history });
         }
         if (p === '/admin/diagnostics/verification/quota/top-up' && req.method === 'POST') {
             await readBody(req);

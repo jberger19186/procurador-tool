@@ -3149,6 +3149,20 @@ router.get('/diagnostics/verification/latest', authenticateAdmin, (req, res) => 
     res.json({ success: true, latest, history, ultimaVezOk });
 });
 
+// GET /admin/diagnostics/health-check/latest — Fase 3 de la mejora del smoke backend.
+// Puro consumo: health-check.js (Fase 1) escribe este archivo solo, vía crontab; acá
+// nada más se lee. Mismo formato { latest, history } que verification-results.json.
+const HEALTH_CHECK_RESULTS_FILE = _path.join(__dirname, '..', 'data', 'health-check-results.json');
+router.get('/diagnostics/health-check/latest', authenticateAdmin, (req, res) => {
+    let data = { latest: null, history: [] };
+    try {
+        if (_fs.existsSync(HEALTH_CHECK_RESULTS_FILE)) {
+            data = JSON.parse(_fs.readFileSync(HEALTH_CHECK_RESULTS_FILE, 'utf8'));
+        }
+    } catch (_) {}
+    res.json({ success: true, latest: data.latest || null, history: data.history || [] });
+});
+
 // POST /admin/diagnostics/verification/report
 // Reporta el resultado de la prueba diaria real (hoy: corrida vía computer-use desde un chat
 // con Claude — ver el procedimiento en CLAUDE.md). Admin-only y NO otorga cupo ni toca
