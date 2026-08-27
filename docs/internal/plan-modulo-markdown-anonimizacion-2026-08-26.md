@@ -2,8 +2,11 @@
 
 > **Origen:** `brief_modulo_anonimizacion_electron.md` (operador, 2026-08-26).
 > **Lugar en el proyecto:** **Etapa 1.2** de `docs/internal/roadmap-salida-a-mercado-2026-08.md`.
-> **Estado:** ✅ **APROBADO POR EL OPERADOR (2026-08-26)** — ya no espera ningún go/no-go de negocio.
-> **No se escribió código.** El módulo no existe todavía.
+> **Estado:** ✅ **EJECUTADO Y EN PRODUCCIÓN (2026-08-27).** Los 7 bloques (M1-M6 + M0 gate) en código,
+> release `electron-v2.7.51` publicado, y `markdown_enabled=true` en el plan **COMBO_PROMO**. El
+> módulo existe y es visible para la cuenta de verificación. Detalle completo de cada bloque, sesión
+> por sesión, en `CLAUDE.md` (buscar "módulo Markdown"). Este documento queda como registro del
+> diseño original, no como trabajo pendiente.
 >
 > **Lo que su aprobación arrastra hacia las etapas siguientes:** este módulo **va a existir cuando
 > corran la Etapa 2 y la Etapa 3**, y las dos tienen que cubrirlo. La Etapa 2 ya lo contemplaba —

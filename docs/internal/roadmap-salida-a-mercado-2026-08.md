@@ -21,12 +21,11 @@
   ETAPA 1 — MEJORAS DE PRODUCTO            ┌── CARRIL PARALELO ──────────────┐
   (lo que se muestra y se vende)           │  AZ — Azure Trusted Signing     │
     1.1 Bitácora F3.4                  ✅  │  (trámite externo, 1-3 días      │
-    1.2 Módulo Markdown / anonimiz.    ⏳  │   hábiles — ARRANCA EL DÍA 0)   │
+    1.2 Módulo Markdown / anonimiz.    ✅  │   hábiles — ARRANCA EL DÍA 0)   │
     1.3 Landing + TyC (beta, límites)  ✅  └─────────────────────────────────┘
     1.4 Guía de backup y recuperación  ✅
     1.5 Control periódico contra PJN   ✅
-    1.6 Demo reproducible en landing   ⬜     ⏳ 1.2 = código M1-M6 listo,
-                                                 falta SOLO el release Electron
+    1.6 Demo reproducible en landing   ⬜
               │
               ▼
   ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
@@ -94,15 +93,16 @@ Cuatro razones, todas económicas — ninguna estética:
 > del proyecto que ya produjo 3 bugs reales de timezone en producción**. Enumera las 6 trampas
 > concretas, cada una de las cuales produce un archivo que *parece* funcionar.
 
-### 1.2 — Módulo Markdown / anonimización judicial ⏳ CÓDIGO COMPLETO (M1-M6), FALTA EL RELEASE
+### 1.2 — Módulo Markdown / anonimización judicial ✅ CERRADO (release + flag encendidos el 2026-08-27)
 
 | | |
 |---|---|
-| **Plan** | [`plan-modulo-markdown-anonimizacion-2026-08-26.md`](plan-modulo-markdown-anonimizacion-2026-08-26.md) ⭐ **nuevo** |
+| **Plan** | [`plan-modulo-markdown-anonimizacion-2026-08-26.md`](plan-modulo-markdown-anonimizacion-2026-08-26.md) |
 | **Qué es** | Toma un informe PDF generado por la app, descarga los PDF vinculados, extrae todo a Markdown, y produce además una versión **anonimizada** (expediente → `Expediente`, partes → `Actor`/`Demandado`, terceros → `Jon### Ber###`) con un diccionario de reemplazos editable y reprocesable |
 | **Dónde** | Botón propio en el topbar, al lado de 📔 Bitácora. Gateado por plan (`markdown_enabled`) |
 | **Modelo / esfuerzo** | Sonnet en 6 de 7 bloques. **Opus solo en M4** (motor de anonimización) |
-| **Sesiones** | **6–10 + 1 release.** ~~Puede subir a 9–13 según M0~~ → **descartado, ver abajo** |
+| **✅ Release** | `electron-v2.7.51`, publicado y confirmado en vivo el 2026-08-27 (`GET /client/download/electron` → 302 al `.exe` correcto) |
+| **✅ Flag** | `markdown_enabled=true` en **COMBO_PROMO** (decisión del operador, 2026-08-27) — radio de impacto real: 1 cuenta activa, las otras 5 suscripciones del plan son fixtures de QA bloqueados. Verificado end-to-end: `GET /client/account` → `markdownEnabled:true`, y el botón **Markdown** aparece en el topbar del build 2.7.51 |
 | **✅ Gate propio — CERRADO el 2026-08-26** | **M0 devolvió ESCENARIO A**, el más barato: los documentos del SCW se descargan **sin sesión** (12/12 `HTTP 200`, verificado sobre los 4 tipos). **M3 es `fetch` en Node** — no se toca ningún script encriptado, no entra el candado de ejecución, y **el módulo SÍ procesa informes viejos**. La capa de texto salió mejor de lo previsto: **0 %** de páginas sin texto en el informe, **14,6 %** en los adjuntos (sin OCR en v1). 📄 [`spike-markdown-M0-2026-08-26.md`](spike-markdown-M0-2026-08-26.md) |
 
 > 🚨 **Lo que M0 encontró y ningún documento del módulo contemplaba:** los `viewer.seam` que el
@@ -361,7 +361,7 @@ Las que este roadmap existe para hacer visibles. Cada una es un error concreto q
 | **8** | ~~**El módulo Markdown tiene su propio gate (M0) antes de M1**~~ ✅ **resuelto 2026-08-26** | Se construían 6 sesiones de módulo para descubrir recién ahí que los adjuntos necesitan sesión del PJN. **M0 se ejecutó y devolvió escenario A** — el riesgo no se materializó, y el arranque de 1.2 pasa a ser M1. En el camino apareció **una dependencia nueva hacia la Etapa 3**: la anonimización debe alcanzar a las URLs (fila 10) |
 | **9** | **Lo que la Etapa 1 construye, las Etapas 2 y 3 tienen que revisarlo** | Es la dependencia que se destapó el 2026-08-26 al confirmar 1.1 y 1.2. El code-review ya la tenía cubierta (**F5** = módulo Markdown; **F1** declara depender de Etapa 1 porque F3.4 toca `routes/bitacora.js`). La seguridad **no**: SEC-2 se escribió el 24/08, cuando 1.2 todavía era una decisión de negocio sin resolver → se le agregó el bloque **S10**. Sin eso, se cierra la Etapa 3 con un módulo entero sin auditar, y encima el que más promete al usuario (*"esto no tiene datos personales"*) |
 | **10** | **Un `.md` "anonimizado" con enlaces del SCW vivos entrega el original sin anonimizar** | Hallazgo de **M0** (2026-08-26): esos enlaces **no requieren login** y **no expiran** (≥27 días medidos). Si M4 no los trata, el módulo cumple su promesa solo en apariencia — y el usuario se entera después de mandar el archivo. La verificación es binaria (un grep de `viewer.seam`) y vive en **S10**, Etapa 3 |
-| **11** | **1.6 (demo) no puede capturar el capítulo de Markdown hasta que se corte el release de Electron** | Detectado en el spike del 2026-08-27: el binario instalado (**v2.7.50**) no tiene el botón de Markdown — M2–M5 están commiteados **sin release**. Si D3 corre antes, ese capítulo sale vacío y hay que rehacer la captura. Además la cuenta de demo necesita `markdown_enabled=true` |
+| **11** | ~~**1.6 (demo) no puede capturar el capítulo de Markdown hasta que se corte el release de Electron**~~ — ✅ **resuelto el 2026-08-27**: release `electron-v2.7.51` publicado y `markdown_enabled=true` en COMBO_PROMO | (era: el binario instalado no tenía el botón). **Sigue habiendo un paso operativo para D3**: usar el build **2.7.51+**, no el `.exe` instalado del operador (que sigue en 2.7.50 hasta que el auto-updater lo alcance) — el `dist/win-unpacked/` local ya sirve |
 
 ---
 
