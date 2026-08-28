@@ -692,9 +692,46 @@ capítulo bloqueado primero y solo permite saltar de capítulo entero, nunca de 
   romper el resto de la navegación de la SPA (`navigateTo()` ignora el `<a>` nuevo porque no tiene
   `data-section`, confirmado leyendo el código antes de asumirlo).
 
-**Pendiente real, no hecho todavía — el propio despliegue:** todo lo de arriba está verificado
-localmente (Playwright real, ambos estados del gate, 375/768/1280 heredado de D5), pero **nada de
-esto se copió al servidor de producción todavía**. Falta el paso 2 de D6 tal como lo describe el
-plan: backup → `scp` a `/var/www/procurador/backend-server/public/` (sin `pm2 restart`, todo esto es
-estático) → verificación con `curl` + una pasada de navegador contra el sitio real. Se confirma con
-el operador antes de tocarlo, por ser el paso que sí afecta producción.
+**D. Despliegue — EJECUTADO (2026-08-27), verificado en vivo.**
+
+🔍 **Hallazgo real de infraestructura, no anticipado por el plan:** `staging-api.procuradortool.com`
+**no puede servir nunca la landing ni `/demo/`** — no es un bug del deploy, es cómo está armado el
+servidor. Los 3 vhosts de Nginx relevantes:
+- `api.procuradortool.com` (prod) y `staging-api.procuradortool.com` (staging): **puro proxy** a
+  Express (`localhost:3443`/`:3444`), sin ningún bloque estático.
+- La landing la sirve un **4to vhost separado**, `procuradortool.com` (`root
+  /var/www/procurador/backend-server/public/landing` fijo) — apunta solo al directorio de
+  **producción**. No existe un `staging.procuradortool.com` equivalente.
+
+Consecuencia: la verificación en staging quedó acotada a lo que SÍ se puede probar ahí — integridad
+de archivo (`md5sum` servidor = local, confirmado en los 3 HTML + las 32 capturas) y que `/usuarios/`
+(que sí pasa por Express) responde 200. El comportamiento real de `/demo/` en un navegador solo se
+pudo confirmar en producción — cubierto por la verificación live de abajo, con el mismo criterio de
+"nunca romper nada real" que ya tenía todo lo anterior (cero flujo real disparado, solo lectura).
+
+**Secuencia real ejecutada** (`runbook-comandos.md`, adaptada a archivos estáticos — sin
+`pm2 restart`, ninguno de estos 3 archivos pasa por Express):
+1. Backup de `landing/index.html` y `usuarios/index.html` en staging Y en producción, a
+   `/tmp/<archivo>.pre-D6-{staging,prod}_<timestamp>` (patrón ya usado en despliegues anteriores del
+   proyecto).
+2. `scp` a staging → verificado por `md5sum` (100% coincidencia) → **a producción recién con
+   confirmación explícita del operador** ("dale, seguimos con producción").
+3. `scp` a producción → mismo `md5sum` (100% coincidencia, los 3 HTML + 32 PNGs).
+4. Verificación real contra el sitio en vivo:
+   - `curl` a `https://procuradortool.com/`, `/demo/`, `/demo/index.html` y una captura de
+     `/demo/assets/...` → **200 en los 4**.
+   - Contenido confirmado por `grep` sobre la respuesta real: "Ver demo" presente, tab "Markdown"
+     presente en el mockup.
+   - `/usuarios/` → 200, "Ver demo" aparece 5 veces en el HTML servido (sidebar + ícono, título +
+     aria-label).
+   - `pm2 list`: ambos procesos (`procurador-api`, `procurador-staging`) `online`, sin reinicios.
+   - `pm2 logs procurador-api` (últimas 15 líneas): sin errores nuevos — solo actividad rutinaria
+     (rate-limit de un login ajeno, cacheo de scripts firmados).
+   - **Pasada de navegador real con Playwright contra `https://procuradortool.com/` y
+     `https://procuradortool.com/demo/#markdown`**: 0 errores de consola en ambas, el gate de sesión
+     mostrando correctamente la pantalla de bloqueo (sin token real en ese navegador — el
+     comportamiento esperado y diseñado).
+
+Con esto, **D6 queda completo — landing, `/demo/`, y las entradas del portal, todo en producción y
+verificado**. Lo único que sigue pendiente de la Etapa 1.6 completa es **D4** (las 7 capturas
+manuales del operador — extensión + PJN), sin fecha ni dependencia técnica.
