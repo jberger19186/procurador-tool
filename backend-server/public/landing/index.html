@@ -483,6 +483,15 @@
     }
     .feat-pill::before { content:'✓'; color:var(--green); font-size:10px; font-weight:700; }
 
+    .feat-demo-link {
+      display:inline-flex; align-items:center; gap:5px;
+      margin-top:16px; font-size:12.5px; font-weight:600;
+      color:var(--amber-dk); text-decoration:none;
+    }
+    .feat-demo-link:hover { color:var(--amber); }
+    .feat-demo-link svg { transition:transform .15s; }
+    .feat-demo-link:hover svg { transform:translateX(2px); }
+
     .feat-card-wide { grid-column:1/-1; }
     .feat-wide-inner { display:grid; grid-template-columns:1fr 1fr; gap:32px; align-items:center; }
 
@@ -744,12 +753,14 @@
     </div>
   </a>
   <ul class="nav-links">
+    <li><a href="#problema">El problema</a></li>
     <li><a href="#solucion">La app</a></li>
     <li><a href="#features">Funciones</a></li>
     <li><a href="#extension">Extensión</a></li>
     <li><a href="#workflow">Cómo funciona</a></li>
     <li><a href="#seguridad">Seguridad</a></li>
     <li><a href="#planes">Planes</a></li>
+    <li><a href="/demo/">Ver demo</a></li>
   </ul>
   <div class="nav-right">
     <a href="https://api.procuradortool.com/usuarios/" class="btn-nav-ghost">Iniciar sesión</a>
@@ -789,9 +800,9 @@
         Empezar ahora
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
       </a>
-      <a href="#solucion" class="btn btn-ghost btn-lg">
+      <a href="/demo/" class="btn btn-ghost btn-lg">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><polygon points="4,2 14,8 4,14"/></svg>
-        Ver cómo funciona
+        Ver demo
       </a>
     </div>
 
@@ -894,6 +905,7 @@
         <div class="atb-tab idle">🔍 Monitor</div>
         <div class="atb-tab idle">📁 Descargas</div>
         <div class="atb-tab idle">📔 Bitácora</div>
+        <div class="atb-tab idle">📝 Markdown</div>
         <div class="atb-space"></div>
         <div class="atb-prog">
           62 / 100 expedientes
@@ -1001,6 +1013,7 @@
           <span class="feat-pill">Fecha personalizable</span>
           <span class="feat-pill">Progreso en tiempo real</span>
         </div>
+        <a href="/demo/#procuracion" class="feat-demo-link">Ver en la demo <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
       </div>
 
       <!-- Monitor -->
@@ -1025,6 +1038,7 @@
           <span class="feat-pill">Confirmación masiva</span>
           <span class="feat-pill">Notificaciones Windows</span>
         </div>
+        <a href="/demo/#monitor" class="feat-demo-link">Ver en la demo <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
       </div>
 
       <!-- Informes -->
@@ -1049,6 +1063,7 @@
           <span class="feat-pill">Secciones configurables</span>
           <span class="feat-pill">Links a documentos adjuntos</span>
         </div>
+        <a href="/demo/#informe" class="feat-demo-link">Ver en la demo <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
       </div>
 
       <!-- Stats / Cuenta -->
@@ -1070,6 +1085,7 @@
           <span class="feat-pill">Soporte con tickets y chat</span>
           <span class="feat-pill">Actualizaciones automáticas</span>
         </div>
+        <a href="/demo/#portal" class="feat-demo-link">Ver en la demo <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
       </div>
 
       <!-- Bitácora -->
@@ -1096,6 +1112,7 @@
           <span class="feat-pill">Vencidos y próximos en un vistazo</span>
           <span class="feat-pill">Exportación e importación de tu agenda</span>
         </div>
+        <a href="/demo/#bitacora" class="feat-demo-link">Ver en la demo <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
       </div>
 
       <div class="feat-card rev rev-d5">
@@ -1120,6 +1137,7 @@
           <span class="feat-pill">100% local, sin subir el expediente</span>
           <span class="feat-pill">Solo texto — sin OCR de páginas escaneadas</span>
         </div>
+        <a href="/demo/#markdown" class="feat-demo-link">Ver en la demo <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
       </div>
 
     </div>

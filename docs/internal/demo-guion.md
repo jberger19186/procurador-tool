@@ -630,3 +630,61 @@ el 100% del ancho como preferido y garantiza el salto de línea. Verificado con 
 (`track()`, `session_id`) que sí tiene `landing/index.html` — el plan solo pedía el link a
 `/register/`, no instrumentación de funnel. Se puede agregar después si se decide medir el tour por
 separado, sin tocar la estructura actual.
+
+---
+
+## 14. D6 implementado (2026-08-27) — integración en landing + portal, con gate para clientes
+
+**Ampliado respecto del alcance original del plan** (que era solo: navbar + hero + tarjetas +
+despliegue), a pedido del operador — 2 decisiones nuevas, ninguna anticipada por D1-D5:
+
+**A. Integración en `landing/index.html`** (lo que sí preveía el plan):
+- Navbar: agregado `El problema` (→ `#problema`, no tenía link propio hasta ahora) y `Ver demo`
+  (→ `/demo/`).
+- Hero: el botón `Ver cómo funciona` (→ `#solucion`, el mockup estático de la propia landing) se
+  **reemplazó** por `Ver demo` (→ `/demo/`) — decisión del operador tras plantear la alternativa de
+  agregar un 3er/4to botón en el hero (4 CTAs de una fue lo que se descartó, por saturar la fila).
+- Las 6 tarjetas de función (`#features`) ganaron un link `Ver en la demo →` al pie, con deep-link
+  directo a su capítulo (`.feat-demo-link`, nueva clase CSS).
+- **Bug real encontrado de paso, no buscado:** el mockup de la app en `#solucion` (la ventana falsa
+  del hero showcase) listaba los tabs `Procurar · Informe · Monitor · Descargas · Bitácora` — sin
+  **Markdown**, quedado desactualizado desde que ese módulo salió a producción (2.7.51). Corregido
+  agregando el tab `📝 Markdown` al mockup — mismo criterio que ya aplicó la sesión 2026-08-27 al
+  encontrar el mismo gap en el propio guion original de D1.
+
+**B. Gate de sesión en `/demo/index.html`** (nuevo, no estaba en el plan de D1-D5):
+Decisión del operador, con el motivo explícito confirmado antes de tocar código (vía
+`AskUserQuestion`): el resto de la demo (más allá de "El problema" y "Procuración") es **una guía
+para clientes ya registrados**, no un gancho de venta — así que el gate es de UX, no de seguridad
+real. Mecanismo: lee `localStorage.getItem('psc_user_token')` — el mismo token que ya usa el portal
+(`usuarios/app.js`, `TOKEN_KEY='psc_user_token'`), legible directo porque `/demo/` vive en el mismo
+origen que `/usuarios/`. Si no hay token: los 2 capítulos libres quedan como siempre, el resto
+muestra 🔒 en la pestaña y, al entrar, una pantalla de "Iniciá sesión para ver el resto" con link al
+portal — nunca un error ni una pantalla rota. **Deliberadamente no verificado contra el backend**
+(no hay llamada a ningún endpoint protegido): si el token está vencido igual desbloquea, y lo peor
+que pasa es que se ven 2 capítulos más de screenshots ya públicos — no hay nada sensible detrás.
+
+**Bug real encontrado y corregido verificando en vivo, no solo leyendo el código:** con el gate
+activo, las teclas ← → en un capítulo bloqueado llamaban a `stepBy()`, que intenta actualizar
+elementos del stepper (`#stepDots`, `#prevStepBtn`, etc.) que **no existen en el DOM** cuando el
+capítulo está bloqueado (la pantalla de "Iniciá sesión" no tiene stepper) — hubiera roto con un
+`TypeError` en el primer ← → de un visitante sin sesión. Corregido: el handler de teclado detecta el
+capítulo bloqueado primero y solo permite saltar de capítulo entero, nunca de paso.
+
+**C. Entradas en el portal** (`usuarios/index.html`, código YA en producción — Etapa 1.3 cerrada):
+- Ítem **"🎬 Ver demo"** en el sidebar, antes de "Ayuda" — un `<a href="/demo/" target="_blank">`
+  simple, no un `data-section` más (la demo no es una sección de la SPA del portal, así que no puede
+  usar `navigateTo()`).
+- Ícono ▶ junto a "Enviar comentario" en el topbar, mismo destino, misma clase `.btn-feedback` que
+  ya existía — reusa el estilo, no inventa uno nuevo.
+- Verificado en vivo contra `stub-portal.js --demo` (login real con el flujo del stub, no solo
+  lectura de HTML): ambos links aparecen con `href="/demo/"` y `target="_blank"` correctos, sin
+  romper el resto de la navegación de la SPA (`navigateTo()` ignora el `<a>` nuevo porque no tiene
+  `data-section`, confirmado leyendo el código antes de asumirlo).
+
+**Pendiente real, no hecho todavía — el propio despliegue:** todo lo de arriba está verificado
+localmente (Playwright real, ambos estados del gate, 375/768/1280 heredado de D5), pero **nada de
+esto se copió al servidor de producción todavía**. Falta el paso 2 de D6 tal como lo describe el
+plan: backup → `scp` a `/var/www/procurador/backend-server/public/` (sin `pm2 restart`, todo esto es
+estático) → verificación con `curl` + una pasada de navegador contra el sitio real. Se confirma con
+el operador antes de tocarlo, por ser el paso que sí afecta producción.

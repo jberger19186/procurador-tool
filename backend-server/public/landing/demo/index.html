@@ -415,6 +415,26 @@ function chapterIndexFromHash() {
   return idx >= 0 ? idx : 0;
 }
 
+// ─── Gate de sesión (D6) ─────────────────────────────────────────
+// El resto de la demo (más allá de "El problema" y "Procuración") es una
+// guía para clientes ya registrados, no un gancho de venta — así que el
+// gate es de UX, no de seguridad: mismo token que usa el portal
+// (usuarios/app.js, TOKEN_KEY='psc_user_token'), leído directo porque
+// /demo/ vive en el mismo origen. Si no hay token, o está vencido, lo peor
+// que pasa es que alguien vea 2 capítulos más de screenshots ya públicos —
+// no hay nada sensible detrás del gate.
+const TOKEN_KEY = 'psc_user_token';
+const CAPITULOS_LIBRES = ['problema', 'procuracion'];
+const PORTAL_URL = 'https://api.procuradortool.com/usuarios/';
+
+function haySesion() {
+  try { return !!localStorage.getItem(TOKEN_KEY); } catch (_) { return false; }
+}
+
+function capituloBloqueado(chapter) {
+  return !haySesion() && !CAPITULOS_LIBRES.includes(chapter.slug);
+}
+
 // ─── Mocks 6.6-6.8 (HTML/CSS, sin ninguna dependencia externa) ─────
 function mockEditorHTML() {
   // Construcción simple línea por línea (evita depender de un parser real).
@@ -467,7 +487,7 @@ function renderChapterNav() {
   const el = document.getElementById('chapterNav');
   el.innerHTML = CHAPTERS.map((c, i) => `
     <button class="chapter-tab" data-idx="${i}">
-      ${c.n ? `<span class="chapter-tab-n">${c.n}</span>` : ''} ${c.label}
+      ${c.n ? `<span class="chapter-tab-n">${c.n}</span>` : ''} ${c.label}${capituloBloqueado(c) ? ' 🔒' : ''}
     </button>
   `).join('');
   el.querySelectorAll('.chapter-tab').forEach(btn => {
@@ -523,6 +543,39 @@ function renderChapter() {
   });
 
   const main = document.getElementById('main');
+
+  if (capituloBloqueado(chapter)) {
+    main.innerHTML = `
+      <div class="chapter active">
+        <div class="chapter-head">
+          <div class="label">${chapter.n ? 'Capítulo ' + chapter.n + ' · ' : ''}${chapter.label}</div>
+          <h2 class="h2">${chapter.title}</h2>
+        </div>
+        <div class="stepper">
+          <div class="step-frame">
+            <div class="step-titlebar">
+              <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+              <span class="step-titlebar-label">Capítulo bloqueado</span>
+            </div>
+            <div class="step-media">
+              <div class="step-placeholder">
+                <div class="step-placeholder-icon">🔒</div>
+                <div class="step-placeholder-title">Iniciá sesión para ver el resto de la demo</div>
+                <div class="step-placeholder-sub">
+                  "El problema" y "Procuración" son de acceso libre. El resto es una guía pensada
+                  para clientes ya registrados — entrá con tu cuenta para seguir.
+                </div>
+                <a href="${PORTAL_URL}" class="btn btn-primary" style="margin-top:6px">Iniciar sesión</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+    return;
+  }
+
   main.innerHTML = `
     <div class="chapter active">
       <div class="chapter-head">
@@ -600,8 +653,15 @@ function goToChapter(idx) {
 
 // ─── Teclado: ← → mueven de paso; en el borde, pasan de capítulo ──
 document.addEventListener('keydown', (e) => {
+  const chapter = CHAPTERS[currentChapter];
+  // Capítulo bloqueado: no hay stepper en el DOM (stepBy() rompería contra
+  // elementos que no existen) — solo se puede saltar de capítulo entero.
+  if (capituloBloqueado(chapter)) {
+    if (e.key === 'ArrowRight' && currentChapter < CHAPTERS.length - 1) goToChapter(currentChapter + 1);
+    else if (e.key === 'ArrowLeft' && currentChapter > 0) goToChapter(currentChapter - 1);
+    return;
+  }
   if (e.key === 'ArrowRight') {
-    const chapter = CHAPTERS[currentChapter];
     if (currentStep < chapter.steps.length - 1) stepBy(1);
     else if (currentChapter < CHAPTERS.length - 1) goToChapter(currentChapter + 1);
   } else if (e.key === 'ArrowLeft') {

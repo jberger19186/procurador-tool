@@ -111,6 +111,10 @@
                 <span class="nav-icon">🤖</span>
                 Asistente IA
             </button>
+            <a class="nav-item" href="/demo/" target="_blank" rel="noopener">
+                <span class="nav-icon">🎬</span>
+                Ver demo
+            </a>
             <button class="nav-item" data-section="ayuda">
                 <span class="nav-icon">📚</span>
                 Ayuda
@@ -138,6 +142,12 @@
             <div class="topbar-right">
                 <span class="user-email" id="topbar-email"></span>
                 <span class="plan-badge" id="topbar-plan">Cargando...</span>
+                <!-- Ver demo (D6, 2026-08-27) — mismo destino que el ítem "Ver demo" del
+                     sidebar (antes de Ayuda), acá también a mano para quien no navega
+                     por el sidebar. Pestaña nueva: no es una sección de esta SPA. -->
+                <a class="btn-feedback" href="/demo/" target="_blank" rel="noopener" title="Ver demo" aria-label="Ver demo">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><polygon points="5,3.5 13,8 5,12.5" fill="currentColor" stroke="none"/></svg>
+                </a>
                 <!-- Atajo a "nuevo ticket" con la categoría Enviar comentario ya elegida.
                      Mismo ícono que el botón del topbar de la app Electron. -->
                 <button class="btn-feedback" id="btn-feedback" title="Enviar comentario" aria-label="Enviar comentario">

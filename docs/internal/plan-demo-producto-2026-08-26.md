@@ -29,8 +29,15 @@
 > + 6.6-6.8 resueltos como mocks HTML/CSS en vivo (sin imagen) + placeholders explícitos para los 8
 > pasos de D4. Verificado en 375/768/1280 con Playwright real. Detalle en
 > [`demo-guion.md` §13](demo-guion.md#13-d5-ejecutado-2026-08-27--el-tour-publicado-en-backend-serverpubliclandingdemo).
-> Sigue D4 (capturas manuales del operador, se integran solas cuando estén) y D6 (integración en la
-> landing + despliegue).
+> **D6 IMPLEMENTADO el mismo día, saltando D4 también** (D6 solo depende de D5 y de la Etapa 1.3, no
+> de D4). Ampliado respecto del alcance original a pedido del operador: navbar + hero + 6 tarjetas de
+> `landing/index.html` (como preveía el plan) **+ un gate de sesión en `/demo/` para clientes ya
+> registrados + 2 entradas nuevas en el portal** (`usuarios/index.html`, ítem de sidebar + ícono de
+> topbar). Detalle completo en
+> [`demo-guion.md` §14](demo-guion.md#14-d6-implementado-2026-08-27--integración-en-landing--portal-con-gate-para-clientes).
+> **Falta el despliegue real** (scp a producción + verificación) — todo lo de arriba está verificado
+> solo en local. Sigue D4 (capturas manuales del operador, se integran solas cuando estén) y el
+> despliegue de D6.
 
 ---
 
@@ -374,11 +381,11 @@ versionada a propósito, y limpieza de `.playwright-mcp/` al cerrar.
 
 ---
 
-### D6 — Integración en la landing + despliegue 🟢
+### D6 — Integración en la landing + despliegue ⏳ IMPLEMENTADO (2026-08-27), falta el despliegue
 
 | | |
 |---|---|
-| **Modelo / esfuerzo** | Sonnet · **bajo** |
+| **Modelo / esfuerzo** | Sonnet · **medio** (subió de "bajo" — el operador amplió el alcance a 3 superficies: landing + `/demo/` + portal, ver `demo-guion.md` §14) |
 | **Depende de** | D5, y de la **Etapa 1.3** ✅ (ya cerrada el 2026-08-26 — sin conflicto de archivo) |
 
 - Entrada en el navbar ("Ver demo") + botón en el hero + link desde cada tarjeta de "Funciones" al
