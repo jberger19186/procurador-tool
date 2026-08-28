@@ -17,6 +17,14 @@
 > Markdown** y **F1 declara depender de Etapa 1 cerrada** porque el `.ics` de F3.4 toca
 > `routes/bitacora.js`. No hay nada condicional que ajustar acá. (La contraparte de seguridad no
 > estaba cubierta — SEC-2 recibió el bloque **S10** el mismo día.)
+>
+> 🔄 **Revisado el 2026-08-28, con la Etapa 1 ya cerrada.** Se midió el delta real (`git diff` desde el
+> 2026-08-25: **136 archivos, +12.833 líneas**) contra los targets escritos acá. **Los que ya estaban
+> apuntados bien no se tocaron** — F1, F2 y F4 cubren los tres archivos que más creció la Etapa 1
+> (`bitacora.js` +238, `usuarios/app.js` +870, `dashboard.js` +458), y **la cadena de cobro no se
+> modificó en una sola línea**, así que F7 queda exactamente como estaba. Lo que sí cambió: apareció
+> código de servidor nuevo que **ningún target incluía** → fase **F10** nueva; F3 se quedó corta por un
+> archivo que nació durante la Etapa 1; y F1/F5 se pudieron precisar ahora que el código existe.
 
 ---
 
@@ -24,11 +32,11 @@
 
 | | |
 |---|---|
-| **Fases** | 9 (F1–F8 de `/code-review` + F9 de `/verify` en runtime) |
+| **Fases** | **10** (F1–F8 + **F10** de `/code-review` + F9 de `/verify` en runtime) |
 | **Modelo dominante** | Sonnet (6 de 9). **Opus en 2**: cadena de cifrado/firma de scripts (F6) y cobranza (F7). El motor de anonimización dentro de F5 también va en Opus. |
-| **Esfuerzo dominante** | `xhigh` en las 3 fases de código grande y nunca revisado (F1, F2, F4); `high` en 4; `medium` en 1 |
+| **Esfuerzo dominante** | `xhigh` en las 4 fases de código grande y nunca revisado (F1, F2, F4, F10); `high` en 4; `medium` en 1 |
 | **`ultra` (multi-agente en la nube)** | **Ninguna fase lo justifica hoy.** Ver §5 — se reserva como escalamiento de F7 si el code-review encuentra algo en el camino del dinero |
-| **Sesiones estimadas** | **9–13**. Las 3 fases `xhigh` (F1, F2, F4) consumen sesión propia y probablemente más de una; F9 depende del operador |
+| **Sesiones estimadas** | **10–15**. Las 4 fases `xhigh` (F1, F2, F4, **F10**) consumen sesión propia y probablemente más de una; F9 depende del operador |
 | **Depende de** | Etapa 1 cerrada (si no, F2/F3/F5 revisan código que va a cambiar) |
 | **Habilita** | Etapa 3 (SEC-2, auditoría de seguridad) y — vía F7 — la Etapa 4 (MercadoPago producción) |
 
@@ -59,25 +67,27 @@ no estimada:
 
 | Área | Tamaño | Último cambio | ¿Revisión de código previa? |
 |---|---|---|---|
-| `public/dashboard/dashboard.js` | **324 KB** | 2026-08-24 | ❌ solo grep dirigido (E6) |
-| `public/usuarios/app.js` | **236 KB** | **2026-08-26** | ❌ solo grep dirigido (E6) |
+| `public/dashboard/dashboard.js` | **348 KB** | 2026-08-27 | ❌ solo grep dirigido (E6) |
+| `public/usuarios/app.js` | **256 KB** | **2026-08-28** | ❌ solo grep dirigido (E6) |
 | `electron-app/renderer.js` | 180 KB | 2026-08-15 | ⚠️ parcial (solo handlers de lote) |
-| `routes/admin.js` | 168 KB | 2026-08-14 | ⚠️ parcial (campos del fix XSS-1) |
+| `routes/admin.js` | **200 KB** | **2026-08-27** | ❌ **ninguna fase lo tenía como target hasta F10** — ver abajo |
 | `electron-app/main.js` | 148 KB | **2026-08-26** | ✅ E2 — **pero cambió mucho después** |
 | `backend-server/scripts/testM2.js` | 104 KB | 2026-07-28 | ✅ E1, **sin cambios desde entonces** |
-| `routes/bitacora.js` | **84 KB** | **2026-08-26** | ❌ **nunca** |
+| `routes/bitacora.js` | **92 KB** | **2026-08-26** | ❌ **nunca** |
 | `services/subscriptionService.js` | 44 KB | 2026-07-24 | ⚠️ revisión de bugs, no code-review |
 | `routes/capture.js` + `utils/captureDrafts.js` | 12 KB | 2026-08-26 | ❌ **nunca** — es el **único endpoint anónimo** del sistema |
 | `utils/mercadopago.js` | 8 KB | 2026-08-24 | ❌ nunca (el guard de staging es nuevo) |
+| `scripts/health-check.js` + `utils/healthAlertCheck.js` + `utils/dbIntegrityChecks.js` + `utils/verificationAlertCheck.js` | 28 KB | **2026-08-27** | ❌ **nunca — no existían** al escribirse este plan |
+| `electron-app/monitor/generarVisorMonitoreo.js` | 20 KB | **2026-08-27** | ❌ **nunca — no existía** (extraído de `main.js` durante la Etapa 1.6) |
 
 **El titular:** todo el módulo **Bitácora** (F1.1–F3.3, ~15 sub-bloques, 4 tablas nuevas,
 ~15 endpoints, el único endpoint anónimo del sistema, y el crecimiento de `usuarios/app.js`
-hasta 236 KB) **se construyó entero después de la última revisión integral** y nunca tuvo una
+hasta 256 KB) **se construyó entero después de la última revisión integral** y nunca tuvo una
 pasada de código. Fue verificado *funcionalmente* (F3.0, 55/55 casos; V1a/V1b/V3 de `/verify`),
 que es otra cosa.
 
-**El segundo titular:** los 2 archivos más grandes del proyecto (`dashboard.js` 324 KB y
-`usuarios/app.js` 236 KB) nunca tuvieron más que un `grep` dirigido a escapes de HTML, y
+**El segundo titular:** los 2 archivos más grandes del proyecto (`dashboard.js` 348 KB y
+`usuarios/app.js` 256 KB) nunca tuvieron más que un `grep` dirigido a escapes de HTML, y
 entre los dos concentran casi todos los `fix:` de UI que el operador detectó con el producto
 ya en producción (5 en agosto, 4 detectados por él).
 
@@ -119,7 +129,7 @@ que cualquier cambio del proyecto.
 | **Modelo / esfuerzo** | Sonnet · **`xhigh`** |
 | **Depende de** | nada — puede arrancar apenas cierre la Etapa 1 |
 
-**Por qué existe.** ~112 KB de código escrito íntegramente **después** de la campaña E1–E6,
+**Por qué existe.** ~120 KB de código escrito íntegramente **después** de la campaña E1–E6,
 con cero revisiones de código. Contiene las 3 cosas que más caro salen si tienen un bug
 silencioso en este módulo:
 
@@ -132,6 +142,15 @@ silencioso en este módulo:
    **dos implementaciones** (backend + `tokenizar()` en Electron), sincronizadas únicamente por
    un fixture compartido de 15 casos. Un cambio en una sola de las dos es un bug silencioso
    con meses de latencia.
+
+**Lo que la Etapa 1 le sumó, y conviene mirar con atención** *(agregado el 2026-08-28)*: `bitacora.js`
+creció **+238 líneas** con el Bloque B de F3.4 — la **serialización `.ics`**, que es 100 % manejo de
+fechas **en el único módulo del proyecto que ya produjo 3 bugs reales de timezone en producción**
+(P-F3.0-a). Su plan (`plan-f3-4-semana-e-ics-2026-08.md` §B.2) enumera las 6 trampas y todas se
+atendieron; esta fase es el primer ojo externo sobre esa implementación. Se sumó también el **export
+por lista de ids** (`?expediente_id=3,7,12`), que amplía la superficie de IDOR de ese endpoint: cada id
+se valida por separado y los ajenos se descartan en silencio — verificar que ese "en silencio" no
+esconda un caso donde un id ajeno sí pase.
 
 **Qué NO cubre:** el ángulo adversarial del endpoint anónimo (desalojo del almacén FIFO,
 abuso de volumen). Eso es **S1 de SEC-2** (Etapa 3), que además ya tiene 2 hallazgos
@@ -151,7 +170,7 @@ es de corrección, no de superficie crítica — y el ángulo de seguridad tiene
 | **Modelo / esfuerzo** | Sonnet · **`xhigh`** |
 | **Depende de** | Etapa 1 cerrada (Bitácora F3.4 toca este archivo) |
 
-**Por qué existe.** 236 KB, modificado hoy, y **el archivo con peor historial de
+**Por qué existe.** 256 KB, modificado hoy, y **el archivo con peor historial de
 defectos-detectados-en-producción del proyecto**: de los 5 commits `fix:` que tocaron
 `public/usuarios/` en agosto, **4 los encontró el operador con el producto ya en producción**
 — ese dato es literalmente lo que motivó la campaña `/verify`. `/verify` encontró después
@@ -171,7 +190,7 @@ lo que quede se cubre en F9.
 
 | | |
 |---|---|
-| **Target** | `electron-app/visorModal_template.html`, `electron-app/informe/visor_informes_template.html`, `electron-app/informe/generador_visor.js`, `generador_excel.js`, `buscarPdfExpediente.js`, `motivoInformeSinPDF.js`, y los bloques de post-procesado/captura de `electron-app/main.js` |
+| **Target** | `electron-app/visorModal_template.html`, `electron-app/informe/visor_informes_template.html`, `electron-app/informe/generador_visor.js`, `generador_excel.js`, `buscarPdfExpediente.js`, `motivoInformeSinPDF.js`, **`electron-app/monitor/generarVisorMonitoreo.js`** *(agregado 2026-08-28)*, y los bloques de post-procesado/captura de `electron-app/main.js` |
 | **Modo** | **path completo** |
 | **Modelo / esfuerzo** | Sonnet · **`high`** |
 | **Depende de** | nada |
@@ -188,6 +207,15 @@ Incluye además la superficie que E4 marcó como confirmada: la interpolación d
 los visores. El fix de escape (`esc()`/`escAttr()`) se aplicó en el Bloque D de julio, pero los
 visores se rediseñaron enteros después.
 
+**Por qué se sumó `generarVisorMonitoreo.js`** *(2026-08-28)*: es el **cuarto generador de visor** y
+hasta la Etapa 1 no era un archivo — vivía inline dentro de `main.js`, y se extrajo (323 líneas,
+copiadas byte a byte) durante D2 de la demo, porque `main.js` hace `require('electron')` en su primera
+línea y eso hacía imposible reusar la función desde un script Node plano. El target original de esta
+fase nombraba los otros tres generadores; este quedó afuera solo porque no existía como archivo cuando
+se escribió el plan. **Atención puntual:** es el único de los cuatro que ya escapaba correctamente
+antes del fix de julio (E4 lo señaló como el contraejemplo positivo) — confirmar que la extracción no
+perdió eso por el camino.
+
 ---
 
 ### F4 — Dashboard admin 🟠
@@ -199,7 +227,7 @@ visores se rediseñaron enteros después.
 | **Modelo / esfuerzo** | Sonnet · **`xhigh`** |
 | **Depende de** | nada |
 
-**Por qué existe.** 324 KB, el archivo más grande del proyecto, y **una migración masiva muy
+**Por qué existe.** 348 KB, el archivo más grande del proyecto, y **una migración masiva muy
 reciente sin revisión de código**: VF-3 reemplazó **71 diálogos nativos en 30 funciones** el
 2026-08-24. Esa migración se verificó por script (0 sitios nativos restantes) y navegando las
 12 secciones, pero la clase de bug que introduce es exactamente la que un script no ve: **un
@@ -216,7 +244,7 @@ y publica documentos legales**. Un bug acá no lo sufre el admin, lo sufre un cl
 
 | | |
 |---|---|
-| **Target** | los archivos nuevos de la Etapa 1.2 — ver `plan-modulo-markdown-anonimizacion-2026-08-26.md` |
+| **Target** | *(fijado el 2026-08-28, con el módulo ya construido)* `electron-app/markdown/anonimizar.js` (541 líneas) · `extraerPdfAMarkdown.js` (312) · `descargarAdjuntos.js` (358) · los **3 handlers IPC** de `electron-app/main.js` (`select-markdown-pdf`, `procesar-markdown-pdf`, `reprocesar-markdown-mapping`) · el modal y su lógica en `index.html`/`renderer.js`/`preload.js` · y el gate de plan (`plans.markdown_enabled` → `GET /client/account`) |
 | **Modo** | **diff / branch** (código nuevo, no hay historia que revisar) |
 | **Modelo / esfuerzo** | **partido**: motor de anonimización → **Opus · `high`** · resto del módulo (UI, ingesta, descargas, gating) → Sonnet · `high` |
 | **Depende de** | Etapa 1.2 terminada |
@@ -232,6 +260,15 @@ apellidos con partículas, mayúsculas/minúsculas, nombres embebidos en otras p
 de aplicación de reglas (una regla que corre después de otra puede no encontrar nada porque la
 primera ya reemplazó), y que el reprocesamiento en memoria parta siempre del **original** y no
 del ya anonimizado (aplicar dos veces = enmascarar el enmascarado).
+
+**Punto de partida, para no re-descubrir lo ya resuelto** *(2026-08-28)*: los tres primeros puntos de
+arriba **ya se atacaron durante M4** y tienen tests — el orden de aplicación es por longitud
+descendente (con el caso `DAMIAN HORACIO Isl### Mat###` documentado como el que lo motivó), y la suite
+del módulo da **94/94** con una tasa de falsos negativos medida de **0,0 %** sobre su corpus. Lo que
+esta fase aporta no es repetir eso: es el ojo externo sobre **el corpus mismo** (¿mide lo que dice
+medir, o está construido a la medida del motor?) y sobre las dos limitaciones que M4 dejó escritas y
+sin corregir a propósito — el número de boleta de deuda que sobrevive, y la dependencia de que el
+usuario revise el `mapping.txt`. El ángulo de **input hostil** no es de esta fase: es **S10** de SEC-2.
 
 ---
 
@@ -324,6 +361,56 @@ cambiado sería repetir E1 — el error que este plan existe para evitar.
 
 ---
 
+### F10 — Backend admin y observabilidad 🔴 *(fase nueva, agregada 2026-08-28)*
+
+| | |
+|---|---|
+| **Target** | `backend-server/routes/admin.js` (200 KB) · `backend-server/scripts/health-check.js` · `backend-server/utils/healthAlertCheck.js` · `backend-server/utils/dbIntegrityChecks.js` · `backend-server/utils/verificationAlertCheck.js` · el cron nuevo de `server.js` (`0 12 * * *`, alerta de verificación) |
+| **Modo** | **path completo** en `admin.js`; los otros son archivos chicos y nuevos |
+| **Modelo / esfuerzo** | Sonnet · **`xhigh`** (por el tamaño de `admin.js`) |
+| **Depende de** | nada |
+
+**Por qué existe, y por qué no estaba.** Son dos huecos que se destaparon al revisar este plan contra
+lo que construyó la Etapa 1:
+
+1. **`routes/admin.js` no era target de ninguna de las 9 fases originales.** Es el archivo backend más grande del
+   proyecto (200 KB) y la tabla de §2 lo listaba como "revisión parcial", pero ninguna fase lo tomaba:
+   F4 cubre `dashboard.js`, que es el **frontend** del panel, no su backend. Era un hueco preexistente
+   —no lo creó la Etapa 1—, pero la Etapa 1 le sumó **+553 líneas** y lo volvió imposible de seguir
+   difiriendo.
+2. **Hay código de servidor nuevo que no existía cuando se escribió este plan:** `health-check.js`
+   (295 líneas) corre **desatendido por crontab a las 08:00**, hace 7 chequeos de solo lectura sobre
+   producción y **manda emails**; sus dos helpers deciden cuándo alertar y cuándo callarse; y el cron
+   nuevo de `server.js` hace lo mismo para la verificación contra el PJN.
+
+**Lo que hay que mirar con más atención dentro de `admin.js`:**
+
+- 🚨 **La vía nueva de otorgar cupo.** `POST /admin/diagnostics/verification/quota/top-up` (Etapa 1.5,
+  F2) es lo único que se construyó en agosto que **crea usos de la nada**. Está diseñado con cuidado —
+  el `user_id` no se toma del cliente sino que se resuelve server-side por CUIT, hay techo duro por
+  submódulo, cooldown de 5 recargas por ventana móvil de 24 h, y auditoría en `admin_events` — pero
+  **esas 7 protecciones nunca se leyeron como código**, solo se verificaron por harness (18/18). Un
+  bug ahí no es un bug de diagnóstico: es una vía de cupo gratis dentro del panel más privilegiado.
+- **Los otros 3 endpoints de diagnóstico** (`verification/report`, `verification/latest`,
+  `health-check/latest`), que escriben y leen archivos JSON en `data/` desde un router HTTP.
+- **El resto del panel**, que es donde un admin suspende cuentas, aplica beneficios comerciales, edita
+  pagos y publica documentos legales. Vale el mismo argumento que justifica F4: **un bug acá no lo
+  sufre el admin, lo sufre un cliente.**
+
+**Lo que hay que mirar en el código de observabilidad:**
+
+- Que un chequeo que falla **no pueda tumbar el proceso ni el cron** (corre sin nadie mirando).
+- La **deduplicación de alertas por episodio** — el mecanismo que evita que un mismo error mande 21
+  emails idénticos. Si se rompe hacia el lado silencioso, la alerta deja de existir sin que nadie lo
+  note, que es peor que no tenerla.
+- Que los chequeos de integridad referencial y de disco/RAM sean **estrictamente de solo lectura**.
+- Que ningún dato de cliente termine en el cuerpo de un email de alerta.
+
+**Qué NO cubre:** el ángulo adversarial (¿puede un no-admin llegar acá?) — eso es SEC-1 (authz admin,
+verificado y no re-testeado) y el barrido de S9. Y el **frontend** del panel, que es F4.
+
+---
+
 ### F9 — `/verify` V4 + V5 + V6 (runtime, con el operador) 🟠 **no es un `/code-review`**
 
 | | |
@@ -361,19 +448,20 @@ que conviene hacer en la misma sesión.
    F6 ─┐  cifrado de scripts (Opus) — temprano: si algo está roto acá,
        │  cambia la prioridad del proyecto entero
        │
-   F1 ─┤  Bitácora backend        ─┐
-   F3 ─┤  visores / captura        │  paralelizables entre sí:
-   F4 ─┤  dashboard admin          │  tocan archivos distintos
-   F2 ─┘  portal de usuarios      ─┘
+   F1 ──┤  Bitácora backend         ─┐
+   F3 ──┤  visores / captura         │
+   F4 ──┤  dashboard admin (front)   │  paralelizables entre sí:
+   F10 ─┤  admin backend + salud     │  tocan archivos distintos
+   F2 ──┘  portal de usuarios       ─┘
        │
-   F5 ─┤  módulo Markdown (cuando exista el código)
+   F5 ─┤  módulo Markdown (código ya existente desde el 2026-08-27)
        │
    F8 ─┤  delta del motor Puppeteer (barato, cierra el círculo)
        │
    F7 ─┤  COBRANZA — Opus ── gate duro ──► habilita Etapa 4 (B3)
        │
    F9 ─┘  /verify V4+V5+V6 ── requiere operador ── DESPUÉS de que
-          los fixes de F1–F5 estén desplegados
+          los fixes de F1–F5 y F10 estén desplegados
 ```
 
 **Las tres decisiones de orden que importan:**
@@ -386,7 +474,13 @@ que conviene hacer en la misma sesión.
    después pasan 8 sesiones de campaña, hay que revalidarla. Correrla último la deja fresca al
    entrar a la Etapa 4.
 3. **F9 va después de los fixes, no antes.** Verificar en runtime un producto al que le faltan los
-   arreglos de F1–F5 produce hallazgos que se corrigen solos al aplicar esos fixes.
+   arreglos de F1–F5 y F10 produce hallazgos que se corrigen solos al aplicar esos fixes.
+
+**Dónde entra F10** *(2026-08-28)*: es paralelizable con el grupo del medio —no comparte un solo
+archivo con F1/F2/F3/F4— así que no altera el orden ni suma tiempo al camino crítico salvo por su
+propio esfuerzo. Si hubiera que priorizar dentro del grupo, va **después de F1** (comparten el criterio
+de "backend nunca revisado" y F1 es la superficie más expuesta) y **antes de F2/F4**, que son los dos
+barridos más largos.
 
 **Sobre `ultra`:** ninguna fase lo justifica de entrada. Es una revisión multi-agente en la nube,
 es cara, y **la enciende el operador** (no se puede lanzar desde una sesión). El único caso donde
@@ -433,6 +527,15 @@ Dicho explícitamente para que "campaña ejecutada" no se confunda con "proyecto
 > ejecutable de los 6 puntos de la fase, corrido **contra staging** (nunca prod).
 > `electron-app/src/security/` y `backend-server/src/security/` son solo lectura: los hallazgos
 > ahí se corrigen desde el llamador o se documentan, jamás con `--fix`.
+
+**F10** (Sonnet, `xhigh`):
+
+> Ejecutá la fase **F10** de `docs/internal/plan-code-review-integral-2026-08-26.md` — backend admin y
+> observabilidad. Empezá por `POST /admin/diagnostics/verification/quota/top-up` y sus 7 protecciones:
+> es lo único del panel que **crea cupo de la nada** y nunca se leyó como código, solo se verificó por
+> harness. Después el resto de `admin.js` con el criterio de F4 (un bug acá lo sufre un cliente, no el
+> admin), y al final el código de observabilidad, donde lo que más importa es que la deduplicación de
+> alertas no se rompa hacia el lado silencioso.
 
 **F7:**
 

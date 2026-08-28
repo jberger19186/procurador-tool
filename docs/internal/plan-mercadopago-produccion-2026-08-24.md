@@ -11,6 +11,15 @@
 Todo lo de esta sección se verificó en vivo el 2026-08-24 contra el servidor y la cuenta de MP,
 no se dedujo del código ni de la documentación previa del proyecto.
 
+> 🔄 **Re-medido el 2026-08-28, al cerrarse la Etapa 1 del roadmap.** Lo primero que se verificó, porque
+> decidía si este plan había que rehacerlo: **la Etapa 1 no modificó una sola línea de la cadena de
+> cobro** — `routes/checkout.js`, `routes/webhooks.js`, `services/subscriptionService.js`,
+> `services/invoiceService.js` y `utils/mercadopago.js` tienen **0 diffs** desde el 25/08. Todas las
+> fases (A, B, C, D, E) y sus trampas documentadas siguen válidas tal cual. Lo único que cambió son dos
+> filas de conteo de esta tabla, marcadas **(actualizado 28/08)**, y **la conclusión de fondo no se
+> mueve: el radio de impacto del switch sigue siendo nulo** (0 pagos, 0 facturas, 0 suscripciones con
+> método de pago).
+
 | Qué | Valor medido | Implicancia |
 |---|---|---|
 | `PAYMENT_MODULE_ENABLED` en prod | **`true`** | ⚠️ **El módulo de pagos YA está activo en producción.** `.env.example` dice "mantener en false hasta validar credenciales" y varias entradas de `CLAUDE.md` dan a entender que el switch pendiente es encenderlo — **es falso**. Los crons de cobranza corren, el checkout está habilitado y el webhook responde. Lo único que impide un cobro real es que las credenciales son de sandbox. |
@@ -20,8 +29,9 @@ no se dedujo del código ni de la documentación previa del proyecto.
 | `invoices` en prod | **0 filas** | Ídem — la facturación manual nunca se ejercitó con un cliente real. |
 | `subscriptions` con `payment_provider` | **0** | Nadie tiene método de pago configurado. Cero clientes activos que romper. |
 | `webhook_events` en prod | 21 filas | Residuo de las pruebas de sandbox. Ver F-C.2 (limpieza). |
-| `users` en prod | 3 (2 admins + 1 cuenta de prueba) | Radio de impacto del switch: prácticamente nulo. |
-| Planes activos y públicos | `EXTENSION_PROMO` ($1.500) · `COMBO_PROMO` ($15.000) | Coinciden con `PLAN_PRICES` de `.env` y con la landing. |
+| `users` en prod | **3** *(re-verificado 28/08)* | Llegaron a ser 9 por 6 fixtures de QA del 27/08, **borrados el 28/08** (ver §5). Vuelven a ser las 3 cuentas reales: 2 admins + la de verificación. Radio de impacto del switch: **nulo**. |
+| `subscriptions` con `payment_provider` | **0** *(re-verificado 28/08)* | Cero clientes activos que romper. Es el dato que sostiene todo el criterio de riesgo de este plan, y sigue igual. |
+| Planes activos y públicos | `EXTENSION_PROMO` ($1.500) · `COMBO_PROMO` ($15.000) *(re-verificado 28/08)* | Coinciden con `PLAN_PRICES` de `.env` y con la landing. Hay un tercer plan **activo pero privado**, `CORTESIA` ($0) — **no afecta a C.1.1**: al ser gratuito no necesita `preapproval_plan` en MP, siguen siendo 2 los que hay que crear en la cuenta productiva. |
 | `MP_PLAN_*_ID` en prod | Presentes, pero **son IDs de la cuenta sandbox** | 🚨 **Estos IDs no existen en la cuenta productiva.** Al cambiar el token sin recrear los planes, `createPreapproval()` falla en la línea 53 con *"Plan MP no encontrado"* → el checkout se cae para todos. Es el punto más fácil de pasar por alto de todo el switch. |
 | `MP_SANDBOX_PAYER_EMAIL` en prod | **Presente** | 🚨 Con credenciales reales, `createUpdatePreapproval` y `createReactivationPreapproval` mandarían un email de test user a MP producción. Ver F-A.2. |
 | Webhook registrado en el panel de MP | **Ninguno** (`notifications_history` → *"no webhook notifications configured"*) | 🚨 Sin el webhook dado de alta en el panel productivo, ningún pago se acredita: el código está listo pero no le llega nada. Ver F-C.1. |
@@ -328,6 +338,13 @@ Todo verificado en vivo, no asumido:
 - [ ] Suscripción de prueba cancelada y reembolsada; sin preapprovals vivos huérfanos
 - [ ] `pm2-error.log` sin entradas nuevas atribuibles al switch
 - [ ] Backup del `.env` anterior guardado y su ruta anotada
+- [x] ~~**Los 6 fixtures de QA del 27/08 borrados de producción**~~ ✅ **HECHO el 2026-08-28**
+      (`qa-sp-*@test.com`, `qa-n01-trial@test.com` — ids 264/265/266/268/269/270). Backup previo
+      verificado (`prod_predeploy_20260828_173021.sql.gz`, integridad y contenido confirmados antes de
+      borrar), `DELETE` por ids explícitos dentro de una transacción, ensayado con `ROLLBACK` primero:
+      6 usuarios + 5 suscripciones por cascada, **0 filas huérfanas** en las 9 relaciones verificadas.
+      La base vuelve a tener las 3 cuentas reales. ⚠️ **Si se vuelven a crear fixtures en producción
+      antes del switch, este ítem se reabre** — no se limpian solos.
 
 ---
 

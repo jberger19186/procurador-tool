@@ -29,10 +29,11 @@
               │
               ▼
   ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
-    F6 cifrado → F1/F2/F3/F4 → F5 → F8 → F7 cobranza (gate) → F9 verify
+    F6 cifrado → F1/F2/F3/F4/F10 → F5 → F8 → F7 cobranza (gate) → F9 verify
               │
               ▼
-  ETAPA 3 — SECURITY REVIEW  (SEC-2: S1–S7 + S9 Strix + S10 Markdown)
+  ETAPA 3 — SECURITY REVIEW
+    SEC-2: S1–S7 + S9 Strix + S10 Markdown + S11 landing/demo
               │
               ▼
   ETAPA 4 — MERCADOPAGO PRODUCCIÓN (B3)
@@ -245,11 +246,11 @@ consumo de cupo cuadrando exacto con el modelo documentado.
 | | |
 |---|---|
 | **Plan** | [`plan-code-review-integral-2026-08-26.md`](plan-code-review-integral-2026-08-26.md) ⭐ **nuevo** |
-| **Fases** | 9 — F1 a F8 de `/code-review` + **F9 = los bloques V4/V5/V6 de `/verify`** que quedaron bloqueados por el entorno |
+| **Fases** | **10** — F1 a F8 + **F10** de `/code-review` + **F9 = los bloques V4/V5/V6 de `/verify`** que quedaron bloqueados por el entorno |
 | **Modelo** | Sonnet en 6. **Opus en 2**: F6 (cadena de cifrado de scripts) y F7 (cobranza) |
-| **Esfuerzo** | `xhigh` en las 3 áreas grandes nunca revisadas · `high` en 4 · `medium` en 1 |
-| **Sesiones** | 9–13 |
-| **Depende de** | Etapa 1 cerrada |
+| **Esfuerzo** | `xhigh` en las 4 áreas grandes nunca revisadas · `high` en 4 · `medium` en 1 |
+| **Sesiones** | **10–15** *(actualizado 2026-08-28: +1–2 por F10)* |
+| **Depende de** | Etapa 1 cerrada ✅ |
 | **Habilita** | Etapa 3, y vía F7 la Etapa 4 |
 
 **El hueco que justifica la campaña, medido el 2026-08-26:** todo el módulo Bitácora
@@ -257,6 +258,16 @@ consumo de cupo cuadrando exacto con el modelo documentado.
 `public/usuarios/app.js` hasta **236 KB**) se construyó **después** de la última revisión integral y
 **nunca tuvo una pasada de código**. Y los dos archivos más grandes del proyecto (`dashboard.js`
 324 KB y `usuarios/app.js` 236 KB) nunca tuvieron más que un `grep` dirigido.
+
+**🔄 Ajuste del 2026-08-28, con la Etapa 1 ya cerrada.** Se midió el delta real de la etapa (136
+archivos, +12.833 líneas) contra los targets del plan. **F1, F2 y F4 ya apuntaban bien** — cubren los
+tres archivos que más creció la Etapa 1 — y **la cadena de cobro no se tocó**, así que F7 y su rol de
+gate quedan intactos. Lo que faltaba: **`routes/admin.js` (200 KB, el backend del panel) no era target
+de ninguna fase**, y la Etapa 1 le sumó 553 líneas incluyendo la única vía nueva del proyecto que
+**otorga cupo** (`quota/top-up`); y apareció código de servidor que corre desatendido y manda emails
+(`health-check.js` y sus helpers). Ambos huecos se cubren con la fase nueva **F10**. De paso, F3 sumó
+`generarVisorMonitoreo.js` (el cuarto generador de visor, que nació como archivo durante la Etapa 1.6)
+y F5 fijó su target real ahora que el módulo Markdown existe.
 
 **Dos pedidos del operador ya incorporados:**
 - **Verificar que los scripts se encripten correctamente** → es la fase **F6**, en Opus, y no es solo
@@ -274,9 +285,9 @@ consumo de cupo cuadrando exacto con el modelo documentado.
 | | |
 |---|---|
 | **Plan** | [`plan-seguridad-lanzamiento-2026-08.md`](plan-seguridad-lanzamiento-2026-08.md) (SEC-2, **actualizado el 2026-08-26** con los bloques S9 y S10) |
-| **Bloques en esta etapa** | **S1–S7 + S9 + S10**. **S8 NO** — ver abajo |
+| **Bloques en esta etapa** | **S1–S7 + S9 + S10 + S11**. **S8 NO** — ver abajo |
 | **Modelo** | Sonnet en todos los de esta etapa |
-| **Sesiones** | 7–11 (S1+S2 y S3+S4 son agrupables) |
+| **Sesiones** | **8–13** (S1+S2, S3+S4 y S10+S11 son agrupables) *(actualizado 2026-08-28)* |
 | **Depende de** | Etapa 2 cerrada y sus fixes desplegados |
 
 **Lo nuevo: S9 — Strix.** Pentest agéntico en runtime (`github.com/usestrix`, Apache 2.0, Docker + CLI).
@@ -295,12 +306,22 @@ hostil?"* — el módulo descarga archivos desde URLs que salen del **documento*
 
 **🚨 Resolución de una contradicción real entre planes:** el bloque **S8 (fraude con cobro real)** del
 plan SEC-2 exige que B3 esté cerrado, pero este roadmap pone la seguridad **antes** que MercadoPago.
-No es un conflicto: es una partición. **S1–S7 + S9 + S10 corren en la Etapa 3; S8 corre dentro de la Etapa
+No es un conflicto: es una partición. **S1–S7 + S9 + S10 + S11 corren en la Etapa 3; S8 corre dentro de la Etapa
 4**, después del primer cobro real. Sin decirlo explícito, alguien da "SEC-2 ejecutado" por cerrado
 con un bloque sin correr.
 
+**Lo tercero, agregado el 2026-08-28 al cerrarse la Etapa 1: S11 — la landing y el gate de la demo.**
+Mismo mecanismo que S10, un capítulo después. El 24/08 `procuradortool.com` era una landing estática
+que **no guardaba nada**, así que auditarla habría sido auditar HTML de marketing. La Etapa 1.6 publicó
+`/demo/` (703 líneas de JS inline) y —para que un cliente logueado no viera el gate de bloqueo— hizo
+que **el portal le pase su JWT a ese origen**, donde queda en `localStorage` sin que nada lo borre. El
+vhost de la landing **no tiene ningún header de seguridad**: la CSP del fix B-5 vive en Helmet, o sea
+solo en Express. No es que el gate sea débil —es de UX y está bien así—, es que **una credencial de
+sesión de 8 h pasó a vivir en el origen menos protegido del sistema**, y ningún bloque de S1–S10 lo
+mira: S5 audita el dashboard y el portal, S1 el endpoint anónimo, S6 el cliente Electron.
+
 **Entregable de cierre de la etapa (no está en el plan original, se agrega acá):** un **informe
-unificado** con los 10 bloques, sus hallazgos, los parches y las re-corridas de verificación, con fecha
+unificado** con los 11 bloques, sus hallazgos, los parches y las re-corridas de verificación, con fecha
 y alcance. Es lo que se le muestra a un cliente institucional que pregunte por la auditoría, y el
 punto de partida del auditor externo el día que se contrate.
 
@@ -362,6 +383,7 @@ Las que este roadmap existe para hacer visibles. Cada una es un error concreto q
 | **8** | ~~**El módulo Markdown tiene su propio gate (M0) antes de M1**~~ ✅ **resuelto 2026-08-26** | Se construían 6 sesiones de módulo para descubrir recién ahí que los adjuntos necesitan sesión del PJN. **M0 se ejecutó y devolvió escenario A** — el riesgo no se materializó, y el arranque de 1.2 pasa a ser M1. En el camino apareció **una dependencia nueva hacia la Etapa 3**: la anonimización debe alcanzar a las URLs (fila 10) |
 | **9** | **Lo que la Etapa 1 construye, las Etapas 2 y 3 tienen que revisarlo** | Es la dependencia que se destapó el 2026-08-26 al confirmar 1.1 y 1.2. El code-review ya la tenía cubierta (**F5** = módulo Markdown; **F1** declara depender de Etapa 1 porque F3.4 toca `routes/bitacora.js`). La seguridad **no**: SEC-2 se escribió el 24/08, cuando 1.2 todavía era una decisión de negocio sin resolver → se le agregó el bloque **S10**. Sin eso, se cierra la Etapa 3 con un módulo entero sin auditar, y encima el que más promete al usuario (*"esto no tiene datos personales"*) |
 | **10** | **Un `.md` "anonimizado" con enlaces del SCW vivos entrega el original sin anonimizar** | Hallazgo de **M0** (2026-08-26): esos enlaces **no requieren login** y **no expiran** (≥27 días medidos). Si M4 no los trata, el módulo cumple su promesa solo en apariencia — y el usuario se entera después de mandar el archivo. La verificación es binaria (un grep de `viewer.seam`) y vive en **S10**, Etapa 3 |
+| **12** | **Lo que la Etapa 1.6 publicó en la landing cambió el perfil de riesgo de ese origen** | Hasta agosto, `procuradortool.com` no guardaba nada y ningún plan lo auditaba — con razón. Desde que la demo existe, **el portal le pasa el JWT del usuario y ese origen lo persiste**, sin CSP y sin forma de limpiarlo. Si nadie lo dice explícito, la Etapa 3 se cierra habiendo auditado los tres orígenes que sí tenían bloque (portal, dashboard, Electron) y dejando afuera el único donde quedó una credencial. Es el bloque **S11**, agregado el 2026-08-28 |
 | **11** | ~~**1.6 (demo) no puede capturar el capítulo de Markdown hasta que se corte el release de Electron**~~ — ✅ **resuelto el 2026-08-27**: release `electron-v2.7.51` publicado y `markdown_enabled=true` en COMBO_PROMO | (era: el binario instalado no tenía el botón). **Sigue habiendo un paso operativo para D3**: usar el build **2.7.51+**, no el `.exe` instalado del operador (que sigue en 2.7.50 hasta que el auto-updater lo alcance) — el `dist/win-unpacked/` local ya sirve |
 
 ---
@@ -413,11 +435,11 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 | Etapa | Sesiones | Notas |
 |---|---|---|
 | **1** — Producto | ~~13–21~~ → **✅ 0 restantes — ETAPA CERRADA** | Los 6 ítems cerrados (2026-08-26/27): 1.1, 1.2 (con release y flag encendidos), 1.3, 1.4, 1.5 y **1.6** (41/43 pasos, 8.3/8.4 descartados por el operador el 2026-08-27) |
-| **2** — Code review | **9–13** | 3 fases `xhigh` consumen sesión propia o más |
-| **3** — Security review | **7–11** | S1+S2 y S3+S4 agrupables. Incluye **S10** (+1–2), agregado el 26/08 |
+| **2** — Code review | **10–15** | 4 fases `xhigh` consumen sesión propia o más. Incluye **F10** (+1–2), agregada el 28/08 |
+| **3** — Security review | **8–13** | S1+S2, S3+S4 y S10+S11 agrupables. Incluye **S10** (+1–2, 26/08) y **S11** (+1, 28/08) |
 | **4** — MercadoPago | **3–5** | + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
-| **Total aproximado** | ~~32–50~~ → **19–29 restantes** | Más las sesiones con operador presente de §9. Actualizado 2026-08-27 tras cerrar la Etapa 1 completa |
+| **Total aproximado** | ~~32–50~~ → ~~19–29~~ → **21–33 restantes** | Más las sesiones con operador presente de §9. Actualizado el **2026-08-28**, tras la revisión de los planes de las Etapas 2/3/4 contra lo que la Etapa 1 realmente construyó (+1–2 por F10, +1 por S11) |
 
 **Después del lanzamiento** — son **exactamente estos tres** (sección "⚪ Post-lanzamiento" de
 `CLAUDE.md`, que hasta el 2026-08-26 se llamaba "Diferidos a decisión de negocio" y tenía además a
