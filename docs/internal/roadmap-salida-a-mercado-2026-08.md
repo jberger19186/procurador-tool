@@ -412,12 +412,12 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 
 | Etapa | Sesiones | Notas |
 |---|---|---|
-| **1** — Producto | ~~13–21~~ → **4–7 restantes** | ✅ 1.1, 1.3, 1.4 y 1.5 **cerrados** (2026-08-26/27). ⏳ **1.2 con el código M1-M6 completo — solo falta el release de Electron** (≈0,5 sesión, no las 6–10 originales). ⬜ Queda **1.6** (4–6) |
+| **1** — Producto | ~~13–21~~ → **✅ 0 restantes — ETAPA CERRADA** | Los 6 ítems cerrados (2026-08-26/27): 1.1, 1.2 (con release y flag encendidos), 1.3, 1.4, 1.5 y **1.6** (41/43 pasos, 8.3/8.4 descartados por el operador el 2026-08-27) |
 | **2** — Code review | **9–13** | 3 fases `xhigh` consumen sesión propia o más |
 | **3** — Security review | **7–11** | S1+S2 y S3+S4 agrupables. Incluye **S10** (+1–2), agregado el 26/08 |
 | **4** — MercadoPago | **3–5** | + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
-| **Total aproximado** | ~~32–50~~ → **23–36 restantes** | Más las sesiones con operador presente de §9. Actualizado 2026-08-27 tras cerrar 1.1/1.3/1.4/1.5 |
+| **Total aproximado** | ~~32–50~~ → **19–29 restantes** | Más las sesiones con operador presente de §9. Actualizado 2026-08-27 tras cerrar la Etapa 1 completa |
 
 **Después del lanzamiento** — son **exactamente estos tres** (sección "⚪ Post-lanzamiento" de
 `CLAUDE.md`, que hasta el 2026-08-26 se llamaba "Diferidos a decisión de negocio" y tenía además a
