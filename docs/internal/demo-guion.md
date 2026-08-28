@@ -733,5 +733,59 @@ pudo confirmar en producción — cubierto por la verificación live de abajo, c
      comportamiento esperado y diseñado).
 
 Con esto, **D6 queda completo — landing, `/demo/`, y las entradas del portal, todo en producción y
-verificado**. Lo único que sigue pendiente de la Etapa 1.6 completa es **D4** (las 7 capturas
-manuales del operador — extensión + PJN), sin fecha ni dependencia técnica.
+verificado**.
+
+---
+
+## 15. D4 EJECUTADA PARCIALMENTE (2026-08-27) — 5/7 pasos resueltos como mocks, no como screenshots reales
+
+El operador aportó material real: 2 archivos `.mhtml` + 1 PNG del sitio del PJN (para "El problema",
+pasos 1.1/1.2) y 4 PNG de la extensión real en Chrome (para el capítulo Extensión, mapeados a los
+pasos 8.1/8.2/8.5 del guion — ver abajo la corrección de mapeo).
+
+**🚨 Ninguno de los 7 archivos aportados se usó tal cual — los 7 tenían datos reales de terceros
+sin anonimizar, imposibles de publicar directo.** Confirmado en cada uno:
+- El expediente individual (`CAF 068920/2018`, "COLEGIO PUBLICO DE ABOGADOS DE CAPITAL FEDERAL c/
+  EN-AFIP") con el **CUIT real del operador (`27320694359`) visible** en las 4 capturas de la
+  extensión y en el `.mhtml` de Actuaciones.
+- La lista de 191 expedientes (Rio Gallegos/Caleta Olivia, ejecuciones fiscales AFIP) con **nombres
+  reales de deudores** (personas físicas y S.A. reales) en cada fila.
+
+**Decisión tomada, no solo la de sustituir texto:** en vez de tapar con rectángulos opacos sobre los
+PNG reales (la opción B de §0.6/CLAUDE.md), se **reconstruyeron como mocks HTML/CSS puros** —mismo
+criterio que ya usan los pasos 6.6-6.8 (`mockEditorHTML()`/`mockChatHTML()`, cero dependencia de
+datos reales)— renderizados con headless Chrome (`--headless=new --screenshot=`, `channel` real de
+Chrome instalado, no el Chromium embebido). Ventaja sobre "tapar": **cero bytes reales en el archivo
+final**, no solo una capa visual encima de ellos. Reusa los fixtures ya establecidos del proyecto
+(`demo-fixtures/expedientes.js`, `cuenta.js`) para que los datos ficticios sean consistentes con el
+resto de la demo: `demo@procuradortool.com` / `COMBO_PROMO` / `FCR 18745/2017` (el mismo expediente
+que ya usa el placeholder real de la extensión, `"Ej.: FCR 18745/2017"`) / `RODRÍGUEZ SOCIEDAD
+ANÓNIMA c/ FISCO NACIONAL s/EJECUCIÓN FISCAL` (fixture #3, ya pensado para el mismo tema — ejecución
+fiscal AFIP en Rio Gallegos).
+
+**Corrección de mapeo entre lo que el operador describió y lo que el guion original (D1) había
+anticipado especulativamente** — las descripciones ganan, por ser material real:
+| Archivo real | Descripción del operador | Paso del guion que en realidad cubre |
+|---|---|---|
+| `8.1_...png` | "el modal de la extensión" | **8.1** (popup vacío, coincide) |
+| `8.2_...png` | "búsqueda de expediente que pide usuario y clave" | **Ninguno** — pantalla SSO/login del PJN, **excluida a propósito** (ver más abajo) |
+| `8.3_...png` | "cómo se ejecuta el modal desde el click derecho" | **8.5** (el menú contextual, no 8.3 como decía el plan original) |
+| `8.4_...png` | "la carga desde el modal del click derecho" | **8.2** (popup ya completado, no 8.4) |
+
+**La captura SSO (real `8.2`) se descartó a propósito, no por omisión** — mismo criterio que ya
+documenta CLAUDE.md sobre las 34 capturas de referencia de agosto: *"2 de las 34 capturas muestran la
+pantalla de login SSO del PJN... la prueba visual de por qué esa pantalla queda fuera de la demo"*.
+Las pantallas de autenticación del PJN no se muestran en material público, con o sin dato real
+visible.
+
+**Resultado: 5 de los 7 pasos pendientes de D4 quedan resueltos (como mock, no como foto real) y
+desplegados** — `problema/1.1-actuaciones-expediente.png`, `problema/1.2-multiples-expedientes-
+pestanas.png`, `extension/8.1-popup-extension.png`, `extension/8.2-popup-completado.png`,
+`extension/8.5-menu-contextual.png`. **Siguen pendientes, genuinamente sin material: 8.3
+(autocompletado en Consulta SCW) y 8.4 (autocompletado en Escritos)** — el "autocompletado
+escribiendo solo en el campo de jurisdicción/número/año del sitio real" no está entre lo que el
+operador aportó esta vez; sigue siendo D4 real (captura del operador, con o sin sustitución
+posterior). Verificado local con headless Chrome que las 5 imágenes cargan y se ven en el tour real
+(`#problema` muestra "Paso 1 de 2" con contenido real en ambos pasos; `#extension` no se pudo
+re-verificar visualmente con el gate desbloqueado por falta de Playwright en esta sesión, pero los
+200/carga de archivo ya están confirmados y el mecanismo del gate ya estaba verificado en D6).

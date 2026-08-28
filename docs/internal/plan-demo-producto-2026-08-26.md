@@ -37,8 +37,16 @@
 > `md5sum` y verificación en vivo contra `https://procuradortool.com/` (200 en landing/demo/assets,
 > gate funcionando, 0 errores de consola). Detalle completo en
 > [`demo-guion.md` §14](demo-guion.md#14-d6-implementado-2026-08-27--integración-en-landing--portal-con-gate-para-clientes).
-> **Etapa 1.6 queda completa salvo D4** (las 7 capturas manuales del operador, sin dependencia
-> técnica ni fecha).
+> **D4 EJECUTADA PARCIALMENTE el mismo día (5/7 pasos): el operador aportó material real, ninguno
+> se usó tal cual — los 7 archivos tenían datos reales de terceros (CUIT, nombres de deudores)
+> imposibles de publicar directo.** Reconstruidos como mocks HTML/CSS con datos sintéticos (mismo
+> criterio que los pasos 6.6-6.8), reusando los fixtures ya establecidos del proyecto — cero bytes
+> reales en el archivo final. Resueltos: **1.1, 1.2** (El problema) y **8.1, 8.2, 8.5** (Extensión).
+> **Siguen pendientes, genuinamente sin material: 8.3 y 8.4** (autocompletado en el sitio real del
+> PJN — Consulta SCW y Escritos). Detalle completo, incluida la corrección de qué archivo real
+> mapea a qué paso del guion, en
+> [`demo-guion.md` §15](demo-guion.md#15-d4-ejecutada-parcialmente-2026-08-27--57-pasos-resueltos-como-mocks-no-como-screenshots-reales).
+> **Etapa 1.6 queda en 41/43 pasos** — solo faltan 8.3 y 8.4.
 
 ---
 

@@ -278,7 +278,7 @@ main { padding: 96px 1.6rem 60px; max-width: 1040px; margin: 0 auto; }
     <img src="../brand-icon.png" alt="Procurador SCW" class="nav-brand-icon">
     <div class="nav-brand-text">
       <span class="nav-brand-name">Procurador <b>TOOL</b></span>
-      <span class="nav-brand-sub">Demo</span>
+      <span class="nav-brand-sub">Procurador SCW</span>
     </div>
   </a>
   <a href="/" class="nav-back">
@@ -287,7 +287,7 @@ main { padding: 96px 1.6rem 60px; max-width: 1040px; margin: 0 auto; }
   </a>
   <div class="chapter-nav" id="chapterNav"></div>
   <a href="https://api.procuradortool.com/register/" class="nav-cta">
-    Probalo gratis
+    Empezar ahora
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
   </a>
 </nav>
@@ -310,8 +310,8 @@ const CHAPTERS = [
     lead: 'Consultar el estado de tus expedientes significa entrar al SCW, expediente por expediente, y repetirlo todos los días. Un estudio con 50 casos activos puede perder más de una hora diaria solo en esto.',
     pills: [],
     steps: [
-      { n:'1.1', placeholder:true, reason:'D4 — captura manual del operador (sitio real del PJN)', caption:'El portal SCW del PJN, vista de <b>Actuaciones</b> de un expediente con varias filas — la consulta manual, expediente por expediente.' },
-      { n:'1.2', placeholder:true, reason:'D4 — captura manual del operador (sitio real del PJN)', caption:'La misma pantalla, recorriendo 5-6 expedientes distintos abiertos en pestañas — así es todos los días, sin la app.' },
+      { n:'1.1', img:'problema/1.1-actuaciones-expediente.png', caption:'El portal SCW del PJN, vista de <b>Actuaciones</b> de un expediente con varias filas — la consulta manual, expediente por expediente.' },
+      { n:'1.2', img:'problema/1.2-multiples-expedientes-pestanas.png', caption:'La misma pantalla, recorriendo 5-6 expedientes distintos abiertos en pestañas — así es todos los días, sin la app.' },
     ],
   },
   {
@@ -396,11 +396,11 @@ const CHAPTERS = [
     lead: 'Cinco flujos del PJN, automatizados desde tu navegador.',
     pills: ['Consulta de expedientes','Presentación de escritos','Notificaciones y DEOX','Lanzá flujos desde cualquier página de Chrome'],
     steps: [
-      { n:'8.1', placeholder:true, reason:'D4 — captura manual del operador', caption:'El popup de la extensión — tu cuenta y los 5 flujos disponibles, en un clic.' },
-      { n:'8.2', placeholder:true, reason:'D4 — captura manual del operador', caption:'El campo de expediente ya completado — tras usar el menú contextual, sin tipear nada.' },
+      { n:'8.1', img:'extension/8.1-popup-extension.png', caption:'El popup de la extensión — tu cuenta y los 5 flujos disponibles, en un clic.' },
+      { n:'8.2', img:'extension/8.2-popup-completado.png', caption:'El campo de expediente ya completado — tras usar el menú contextual, sin tipear nada.' },
       { n:'8.3', placeholder:true, reason:'D4 — captura manual del operador', caption:'Autocompletado en acción en <b>Consulta SCW</b> — jurisdicción, número y año, solos.' },
       { n:'8.4', placeholder:true, reason:'D4 — captura manual del operador', caption:'Autocompletado en <b>Escritos</b> — mismo mecanismo, otra pantalla del PJN.' },
-      { n:'8.5', placeholder:true, reason:'D4 — captura manual del operador', caption:'Click derecho sobre un expediente seleccionado → <b>Enviar expediente a PJN</b>. Así de directo.' },
+      { n:'8.5', img:'extension/8.5-menu-contextual.png', caption:'Click derecho sobre un expediente seleccionado → <b>Enviar expediente a PJN</b>. Así de directo.' },
     ],
   },
 ];
@@ -609,7 +609,7 @@ function renderChapter() {
       <div class="chapter-cta">
         <div class="chapter-cta-lead">¿Te sirve ${chapter.label.toLowerCase() === 'el problema' ? 'Procurador SCW' : chapter.label}?</div>
         <a href="${REGISTER_URL}" class="btn btn-primary">
-          Probalo gratis
+          Empezar ahora
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
         </a>
         <div class="chapter-pager">
