@@ -25,7 +25,7 @@
     1.3 Landing + TyC (beta, límites)  ✅  └─────────────────────────────────┘
     1.4 Guía de backup y recuperación  ✅
     1.5 Control periódico contra PJN   ✅
-    1.6 Demo reproducible en landing   🔄  (D1 guion ✅, D2 fixtures ✅, D3 32/36 capturas ✅, sigue D4/D5)
+    1.6 Demo reproducible en landing   🔄  (D1 guion ✅, D2 fixtures ✅, D3 32/36 capturas ✅, D5 tour ✅, sigue D4/D6)
               │
               ▼
   ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
@@ -223,14 +223,14 @@ protecciones · tarjeta reescrita en Diagnóstico con el comando de computer-use
 **La primera corrida real** (app v2.7.50 contra el PJN) dio **los 5 flujos en `ok`**, con el
 consumo de cupo cuadrando exacto con el modelo documentado.
 
-### 1.6 — Demo reproducible del producto en la landing ⏳ D1+D2+D3 EJECUTADAS, EN CURSO
+### 1.6 — Demo reproducible del producto en la landing ⏳ D1+D2+D3+D5 EJECUTADAS, EN CURSO
 
 | | |
 |---|---|
 | **Plan** | [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md) — revisado el 2026-08-27 con un spike de capacidad |
 | **Guion** | ✅ **[`demo-guion.md`](demo-guion.md)** (D1, 2026-08-27, revisado contra 34 capturas reales + capítulo de Portal agregado) — 8 capítulos, 43 pasos (36 D3 / 7 D4) |
 | **Qué es** | Tour guiado en HTML estático servido desde `/demo/`, con capturas reales anonimizadas + clips cortos, un capítulo por módulo, linkeable desde cada tarjeta de la landing |
-| **Fases** | **6 (D1–D6)** · **D1 ✅ · D2 ✅ · D3 ✅** (32/36 pasos capturados con Playwright real — visores, portal y la app Electron viva por CDP — [`demo-guion.md` §12](demo-guion.md#12-d3-ejecutado-2026-08-27--3236-pasos-capturados-3-pipelines-verificados)) · sigue **D4** (capturas manuales de extensión + PJN) y **D5** (tour) |
+| **Fases** | **6 (D1–D6)** · **D1 ✅ · D2 ✅ · D3 ✅** (32/36 pasos capturados con Playwright real) **· D5 ✅** (el tour, `backend-server/public/landing/demo/index.html`, saltado adelante de D4 a pedido del operador — D5 solo depende de D3 — [`demo-guion.md` §13](demo-guion.md#13-d5-ejecutado-2026-08-27--el-tour-publicado-en-backend-serverpubliclandingdemo)) · sigue **D4** (capturas manuales del operador, se integran solas cuando estén) y **D6** (integración en la landing + despliegue) |
 | **Modelo / esfuerzo** | Sonnet en las 6 · `alto` solo en D3 (volumen: ~40 pantallas) |
 | **Sesiones** | **~5,5** + **~15 min del operador** (ya no una sesión conjunta) |
 | **Depende de** | 1.1 ✅ · 1.2 ✅ (con su release, `electron-v2.7.51`) · 1.3 ✅ — **sin dependencias pendientes** para arrancar D2 |

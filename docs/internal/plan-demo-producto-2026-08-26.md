@@ -24,8 +24,13 @@
 > 32/36 pasos automatizables capturados con Playwright real (visores, portal, y la app Electron viva
 > por CDP) y versionados en `backend-server/public/landing/demo/assets/`. Detalle completo en
 > [`demo-guion.md` §12](demo-guion.md#12-d3-ejecutado-2026-08-27--3236-pasos-capturados-3-pipelines-verificados).
-> Sigue D4 (capturas manuales de extensión + PJN) y D5 (construcción del tour, incluidos los 3
-> mockups de 6.6-6.8).
+> **D5 EJECUTADA el mismo día, saltando D4** (el operador pidió adelantarla — D5 solo depende de D3,
+> no de D4). El tour vive en `backend-server/public/landing/demo/index.html`, con los 32 pasos reales
+> + 6.6-6.8 resueltos como mocks HTML/CSS en vivo (sin imagen) + placeholders explícitos para los 8
+> pasos de D4. Verificado en 375/768/1280 con Playwright real. Detalle en
+> [`demo-guion.md` §13](demo-guion.md#13-d5-ejecutado-2026-08-27--el-tour-publicado-en-backend-serverpubliclandingdemo).
+> Sigue D4 (capturas manuales del operador, se integran solas cuando estén) y D6 (integración en la
+> landing + despliegue).
 
 ---
 
@@ -351,13 +356,13 @@ versionada a propósito, y limpieza de `.playwright-mcp/` al cerrar.
 
 ---
 
-### D5 — Construcción del tour 🟢
+### D5 — Construcción del tour ✅ EJECUTADA (2026-08-27)
 
 | | |
 |---|---|
 | **Modelo / esfuerzo** | Sonnet · **medio** |
 | **Depende de** | D3 (puede arrancar sin D4 y sumar esas capturas después) |
-| **Entregable** | `backend-server/public/landing/demo/index.html` (+ CSS/JS propios) |
+| **Entregable** | `backend-server/public/landing/demo/index.html` (+ CSS/JS propios) — hecho, verificado con Playwright en 375/768/1280 — [`demo-guion.md` §13](demo-guion.md#13-d5-ejecutado-2026-08-27--el-tour-publicado-en-backend-serverpubliclandingdemo) |
 
 - HTML estático, **sistema de diseño de la landing** (ámbar `#d97706`, Inter, Crimson Pro).
 - Navegación por pasos con teclado y con botones; deep-link por capítulo (`/demo/#bitacora`) para

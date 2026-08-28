@@ -585,3 +585,48 @@ cuenta de verificación, no es gratis).
 **Pendiente real para D5 (no bloquea nada de D3):** los 3 mockups de 6.6-6.8, y la decisión de qué
 cuenta usar si se regenera esto más adelante (la de verificación sigue siendo la única disponible
 hasta que exista una cuenta de demo dedicada).
+
+---
+
+## 13. D5 ejecutado (2026-08-27) — el tour, publicado en `backend-server/public/landing/demo/`
+
+**Entregable real:** `backend-server/public/landing/demo/index.html`, un único archivo estático
+(HTML + CSS + JS embebidos, sin `<link>`/`<script src>` externos salvo Google Fonts — mismo patrón
+que ya usa `landing/index.html`, no una inconsistencia nueva), servido tal cual por Nginx.
+
+**Sistema de diseño copiado literal del `:root` de `landing/index.html`** (ámbar `#d97706`, Inter +
+Crimson Pro, las mismas sombras/radios) — no un `<link>` compartido, porque la landing tampoco expone
+su CSS como archivo aparte. El marco de cada captura reusa el mismo patrón visual de ventana con
+semáforo (●●●) que ya existía en el mockup del hero de la landing real, aplicado acá sobre capturas
+REALES en vez de HTML de mentira.
+
+**Navegación:** 8 pestañas de capítulo en el header (con scroll horizontal en mobile, todas visibles
+en desktop) + un stepper por capítulo (flechas, puntos, contador "Paso N de M") + flechas de teclado
+(← → avanzan de paso, y en el borde de un capítulo pasan al siguiente/anterior) + deep-link por
+capítulo vía `location.hash` (`/demo/#bitacora`, etc., tal como pedía el plan) + paginador
+capítulo-a-capítulo al pie de cada uno, con un botón "Probalo gratis" → `/register/` en cada uno.
+
+**Los 32 pasos reales de D3 están integrados**, más:
+- **6.6-6.8, resueltos como HTML/CSS en vivo, no como imágenes**: un mock de editor de código (línea
+  numerada, tema oscuro, entidades enmascaradas resaltadas) para 6.6, y 2 mocks de chat neutro
+  ("Asistente IA", sin nombrar ningún producto de terceros — mismo criterio que ya evitó nombrar
+  ChatGPT/Claude/Gemini en la landing real) para 6.7-6.8. Cero dependencia de ningún sistema — se
+  regeneran solas cada vez que se abre la página, no hace falta volver a capturar nada.
+- **Los 8 pasos de D4** (1.1, 1.2, 8.1-8.5) quedan con una tarjeta de placeholder explícita
+  ("📸 Captura pendiente — D4, captura manual del operador") en vez de una imagen rota — la página
+  queda presentable y honesta mientras esas capturas no existan, y el reemplazo es mecánico: alcanza
+  con agregar el archivo a `assets/<capítulo>/` y cambiar `placeholder:true` por `img:'...'` en el
+  array `CHAPTERS` del script — no hace falta tocar la estructura del HTML.
+
+**Bug real encontrado y corregido verificando en vivo, no solo leyendo el CSS:** en mobile (375px),
+las pestañas de capítulo quedaban comprimidas a ~1.5px de ancho en vez de bajar a su propia fila.
+Causa: `.chapter-nav { flex:1 }` tiene `flex-basis:0%` por el shorthand, así que a flexbox le
+"alcanzaba" con ese resto mínimo de espacio en la primera fila y nunca las forzaba a la segunda,
+pese a `flex-wrap:wrap` en el contenedor. Fix: `flex:1 1 100%` en el breakpoint de 960px, que le pide
+el 100% del ancho como preferido y garantiza el salto de línea. Verificado con Playwright real en
+375/768/1280 — los 3 anchos que pide el plan — no solo el desktop.
+
+**No incluido a propósito (no era parte del alcance de D5):** el sistema de analytics/tracking
+(`track()`, `session_id`) que sí tiene `landing/index.html` — el plan solo pedía el link a
+`/register/`, no instrumentación de funnel. Se puede agregar después si se decide medir el tour por
+separado, sin tocar la estructura actual.
