@@ -845,3 +845,41 @@ deber de supervisión (Sección 6) en una sola idea. `doc-meta` actualizado a 27
 
 **Los 4 (bug del link + 2 aclaraciones del registro + cláusula de TyC) desplegados a staging y
 producción con el mismo procedimiento que D6** (backup, `scp`, `md5sum`, verificación en vivo).
+
+---
+
+## 18. 5to hallazgo real: "Ver demo" desde el portal LOGUEADO seguía bloqueado (2026-08-28)
+
+El fix del punto 17 (URL absoluta) corrigió el 404, pero dejó un problema real de fondo que el
+operador encontró al probarlo de nuevo: **entrando a la demo desde el portal ya logueado, el gate
+seguía mostrando el mismo bloqueo que un visitante anónimo desde la landing.**
+
+**Causa raíz, y un error propio de diseño en §14 (D6):** ese apartado afirmaba *"el mismo token que
+ya usa el portal... leído directo porque `/demo/` vive en el mismo origen"* — **es falso**. El portal
+vive en `api.procuradortool.com`; `/demo/` vive en `procuradortool.com`. Son **dos orígenes
+distintos**, y `localStorage` está aislado por origen — el token que el portal guarda en el suyo
+**nunca fue legible** desde `/demo/`, ni antes ni después del fix del link. El gate, tal como estaba
+escrito, era estructuralmente imposible de desbloquear desde un click real del portal — solo se
+había verificado inyectando el token a mano vía `localStorage.setItem()` en el MISMO origen del
+navegador de prueba, lo que ocultó el problema en la verificación de D6.
+
+**Fix: el mismo patrón `#sso=` que el proyecto ya usa para que Electron entre logueado al portal**
+(`openPortalSection()`, documentado en la sección "Navegación al portal web con auto-login (SSO)" de
+`CLAUDE.md`). Adaptado a cruzar el origen inverso (portal → demo, no Electron → portal):
+- `usuarios/app.js`, nueva función `wireVerDemoLinks()` — llamada desde `initDashboard()` una vez
+  confirmada la sesión. Lee el token con el `getToken()` ya existente y reescribe el `href` de los 2
+  links "Ver demo" (agregados `id`s `nav-ver-demo`/`topbar-ver-demo` en `usuarios/index.html`) a
+  `https://procuradortool.com/demo/#sso=<token>`. Los `<a href="...">` estáticos originales quedan
+  como fallback si el JS no llega a correr.
+- `landing/demo/index.html`, nueva función `consumirTokenDesdeHash()` — corre una sola vez al cargar
+  la página, ANTES de la primera llamada a `chapterIndexFromHash()`/`renderChapter()`: si el hash
+  empieza con `#sso=`, guarda el token en el `localStorage` **de la propia demo** bajo la misma key
+  (`psc_user_token`) y limpia el hash con `history.replaceState()` (para no dejar el token crudo en
+  la barra de direcciones ni confundir el router de capítulos).
+
+**Verificado local con headless Chrome, en 2 pasos que reproducen el flujo real completo:** (1)
+cargar `demo/index.html#sso=<token-de-prueba>` → los 8 capítulos aparecen sin candado, "El problema"
+renderiza normal (el hash se consume y el chapter cae al default) → (2) **recargar sin el `#sso=`**
+en el mismo perfil de navegador, directo a `#markdown` → sigue desbloqueado, confirmando que el
+token quedó persistido en el `localStorage` de la demo y no dependía de que el hash siguiera
+presente. Desplegado a staging y producción con el mismo procedimiento (backup, `scp`, `md5sum`).

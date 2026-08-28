@@ -419,13 +419,32 @@ function chapterIndexFromHash() {
 // El resto de la demo (más allá de "El problema" y "Procuración") es una
 // guía para clientes ya registrados, no un gancho de venta — así que el
 // gate es de UX, no de seguridad: mismo token que usa el portal
-// (usuarios/app.js, TOKEN_KEY='psc_user_token'), leído directo porque
-// /demo/ vive en el mismo origen. Si no hay token, o está vencido, lo peor
-// que pasa es que alguien vea 2 capítulos más de screenshots ya públicos —
-// no hay nada sensible detrás del gate.
+// (usuarios/app.js, TOKEN_KEY='psc_user_token'). Si no hay token, o está
+// vencido, lo peor que pasa es que alguien vea 2 capítulos más de
+// screenshots ya públicos — no hay nada sensible detrás del gate.
+//
+// ⚠️ /demo/ vive en `procuradortool.com`; el portal vive en
+// `api.procuradortool.com` — son ORÍGENES DISTINTOS, así que el localStorage
+// del portal no es legible acá directo (bug real reportado por el operador:
+// "Ver demo" desde el portal logueado seguía mostrando el gate bloqueado,
+// igual que un visitante anónimo desde la landing). Fix: el portal pasa el
+// token por el hash de la URL (`#sso=<token>`, mismo patrón ya usado para
+// que Electron entre logueado al portal — ver `usuarios/app.js`,
+// `wireVerDemoLinks()`) y esta página lo consume una sola vez al cargar,
+// guardándolo en SU PROPIO localStorage bajo la misma key.
 const TOKEN_KEY = 'psc_user_token';
 const CAPITULOS_LIBRES = ['problema', 'procuracion'];
 const PORTAL_URL = 'https://api.procuradortool.com/usuarios/';
+
+function consumirTokenDesdeHash() {
+  if (!location.hash.startsWith('#sso=')) return;
+  const token = decodeURIComponent(location.hash.slice(5));
+  try { if (token) localStorage.setItem(TOKEN_KEY, token); } catch (_) {}
+  // Limpia el hash para no dejar el token crudo en la barra de direcciones
+  // ni confundir al router de capítulos (chapterIndexFromHash).
+  history.replaceState(null, '', location.pathname + location.search);
+}
+consumirTokenDesdeHash();
 
 function haySesion() {
   try { return !!localStorage.getItem(TOKEN_KEY); } catch (_) { return false; }

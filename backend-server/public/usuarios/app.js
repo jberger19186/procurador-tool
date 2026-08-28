@@ -310,6 +310,16 @@ function doLogout() {
 }
 
 // ─── INIT DASHBOARD ───────────────────────────────────────────────────────────
+function wireVerDemoLinks() {
+    const token = getToken();
+    if (!token) return;
+    const url = 'https://procuradortool.com/demo/#sso=' + encodeURIComponent(token);
+    const nav = document.getElementById('nav-ver-demo');
+    const topbar = document.getElementById('topbar-ver-demo');
+    if (nav) nav.href = url;
+    if (topbar) topbar.href = url;
+}
+
 async function initDashboard() {
     document.getElementById('login-page').style.display = 'none';
     document.getElementById('app').classList.add('visible');
@@ -325,6 +335,13 @@ async function initDashboard() {
     if (state.account && !state.account.emailVerified) {
         showEmailVerificationBanner();
     }
+
+    // "Ver demo" — /demo/ vive en un origen distinto (procuradortool.com, no
+    // api.procuradortool.com), así que su gate de sesión no puede leer el
+    // localStorage del portal directo. Se pasa el token por el hash (mismo
+    // patrón #sso= que ya usa Electron para entrar logueado al portal) para
+    // que la demo lo tome y quede desbloqueada para un usuario ya logueado.
+    wireVerDemoLinks();
 
     // Cargar contador de notificaciones no leídas (badge sidebar)
     refreshNotifBadge();
