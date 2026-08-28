@@ -639,15 +639,18 @@ separado, sin tocar la estructura actual.
 despliegue), a pedido del operador — 2 decisiones nuevas, ninguna anticipada por D1-D5:
 
 **A. Integración en `landing/index.html`** (lo que sí preveía el plan):
-- Navbar: agregado `El problema` (→ `#problema`, no tenía link propio hasta ahora) y `Ver demo`
-  (→ `/demo/`, junto a `Planes`).
+- Navbar: agregado `El problema` (→ `#problema`, no tenía link propio hasta ahora). `Ver demo`
+  pasó POR el navbar en una iteración intermedia y se sacó de ahí en la definitiva — queda solo en
+  el hero-adyacente (ver abajo), no duplicado en la barra superior.
 - Hero: pasa de 2 a **3 botones** — `Empezar ahora` (primario, sin cambios) · `El problema`
   (→ `#problema`) · `La solución` (→ `#solucion`, el mockup estático que antes usaba
-  `Ver cómo funciona`). `Ver demo` NO queda acá — 2 iteraciones hasta llegar a esta distribución:
+  `Ver cómo funciona`). `Ver demo` NO queda acá — 3 iteraciones hasta llegar a esta distribución:
   1ra, lo mové al navbar solo, sin confirmarlo explícitamente (el operador lo notó: "no quedó como
-  se había propuesto"); 2da, lo puse como 4to botón del hero (lo que sí se había pedido); 3ra y
-  definitiva, el operador pidió sacarlo del hero (que quedó en 3) y agregar un `Ver demo` propio
-  **debajo del mockup de `#solucion`** — más contextual ahí que compitiendo en la fila del hero.
+  se había propuesto"); 2da, lo puse como 4to botón del hero (lo que sí se había pedido
+  originalmente); 3ra, el operador pidió sacarlo del hero (que quedó en 3) y ponerlo debajo del
+  mockup de `#solucion` en su lugar — dejándolo TAMBIÉN en el navbar en ese momento; 4ta y
+  definitiva, el operador pidió sacarlo del navbar también — queda en un solo lugar (debajo del
+  mockup), no repetido en 2.
 - Debajo del `app-frame` (el mockup falso) en `#solucion`: botón `Ver demo` (→ `/demo/`), como
   siguiente paso natural después de ver la ventana de mentira — "esto es un mockup, la demo real
   está acá".
