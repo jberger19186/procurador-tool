@@ -18,11 +18,15 @@
 ## §1 — El mapa
 
 ```
-  ETAPA 1 — MEJORAS DE PRODUCTO            ┌── CARRIL PARALELO ──────────────┐
+  ETAPA 1 — MEJORAS DE PRODUCTO            ┌── CARRILES PARALELOS ───────────┐
   (lo que se muestra y se vende)           │  AZ — Azure Trusted Signing     │
     1.1 Bitácora F3.4                  ✅  │  (trámite externo, 1-3 días      │
     1.2 Módulo Markdown / anonimiz.    ✅  │   hábiles — ARRANCA EL DÍA 0)   │
-    1.3 Landing + TyC (beta, límites)  ✅  └─────────────────────────────────┘
+    1.3 Landing + TyC (beta, límites)  ✅  │                                 │
+                                           │  AG — Auditoría independiente   │
+                                           │  con Antigravity (el gate A0 ya │
+                                           │  se puede correr — ver §7b)     │
+                                           └─────────────────────────────────┘
     1.4 Guía de backup y recuperación  ✅
     1.5 Control periódico contra PJN   ✅
     1.6 Demo reproducible en landing   ✅  CERRADA (41/43 pasos — 8.3/8.4 descartados por el operador)
@@ -364,6 +368,40 @@ términos que no reflejan que el producto está en prueba es exposición inneces
 | **Pasos** | Cuenta Azure → Trusted Signing Account → Certificate Profile (Public Trust) → App Registration → 5 variables de entorno → configurar `electron-builder` |
 | **Quién** | El trámite es del operador. La configuración de `electron-builder` es 1 sesión, Sonnet/bajo |
 | **Beneficio colateral ya documentado** | El bloqueo de SmartScreen fue exactamente lo que trabó dos veces la instalación del auto-update durante las pruebas de F3.0 (el instalador quedaba en el escritorio seguro, invisible para cualquier automatización). Un instalador firmado elimina esa fricción también para el testing |
+
+---
+
+## §7b — Carril paralelo — AG: auditoría independiente con Antigravity *(agregado 2026-08-28)*
+
+| | |
+|---|---|
+| **Plan** | `C:\Users\JONATHAN\source\repos\proyecto\auditoria pt antigravity\` — carpeta propia, **fuera de este repo** (incluye un script que copia el código, no corresponde versionarlo acá) |
+| **Qué es** | 4 fases (A0–A3) de code-review y security-review ejecutadas con **Gemini** desde Google Antigravity, sobre una **copia sanitizada** del repo |
+| **Por qué existe** | Cubre el **único hueco que las Etapas 2 y 3 admiten por escrito que no pueden cubrir**: el sesgo de que el mismo agente que escribió el código sea el que lo audita. §8 del plan SEC-2 lo dice textual — *"ningún nivel de esfuerzo lo corrige"* |
+| **Modelo / esfuerzo** | A0 → **Gemini 3.1 Pro `High`** · A1 y A2 → **3.7 Flash `High`** · A3 → **3.7 Flash `Medium`** |
+| **Sesiones** | **1,5 para el gate A0.** Si pasa: 7,5–10,5 en total, incluido el triage con Claude |
+| **Cuándo** | **A0 se puede correr hoy** — no depende de nada. **A1 después de la Etapa 2** · **A2 después de la Etapa 3** |
+| **Quién** | El operador desde Antigravity; **el triage y los fixes los escribe Claude** |
+
+**No suma al camino crítico y no reemplaza nada.** Es un complemento que se puede saltear entero: si
+el gate **A0** no encuentra nada que las campañas de Claude no vayan a encontrar igual, se desestima
+**con evidencia** y el roadmap sigue exactamente igual.
+
+**El caso que lo justifica, en una línea:** el motor de anonimización lo escribió Claude, el corpus
+adversarial que lo evalúa lo escribió Claude, el resultado es 0,0 % de falsos negativos, y la fase
+**F5** que va a revisarlo —también escrita por Claude— se pregunta *"¿el corpus mide lo que dice
+medir, o está construido a la medida del motor?"*. Esa pregunta el autor no la puede responder sobre
+su propio trabajo.
+
+🚨 **Dos reglas que anulan el ejercicio si se rompen:** Antigravity **nunca** abre el repo real (usa
+una copia sanitizada que arma su propio script, ya probado end-to-end), y el modelo **nunca** puede
+ser Claude —lo ofrece entre sus opciones— porque el único aporte estructural es que audite **otra
+familia de modelos**. Abrir "una sesión nueva de Claude" **no** sustituye eso: cambia el contexto, no
+el sesgo.
+
+> **Relación con EXT** (auditoría externa profesional, sigue pendiente): **no la reemplaza** — no da
+> atestación firmada, que es lo que pide un cliente institucional. La **abarata**: el auditor llega a
+> un producto más limpio y su encargo pasa de *descubrimiento* a *confirmación*.
 
 ---
 
