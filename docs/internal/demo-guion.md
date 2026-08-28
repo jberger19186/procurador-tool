@@ -883,3 +883,35 @@ renderiza normal (el hash se consume y el chapter cae al default) → (2) **reca
 en el mismo perfil de navegador, directo a `#markdown` → sigue desbloqueado, confirmando que el
 token quedó persistido en el `localStorage` de la demo y no dependía de que el hash siguiera
 presente. Desplegado a staging y producción con el mismo procedimiento (backup, `scp`, `md5sum`).
+
+### ⚠️ La consecuencia de seguridad de este fix, detectada el mismo día (2026-08-28)
+
+**Leer esto antes de volver a tocar el gate.** El fix de arriba es correcto y el gate está bien como
+está — es de **UX**, no de seguridad: detrás no hay nada sensible, son capturas que igual son
+públicas, y por eso no chequea expiración ni valida el token contra ningún endpoint. Eso no cambia.
+
+**Lo que sí cambió es dónde vive la credencial.** Al pasar el JWT del portal por el fragmento, el
+token queda guardado en el `localStorage` de **`procuradortool.com`**, y ahí:
+
+| | |
+|---|---|
+| **Nunca se borra** | No hay logout en ese origen ni chequeo de expiración — el gate solo evalúa `!!localStorage.getItem(...)`. Un logout del portal **no** lo limpia: son orígenes distintos |
+| **Vigencia del token** | 8 h (`/auth/portal-login`), con acceso completo a `/usuarios/api/*` y `/client/*` |
+| **Headers del vhost** | **Ninguno** — verificado el 28/08: `/etc/nginx/sites-available/procuradortool` no tiene un solo `add_header`. La CSP del fix B-5 vive en Helmet, o sea **solo en Express**; la landing la sirve Nginx directo |
+
+Hasta la Etapa 1, un XSS en la landing era un defacement. Con el token ahí, es un robo de sesión.
+**No es urgente** (hace falta un XSS en ese origen, y hoy `/demo/index.html` no interpola ningún
+input externo), pero sí es una clase de riesgo nueva: cualquier contenido dinámico que se agregue
+después a esa página —o cualquier script de terceros que se sume a la landing, un pixel, un tag de
+marketing— pasa a tener alcance sobre la sesión del usuario.
+
+**Lo que sí quedó bien resuelto y no hay que "arreglar":** el fragmento **no viaja al servidor** (los
+`#` no se mandan en la request ni en el `Referer`) y `history.replaceState()` lo borra de la barra
+apenas se consume, así que tampoco queda en el historial.
+
+**Dónde se resuelve:** es el bloque **S11** de
+[`plan-seguridad-lanzamiento-2026-08.md`](plan-seguridad-lanzamiento-2026-08.md) (Etapa 3), con dos
+opciones ya planteadas para el operador — un **token propio, efímero y sin privilegios** solo para
+desbloquear la demo (elimina la clase de riesgo entera), o la mitigación mínima de **agregar headers
+al vhost + descartar el token vencido**. **No se toca desde acá**: si alguien cambia este mecanismo
+antes de que S11 corra, actualizar también ese bloque.

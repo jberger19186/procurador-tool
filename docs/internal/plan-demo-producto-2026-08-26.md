@@ -3,8 +3,13 @@
 > **Pedido del operador (2026-08-26):** una presentación *que pueda reproducirse*, armada con
 > capturas reales de la aplicación y de las pantallas web, **con los datos de usuarios y
 > expedientes esfumados**, accesible desde la landing page, que muestre las funciones incluyendo
-> **Bitácora, Markdown y la extensión de Chrome**. Referencia de encuadre: las 36 capturas de
-> `C:\Users\JONATHAN\Desktop\ordenar\imagenes`.
+> **Bitácora, Markdown y la extensión de Chrome**. Referencia de encuadre: las capturas del operador.
+> ⚠️ **Corrección (2026-08-27):** la ruta que citaba este pedido (`Desktop\ordenar\imagenes`) **no
+> existía** — se buscó en Desktop y OneDrive completos sin resultado. El operador ubicó la carpeta real
+> en `C:\Users\JONATHAN\Pictures\Screenshots\imagenes_pt` (**34 capturas**, no 36) y se revisaron una
+> por una contra el guion. 🚨 **Ninguna resultó reutilizable tal cual**: tienen el CUIT real del
+> operador visible en al menos 6 pantallas, su email, y carátulas con nombres de partes reales.
+> Sirvieron de referencia de encuadre, **nunca como asset final**.
 >
 > **Lugar en el proyecto:** **Etapa 1.6** de `docs/internal/roadmap-salida-a-mercado-2026-08.md` —
 > el último bloque de la etapa de producto, porque necesita que Bitácora F3.4 y el módulo Markdown
@@ -50,6 +55,16 @@
 > corregidos y desplegados: link "Ver demo" del portal con URL relativa rota (404), 2 aclaraciones
 > de copy en el registro (extensión/Bitácora/Markdown) y una cláusula unificada de beta en los TyC —
 > ver [`demo-guion.md` §17](demo-guion.md#17-4-hallazgos-reales-encontrados-en-una-revisión-del-operador-tras-el-despliegue-de-d4).
+> **Un 5to hallazgo, el 2026-08-28: "Ver demo" desde el portal LOGUEADO seguía mostrando el gate de
+> bloqueo**, igual que un visitante anónimo. Causa raíz: el gate leía el token del portal asumiendo
+> mismo origen, y **son orígenes distintos** (`api.procuradortool.com` vs `procuradortool.com`) — era
+> estructuralmente imposible de desbloquear desde un click real. Corregido con el mismo patrón `#sso=`
+> que el proyecto ya usa para que Electron entre logueado al portal. Detalle en
+> [`demo-guion.md` §18](demo-guion.md). ⚠️ **Ese fix arrastró una consecuencia de seguridad, detectada
+> el mismo día, que NO es alcance de este plan:** el JWT del usuario pasa a persistir en el
+> `localStorage` del origen de la landing, que no tiene ningún header de seguridad. Es el bloque
+> **S11** de [`plan-seguridad-lanzamiento-2026-08.md`](plan-seguridad-lanzamiento-2026-08.md),
+> Etapa 3 — no un pendiente de este documento.
 
 ---
 
