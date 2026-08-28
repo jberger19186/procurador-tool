@@ -640,13 +640,17 @@ despliegue), a pedido del operador — 2 decisiones nuevas, ninguna anticipada p
 
 **A. Integración en `landing/index.html`** (lo que sí preveía el plan):
 - Navbar: agregado `El problema` (→ `#problema`, no tenía link propio hasta ahora) y `Ver demo`
-  (→ `/demo/`).
-- Hero: pasa de 2 a **4 botones** — `Empezar ahora` (primario, sin cambios) · `El problema`
+  (→ `/demo/`, junto a `Planes`).
+- Hero: pasa de 2 a **3 botones** — `Empezar ahora` (primario, sin cambios) · `El problema`
   (→ `#problema`) · `La solución` (→ `#solucion`, el mockup estático que antes usaba
-  `Ver cómo funciona`) · `Ver demo` (→ `/demo/`, el que antes era `Ver cómo funciona`). Pedido
-  explícito del operador — un primer intento los había movido al navbar en vez del hero, para no
-  saturar la fila; el operador prefirió los 4 en el hero como los había pedido originalmente, y así
-  quedó tras corregirlo.
+  `Ver cómo funciona`). `Ver demo` NO queda acá — 2 iteraciones hasta llegar a esta distribución:
+  1ra, lo mové al navbar solo, sin confirmarlo explícitamente (el operador lo notó: "no quedó como
+  se había propuesto"); 2da, lo puse como 4to botón del hero (lo que sí se había pedido); 3ra y
+  definitiva, el operador pidió sacarlo del hero (que quedó en 3) y agregar un `Ver demo` propio
+  **debajo del mockup de `#solucion`** — más contextual ahí que compitiendo en la fila del hero.
+- Debajo del `app-frame` (el mockup falso) en `#solucion`: botón `Ver demo` (→ `/demo/`), como
+  siguiente paso natural después de ver la ventana de mentira — "esto es un mockup, la demo real
+  está acá".
 - Las 6 tarjetas de función (`#features`) ganaron un link `Ver en la demo →` al pie, con deep-link
   directo a su capítulo (`.feat-demo-link`, nueva clase CSS).
 - **Bug real encontrado de paso, no buscado:** el mockup de la app en `#solucion` (la ventana falsa
