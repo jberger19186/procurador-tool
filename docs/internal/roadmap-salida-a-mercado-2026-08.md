@@ -25,7 +25,7 @@
     1.3 Landing + TyC (beta, límites)  ✅  └─────────────────────────────────┘
     1.4 Guía de backup y recuperación  ✅
     1.5 Control periódico contra PJN   ✅
-    1.6 Demo reproducible en landing   🔄  (41/43 pasos en producción, faltan 8.3 y 8.4)
+    1.6 Demo reproducible en landing   ✅  CERRADA (41/43 pasos — 8.3/8.4 descartados por el operador)
               │
               ▼
   ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
@@ -223,14 +223,14 @@ protecciones · tarjeta reescrita en Diagnóstico con el comando de computer-use
 **La primera corrida real** (app v2.7.50 contra el PJN) dio **los 5 flujos en `ok`**, con el
 consumo de cupo cuadrando exacto con el modelo documentado.
 
-### 1.6 — Demo reproducible del producto en la landing ⏳ D1-D3/D5/D6 EN PRODUCCIÓN, falta solo D4
+### 1.6 — Demo reproducible del producto en la landing ✅ CERRADA (41/43 pasos)
 
 | | |
 |---|---|
 | **Plan** | [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md) — revisado el 2026-08-27 con un spike de capacidad |
 | **Guion** | ✅ **[`demo-guion.md`](demo-guion.md)** (D1, 2026-08-27, revisado contra 34 capturas reales + capítulo de Portal agregado) — 8 capítulos, 43 pasos (36 D3 / 7 D4) |
 | **Qué es** | Tour guiado en HTML estático servido desde `/demo/`, con capturas reales anonimizadas + clips cortos, un capítulo por módulo, linkeable desde cada tarjeta de la landing — el resto de los capítulos más allá de "El problema"/"Procuración" quedan gateados a clientes logueados (D6) |
-| **Fases** | **6 (D1–D6)** · **D1 ✅ · D2 ✅ · D3 ✅** (32/36 pasos capturados con Playwright real) **· D5 ✅** (el tour, `backend-server/public/landing/demo/index.html` — [`demo-guion.md` §13](demo-guion.md#13-d5-ejecutado-2026-08-27--el-tour-publicado-en-backend-serverpubliclandingdemo)) **· D6 ✅ desplegada a producción** (navbar + hero + tarjetas de la landing, gate de sesión en `/demo/`, entradas nuevas en el portal — alcance ampliado a pedido del operador, verificado en vivo contra `procuradortool.com` — [`demo-guion.md` §14](demo-guion.md#14-d6-implementado-2026-08-27--integración-en-landing--portal-con-gate-para-clientes)) · **D4 parcial (5/7)**: 1.1/1.2/8.1/8.2/8.5 resueltos como mocks sintéticos a partir de material real del operador (ninguno usado tal cual — todos tenían datos reales de terceros) — quedan **8.3 y 8.4** (autocompletado en el sitio real del PJN), sin material todavía — [`demo-guion.md` §15](demo-guion.md#15-d4-ejecutada-parcialmente-2026-08-27--57-pasos-resueltos-como-mocks-no-como-screenshots-reales) |
+| **Fases** | **6 (D1–D6), las 6 ✅** — D1/D2/D3 (32/36 pasos con Playwright real) · D5 (el tour, `backend-server/public/landing/demo/index.html` — [`demo-guion.md` §13](demo-guion.md#13-d5-ejecutado-2026-08-27--el-tour-publicado-en-backend-serverpubliclandingdemo)) · D6 desplegada a producción (navbar + hero + tarjetas de la landing, gate de sesión en `/demo/`, entradas nuevas en el portal — [`demo-guion.md` §14](demo-guion.md#14-d6-implementado-2026-08-27--integración-en-landing--portal-con-gate-para-clientes)) · **D4 (5/7): 1.1/1.2/8.1/8.2/8.5 resueltos como mocks sintéticos a partir de material real del operador** (ninguno usado tal cual — todos tenían datos reales de terceros) — **8.3 y 8.4 (autocompletado en el sitio real del PJN) descartados por decisión explícita del operador**, no quedan pendientes — [`demo-guion.md` §15-16](demo-guion.md#15-d4-ejecutada-parcialmente-2026-08-27--57-pasos-resueltos-como-mocks-no-como-screenshots-reales). **Además, 4 hallazgos reales encontrados por el operador tras el despliegue, los 4 corregidos**: el link "Ver demo" del portal daba 404 (usaba una ruta relativa desde un origen distinto al de la landing) · el registro no aclaraba que los 5 flujos de las promos son de la extensión · el plan Combo no mencionaba Bitácora/Markdown en su detalle · los TyC no unían en una sola cláusula "todo es beta + depende de un tercero + hay que supervisar todo" — [`demo-guion.md` §17](demo-guion.md#17-4-hallazgos-reales-encontrados-en-una-revisión-del-operador-tras-el-despliegue-de-d4) |
 | **Modelo / esfuerzo** | Sonnet en las 6 · `alto` solo en D3 (volumen: ~40 pantallas) |
 | **Sesiones** | **~5,5** + **~15 min del operador** (ya no una sesión conjunta) |
 | **Depende de** | 1.1 ✅ · 1.2 ✅ (con su release, `electron-v2.7.51`) · 1.3 ✅ — **sin dependencias pendientes** para arrancar D2 |

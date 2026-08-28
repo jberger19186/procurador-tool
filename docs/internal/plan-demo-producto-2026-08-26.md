@@ -42,11 +42,14 @@
 > imposibles de publicar directo.** Reconstruidos como mocks HTML/CSS con datos sintéticos (mismo
 > criterio que los pasos 6.6-6.8), reusando los fixtures ya establecidos del proyecto — cero bytes
 > reales en el archivo final. Resueltos: **1.1, 1.2** (El problema) y **8.1, 8.2, 8.5** (Extensión).
-> **Siguen pendientes, genuinamente sin material: 8.3 y 8.4** (autocompletado en el sitio real del
-> PJN — Consulta SCW y Escritos). Detalle completo, incluida la corrección de qué archivo real
-> mapea a qué paso del guion, en
-> [`demo-guion.md` §15](demo-guion.md#15-d4-ejecutada-parcialmente-2026-08-27--57-pasos-resueltos-como-mocks-no-como-screenshots-reales).
-> **Etapa 1.6 queda en 41/43 pasos** — solo faltan 8.3 y 8.4.
+> **8.3 y 8.4 (autocompletado en el sitio real del PJN — Consulta SCW y Escritos) DESCARTADOS por
+> decisión explícita del operador** — no quedan pendientes, la Etapa 1.6 cierra en 41/43 pasos.
+> Detalle completo, incluida la corrección de qué archivo real mapea a qué paso del guion, en
+> [`demo-guion.md` §15-16](demo-guion.md#15-d4-ejecutada-parcialmente-2026-08-27--57-pasos-resueltos-como-mocks-no-como-screenshots-reales).
+> **✅ ETAPA 1.6 CERRADA.** Además, 4 hallazgos reales del operador tras el despliegue, los 4
+> corregidos y desplegados: link "Ver demo" del portal con URL relativa rota (404), 2 aclaraciones
+> de copy en el registro (extensión/Bitácora/Markdown) y una cláusula unificada de beta en los TyC —
+> ver [`demo-guion.md` §17](demo-guion.md#17-4-hallazgos-reales-encontrados-en-una-revisión-del-operador-tras-el-despliegue-de-d4).
 
 ---
 
@@ -200,7 +203,7 @@ mejor como material comercial que una barra negra, que transmite "acá hay algo 
 | **D1** | Guion y selección de flujos | Sonnet | **medio** | ~1 | `docs/internal/` | — | ✅ sí — ordena el pedido aunque no se capture nada |
 | **D2** | Fixtures sintéticos + capa de sustitución | Sonnet | **medio-alto** | ~1 | `dev-tools/demo-fixtures/` | D1 | parcial |
 | **D3** | Pipeline de captura automatizado | Sonnet | **alto** | ~1,5 | script + `assets/` | D2 · **release de Electron** (ver §0.1) | ✅ sí — el activo reutilizable |
-| **D4** | Capturas manuales (extensión + PJN) | Sonnet | **bajo** | ~0,5 | `assets/` | D1 · **~15 min del operador** | parcial |
+| **D4** | Capturas manuales (extensión + PJN) | Sonnet | **bajo** | ~0,5 | `assets/` | D1 · **~15 min del operador** | ✅ cerrado (5/7, 8.3/8.4 descartados) |
 | **D5** | Construcción del tour | Sonnet | **medio** | ~1 | `landing/demo/` | D3 (D4 puede llegar después) | ✅ sí |
 | **D6** | Integración en la landing + despliegue | Sonnet | **bajo** | ~0,5 | `landing/` | D5 · Etapa **1.3** | ✅ sí |
 | | **Total** | | | **~5,5** | | | |

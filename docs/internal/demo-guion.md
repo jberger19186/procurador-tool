@@ -789,3 +789,59 @@ posterior). Verificado local con headless Chrome que las 5 imágenes cargan y se
 (`#problema` muestra "Paso 1 de 2" con contenido real en ambos pasos; `#extension` no se pudo
 re-verificar visualmente con el gate desbloqueado por falta de Playwright en esta sesión, pero los
 200/carga de archivo ya están confirmados y el mecanismo del gate ya estaba verificado en D6).
+
+---
+
+## 16. 8.3 y 8.4 DESCARTADOS por decisión del operador (2026-08-27) — Etapa 1.6 cierra en 41/43
+
+El operador confirmó explícitamente: **no se van a perseguir más capturas para 8.3 y 8.4**
+(autocompletado en el sitio real del PJN — Consulta SCW y Escritos). No es un olvido ni queda como
+"pendiente eterno" — es una decisión de alcance: la Etapa 1.6 cierra con **41 de los 43 pasos**
+reales del guion, y esos 2 quedan fuera de alcance del tour. Si en el futuro aparece material real
+para esos 2 pasos, se pueden sumar sin tocar la estructura (mismo mecanismo mecánico que el resto:
+agregar el archivo + cambiar `placeholder:true` por `img:'...'`), pero no es trabajo pendiente de
+ninguna sesión.
+
+## 17. 4 hallazgos reales encontrados en una revisión del operador tras el despliegue de D4
+
+Revisando el resultado en producción, el operador encontró 3 problemas reales (más el punto 16 de
+arriba) — ninguno relacionado con la demo en sí:
+
+**🐞 Bug real: "Ver demo" del portal daba `{"error":"Endpoint no encontrado","path":"/demo/"}`.**
+Causa: los 2 links agregados en D6 (`usuarios/index.html`, sidebar + topbar) usaban `href="/demo/"`
+— una ruta **relativa a la raíz**. El portal vive en `api.procuradortool.com/usuarios/`, un origen
+**distinto** al de la landing (`procuradortool.com`, donde sí existe `/demo/`) — así que el navegador
+resolvía la ruta contra `api.procuradortool.com/demo/`, que no existe (Express, no Nginx estático,
+responde ahí) → el catch-all de Express devuelve el JSON 404 genérico. **No se detectó en la
+verificación de D6** porque esa verificación probó los links por atributo (`href` correcto en el
+HTML) y por navegación directa a `https://procuradortool.com/demo/` — nunca se clickeó el link real
+**desde el origen del portal**. Fix: los 2 `href` pasan a la URL absoluta
+`https://procuradortool.com/demo/`.
+
+**📝 Registro — el plan de solo extensión no aclaraba que los 5 flujos son de la extensión.**
+`register/index.html`, sección `flowsSection` (visible solo con `EXTENSION_PROMO` seleccionado): el
+texto decía "tenés todos los flujos incluidos" sin especificar de qué — ambiguo para alguien que no
+conoce la arquitectura del producto. Corregido a "los 5 flujos de la extensión Chrome incluidos".
+
+**📝 Registro — el plan Combo no mencionaba Bitácora ni Markdown, y tampoco aclaraba el origen de
+los 5 flujos.** `betaSection` (visible con `COMBO_PROMO`) listaba los mismos 5 chips de flujo sin
+decir que son de la extensión, y su bloque `beta-features` solo tenía 2 tarjetas (Procuración ·
+Informes y monitoreo) — **sin mencionar Bitácora ni Markdown**, pese a que **ambos flags están
+encendidos en `COMBO_PROMO` en producción** (verificado por SQL antes de escribir el copy:
+`bitacora_enabled=true`, `markdown_enabled=true`). Corregido: agregada una línea aclarando que los 5
+chips son de la extensión, y 2 tarjetas nuevas (mismo estilo `beta-feature-item` ya existente) para
+Bitácora y Markdown/Anonimización.
+
+**📜 TyC — no había una cláusula única y explícita que uniera "todo el servicio es beta" + "depende
+de internet y de un tercero" + "por eso hay que supervisar todo".** Las piezas ya existían
+**dispersas**: la Sección 2 lista los componentes, la Sección 3 nombraba Bitácora/Markdown/Extensión
+como "en desarrollo activo" (pero sin decir explícitamente que los flujos CORE de la app —
+Procuración/Informes/Monitoreo — también son beta, dejando una lectura ambigua de que solo lo nuevo
+lo es), la Sección 6 tiene el deber de supervisión, y la Sección 7(a) tiene la dependencia de
+internet/PJN — pero nunca conectadas en un solo párrafo. Corregido en la **Sección 3**: nuevo párrafo
+que enumera explícitamente TODOS los flujos de la app y TODOS los de la extensión como beta sin
+excepción, y un segundo párrafo que conecta la dependencia de internet + tercero (Sección 7a) con el
+deber de supervisión (Sección 6) en una sola idea. `doc-meta` actualizado a 27/08/2026.
+
+**Los 4 (bug del link + 2 aclaraciones del registro + cláusula de TyC) desplegados a staging y
+producción con el mismo procedimiento que D6** (backup, `scp`, `md5sum`, verificación en vivo).
