@@ -62,7 +62,8 @@ Cuatro razones, todas económicas — ninguna estética:
 3. **Todo antes que MercadoPago.** El día que las credenciales de MP sean reales, cada bug del camino
    del pago cuesta dinero. B3 debe entrar sobre código ya revisado y auditado, no al revés. Por eso
    la fase **F7 (cobranza) del code-review es un gate duro** de la Etapa 4.
-4. **AZ arranca el día 0.** Es lo único cuyo tiempo no lo controlamos (Certificate Profile: 1-3 días
+4. **AZ va al FINAL** *(decisión del operador, 2026-08-30 — antes decía "arranca el día 0")*.
+   Es lo único cuyo tiempo no lo controlamos (Certificate Profile: 1-3 días
    hábiles). No bloquea nada, pero si se deja para el final, el lanzamiento queda esperando un
    trámite. Arranca en paralelo con la Etapa 1 y se olvida hasta que llegue.
 
@@ -359,7 +360,14 @@ términos que no reflejan que el producto está en prueba es exposición inneces
 
 ---
 
-## §7 — Carril paralelo — AZ (Azure Trusted Signing)
+## §7 — AZ (Azure Trusted Signing) — **al final del roadmap**
+
+> 🔄 **Cambiado el 2026-08-30, a pedido del operador.** Hasta esa fecha este bloque decía
+> *"carril paralelo, arranca el día 0"*, con el argumento de que es el único trámite cuyo
+> tiempo no controlamos. **Pasa al final.** La consecuencia que se asume, dicha explícita
+> para que nadie la redescubra: el lanzamiento va a esperar hasta **3 días hábiles** por el
+> Certificate Profile. Se acepta porque la ventana es corta y porque el trámite tiene un
+> costo mensual que no conviene abrir mientras el producto todavía no se lanza.
 
 | | |
 |---|---|
@@ -447,7 +455,7 @@ Las que este roadmap existe para hacer visibles. Cada una es un error concreto q
 | **4** | **F7 (cobranza) es el gate de B3, y va al final de la Etapa 2** | Correrla al principio y entrar a B3 ocho sesiones después obliga a revalidarla |
 | **5** | **Los TyC de beta se publican antes del primer cobro real** | Se cobra con términos que no dicen que el producto está en prueba |
 | **6** | ~~**1.3 (landing) y 1.6 (demo) tocan el mismo archivo**~~ — ✅ **resuelto**: 1.3 se cerró el 2026-08-26, así que 1.6 ya no compite con nadie por `landing/index.html` | (era: dos sesiones editando el mismo archivo en paralelo = conflicto) |
-| **7** | **AZ arranca el día 0** | El lanzamiento queda esperando un trámite de 3 días que podría haber corrido en paralelo desde el principio |
+| **7** | ~~AZ arranca el día 0~~ → **AZ va al final** *(cambiado 2026-08-30)* | La consecuencia asumida: el lanzamiento espera hasta **3 días hábiles** por el Certificate Profile. Se acepta porque la ventana es corta y el trámite tiene costo mensual que conviene no abrir antes de tiempo |
 | **8** | ~~**El módulo Markdown tiene su propio gate (M0) antes de M1**~~ ✅ **resuelto 2026-08-26** | Se construían 6 sesiones de módulo para descubrir recién ahí que los adjuntos necesitan sesión del PJN. **M0 se ejecutó y devolvió escenario A** — el riesgo no se materializó, y el arranque de 1.2 pasa a ser M1. En el camino apareció **una dependencia nueva hacia la Etapa 3**: la anonimización debe alcanzar a las URLs (fila 10) |
 | **9** | **Lo que la Etapa 1 construye, las Etapas 2 y 3 tienen que revisarlo** | Es la dependencia que se destapó el 2026-08-26 al confirmar 1.1 y 1.2. El code-review ya la tenía cubierta (**F5** = módulo Markdown; **F1** declara depender de Etapa 1 porque F3.4 toca `routes/bitacora.js`). La seguridad **no**: SEC-2 se escribió el 24/08, cuando 1.2 todavía era una decisión de negocio sin resolver → se le agregó el bloque **S10**. Sin eso, se cierra la Etapa 3 con un módulo entero sin auditar, y encima el que más promete al usuario (*"esto no tiene datos personales"*) |
 | **10** | **Un `.md` "anonimizado" con enlaces del SCW vivos entrega el original sin anonimizar** | Hallazgo de **M0** (2026-08-26): esos enlaces **no requieren login** y **no expiran** (≥27 días medidos). Si M4 no los trata, el módulo cumple su promesa solo en apariencia — y el usuario se entera después de mandar el archivo. La verificación es binaria (un grep de `viewer.seam`) y vive en **S10**, Etapa 3 |
