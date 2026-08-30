@@ -80,6 +80,19 @@ const PALABRAS_NO_NOMBRE = new Set([
     'PARA', 'SU', 'SUS', 'OTRO', 'OTROS', 'OTRA', 'OTRAS',
 ]);
 
+// Conectores que viven ADENTRO de un nombre ("MARIA DEL VALLE", "FERNANDEZ
+// DE LA VEGA"). Estan tambien en PALABRAS_NO_NOMBRE porque no aportan
+// identidad por si solos, pero NO deben cortar la captura: hasta la auditoria
+// A0 (2026-08-30) `DESTINATARIO: MARIA DEL VALLE` daba `MAR### DEL VALLE`,
+// enmascarando el nombre de pila y dejando el apellido -- que es justo la
+// parte que identifica. Un conector se acepta solo si detras viene un token
+// real, y nunca puede abrir ni cerrar el nombre.
+const CONECTORES_NOMBRE = new Set(['DE', 'DEL', 'LA', 'LAS', 'EL', 'LOS', 'Y']);
+
+// Titulos de cortesia. No son parte del nombre y, sobre todo, no deben
+// consumir presupuesto de tokens -- ver `detectarTercerosPorMarcador`.
+const HONORIFICOS = new Set(['DR', 'DRA', 'SR', 'SRA', 'SRTA', 'LIC', 'ING']);
+
 // Sufijos societarios — un candidato que los tenga es una empresa, no una
 // persona física. Se anonimiza igual si es una PARTE (viene de la carátula),
 // pero NO se toma como "tercero" por heurística de nombre propio.
@@ -135,6 +148,9 @@ function enmascararNombre(nombre) {
         .map(token => {
             const letras = token.replace(/[^\p{L}]/gu, '');
             if (letras.length === 0) return token;
+            // Un conector no identifica a nadie: enmascararlo solo ensucia la
+            // lectura (`MAR### DE### LA### FUE###`). Se deja tal cual.
+            if (CONECTORES_NOMBRE.has(letras.toUpperCase())) return token;
             return letras.slice(0, 3) + '###';
         })
         .join(' ');
@@ -147,10 +163,16 @@ function tokensDe(texto) {
 /** Un candidato sirve como nombre de persona si aporta algo propio. */
 function pareceNombrePersona(candidato) {
     const tokens = tokensDe(candidato);
-    if (tokens.length === 0 || tokens.length > MAX_TOKENS_NOMBRE) return false;
+    if (tokens.length === 0) return false;
+    // El tope cuenta los tokens REALES: `JUAN PABLO DE LA TORRE` son 5
+    // palabras pero 3 partes de nombre, y rechazarlo por largo dejaria pasar
+    // el apellido entero.
+    const reales = tokens.filter(t =>
+        !CONECTORES_NOMBRE.has(t.replace(/[^\p{L}]/gu, '').toUpperCase()));
+    if (reales.length === 0 || reales.length > MAX_TOKENS_NOMBRE) return false;
     if (SUFIJOS_SOCIETARIOS.test(candidato)) return false;
     // Al menos un token que no sea institucional/procesal y tenga largo real.
-    return tokens.some(t => {
+    return reales.some(t => {
         const limpio = t.replace(/[^\p{L}]/gu, '');
         return limpio.length >= MIN_LARGO_TOKEN && !PALABRAS_NO_NOMBRE.has(limpio.toUpperCase());
     });
@@ -182,8 +204,57 @@ function pareceNombrePersona(candidato) {
  */
 const SEP_TOKENS = '[\\s,>]+';
 
+
+// --- Tolerancia a tildes (defecto 3 de A0) -------------------------------
+// El PJN escribe casi todo en mayusculas y a veces SIN tildes: la caratula
+// dice `GOMEZ ALVAREZ` con tilde y el cuerpo sin ella. Con un reemplazo
+// literal la segunda mencion sobrevive, y ahi no se filtra un tercero: se
+// filtra LA PARTE, entera. El encabezado de este archivo ya advertia el
+// riesgo; lo que faltaba era manejarlo. Medido en la auditoria A0.
+const MAPA_ACENTOS = {
+    A: 'A\u00c1\u00c0\u00c4\u00c2\u00c3', E: 'E\u00c9\u00c8\u00cb\u00ca',
+    I: 'I\u00cd\u00cc\u00cf\u00ce', O: 'O\u00d3\u00d2\u00d6\u00d4\u00d5',
+    U: 'U\u00da\u00d9\u00dc\u00db', N: 'N\u00d1', C: 'C\u00c7',
+};
+
+const CLASE_POR_LETRA = (() => {
+    const mapa = new Map();
+    for (const variantes of Object.values(MAPA_ACENTOS)) {
+        const clase = `[${variantes}${variantes.toLowerCase()}]`;
+        for (const ch of variantes) {
+            mapa.set(ch, clase);
+            mapa.set(ch.toLowerCase(), clase);
+        }
+    }
+    return mapa;
+})();
+
+// --- Tolerancia al corte de guion (defecto 4 de A0) ----------------------
+// El PDF envuelve por ancho y parte la palabra: "VE-" al final de una linea y
+// "GA" al principio de la siguiente. A diferencia de SEP_TOKENS, esto va
+// ENTRE CARACTERES de un mismo token -- es un corte adentro de la palabra, no
+// entre palabras. Es opcional, asi que un token sin cortar matchea igual.
+const CORTE_DE_GUION = '(?:-\\s*\\n\\s*>?\\s*)?';
+
+function claseDeCaracter(ch) {
+    return CLASE_POR_LETRA.get(ch) || escaparRegex(ch);
+}
+
+function patronDeToken(token) {
+    return [...token].map(claseDeCaracter).join(CORTE_DE_GUION);
+}
+
+/**
+ * Une las palabras partidas por un guion de corte. Se usa SOLO para detectar:
+ * el reemplazo sigue corriendo sobre el Markdown ORIGINAL (con el regex que
+ * tolera el corte), asi que el documento del usuario nunca se altera.
+ */
+function unirCortesDeGuion(texto) {
+    return texto.replace(/(\p{L})-\s*\n\s*>?\s*(\p{L})/gu, '$1$2');
+}
+
 function regexDeTermino(termino) {
-    const partes = tokensDe(termino).map(escaparRegex);
+    const partes = tokensDe(termino).map(patronDeToken);
     if (partes.length === 0) return null;
     // Los límites: al inicio, que no venga pegado a una letra o dígito; al
     // final, ídem — sin usar `\b`, que se comporta mal con acentos y con
@@ -252,10 +323,15 @@ function parsearExpediente(markdown) {
 function detectarTercerosPorMarcador(markdown) {
     const encontrados = new Set();
     const alternador = MARCADORES_ROL.map(escaparRegex).join('|');
+    // Los limites de palabra NO son cosmeticos: sin ellos `DR` matchea DENTRO
+    // de `ADRIAN`, y de `AFIP c/ ADRIAN BOYADJIAN` sale el falso tercero
+    // `IAN BOYADJIAN` -- que ademas nunca matchea al reemplazar (el lookbehind
+    // lo impide), asi que queda como una linea fantasma en el mapping.txt que
+    // el usuario lee. Encontrado inspeccionando la salida real, no por un test.
     // Tras el marcador puede venir `.`, `:`, un pipe (escapado como `\|` por
     // el render de tablas de M2) o simplemente espacios.
     const re = new RegExp(
-        `(?:${alternador})\\s*[.:]?\\s*(?:\\\\?\\|)?\\s*([\\p{Lu}][\\p{L}'’.\\s]{2,80})`,
+        `(?<![\\p{L}])(?:${alternador})(?![\\p{L}])\\s*[.:]?\\s*(?:\\\\?\\|)?\\s*([\\p{Lu}][\\p{L}'’.\\s]{2,80})`,
         'gu'
     );
 
@@ -265,13 +341,52 @@ function detectarTercerosPorMarcador(markdown) {
         // Cortar en el primer separador estructural.
         const hastaSeparador = crudo.split(/\\?\||,| - |\s{2,}|\n/)[0];
         // Cortar ante la primera palabra que no puede ser parte de un nombre.
+        const brutos = tokensDe(hastaSeparador);
+
+        // Los honorificos no son parte del nombre y, sobre todo, no deben
+        // gastar presupuesto de tokens (defecto 2 de A0): en
+        // `LETRADO: DR. JUAN PABLO GARCIA CUERVA` el marcador que matchea es
+        // `LETRADO`, asi que la captura arranca en `DR` -- que se comia uno de
+        // los 4 lugares y dejaba `CUERVA`, el apellido, afuera. Sin el `DR.`
+        // el mismo nombre se enmascaraba entero.
+        let inicio = 0;
+        while (inicio < brutos.length &&
+               HONORIFICOS.has(brutos[inicio].replace(/[^\p{L}]/gu, '').toUpperCase())) {
+            inicio++;
+        }
+
         const tokens = [];
-        for (const token of tokensDe(hastaSeparador)) {
+        let pendientes = [];   // conectores esperando un token real detras
+        let reales = 0;        // solo cuentan los tokens que no son conectores
+        for (const token of brutos.slice(inicio)) {
             const limpio = token.replace(/[^\p{L}]/gu, '').toUpperCase();
             if (limpio.length === 0) break;
+            // Un conector NO corta el nombre (defecto 1 de A0): `MARIA DEL
+            // VALLE` es un apellido con particula, no "MARIA" seguido de texto
+            // procesal. Queda en espera y solo se incorpora si despues viene un
+            // token real; si el nombre termina ahi, se descarta -- un nombre no
+            // puede abrir ni cerrar con un conector. Este chequeo va ANTES del
+            // de PALABRAS_NO_NOMBRE, que tambien contiene DE/DEL/LA.
+            if (CONECTORES_NOMBRE.has(limpio)) {
+                if (reales === 0) break;
+                pendientes.push(token);
+                continue;
+            }
+            // Un token que ARRANCA EN MINUSCULA cierra el nombre. En el PJN los
+            // nombres van en mayusculas y la prosa que los rodea no, asi que
+            // esta es la senal de fin de nombre mas confiable que da el propio
+            // documento. Hace falta desde que los conectores dejaron de cortar:
+            // sin ella, `El DR. FERNANDEZ DE LA VEGA dijo algo` capturaba
+            // tambien `dijo algo` y lo enmascaraba -- sobre-enmascarar vuelve
+            // el archivo ilegible, que este modulo considera PEOR que un falso
+            // negativo (ver el encabezado). Va DESPUES del chequeo de conector
+            // para no romper `Juan de la Torre`, donde la particula es
+            // legitimamente minuscula.
+            if (/^\p{Ll}/u.test(token)) break;
             if (PALABRAS_NO_NOMBRE.has(limpio)) break;
-            tokens.push(token.replace(/[.,;:]+$/, ''));
-            if (tokens.length >= MAX_TOKENS_NOMBRE) break;
+            tokens.push(...pendientes, token.replace(/[.,;:]+$/, ''));
+            pendientes = [];
+            if (++reales >= MAX_TOKENS_NOMBRE) break;
         }
         if (tokens.length === 0) continue;
         const candidato = tokens.join(' ').trim();
@@ -355,6 +470,11 @@ function variantesPresentes(nombreCompleto, markdown) {
  * @returns {Array<{original: string, reemplazo: string, tipo: string}>}
  */
 function detectarEntidades(markdown) {
+    // La deteccion corre sobre una copia con los cortes de guion ya unidos
+    // (`VE-` + salto de linea + `GA` -> `VEGA`). El reemplazo, en cambio,
+    // sigue corriendo sobre el ORIGINAL con un regex que tolera el corte:
+    // asi el nombre se detecta entero sin alterar el documento del usuario.
+    const texto = unirCortesDeGuion(markdown);
     const entradas = [];
     const yaVisto = new Set();
 
@@ -366,24 +486,24 @@ function detectarEntidades(markdown) {
     };
 
     // — Expediente —
-    const expediente = parsearExpediente(markdown);
+    const expediente = parsearExpediente(texto);
     if (expediente) agregar(expediente, REEMPLAZO_EXPEDIENTE, 'expediente');
 
     // — Partes (carátula) —
-    const { actor, demandado } = parsearCaratula(markdown);
+    const { actor, demandado } = parsearCaratula(texto);
     if (actor) {
         agregar(actor, REEMPLAZO_ACTOR, 'parte');
-        variantesPresentes(actor, markdown).forEach(v => agregar(v, REEMPLAZO_ACTOR, 'parte-variante'));
+        variantesPresentes(actor, texto).forEach(v => agregar(v, REEMPLAZO_ACTOR, 'parte-variante'));
     }
     if (demandado) {
         agregar(demandado, REEMPLAZO_DEMANDADO, 'parte');
-        variantesPresentes(demandado, markdown).forEach(v => agregar(v, REEMPLAZO_DEMANDADO, 'parte-variante'));
+        variantesPresentes(demandado, texto).forEach(v => agregar(v, REEMPLAZO_DEMANDADO, 'parte-variante'));
     }
 
     // — Terceros (marcadores de rol) —
-    for (const tercero of detectarTercerosPorMarcador(markdown)) {
+    for (const tercero of detectarTercerosPorMarcador(texto)) {
         agregar(tercero, enmascararNombre(tercero), 'tercero');
-        for (const v of variantesPresentes(tercero, markdown)) {
+        for (const v of variantesPresentes(tercero, texto)) {
             agregar(v, enmascararNombre(v), 'tercero-variante');
         }
     }
@@ -392,11 +512,11 @@ function detectarEntidades(markdown) {
     for (const re of [RE_CUIT, RE_CUIT_SEP]) {
         re.lastIndex = 0;
         let m;
-        while ((m = re.exec(markdown)) !== null) agregar(m[0], '(CUIT oculto)', 'identificador');
+        while ((m = re.exec(texto)) !== null) agregar(m[0], '(CUIT oculto)', 'identificador');
     }
     RE_DNI.lastIndex = 0;
     let mDni;
-    while ((mDni = RE_DNI.exec(markdown)) !== null) agregar(mDni[1], '(DNI oculto)', 'identificador');
+    while ((mDni = RE_DNI.exec(texto)) !== null) agregar(mDni[1], '(DNI oculto)', 'identificador');
 
     return entradas;
 }

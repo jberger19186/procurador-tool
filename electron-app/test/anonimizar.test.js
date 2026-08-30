@@ -295,6 +295,66 @@ const CORPUS = [
         fugas: ['JUAN PEREZ'],
         preservar: ['algo PEREZ', 'JUAN otra cosa'],
     },
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  Los 4 defectos que encontró la auditoría independiente A0 con
+    //  Antigravity/Gemini (2026-08-30). Comparten una misma dirección de
+    //  falla, y era la peor posible: el motor enmascaraba los NOMBRES DE PILA
+    //  y dejaba pasar el APELLIDO, que es la parte que identifica.
+    // ─────────────────────────────────────────────────────────────────────
+    {
+        // 🚨 EL HALLAZGO QUE JUSTIFICÓ LA AUDITORÍA. El corpus original SÍ
+        // probaba una partícula ("DE LA FUENTE", más arriba) — pero solo por
+        // el camino de la CARÁTULA, que la toma entera y funciona bien. Por el
+        // camino del MARCADOR DE ROL el conector `DE` cortaba la captura y
+        // salía `MAR### DE LA FUENTE`. Mismo nombre, dos caminos, resultados
+        // opuestos: el autor probó su regla donde su regla anda.
+        nombre: '🚨 Partícula en un TERCERO (no en la carátula) — asimetría parte/tercero',
+        md: '# EXP 30/2020\n\n> AFIP c/ SOSA s/EJECUCION FISCAL\n\nDESTINATARIO: MARIA DE LA FUENTE.',
+        fugas: ['DE LA FUENTE'],
+        preservar: [],
+    },
+    {
+        // El honorífico se comía uno de los 4 lugares del presupuesto: el
+        // marcador que matchea es `LETRADO`, así que la captura arrancaba en
+        // `DR` y el apellido quedaba afuera. Sin el `DR.` el mismo nombre se
+        // enmascaraba entero — un token de cortesía decidía si había fuga.
+        nombre: 'El honorífico no debe consumir presupuesto de tokens',
+        md: '# EXP 31/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nLETRADO: DR. JUAN PABLO GARCIA CUERVA',
+        fugas: ['CUERVA'],
+        preservar: [],
+    },
+    {
+        // El PJN a veces escribe sin tildes. Acá no se filtra un tercero: se
+        // filtra LA PARTE, entera. El encabezado del motor ya advertía el
+        // riesgo; lo que faltaba era manejarlo.
+        nombre: '🚨 Parte con tilde en la carátula y SIN tilde en el cuerpo',
+        md: '# EXP 32/2020\n\n> GÓMEZ ÁLVAREZ c/ PEREZ s/EJECUTIVO\n\nEl Sr. GOMEZ ALVAREZ declaró.',
+        fugas: ['GOMEZ ALVAREZ'],
+        preservar: [],
+    },
+    {
+        // Nombre partido por el guión de corte del PDF. El `preservar` es la
+        // mitad que importa: al dejar que los conectores no corten la captura
+        // se quitó un freno que accidentalmente impedía la captura desbocada
+        // en prosa, y el motor pasó a enmascarar también "dijo algo". Lo cazó
+        // la inspección manual de la salida, no un test.
+        nombre: 'Nombre partido por guión de corte, sin arrastrar la prosa que sigue',
+        md: '# EXP 33/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nEl DR. FERNANDEZ DE LA VE-\nGA dijo algo.',
+        fugas: ['VE-\nGA'],
+        preservar: ['dijo algo'],
+    },
+    {
+        // Encontrado inspeccionando la salida real, no por un test: sin
+        // límite de palabra, `DR` matchea DENTRO de `ADRIAN` y genera el
+        // tercero fantasma `IAN BOYADJIAN`, que nunca reemplaza nada pero
+        // ensucia el mapping.txt que el usuario lee.
+        nombre: 'Un marcador de rol no matchea dentro de otra palabra (ADRIAN ≠ DR)',
+        md: '# EXP 34/2020\n\n> AFIP c/ ADRIAN BOYADJIAN Y OTRO S.R.L. s/EJECUCION\n\nSe notificó.',
+        fugas: [],
+        preservar: [],
+        sinTerceros: true,
+    },
 ];
 
 function correrCorpus() {
@@ -305,8 +365,21 @@ function correrCorpus() {
     const detalleRotos = [];
 
     for (const caso of CORPUS) {
-        const { markdownAnonimizado } = anonimizar(caso.md);
+        const { markdownAnonimizado, entradas } = anonimizar(caso.md);
         let casoOk = true;
+
+        // Algunos casos no vigilan una fuga sino lo contrario: que NO se
+        // invente un tercero. Un tercero fantasma no filtra nada, pero
+        // ensucia el mapping.txt que el usuario lee y decide.
+        if (caso.sinTerceros) {
+            const fantasmas = entradas.filter(e => e.tipo.startsWith('tercero'));
+            if (fantasmas.length > 0) {
+                casoOk = false;
+                detalleRotos.push(`${caso.nombre} -> tercero inventado: ${JSON.stringify(fantasmas.map(f => f.original))}`);
+                preservarRotos++;
+            }
+            totalPreservar++;
+        }
 
         for (const fuga of caso.fugas) {
             totalFugas++;
