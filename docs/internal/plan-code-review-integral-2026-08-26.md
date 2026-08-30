@@ -238,6 +238,22 @@ lo elimina (el riesgo que queda es un `showConfirm()` cuyo resultado no se mira)
 Segundo motivo: es el panel donde un admin **suspende cuentas, aplica beneficios, edita pagos
 y publica documentos legales**. Un bug acá no lo sufre el admin, lo sufre un cliente.
 
+📌 **Hallazgo ya identificado, para arrancar la fase con algo concreto** *(AG · A3, 2026-08-30)*:
+**`submitAddUser` dispara el `POST /admin/users` con todos los campos vacíos** y sin mostrar ningún
+error del lado del cliente. Medido: `{"nombre":"","apellido":"","email":"","password":"","cuit":""}`.
+El servidor valida y devuelve 400, así que no es un problema de corrección ni de seguridad — es una
+llamada innecesaria y un admin que no ve por qué no pasó nada. 🔵 bajo. La pregunta que la fase debe
+responder no es esa sola, sino **cuántos de los ~30 handlers de guardado del dashboard comparten el
+patrón**: `submitAddUser` construye el body, deshabilita el botón y llama a la API, sin ninguna
+validación previa en el medio.
+
+⚠️ **Y un falso positivo ya descartado, para no gastar la fase en él:** la misma auditoría reportó
+falta de protección contra **doble envío** en el dashboard. **No es cierto, y se midió** — corriendo
+su propio script de reproducción (`btn.click(); btn.click();`) sale **1 POST, no 2**: el botón queda
+`disabled` de forma síncrona antes del `await`, y un `<button disabled>` no dispara `click`. Además
+el dashboard **no tiene un solo `<form>` ni un listener de `submit`** (todo es `onclick`), así que
+no existe la segunda vía por la que ese bug sí era real en el portal (fixes `354fbcc` y `f5d1348`).
+
 ---
 
 ### F5 — Módulo Markdown / Anonimización (código nuevo) 🟠
@@ -269,6 +285,46 @@ esta fase aporta no es repetir eso: es el ojo externo sobre **el corpus mismo** 
 medir, o está construido a la medida del motor?) y sobre las dos limitaciones que M4 dejó escritas y
 sin corregir a propósito — el número de boleta de deuda que sobrevive, y la dependencia de que el
 usuario revise el `mapping.txt`. El ángulo de **input hostil** no es de esta fase: es **S10** de SEC-2.
+
+🔄 **REVISADO EL 2026-08-30 — la pregunta central de esta fase YA SE RESPONDIÓ, y la respuesta fue
+que sí.** El carril paralelo **AG** corrió su fase A0 (Gemini 3.1 Pro / High) justamente sobre el
+corpus, y encontró que **estaba construido a la medida del motor**: el corpus original sí probaba
+un apellido con partícula (`MARIA DE LA FUENTE`), pero **solo por el camino de la carátula**, que lo
+toma entero y funciona bien. Por el camino del **marcador de rol**, el mismo nombre se filtraba.
+Mismo dato, dos caminos, resultados opuestos.
+
+**5 defectos reales encontrados, los 5 corregidos el mismo día** — todos con la misma dirección de
+falla, y era la peor posible: **el motor enmascaraba los nombres de pila y dejaba pasar el
+apellido**, que es la parte que identifica.
+
+| # | Defecto | Causa raíz |
+|---|---|---|
+| 1 | Apellido con partícula en un **tercero** | El conector (`DE`/`DEL`/`LA`) cortaba la captura tras el marcador de rol |
+| 2 | Apellido tras 2+ nombres de pila | El honorífico `DR.` consumía uno de los 4 lugares del presupuesto de tokens |
+| 3 | **Parte** escrita sin tildes en el cuerpo | El reemplazo era sensible a acentos, y el PJN a veces las omite |
+| 4 | Apellido partido por guión de corte | No se rejuntaban los fragmentos entre líneas |
+| 5 | Tercero **fantasma** en el `mapping.txt` | Sin límite de palabra, `DR` matcheaba dentro de `ADRIAN` |
+
+Los 5 quedaron **fijados como tests de regresión**: el corpus pasó de 18 a **22** datos que deben
+desaparecer y de 8 a **10** textos que deben sobrevivir, ambas tasas en 0,0 %. La suite del módulo
+sigue en **94/94**.
+
+**Consecuencia para esta fase — el eje se corre, no desaparece.** Ya no tiene sentido plantearla
+como *"auditar el corpus"*: eso se hizo y se corrigió. Lo que queda es:
+
+1. **Verificar los 5 fixes, no re-derivarlos.** En particular el más delicado: permitir que los
+   conectores no corten el nombre **quitó un freno accidental** contra la captura desbocada en
+   prosa, y hubo que reponerlo con otra regla (un token que arranca en minúscula cierra el nombre).
+   Esa interacción merece un ojo fresco.
+2. **El resto del módulo, que A0 no tocó** — ingesta de PDF, descarga de adjuntos, los 3 handlers
+   IPC, el modal y el gate de plan. Sigue sin revisión externa.
+3. Las 2 limitaciones que M4 dejó escritas a propósito (boleta de deuda, dependencia de que el
+   usuario revise el `mapping.txt`), que siguen abiertas.
+
+**Y una lección de método que vale para toda la Etapa 2:** de los 5 defectos, **2 los encontró la
+inspección manual de la salida real, no un test** — el sobre-enmascarado de `dijo algo` y el tercero
+fantasma. Es el mismo patrón que M4 ya había documentado. Los tests confirman lo que uno ya sabe
+buscar; leer la salida es lo que muestra lo que no.
 
 ---
 

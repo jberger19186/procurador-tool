@@ -403,6 +403,36 @@ el sesgo.
 > atestación firmada, que es lo que pide un cliente institucional. La **abarata**: el auditor llega a
 > un producto más limpio y su encargo pasa de *descubrimiento* a *confirmación*.
 
+### Estado del carril *(2026-08-30)*
+
+| Fase | Estado | Resultado |
+|---|---|---|
+| **A0** — gate, motor de anonimización | ✅ **corrida** · 3.1 Pro `High` | **Gate PASA.** 4 defectos reales — más 1 quinto encontrado al verificar. **Los 5 corregidos**, con tests de regresión. Informe: `informe-A0-2026-08-30.md` |
+| **A3** — runtime, portal y dashboard | ✅ **corrida** · 3.7 Flash `Medium` | 1 hallazgo menor (🔵) + **1 falso positivo descartado midiendo**. Confirmó desde afuera 4 fixes nuestros. Informe: `informe-A3-2026-08-30.md` |
+| **A1** — code review | ⏳ espera la **Etapa 2** cerrada | — |
+| **A2** — security review | ⏳ espera la **Etapa 3** cerrada | — |
+
+**El gate se justificó.** La pregunta que A0 tenía que responder era si el corpus adversarial del
+motor estaba construido a la medida del motor. **Lo estaba:** probaba un apellido con partícula solo
+por el camino de la carátula, que funciona, y no por el del marcador de rol, donde se filtraba. El
+patrón de los 5 defectos era el peor posible — **el motor enmascaraba los nombres de pila y dejaba
+pasar el apellido**. Detalle y consecuencias en la ficha **F5** del plan de code-review.
+
+**Dos aprendizajes de método, que valen para A1 y A2:**
+
+1. **Las citas `archivo:línea` de Antigravity fueron erróneas en 3 de 3** casos verificados (una
+   apuntaba a una función de 4 líneas sin botón ni `fetch`), y **infla la severidad** — A0 declaró
+   7 "críticos" y quedaron 4 reales; A3 declaró 2 y quedó 1. **El diagnóstico de fondo suele
+   acertar; la ubicación y la severidad, no.** Ningún hallazgo se aplica sin reproducirlo primero.
+2. **La copia le pasaba `CLAUDE.md` y los 79 archivos de `docs/internal/`** — entre ellos el plan
+   de seguridad con las hipótesis **S1–S11, que son los targets literales de A2**. No era un
+   problema de secretos sino de contaminación del criterio: un auditor que las lee confirma
+   supuestos ajenos en vez de aportar los propios. **Ya excluidos del script.**
+
+📌 **La copia del código (`repo-auditoria`) se borró al cerrar A3.** Se regenera en 2 minutos cuando
+llegue A1 — y conviene que sea así: para entonces la Etapa 2 va a haber cambiado justo el código que
+A1 tiene que mirar.
+
 ---
 
 ## §8 — Dependencias cruzadas que no son obvias
