@@ -27,13 +27,19 @@ def diff_cupo(cupo_antes: dict, cupo_despues: dict) -> dict:
     diffs = {}
     for k, sub_antes in cupo_antes.get("submodulos", {}).items():
         sub_despues = cupo_despues["submodulos"][k]
-        consumido = sub_antes["used"] - sub_despues["used"]
+        # F9a (2026-08-31): estaba `antes - despues`, que da el signo invertido —
+        # `used` es un contador ACUMULADO (sube con cada ejecucion, ver
+        # routes/admin.js: remaining = efectivo - used), asi que lo que se
+        # consumio en esta corrida es cuanto SUBIO, es decir despues - antes.
+        # Confirmado en vivo: una corrida real de 6/6 flujos ok reporto
+        # "consumido -1/-1/-3/-3/-7" con la formula vieja.
+        consumido = sub_despues["used"] - sub_antes["used"]
         # `used` puede no subir 1:1 si hubo recarga de bonus en el medio —
         # se reporta el delta real observado, con el costo esperado al lado.
         diffs[k] = {"consumido": consumido, "esperado": sub_despues["costoPorPrueba"]}
     g_antes, g_despues = cupo_antes["global"], cupo_despues["global"]
     diffs["global"] = {
-        "consumido": g_antes["used"] - g_despues["used"],
+        "consumido": g_despues["used"] - g_antes["used"],
         "esperado": g_despues["costoPorPrueba"],
     }
     return diffs

@@ -32,9 +32,9 @@
     1.6 Demo reproducible en landing   ✅  CERRADA (41/43 pasos — 8.3/8.4 descartados por el operador)
               │
               ▼
-  ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
-    F6 cifrado → F1/F2/F3/F4/F10 → F5 → F8 → F9a verify (ya SIN operador)
-    (F9b — spike de la extensión, con operador si el spike no alcanza — no bloquea el cierre)
+  ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)          ✅ CERRADA (2026-08-31)
+    F6 cifrado → F1/F2/F3/F4/F10 → F5 → F8 → F9a verify — las 9 fases ejecutadas
+    (F9b — spike de la extensión queda abierta, no bloqueaba el cierre)
               │
               ▼
   ETAPA 3 — SECURITY REVIEW
@@ -262,6 +262,7 @@ consumo de cupo cuadrando exacto con el modelo documentado.
 | **Sesiones** | **9–13** *(actualizado 2026-08-31: -1–2 por la salida de F7, F9a ya no depende del operador)* |
 | **Depende de** | Etapa 1 cerrada ✅ |
 | **Habilita** | Etapa 3. F7 ya no habilita la Etapa 4 desde acá — corre dentro de ella, como su primer paso |
+| **Estado** | ✅ **CERRADA (2026-08-31)** — las 9 fases (F1-F6, F8, F10, F9a) ejecutadas, con informe propio cada una. Queda **F9b** abierta (spike de la extensión, no bloqueante — ver F9b en el plan) |
 
 **El hueco que justifica la campaña, medido el 2026-08-26:** todo el módulo Bitácora
 (`routes/bitacora.js` **84 KB**, el único endpoint anónimo del sistema, y el crecimiento de
@@ -539,11 +540,11 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 | Etapa | Sesiones | Notas |
 |---|---|---|
 | **1** — Producto | ~~13–21~~ → **✅ 0 restantes — ETAPA CERRADA** | Los 6 ítems cerrados (2026-08-26/27): 1.1, 1.2 (con release y flag encendidos), 1.3, 1.4, 1.5 y **1.6** (41/43 pasos, 8.3/8.4 descartados por el operador el 2026-08-27) |
-| **2** — Code review | **9–13** | 4 fases `xhigh` consumen sesión propia o más. Incluye **F10** (+1–2, 28/08). **F7 salió** (-1–2, 31/08) — ahora abre la Etapa 4. F9a ya no depende del operador |
+| **2** — Code review | ~~9–13~~ → **✅ 0 restantes — ETAPA CERRADA (2026-08-31)** | Las 9 fases ejecutadas: F1-F6, F8, F10, F9a. Queda **F9b** abierta (spike de la extensión), no bloqueante |
 | **3** — Security review | **8–13** | S1+S2, S3+S4 y S10+S11 agrupables. Incluye **S10** (+1–2, 26/08) y **S11** (+1, 28/08) |
 | **4** — MercadoPago | **4–6** | **F7 entró** (+1, 31/08) como su primer paso + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
-| **Total aproximado** | ~~32–50~~ → ~~19–29~~ → **21–33 restantes** | Más las sesiones con operador presente de §9. Actualizado el **2026-08-28**, tras la revisión de los planes de las Etapas 2/3/4 contra lo que la Etapa 1 realmente construyó (+1–2 por F10, +1 por S11) |
+| **Total aproximado** | ~~32–50~~ → ~~19–29~~ → ~~21–33~~ → **12–20 restantes** | Actualizado el **2026-08-31**: Etapa 2 cerrada, resta Etapa 3 (8–13) + Etapa 4 (4–6) + F9b/D4/Fase C con operador (§9) |
 
 **Después del lanzamiento** — son **exactamente estos tres** (sección "⚪ Post-lanzamiento" de
 `CLAUDE.md`, que hasta el 2026-08-26 se llamaba "Diferidos a decisión de negocio" y tenía además a

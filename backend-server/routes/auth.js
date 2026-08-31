@@ -890,7 +890,14 @@ router.post('/refresh', authenticateToken, async (req, res) => {
         // el de la extensión lo aplican extension-login/extension-auth (que SÍ gatean
         // por usos). Si acá se gateara por usos, el heartbeat de la app dejaría
         // sessionVerified=false al agotarse → "No autenticado" confuso y app trabada.
-        const isActiveSub = user.status === 'active';
+        // F9a (2026-08-31, V6-b): isActiveSub exigía SOLO subscriptions.status='active',
+        // sin mirar users.registration_status — a diferencia de /auth/login y
+        // /auth/extension-login, que bloquean por registration_status ANTES de mirar la
+        // suscripción. En la práctica el invariante "sub activa ⟹ registro activo" hoy se
+        // sostiene (F10 cerró el único camino admin que podía romperlo, el flip crudo del
+        // selector), pero refresh dependía de eso IMPLÍCITAMENTE, sin chequearlo — la misma
+        // fragilidad que F10 corrigió una fase antes en esta campaña, acá del lado de lectura.
+        const isActiveSub = user.status === 'active' && user.registration_status === 'active';
         const isTrialSub  = user.status === 'suspended' && user.registration_status === 'pending_activation';
         if (!isActiveSub && !isTrialSub) {
             return res.status(403).json({

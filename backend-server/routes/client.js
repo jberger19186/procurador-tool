@@ -841,6 +841,14 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
     try {
         // Permite la extensión durante el trial: active OR (suspended + pending_activation).
         // Mismo criterio que /auth/extension-login y /auth/refresh.
+        //
+        // F9a (2026-08-31, V6-b): la rama `s.status = 'active'` NO exigía
+        // `u.registration_status = 'active'` — a diferencia de /auth/extension-login, que
+        // bloquea por registration_status ANTES de llegar a esta misma query (blockedExtStatuses).
+        // Verificado con harness real: forzando registration_status='rejected' por SQL directo
+        // (bypaseando la API — F10 ya cerró el único camino admin que producía esa combinación),
+        // extension-auth seguía devolviendo 200 con un token todavía vigente. Se agrega el
+        // chequeo explícito para no depender solo del invariante entre las 2 tablas.
         const result = await db.query(`
             SELECT s.plan, s.status, s.expires_at,
                    s.usage_count, s.usage_limit, s.payment_provider,
@@ -853,7 +861,7 @@ router.get('/extension-auth', authenticateToken, async (req, res) => {
             JOIN users u ON u.id = s.user_id
             WHERE s.user_id = $1 AND s.expires_at > NOW()
               AND (
-                s.status = 'active'
+                (s.status = 'active' AND u.registration_status = 'active')
                 OR (s.status = 'suspended' AND u.registration_status = 'pending_activation')
               )
         `, [userId]);

@@ -408,13 +408,24 @@ document.getElementById('exp').addEventListener('keydown', e => {
 document.getElementById('btn-cancel').addEventListener('click', () => window.close());
 
 // ── Aceptar ───────────────────────────────────────────────────────────────────
+// Guard contra doble click (2026-08-31, F9a): background.js resuelve START_FLOW con un
+// listener async que espera una verificación de red real (canUseFlow → GET
+// /client/extension-auth, hasta 6s de timeout) antes de responder — el "await
+// chrome.runtime.sendMessage" de abajo se queda colgado ese tiempo real, sin feedback
+// visual hasta que termina. Sin este guard, un segundo click en esa ventana dispara un
+// segundo START_FLOW → background.js abre una SEGUNDA pestaña para el mismo flujo.
+let btnOkEnCurso = false;
 document.getElementById('btn-ok').addEventListener('click', async () => {
+  if (btnOkEnCurso) return;
   clearMsg('msg');
 
   if (!selectedFlow) {
     showMsg('msg', 'Seleccioná un flujo primero', 'err');
     return;
   }
+
+  btnOkEnCurso = true;
+  document.getElementById('btn-ok').disabled = true;
 
   try {
     const expedienteData = parseExpediente(document.getElementById('exp').value);
@@ -429,5 +440,7 @@ document.getElementById('btn-ok').addEventListener('click', async () => {
     setTimeout(() => window.close(), 600);
   } catch (e) {
     showMsg('msg', e.message || String(e), 'err');
+    btnOkEnCurso = false;
+    document.getElementById('btn-ok').disabled = false;
   }
 });

@@ -3,6 +3,17 @@
 // Capa 3: ID binding — solo ejecutar dentro de la extensión legítima
 if (typeof chrome === 'undefined' || !chrome?.runtime?.id) throw new Error('[PJN] Contexto de extensión requerido');
 
+// Guard contra doble inyección en el mismo documento (2026-08-31, F9a). background.js
+// reinyecta el content script en CADA evento 'complete' de la pestaña (sin removerse a sí
+// mismo entre navegaciones), y una cadena SSO→destino puede disparar 'complete' más de una
+// vez sobre el MISMO documento final — el mecanismo exacto que ya motivó el guard de
+// cs-deox.js ("para evitar errores de re-declaración cuando el script se inyecta más de una
+// vez"). Sin este guard, cada re-inyección registra un 'onMessage' nuevo en el mismo realm
+// aislado, y un solo 'fillFields' de background.js llega a 2+ listeners a la vez — corren el
+// llenado del formulario en paralelo (doble click en "Siguiente", riesgo de saltar un paso).
+if (window.__PJN_ESCRITOS2_INJECTED__) throw new Error('[PJN] cs-escritos2 ya inyectado en este documento');
+window.__PJN_ESCRITOS2_INJECTED__ = true;
+
 console.log("✅ cs-escritos2 inyectado en", location.href);
 
 // ── LOGIN SSO ──────────────────────────────────────────────────────────────

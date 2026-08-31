@@ -85,14 +85,6 @@ const FLOW_URLS = {
   deox:      "https://deox.pjn.gov.ar/nuevo",
 };
 
-const FLOW_URL_PATTERN = {
-  consulta:  /^https?:\/\/(scw\.pjn\.gov\.ar|sso\.pjn\.gov\.ar)\//,
-  escritos1: /^https?:\/\/(scw\.pjn\.gov\.ar|sso\.pjn\.gov\.ar)\//,
-  escritos2: /^https?:\/\/(escritos\.pjn\.gov\.ar|sso\.pjn\.gov\.ar)\//,
-  notif:     /^https?:\/\/(notif\.pjn\.gov\.ar|sso\.pjn\.gov\.ar)\//,
-  deox:      /^https?:\/\/(sso\.pjn\.gov\.ar\/|deox\.pjn\.gov\.ar\/)/,
-};
-
 const FLOW_CONTENT_SCRIPT = {
   consulta:  "cs-scw.js",
   escritos1: "cs-scw.js",
@@ -159,7 +151,6 @@ chrome.runtime.onMessage.addListener(async (msg) => {
     }
 
     const startUrl      = FLOW_URLS[flow];
-    const urlPattern    = FLOW_URL_PATTERN[flow];
     const contentScript = FLOW_CONTENT_SCRIPT[flow];
     const needsFill     = FLOW_NEEDS_FILL.has(flow);
 

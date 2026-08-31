@@ -613,6 +613,18 @@ verificado y no re-testeado) y el barrido de S9. Y el **frontend** del panel, qu
 
 ### F9a — `/verify` V4 + V5 + V6-a/V6-b (runtime, ya sin operador) 🟢
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F9a-2026-08-31.md`](revision-F9a-2026-08-31.md).
+> **6 hallazgos, los 6 corregidos** — 3 en `extension-app/` (V6-a: guard de doble inyección
+> faltante en 2 content scripts, doble click sin guard en el popup, `cs-selection.js` muerto) ·
+> 1 en el backend (V6-b: `/client/extension-auth` y `/auth/refresh` no verificaban
+> `registration_status` en la rama paga, a diferencia de `extension-login` — desplegado a
+> producción) · 1 encontrado usando la herramienta, no buscado (`tests/daily/resumen.py` reportaba
+> el consumo de cupo con el signo invertido, confirmado con la corrida real de V5: 6/6 flujos `ok`).
+> **Hallazgo colateral para F9b:** `tests/web/test_m11_extension.py` YA usa
+> `launch_persistent_context` + `--load-extension` — el mecanismo que F9b propone como spike ya
+> está probado en este repo, solo falta la parte que ese test explícitamente skipea (K-07 a K-09,
+> sesión PJN real).
+
 > 🔄 **Reescrita el 2026-08-31.** Era "F9", un solo bloque que necesitaba al operador entero.
 > Se parte en F9a (esto — V4, V5, y las 2/3 de V6 que no tocan el PJN real) y F9b (V6-c, más
 > abajo). El motivo: el mismo hallazgo de CDP que sacó las capturas de la demo de la lista de
