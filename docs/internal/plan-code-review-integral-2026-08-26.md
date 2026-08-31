@@ -260,6 +260,20 @@ perdió eso por el camino.
 
 ### F4 — Dashboard admin 🟠
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F4-2026-08-31.md`](revision-F4-2026-08-31.md).
+> **El hallazgo que motivó la fase se descartó** (los 37 `showConfirm`/`showPrompt` del
+> archivo usan `await` correctamente). En su lugar, **13 hallazgos reales, los 13
+> corregidos y en producción** (1 mitigado sin tocar el backend, fuera de alcance). El más
+> serio: **XSS almacenado en 16 `onclick`** — un email autoregistrable con un apóstrofe
+> (válido por RFC 5322, sin validación de formato en el registro público) rompía un
+> string-literal JS embebido en el atributo y ejecutaba con la sesión del admin. Verificado
+> con `parse5` que **ni `escAttr()` alcanza** para este contexto — el navegador decodifica
+> las entidades HTML antes de compilar el atributo como JS, así que hace falta escapar
+> primero para sintaxis JS y recién después para HTML (`escJsAttr()` nueva). Otros 2 de
+> peso: 22 sitios con el mismo error en `value=""` (ahí sí `escAttr()` es la función
+> correcta) y un `<textarea>` de edición de Términos/Privacidad que corrompía cada salto de
+> línea real del documento legal en cada edición (`escHtml()` usado en un contexto RCDATA).
+
 | | |
 |---|---|
 | **Target** | `backend-server/public/dashboard/dashboard.js` (+ `dashboard.css` como contexto) |

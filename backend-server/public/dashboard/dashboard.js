@@ -8,6 +8,8 @@ let token = null;
 let currentAdmin = null;
 let currentPage = null;
 let prevPage    = null;
+let currentPageId = null; // F4: id de la pagina actual, para poder reconstruir prevPageId al salir
+let prevPageId  = null;   // F4: id de la pagina anterior (ej. el ticket del que se vino)
 
 // ───── AUTH ─────
 async function doLogin() {
@@ -154,8 +156,9 @@ window.addEventListener('load', async () => {
 
 // ───── ROUTING ─────
 function navigate(page, id, fromHistory) {
-    if (currentPage && currentPage !== page) prevPage = currentPage;
+    if (currentPage && currentPage !== page) { prevPage = currentPage; prevPageId = currentPageId; }
     currentPage = page;
+    currentPageId = id;
     document.querySelectorAll('#sidebar nav a').forEach(a => {
         a.classList.toggle('active', a.dataset.page === page);
     });
@@ -536,6 +539,13 @@ window.submitAddUser = async function() {
         cuit: g('_au-cuit'), telefono: g('_au-tel') || null,
         planId: parseInt(sel?.value),
     };
+    // F4 (2026-08-31): validacion minima antes del POST -- no reemplaza la del
+    // servidor (que ya rechaza esto), solo evita el round-trip inutil de un
+    // submit con campos vacios (hallazgo conocido de este plan).
+    if (!body.nombre || !body.apellido || !body.email || !body.password || !body.cuit || !Number.isInteger(body.planId)) {
+        if (err) { err.textContent = 'Completá nombre, apellido, email, contraseña, CUIT y plan.'; err.style.display = 'block'; }
+        return;
+    }
     if (gratis) body.durationDays = parseInt(document.getElementById('_au-dias')?.value) || 30;
     const btn = document.getElementById('_au-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Creando…'; }
@@ -568,7 +578,7 @@ async function renderUserDetail(userId) {
         activePlansCache = allPlans; // reuso para el selector "cambiar plan" del beneficio
 
         document.getElementById('content').innerHTML = `
-        <a class="back-btn" onclick="navigate(prevPage || 'users')">← Volver a ${prevPage === 'pending-users' ? 'Pendientes' : 'Usuarios'}</a>
+        <a class="back-btn" onclick="navigate(prevPage || 'users', prevPageId)">← ${prevPage === 'ticket-detail' ? 'Volver al ticket' : prevPage === 'pending-users' ? 'Volver a Pendientes' : prevPage === 'tickets' ? 'Volver a Tickets' : 'Volver a Usuarios'}</a>
         <div class="page-header">
             <div><h2>${escHtml(u.email)}</h2><p>ID: ${u.id} · Registrado: ${fmtDate(u.created_at)}</p></div>
         </div>
@@ -591,7 +601,7 @@ async function renderUserDetail(userId) {
                         <button class="btn btn-sm btn-secondary" onclick="toggleRole(${u.id},'${u.role}')">
                             ${u.role === 'admin' ? '👤 Quitar admin' : '🔐 Hacer admin'}
                         </button>
-                        <button class="btn btn-sm btn-warning" onclick="sendPasswordReset(${u.id},'${escHtml(u.email)}')">🔑 Blanquear contraseña</button>
+                        <button class="btn btn-sm btn-warning" onclick="sendPasswordReset(${u.id},'${escJsAttr(u.email)}')">🔑 Blanquear contraseña</button>
                     </div>
                     <div style="margin-top:12px">
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Asignar CUIT</label>
@@ -666,20 +676,20 @@ async function renderUserDetail(userId) {
             <div class="card-body">
                 <div style="margin-bottom:12px">
                     <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Email <span style="font-weight:400;color:var(--text-muted)">(solo editable por admin · al cambiarlo se suspende hasta re-verificar)</span></label>
-                    <input type="email" id="reg-email" value="${escHtml(u.email || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                    <input type="email" id="reg-email" value="${escAttr(u.email || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                     <div>
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Nombre</label>
-                        <input type="text" id="reg-nombre" value="${escHtml(u.nombre || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                        <input type="text" id="reg-nombre" value="${escAttr(u.nombre || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                     </div>
                     <div>
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Apellido</label>
-                        <input type="text" id="reg-apellido" value="${escHtml(u.apellido || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                        <input type="text" id="reg-apellido" value="${escAttr(u.apellido || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                     </div>
                     <div>
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">CUIT/CUIL</label>
-                        <input type="text" id="reg-cuit" value="${escHtml(u.cuit || '')}" maxlength="11" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                        <input type="text" id="reg-cuit" value="${escAttr(u.cuit || '')}" maxlength="11" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                     </div>
                     <div>
                         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Estado de registro</label>
@@ -697,36 +707,36 @@ async function renderUserDetail(userId) {
                 </div>
                 <div style="margin-top:12px">
                     <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Teléfono</label>
-                    <input type="text" id="reg-telefono" value="${escHtml(u.telefono || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                    <input type="text" id="reg-telefono" value="${escAttr(u.telefono || '')}" disabled style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                 </div>
                 <div style="margin-top:12px">
                     <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Domicilio</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr 80px 80px;gap:8px;margin-bottom:8px">
                         <div>
                             <label style="font-size:11px;display:block;margin-bottom:3px">Calle</label>
-                            <input type="text" id="reg-calle" value="${escHtml(u.domicilio?.calle || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                            <input type="text" id="reg-calle" value="${escAttr(u.domicilio?.calle || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                         </div>
                         <div>
                             <label style="font-size:11px;display:block;margin-bottom:3px">Número</label>
-                            <input type="text" id="reg-numero" value="${escHtml(u.domicilio?.numero || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                            <input type="text" id="reg-numero" value="${escAttr(u.domicilio?.numero || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                         </div>
                         <div>
                             <label style="font-size:11px;display:block;margin-bottom:3px">Piso</label>
-                            <input type="text" id="reg-piso" value="${escHtml(u.domicilio?.piso || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                            <input type="text" id="reg-piso" value="${escAttr(u.domicilio?.piso || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                         </div>
                         <div>
                             <label style="font-size:11px;display:block;margin-bottom:3px">Depto</label>
-                            <input type="text" id="reg-depto" value="${escHtml(u.domicilio?.depto || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                            <input type="text" id="reg-depto" value="${escAttr(u.domicilio?.depto || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                         </div>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
                         <div>
                             <label style="font-size:11px;display:block;margin-bottom:3px">Localidad</label>
-                            <input type="text" id="reg-localidad" value="${escHtml(u.domicilio?.localidad || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                            <input type="text" id="reg-localidad" value="${escAttr(u.domicilio?.localidad || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                         </div>
                         <div>
                             <label style="font-size:11px;display:block;margin-bottom:3px">Provincia</label>
-                            <input type="text" id="reg-provincia" value="${escHtml(u.domicilio?.provincia || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
+                            <input type="text" id="reg-provincia" value="${escAttr(u.domicilio?.provincia || '')}" disabled style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;background:var(--bg-secondary)">
                         </div>
                     </div>
                 </div>
@@ -736,7 +746,7 @@ async function renderUserDetail(userId) {
                     </span>
                     ${!u.email_verified ? `
                     <button class="btn btn-sm btn-success" onclick="verifyEmailManual(${u.id})" style="font-size:12px;padding:4px 10px">✅ Marcar email verificado</button>
-                    <button class="btn btn-sm btn-secondary" onclick="resendVerification(${u.id},'${escHtml(u.email)}')" style="font-size:12px;padding:4px 10px">✉️ Reenviar verificación</button>
+                    <button class="btn btn-sm btn-secondary" onclick="resendVerification(${u.id},'${escJsAttr(u.email)}')" style="font-size:12px;padding:4px 10px">✉️ Reenviar verificación</button>
                     ` : ''}
                 </div>
             </div>
@@ -846,7 +856,7 @@ async function renderUserDetail(userId) {
         <div class="card section-gap">
             <div class="card-header">
                 <h3>💳 Historial de Pagos</h3>
-                <button class="btn btn-sm btn-primary" onclick="openPaymentModal(${u.id},'${escHtml(u.email)}')">＋ Agregar pago</button>
+                <button class="btn btn-sm btn-primary" onclick="openPaymentModal(${u.id},'${escJsAttr(u.email)}')">＋ Agregar pago</button>
             </div>
             <div class="card-body" style="padding:0">
                 <div id="payment-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
@@ -857,7 +867,7 @@ async function renderUserDetail(userId) {
         <div class="card section-gap">
             <div class="card-header">
                 <h3>🧾 Historial de Facturas</h3>
-                <button class="btn btn-sm btn-primary" onclick="openInvoiceModalDynamic(${u.id},'${escHtml(u.email)}')">＋ Agregar factura</button>
+                <button class="btn btn-sm btn-primary" onclick="openInvoiceModalDynamic(${u.id},'${escJsAttr(u.email)}')">＋ Agregar factura</button>
             </div>
             <div class="card-body" style="padding:0">
                 <div id="invoice-history-list"><div class="empty-state" style="padding:16px"><p style="font-size:13px;color:var(--text-muted)">Cargando...</p></div></div>
@@ -1483,6 +1493,13 @@ async function renderTicketDetail(ticketId) {
         const t = data.ticket;
         const comments = data.comments;
         _currentTicketComments = comments || [];
+        // F4 (2026-08-31): sin este reset, generar una sugerencia de IA en un
+        // ticket y despues navegar a OTRO sin enviarla dejaba _currentAiLogId/
+        // _currentAiSuggestion con los valores del ticket anterior -- el proximo
+        // reply() de este ticket nuevo terminaba mandando la telemetria de IA
+        // (log_id + texto final) al log de sugerencia de OTRO ticket.
+        _currentAiLogId = null;
+        _currentAiSuggestion = '';
         await getActivePlans(); // cache para el selector "cambiar plan" del beneficio
         // Trial = sin método de pago. La cortesía solo surte efecto en trial (suma al cupo
         // global); el ajuste por submódulo (*_bonus) solo importa en cuentas pagas.
@@ -1910,14 +1927,26 @@ window.updateTicketMeta = async function(id) {
     const status     = document.getElementById('ticket-status').value;
     const priority   = document.getElementById('ticket-priority').value;
     const aiManaged  = document.getElementById('ai-managed-toggle')?.checked ?? false;
+    // F4 (2026-08-31): antes iban en Promise.all -- si UNA de las 2 PUT fallaba
+    // despues de que la otra ya habia aplicado, quedaban desincronizadas (ej.
+    // status guardado pero priority no) con un solo mensaje de error generico
+    // que no decia cual. Ahora secuencial: cada paso atribuye su propio error,
+    // y si el 2do falla igual se refresca la vista para mostrar el estado REAL.
     try {
-        await Promise.all([
-            apiFetch(`/admin/tickets/${id}/status`,   'PUT', { status }),
-            apiFetch(`/admin/tickets/${id}/priority`, 'PUT', { priority, ai_managed: aiManaged })
-        ]);
-        showAlert(document.getElementById('td-alert'), 'Ticket actualizado.', 'success');
-        setTimeout(() => navigate('ticket-detail', id), 1000);
-    } catch (e) { showAlert(document.getElementById('td-alert'), e.message); }
+        await apiFetch(`/admin/tickets/${id}/status`, 'PUT', { status });
+    } catch (e) {
+        showAlert(document.getElementById('td-alert'), 'No se pudo actualizar el estado: ' + e.message);
+        return;
+    }
+    try {
+        await apiFetch(`/admin/tickets/${id}/priority`, 'PUT', { priority, ai_managed: aiManaged });
+    } catch (e) {
+        showAlert(document.getElementById('td-alert'), 'Estado actualizado, pero la prioridad falló: ' + e.message);
+        setTimeout(() => navigate('ticket-detail', id), 1500);
+        return;
+    }
+    showAlert(document.getElementById('td-alert'), 'Ticket actualizado.', 'success');
+    setTimeout(() => navigate('ticket-detail', id), 1000);
 };
 
 window.applyBenefit = async function(id, userId) {
@@ -2133,6 +2162,44 @@ function escHtml(s) {
 function escAttr(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// F4 (2026-08-31, code-review): escAttr() NO alcanza para un valor que se interpola dentro
+// de un string-literal JS embebido en un atributo onclick="...('${valor}')" — el parser HTML
+// decodifica &#39;/&quot; a comillas REALES al construir el valor del atributo, y ESO es lo
+// que el navegador compila como cuerpo de la función del evento. Verificado con un parser
+// HTML real (parse5) + compilando el atributo decodificado como JS: un email con un solo
+// apóstrofe (ej. o'brien@ejemplo.com, válido por RFC 5322 y alcanzable por registro público
+// sin validación de formato) rompía el string y ejecutaba JS arbitrario en la sesión del
+// admin — con escHtml() Y con escAttr() por igual, los dos dieron el mismo resultado
+// vulnerable en la prueba. La única forma correcta es escapar PRIMERO para sintaxis de
+// string-literal JS (\ y ' con backslash) y RECIÉN DESPUÉS para el atributo HTML que lo
+// envuelve — en ese orden. Usar SIEMPRE que un valor de texto libre se interpole dentro de
+// un string-literal JS en un onclick (no para `href`/`title`/`value`/`data-*` normales,
+// donde escAttr() sigue siendo correcto).
+function escJsAttr(s) {
+    return String(s ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// F4 (2026-08-31): para prellenar el CONTENIDO de un <textarea> (contexto RCDATA:
+// el navegador NO interpreta HTML ahi adentro). escHtml() convierte cada \n en el
+// string literal "<br>" -- correcto para mostrar texto en HTML normal, pero DENTRO
+// de un textarea ese "<br>" queda como texto literal, reemplazando cada salto de
+// linea real del documento legal que se esta editando. Detectado en le-content
+// (editor de Terminos/Privacidad): cada vez que se recargaba el formulario, TODOS
+// los saltos de linea del HTML fuente se convertian en "<br>" literal -- y la
+// corrupcion se acumulaba edicion tras edicion, porque el contenido ya corrompido
+// volvia a pasar por el mismo reemplazo la vez siguiente. Solo escapa lo necesario
+// para no romper el tag (</textarea> lo cerraria) ni malinterpretar entidades.
+function escTextarea(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 // Etiquetas legibles para los eventos de la cuenta (user_events)
 function eventLabel(type) {
     const map = {
@@ -2270,9 +2337,9 @@ async function renderPendingUsers() {
                 <td style="font-size:12px">${new Date(u.created_at).toLocaleDateString('es-AR')}</td>
                 <td>
                     <div style="display:flex;gap:5px;flex-wrap:wrap">
-                        <button class="btn btn-sm btn-success" onclick="activateUser(${u.id}, '${escHtml(u.email)}')">✅ Activar</button>
-                        <button class="btn btn-sm btn-danger" onclick="rejectUserBlock(${u.id}, '${escHtml(u.email)}')">🚫 Rechazar</button>
-                        <button class="btn btn-sm btn-secondary" onclick="rejectUserKeepTrial(${u.id}, '${escHtml(u.email)}')">⏸ Mantener trial</button>
+                        <button class="btn btn-sm btn-success" onclick="activateUser(${u.id}, '${escJsAttr(u.email)}')">✅ Activar</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectUserBlock(${u.id}, '${escJsAttr(u.email)}')">🚫 Rechazar</button>
+                        <button class="btn btn-sm btn-secondary" onclick="rejectUserKeepTrial(${u.id}, '${escJsAttr(u.email)}')">⏸ Mantener trial</button>
                     </div>
                 </td>
             </tr>`).join('');
@@ -2300,8 +2367,8 @@ async function renderPendingUsers() {
                     <td style="font-size:12px;color:var(--text-muted);max-width:200px;white-space:normal">${escHtml(req.message || '(sin mensaje)')}</td>
                     <td>
                         <div style="display:flex;gap:5px">
-                            <button class="btn btn-sm btn-success" onclick="approveReactivation(${u.id}, '${escHtml(u.email)}')">✅ Aprobar</button>
-                            <button class="btn btn-sm btn-danger" onclick="rejectReactivation(${u.id}, '${escHtml(u.email)}')">❌ Rechazar</button>
+                            <button class="btn btn-sm btn-success" onclick="approveReactivation(${u.id}, '${escJsAttr(u.email)}')">✅ Aprobar</button>
+                            <button class="btn btn-sm btn-danger" onclick="rejectReactivation(${u.id}, '${escJsAttr(u.email)}')">❌ Rechazar</button>
                         </div>
                     </td>
                 </tr>`;
@@ -2375,16 +2442,11 @@ window.verifyEmailManual = async function(userId) {
     }
 };
 
-window.resendVerification = async function(userId, email) {
-    if (!(await showConfirm(`¿Reenviar el email de verificación a ${email}?`))) return;
-    const alertEl = document.getElementById('ud-alert');
-    try {
-        const data = await apiFetch(`/admin/users/${userId}/resend-verification`, 'POST', {});
-        showAlert(alertEl, `✉️ ${data.message}`, 'success');
-    } catch (e) {
-        showAlert(alertEl, e.message, 'error');
-    }
-};
+// F4 (2026-08-31): la version anterior de resendVerification() (que tomaba
+// (userId, email) y mostraba el email en el confirm) quedaba SIEMPRE pisada
+// por la definicion de mas abajo (window.resendVerification = ...), asi que
+// era codigo muerto -- eliminada. La que sobrevive ahora acepta el email
+// opcional (linea 739 la llama con 2 args) para no perder ese mensaje.
 
 window.sendPasswordReset = async function(userId, email) {
     if (!(await showConfirm(`¿Enviar email de restablecimiento de contraseña a ${email}?`))) return;
@@ -2454,9 +2516,10 @@ window.saveRegistroData = async function(userId) {
     }
 };
 
-window.resendVerification = async function(userId) {
+window.resendVerification = async function(userId, email) {
     const alertEl = document.getElementById('ud-alert');
-    if (!(await showConfirm('¿Reenviar el email de verificación a este usuario?'))) return;
+    const msg = email ? `¿Reenviar el email de verificación a ${email}?` : '¿Reenviar el email de verificación a este usuario?';
+    if (!(await showConfirm(msg))) return;
     try {
         const r = await apiFetch(`/admin/users/${userId}/resend-verification`, 'POST');
         showAlert(alertEl, (r && r.message) || '✅ Email de verificación reenviado', 'success');
@@ -2856,7 +2919,7 @@ window.savePlanForm = async function(planId) {
         promo_type:   promoType,
         promo_end_date:   promoType === 'date'  ? (document.getElementById('pf-promo-date').value || null) : null,
         promo_max_users:  promoType === 'quota' ? (parseInt(document.getElementById('pf-promo-quota').value) || null) : null,
-        promo_alert_days: parseInt(document.getElementById('pf-promo-alert-days').value) || 15,
+        promo_alert_days: (() => { const v = parseInt(document.getElementById('pf-promo-alert-days').value); return Number.isInteger(v) && v >= 0 ? v : 15; })(), // F4: '||15' nunca dejaba setear 0
     };
 
     try {
@@ -2870,6 +2933,11 @@ window.savePlanForm = async function(planId) {
             await apiFetch('/admin/plans', 'POST', body);
             showAlert(alertEl, 'Plan creado correctamente.', 'success');
         }
+        // F4 (2026-08-31): activePlansCache (getActivePlans()) no tenia TTL ni
+        // invalidacion -- una vez cacheado en la sesion, un plan creado/activado/
+        // desactivado despues no aparecia/desaparecia de los selectores de
+        // "cambiar plan" hasta un hard-refresh de toda la pagina.
+        activePlansCache = null;
         document.getElementById('plan-form-container').style.display = 'none';
         setTimeout(() => renderPlans(), 1200);
     } catch (e) { showAlert(alertEl, e.message); }
@@ -2879,6 +2947,7 @@ window.deactivatePlan = async function(planId) {
     if (!(await showConfirm('¿Desactivar este plan? Los usuarios con este plan no perderán su suscripción actual.'))) return;
     try {
         await apiFetch(`/admin/plans/${planId}`, 'DELETE');
+        activePlansCache = null;
         showAlert(document.getElementById('plan-alert') || document.getElementById('content'), 'Plan desactivado.', 'success');
         setTimeout(() => renderPlans(), 1000);
     } catch (e) { showToast(e.message, 'error'); }
@@ -2888,6 +2957,7 @@ window.activatePlan = async function(planId) {
     if (!(await showConfirm('¿Activar este plan? Quedará disponible para asignarlo a usuarios.'))) return;
     try {
         await apiFetch(`/admin/plans/${planId}/activate`, 'PATCH');
+        activePlansCache = null;
         showAlert(document.getElementById('plan-alert') || document.getElementById('content'), 'Plan activado.', 'success');
         setTimeout(() => renderPlans(), 1000);
     } catch (e) { showToast(e.message, 'error'); }
@@ -2925,7 +2995,7 @@ async function renderFeriados() {
                     </p>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <input id="feriados-year-filtro" type="number" placeholder="Año" style="width:90px;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" value="${escHtml(_feriadosYearFiltro)}" onchange="_feriadosSetYearFiltro(this.value)">
+                    <input id="feriados-year-filtro" type="number" placeholder="Año" style="width:90px;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" value="${escAttr(_feriadosYearFiltro)}" onchange="_feriadosSetYearFiltro(this.value)">
                     <button class="btn btn-sm btn-primary" onclick="openFeriadoModal()">＋ Agregar feriado</button>
                 </div>
             </div>
@@ -3000,7 +3070,7 @@ function openFeriadoModal(feriado) {
             </div>
             <div>
                 <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Motivo</label>
-                <input id="_fer-motivo" type="text" maxlength="200" placeholder="Ej: Feria judicial de invierno" value="${escHtml(feriado?.motivo || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                <input id="_fer-motivo" type="text" maxlength="200" placeholder="Ej: Feria judicial de invierno" value="${escAttr(feriado?.motivo || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
             </div>
             <div id="_fer-err" style="color:#991b1b;font-size:12px;display:none"></div>
             <div style="display:flex;justify-content:flex-end;gap:8px">
@@ -3346,7 +3416,7 @@ async function renderLegal() {
                             <td style="font-size:12px">${d.effective_date ? fmtDate(d.effective_date) : '—'}</td>
                             <td>
                                 ${d.acceptance_count > 0
-                                    ? `<a href="#" onclick="legalViewStats(${d.id},'${escHtml(TYPE_LABEL[type])} v${escHtml(d.version)}')" style="color:var(--primary);font-weight:600">${d.acceptance_count} usuarios</a>`
+                                    ? `<a href="#" onclick="legalViewStats(${d.id},'${escJsAttr(TYPE_LABEL[type])} v${escJsAttr(d.version)}')" style="color:var(--primary);font-weight:600">${d.acceptance_count} usuarios</a>`
                                     : `<span style="color:var(--text-muted)">0</span>`}
                             </td>
                             <td style="text-align:center">${d.requires_acceptance ? '✅' : '—'}</td>
@@ -3489,21 +3559,21 @@ function legalEditorHTML(prefill, type, typeLabel, mode) {
             <div style="display:grid;grid-template-columns:160px 1fr 180px;gap:12px;margin-bottom:12px">
                 <div class="form-group" style="margin:0">
                     <label>Versión *</label>
-                    <input id="le-version" type="text" value="${escHtml(prefill.version)}" placeholder="ej: 1.1" />
+                    <input id="le-version" type="text" value="${escAttr(prefill.version)}" placeholder="ej: 1.1" />
                 </div>
                 <div class="form-group" style="margin:0">
                     <label>Título *</label>
-                    <input id="le-title" type="text" value="${escHtml(prefill.title)}" />
+                    <input id="le-title" type="text" value="${escAttr(prefill.title)}" />
                 </div>
                 <div class="form-group" style="margin:0">
                     <label>Vigencia desde</label>
-                    <input id="le-date" type="date" value="${escHtml(prefill.date)}" />
+                    <input id="le-date" type="date" value="${escAttr(prefill.date)}" />
                 </div>
             </div>
 
             <div class="form-group">
                 <label>Resumen de cambios <span style="color:var(--text-muted);font-weight:400">(se muestra a usuarios en la notificación — dejá en blanco si no aplica)</span></label>
-                <input id="le-summary" type="text" value="${escHtml(prefill.summary)}" placeholder="ej: Actualizamos la cláusula de pagos y retención de datos." />
+                <input id="le-summary" type="text" value="${escAttr(prefill.summary)}" placeholder="ej: Actualizamos la cláusula de pagos y retención de datos." />
             </div>
 
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
@@ -3516,7 +3586,7 @@ function legalEditorHTML(prefill, type, typeLabel, mode) {
                     <label style="margin:0">Contenido HTML *</label>
                     <button class="btn btn-sm btn-secondary" id="le-preview-btn" onclick="legalTogglePreviewEditor()">👁 Vista previa</button>
                 </div>
-                <textarea id="le-content" rows="20" style="font-family:'Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.5;width:100%;resize:vertical;background:#f9fafb">${escHtml(prefill.html_content)}</textarea>
+                <textarea id="le-content" rows="20" style="font-family:'Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.5;width:100%;resize:vertical;background:#f9fafb">${escTextarea(prefill.html_content)}</textarea>
             </div>
 
             <div id="le-preview-box" style="display:none;border:1px solid var(--border);border-radius:8px;padding:24px 32px;max-height:480px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px;margin-bottom:12px"></div>
@@ -4693,7 +4763,7 @@ function pendingInvoiceRow(row) {
                     <input id="file-${row.payment_id}" type="file" accept=".pdf"
                         style="font-size:13px">
                 </div>
-                <button class="btn btn-sm btn-primary" onclick="uploadInvoicePdf('${row.payment_id}','${row.invoice_id || ''}')">
+                <button class="btn btn-sm btn-primary" id="upload-confirm-${row.payment_id}" onclick="uploadInvoicePdf('${row.payment_id}','${row.invoice_id || ''}')">
                     ✅ Confirmar
                 </button>
                 <button class="btn btn-sm btn-secondary" onclick="document.getElementById('upload-row-${row.payment_id}').style.display='none'">
@@ -4710,6 +4780,13 @@ function showUploadForm(paymentId, invoiceId) {
 }
 
 async function uploadInvoicePdf(paymentId, invoiceId) {
+    // F4 (2026-08-31): guard de doble submit -- las demas funciones de este
+    // bloque (submitManualInvoice, submitManualPayment, etc.) deshabilitan su
+    // boton antes del await; esta era la unica excepcion, y un doble clic (o
+    // Enter + clic) mandaba 2 POST concurrentes con el mismo PDF, dejando un
+    // archivo huerfano en storage/invoices/ del que el admin nunca se entera.
+    const btn = document.getElementById(`upload-confirm-${paymentId}`);
+    if (btn?.disabled) return;
     const fileInput  = document.getElementById(`file-${paymentId}`);
     const numeroInput = document.getElementById(`numero-${paymentId}`);
     const tipoSelect = document.getElementById(`tipo-${paymentId}`);
@@ -4726,6 +4803,7 @@ async function uploadInvoicePdf(paymentId, invoiceId) {
     if (tipoSelect?.value)          form.append('invoice_type', tipoSelect.value);
     if (caeInput?.value.trim())     form.append('cae',          caeInput.value.trim());
 
+    if (btn) btn.disabled = true;
     try {
         const resp = await fetch(endpoint, {
             method: 'POST',
@@ -4742,6 +4820,7 @@ async function uploadInvoicePdf(paymentId, invoiceId) {
         setTimeout(loadPendingInvoices, 1500);
     } catch (e) {
         showToast('Error: ' + e.message, 'error');
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -4805,8 +4884,8 @@ async function loadIssuedInvoices() {
                         </td>
                         <td style="padding:10px 12px;text-align:center;white-space:nowrap">
                             ${inv.payment_id
-                                ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro del pago" onclick="gotoPaymentRecord(${inv.payment_id},'${escHtml(inv.email||'')}')">Pago #${inv.payment_id}</a> <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 6px" onclick="unlinkInvoiceFromPayment(${inv.id},'facturas')" title="Desvincular">✕</button>`
-                                : `<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px" onclick="openLinkPaymentModal(${inv.id},'${escHtml(inv.email||'')}')">Asociar pago</button>`}
+                                ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro del pago" onclick="gotoPaymentRecord(${inv.payment_id},'${escJsAttr(inv.email||'')}')">Pago #${inv.payment_id}</a> <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 6px" onclick="unlinkInvoiceFromPayment(${inv.id},'facturas')" title="Desvincular">✕</button>`
+                                : `<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px" onclick="openLinkPaymentModal(${inv.id},'${escJsAttr(inv.email||'')}')">Asociar pago</button>`}
                         </td>
                         <td style="padding:10px 12px;text-align:center">
                             <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:2px 8px" title="Editar datos de la factura" onclick="openInvoiceEditModal(${inv.id})">✏️</button>
@@ -4856,14 +4935,17 @@ document.addEventListener('click', e => {
 
 let _invoiceUserResults = [];  // resultados de la última búsqueda
 let _invoiceUserActiveIdx = -1; // índice resaltado por teclado
+let _invoiceSearchSeq = 0; // F4: descarta respuestas de búsquedas viejas que llegan tarde
 
 async function searchUsersForInvoice(query) {
     clearTimeout(_userSearchTimeout);
     const dd = document.getElementById('mi-user-dropdown');
     if (!query || query.length < 2) { dd.style.display = 'none'; return; }
+    const mySeq = ++_invoiceSearchSeq;
     _userSearchTimeout = setTimeout(async () => {
         try {
             const data = await apiFetch(`/admin/users/search?q=${encodeURIComponent(query)}&limit=8`);
+            if (mySeq !== _invoiceSearchSeq) return; // llegó tarde, ya hay una búsqueda más nueva
             const users = data?.users || [];
             _invoiceUserResults = users;
             _invoiceUserActiveIdx = -1;
@@ -5077,13 +5159,13 @@ async function loadPaymentsAdmin() {
                 <td style="font-size:11px">${
                     !p.invoice_id ? '<span style="color:#9ca3af">Sin factura</span>'
                     : p.invoice_pdf
-                        ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro de la factura (emitida)" onclick="gotoInvoiceRecord(${p.invoice_id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</a>`
-                        : `<a class="badge badge-yellow" style="cursor:pointer;text-decoration:none" title="Registro creado sin PDF — subir en Pendientes" onclick="gotoPendingInvoice(${p.id},'${escHtml(p.email||'')}')">Factura #${p.invoice_id} · sin PDF</a>`
+                        ? `<a class="badge badge-green" style="cursor:pointer;text-decoration:none" title="Ver registro de la factura (emitida)" onclick="gotoInvoiceRecord(${p.invoice_id},'${escJsAttr(p.email||'')}')">Factura #${p.invoice_id}${p.invoice_numero?(' · '+escHtml(p.invoice_numero)):''}</a>`
+                        : `<a class="badge badge-yellow" style="cursor:pointer;text-decoration:none" title="Registro creado sin PDF — subir en Pendientes" onclick="gotoPendingInvoice(${p.id},'${escJsAttr(p.email||'')}')">Factura #${p.invoice_id} · sin PDF</a>`
                 }</td>
                 <td style="white-space:nowrap">${p.payment_method === 'manual' ? `<button class="btn btn-sm btn-secondary" title="Editar pago manual" onclick="openPaymentEditModal(${p.id})">✏️</button> ` : ''}${p.invoice_id
                     ? `<button class="btn btn-sm btn-secondary" onclick="unlinkInvoiceFromPayment(${p.invoice_id},'pagos')">Desvincular</button>`
-                    : `<button class="btn btn-sm btn-primary" onclick="openInvoiceFromPayment(${p.id},'${escHtml(p.email||'')}')">📎 Crear factura</button>
-                       <button class="btn btn-sm btn-secondary" onclick="openLinkInvoiceModal(${p.id},'${escHtml(p.email||'')}')">Asociar</button>`}</td>
+                    : `<button class="btn btn-sm btn-primary" onclick="openInvoiceFromPayment(${p.id},'${escJsAttr(p.email||'')}')">📎 Crear factura</button>
+                       <button class="btn btn-sm btn-secondary" onclick="openLinkInvoiceModal(${p.id},'${escJsAttr(p.email||'')}')">Asociar</button>`}</td>
             </tr>`).join('')}</tbody>
         </table></div>`;
         if (_pendingPaymentHighlight) { const h = _pendingPaymentHighlight; _pendingPaymentHighlight = null; _flashRow(`pay-row-${h.id}`); }
@@ -5247,13 +5329,16 @@ function openPaymentModal(fixedUserId = null, fixedEmail = '') {
         </div>`);
 }
 let _payUserSearchTimeout = null;
+let _paySearchSeq = 0; // F4: mismo guard de secuencia que searchUsersForInvoice
 function _payUserSearch(q) {
     clearTimeout(_payUserSearchTimeout);
     const dd = document.getElementById('_pay-user-dropdown');
     if (!q || q.length < 2) { dd.style.display = 'none'; return; }
+    const mySeq = ++_paySearchSeq;
     _payUserSearchTimeout = setTimeout(async () => {
         try {
             const data = await apiFetch(`/admin/users/search?q=${encodeURIComponent(q)}&limit=8`);
+            if (mySeq !== _paySearchSeq) return;
             _payUserResults = data?.users || [];
             if (!_payUserResults.length) { dd.style.display = 'none'; return; }
             dd.innerHTML = _payUserResults.map((u, idx) => `<div onmousedown="_paySelectUser(${idx})" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f3f4f6" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'"><strong>${escHtml(u.nombre||'')} ${escHtml(u.apellido||'')}</strong> <span style="color:#6b7280">${escHtml(u.email)}</span>${u.cuit?` <span style="color:#6b7280;font-size:11px">CUIT: ${escHtml(u.cuit)}</span>`:''}</div>`).join('');
@@ -5442,7 +5527,7 @@ function openPaymentEditModal(paymentId) {
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto *</label>
                     <input id="_pe-amount" type="number" min="0" step="0.01" value="${p.amount != null ? Number(p.amount) : ''}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Moneda</label>
-                    <input id="_pe-currency" type="text" value="${escHtml(p.currency || 'ARS')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                    <input id="_pe-currency" type="text" value="${escAttr(p.currency || 'ARS')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Estado</label>
@@ -5450,16 +5535,16 @@ function openPaymentEditModal(paymentId) {
                         ${['approved','pending','rejected','refunded'].map(s => `<option value="${s}" ${p.status===s?'selected':''}>${({approved:'Aprobado',pending:'Pendiente',rejected:'Rechazado',refunded:'Reembolsado'})[s]}</option>`).join('')}
                     </select></div>
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Método</label>
-                    <input id="_pe-method" type="text" value="${escHtml(p.payment_method || 'manual')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                    <input id="_pe-method" type="text" value="${escAttr(p.payment_method || 'manual')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Fecha</label>
                     <input id="_pe-date" type="date" value="${dateVal}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Plan / Concepto</label>
-                    <input id="_pe-plan" type="text" value="${escHtml(p.plan || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                    <input id="_pe-plan" type="text" value="${escAttr(p.plan || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
             </div>
             <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">ID externo <span style="font-weight:400;color:#9ca3af">(opcional)</span></label>
-                <input id="_pe-extid" type="text" value="${escHtml(p.external_payment_id || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                <input id="_pe-extid" type="text" value="${escAttr(p.external_payment_id || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
             <div id="_pe-err" style="color:#991b1b;font-size:12px;display:none"></div>
             <div style="display:flex;justify-content:flex-end;gap:8px">
                 <button class="btn btn-sm btn-secondary" onclick="closeDynModal()">Cancelar</button>
@@ -5506,13 +5591,15 @@ function openInvoiceEditModal(invoiceId) {
                         ${['C','B','A','NC_C','NC_B'].map(t => `<option value="${t}" ${inv.invoice_type===t?'selected':''}>${({C:'Factura C',B:'Factura B',A:'Factura A',NC_C:'Nota de crédito C',NC_B:'Nota de crédito B'})[t]}</option>`).join('')}
                     </select></div>
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Monto (ARS)</label>
-                    <input id="_ie-amount" type="number" min="0" step="0.01" value="${inv.amount != null ? Number(inv.amount) : ''}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                    <input id="_ie-amount" type="number" min="0" step="0.01" value="${inv.amount != null ? Number(inv.amount) : ''}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box">
+                    <div style="font-size:11px;color:#9ca3af;margin-top:3px">Dejarlo vacío NO lo borra — conserva el valor anterior.</div>
+                </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Número</label>
-                    <input id="_ie-numero" type="text" value="${escHtml(inv.numero || '')}" onblur="this.value=fmtNroFactura(this.value)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
+                    <input id="_ie-numero" type="text" value="${escAttr(inv.numero || '')}" onblur="this.value=fmtNroFactura(this.value)" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
                 <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">CAE</label>
-                    <input id="_ie-cae" type="text" value="${escHtml(inv.cae || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace"></div>
+                    <input id="_ie-cae" type="text" value="${escAttr(inv.cae || '')}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace"></div>
             </div>
             <div><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px">Fecha de emisión</label>
                 <input id="_ie-date" type="date" value="${dateVal}" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box"></div>
