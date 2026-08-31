@@ -1117,19 +1117,19 @@ function puedeReintentar(identificador, expedienteStr) {
     return estado.contadorReintentos.attempts < estado.contadorReintentos.max;
 }
 
-/**
- * Actualiza el estado del PDF generado
- */
-function actualizarEstadoPDF(identificador, expedienteStr, generado) {
-    const estadoPath = getEstadoSeccionesPath(identificador, expedienteStr);
-    let estado = leerEstadoSecciones(identificador, expedienteStr);
-    if (!estado) {
-        inicializarEstadoSecciones(identificador, expedienteStr);
-        estado = leerEstadoSecciones(identificador, expedienteStr);
-    }
-    estado.pdfGenerado = generado;
-    fs.writeFileSync(estadoPath, JSON.stringify(estado, null, 2), "utf-8");
-}
+// F8 (2026-08-31, code-review): `actualizarEstadoPDF` (usaba `estado.pdfGenerado`
+// como booleano, distinta de `actualizarEstadoSeccion` — plural "Secciones",
+// que sí está en uso, con `estado.pdfGenerado.processed`) no tenía NINGÚN
+// call site en todo el repo — código muerto desde siempre. Se elimina en vez
+// de dejarla: llamaba a `inicializarEstadoSecciones(identificador,
+// expedienteStr)` sin el 3er argumento `configInforme` que la función exige,
+// y —más grave si alguna vez se hubiera cableado— el fix de esta misma sesión
+// (`2ccae31`, "limpiar el estado al inicio de cada corrida") hizo que
+// `inicializarEstadoSecciones` borre TODA la carpeta de backup del expediente
+// antes de reescribir el estado. El comentario de esa función promete que se
+// invoca "una sola vez por ejecución de main(), ANTES del bucle de reintentos,
+// nunca dentro" — este segundo call site, de haber estado vivo, violaba esa
+// garantía en cualquier punto intermedio de una corrida.
 
 
 /**

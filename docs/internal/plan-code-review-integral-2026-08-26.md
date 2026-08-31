@@ -494,6 +494,15 @@ mirar como código, porque no se puede ejercitar sin una persona pagando:**
 
 ### F8 — Motor Puppeteer, solo el delta 🟢
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F8-2026-08-31.md`](revision-F8-2026-08-31.md).
+> El delta real fue de 4 archivos (no 18) — `health-check.js` ya estaba cubierto por F10. **1
+> hallazgo real, corregido:** `actualizarEstadoPDF()` en `informequickscwpjn.js` era código muerto
+> (0 call sites en todo el repo) que violaba la garantía "se inicializa una sola vez, antes del
+> loop de reintentos" que el fix `2ccae31` acababa de establecer — de haberse cableado alguna vez,
+> habría podido borrar el estado de una corrida en curso. Eliminada. El resto del delta (respaldo
+> de `storage/invoices/`, reporte del canary al dashboard, el fix de columna de `data-retention.js`)
+> se revisó sin hallazgos nuevos.
+
 | | |
 |---|---|
 | **Target** | `backend-server/scripts/informequickscwpjn.js` — y cualquier otro `scripts/*.js` con cambios posteriores al 2026-07-28 |

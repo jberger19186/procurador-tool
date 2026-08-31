@@ -2969,7 +2969,14 @@ const SMOKE_FILE = _path.join(__dirname, '..', 'data', 'smoke-test-results.json'
 
 function _loadSmoke() {
     try { if (_fs.existsSync(SMOKE_FILE)) return JSON.parse(_fs.readFileSync(SMOKE_FILE, 'utf8')); } catch (_) {}
-    return { api: null, pjn: null, extension: null };
+    // F8 (2026-08-31): `canary` agregado al default — canary-test.js (crontab,
+    // sin token de admin) escribe esa clave directo por fs desde el 2026-08-27
+    // (`guardarResultadoCanary()`). Sin ella acá, si este fallback se dispara
+    // (archivo ausente o corrupto) justo cuando un admin corre `run-api`/
+    // `report-pjn`/`report-extension`, el `_saveSmoke()` subsiguiente escribe
+    // el archivo SIN `canary` — no perdía el dato en el caso normal (el objeto
+    // cargado del disco ya lo trae), pero sí en este caso borde.
+    return { api: null, pjn: null, extension: null, canary: null };
 }
 
 function _saveSmoke(data) {
