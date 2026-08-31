@@ -75,9 +75,30 @@ const PALABRAS_NO_NOMBRE = new Set([
     'ESCRITO', 'CEDULA', 'CÉDULA', 'DESPACHO', 'SENTENCIA', 'RESOLUCION', 'RESOLUCIÓN',
     'MOVIMIENTO', 'ESTADO', 'FECHA', 'NOTIFICACION', 'NOTIFICACIÓN', 'INFORME',
     'EJECUCION', 'EJECUCIÓN', 'TOMO', 'FOLIO', 'NOMBRE', 'LETRADO', 'APODERADO',
+    // F5 (2026-08-31) — vocabulario procesal de alta frecuencia que FALTABA.
+    // No es un agregado cosmético: es lo que acota la captura tras un marcador
+    // de rol ahora que ni los conectores (fix de A0) ni un presupuesto de 4
+    // tokens la cortan. Medido antes de agregarlas: `DR. FERNANDEZ SOLICITA
+    // MEDIDA CAUTELAR URGENTE` producía el "tercero" `FERNANDEZ SOLICITA
+    // MEDIDA CAUTELAR` → `FER### SOL### MED### CAU###`, y `AL DR. GOMEZ HAGASE
+    // SABER LO RESUELTO` producía `GOM### HAG### SAB### LO###`. Sobre-enmascarar
+    // vuelve el archivo ilegible, que este módulo considera peor que un falso
+    // negativo. Criterio de inclusión: SOLO palabras que no pueden ser un
+    // apellido argentino — por eso quedan afuera COSTAS, LEON, VEGA, PEÑA y
+    // cualquier otra que sí lo sea (agregarlas dejaría fugar a esa persona).
+    'SOLICITA', 'SOLICITADO', 'SOLICITUD', 'MEDIDA', 'MEDIDAS', 'CAUTELAR',
+    'HAGASE', 'HÁGASE', 'SABER', 'RESUELTO', 'RESUELVE', 'PROVEER', 'PROVEASE',
+    'PROVÉASE', 'AGREGUESE', 'AGRÉGUESE', 'INTIMESE', 'INTÍMESE', 'TRASLADO',
+    'OFICIO', 'MANDAMIENTO', 'EMBARGO', 'LIQUIDACION', 'LIQUIDACIÓN',
+    'HONORARIOS', 'RECURSO', 'APELACION', 'APELACIÓN', 'NOTIFICADO',
+    'NOTIFICADA', 'PRESENTA', 'ACOMPAÑA', 'ACOMPANA', 'DOMICILIO',
+    'ELECTRONICO', 'ELECTRÓNICO', 'AUDIENCIA', 'PLAZO', 'DIAS', 'DÍAS',
+    'HABILES', 'HÁBILES', 'ARTICULO', 'ARTÍCULO', 'CODIGO', 'CÓDIGO', 'LEY',
+    'INCISO', 'JUEZ', 'JUEZA', 'ACTUARIO', 'ACTUARIA', 'URGENTE', 'CAPITAL',
+    'INTERESES', 'DEUDA', 'PAGO', 'PAGOS', 'CUOTA', 'CUOTAS', 'ACREDITADO',
     // Conectores
     'DE', 'DEL', 'LA', 'EL', 'LOS', 'LAS', 'Y', 'AL', 'EN', 'CON', 'SIN', 'SOBRE',
-    'PARA', 'SU', 'SUS', 'OTRO', 'OTROS', 'OTRA', 'OTRAS',
+    'PARA', 'SU', 'SUS', 'OTRO', 'OTROS', 'OTRA', 'OTRAS', 'LO',
 ]);
 
 // Conectores que viven ADENTRO de un nombre ("MARIA DEL VALLE", "FERNANDEZ
@@ -101,16 +122,36 @@ const SUFIJOS_SOCIETARIOS = /\b(S\.?A\.?|S\.?R\.?L\.?|S\.?A\.?S\.?|S\.?C\.?A\.?|
 // ─── Marcadores de rol que anteceden a un nombre de persona ───────────────
 // Ordenados de más específico a más genérico (el alternador de regex es
 // ordenado, y `LETRADO APODERADO` debe ganarle a un eventual `LETRADO`).
+// F5 (2026-08-31): `DR/A` y `SR/A` — la forma de formulario ("Sr/a. Juez",
+// "Dr/a. …") que el PJN usa en despachos y cédulas tipo. Van ANTES de `DR`/`SR`
+// por claridad; el `(?![\p{L}])` del final ya evitaba que el corto le ganara al
+// largo, pero no cubría este caso: `DR` seguido de `/` SÍ pasa el lookahead
+// (una barra no es letra) y la captura moría enseguida contra la `A`.
 const MARCADORES_ROL = [
     'LETRADO APODERADO', 'LETRADO PATROCINANTE', 'APODERADO', 'LETRADO',
     'PERITO', 'MARTILLERO', 'DEFENSOR', 'DEFENSORA', 'SINDICO', 'SÍNDICO',
-    'DESTINATARIO', 'DR', 'DRA', 'SR', 'SRA', 'SRTA',
+    'DESTINATARIO', 'DR/A', 'SR/A', 'DR', 'DRA', 'SR', 'SRA', 'SRTA',
 ];
 
-// Un nombre de persona: 1 a 4 tokens en mayúsculas (el PJN escribe casi todo
-// en mayúsculas), con acentos y la Ñ. El tope de 4 evita arrastrar media
+// Un nombre de persona: hasta N tokens REALES en mayúsculas (el PJN escribe
+// casi todo en mayúsculas), con acentos y la Ñ. El tope evita arrastrar media
 // oración cuando el marcador está seguido de texto procesal.
-const MAX_TOKENS_NOMBRE = 4;
+//
+// 🚨 F5 (2026-08-31): era 4, y 4 es MENOS que un nombre legal argentino
+// completo. Medido: `DESTINATARIO: JUAN CARLOS MARIA JOSE FERNANDEZ` gastaba
+// el presupuesto en los 4 nombres de pila y salía
+// `JUA### CAR### MAR### JOS### FERNANDEZ` — **el apellido, entero, sobrevivía**.
+// Es el mismo defecto que A0 encontró y arregló para el caso del honorífico
+// (`DR.` comiéndose un lugar), pero A0 atacó el síntoma, no la causa: el
+// presupuesto se gasta de izquierda a derecha y lo que queda afuera es siempre
+// la cola — que en un nombre es justamente el apellido.
+//
+// 6 cubre el peor caso real (hasta 4 nombres de pila + 2 apellidos; los
+// conectores de "DE LA VEGA" no cuentan, ver el bucle de captura). Subir el
+// tope solo es seguro porque el corte real lo hacen las OTRAS 3 señales —
+// token en minúscula, palabra procesal, separador estructural — y la lista de
+// palabras procesales se amplió en el mismo cambio justamente para eso.
+const MAX_TOKENS_NOMBRE = 6;
 const MIN_LARGO_TOKEN = 2;
 
 // CUIT/CUIL: 11 dígitos con prefijo de persona/empresa válido. Los `\b`
@@ -119,7 +160,24 @@ const MIN_LARGO_TOKEN = 2;
 const RE_CUIT = /\b(?:20|23|24|27|30|33|34)\d{9}\b/g;
 // Con separadores (menos frecuente en estos PDF, pero válido).
 const RE_CUIT_SEP = /\b(?:20|23|24|27|30|33|34)[-\s]?\d{8}[-\s]?\d\b/g;
-const RE_DNI = /\bDNI\s*:?\s*(\d{1,3}\.?\d{3}\.?\d{3})\b/gi;
+
+// 🚨 F5 (2026-08-31): la versión anterior era `/\bDNI\s*:?\s*(\d…)/i` — exigía
+// la sigla PELADA y como mucho un `:` antes del número. Medido sobre las 17
+// formas en que un escrito judicial argentino escribe un documento, detectaba
+// 2: `DNI 22.367.078` y `DNI: 22.367.078`. Se filtraban, entre otras,
+// `DNI Nº`, `DNI N°`, `DNI nro.`, `D.N.I.`, `D.N.I. Nº`, `DNI (…)`, `L.E.` y
+// `L.C.` — todas corrientes, y `D.N.I.`/`DNI Nº` son probablemente las MÁS
+// frecuentes de todas. El `mapping.txt` tiene una sección titulada
+// "Identificadores (CUIT / CUIL / DNI)", así que el usuario ve una promesa de
+// cobertura que el patrón no cumplía. Ahora:
+//   · la sigla admite puntos entre letras (`D.N.I.`) y las variantes
+//     históricas L.E./L.C. (libreta de enrolamiento/cívica, todavía vigentes
+//     como documento de las partes nacidas antes de ~1968);
+//   · entre la sigla y el número admite `Nº/N°/N./Nro./nro`, `:`, `(` y espacios.
+// El número sigue exigiendo una sigla adelante — 8 dígitos sueltos son
+// demasiado genéricos para enmascararlos sin contexto (un importe, un nº de
+// actuación), y sobre-enmascarar es el otro modo de falla del módulo.
+const RE_DNI = /\b(?:D\.?N\.?I\.?|L\.?E\.?|L\.?C\.?|DOCUMENTO\s+NACIONAL\s+DE\s+IDENTIDAD)\s*(?:N[º°ro.]{0,4})?\s*[:(]?\s*(\d{1,3}\.?\d{3}\.?\d{3})\b/gi;
 
 // Enlaces al visor del SCW — REGLA 4 (decisión del operador: opción A,
 // eliminar). Ver §M4 del plan y §4 del spike de M0: esos enlaces abren el
@@ -296,9 +354,27 @@ function parsearCaratula(markdown) {
 
     // El actor suele arrastrar el nº de boleta de deuda entre paréntesis
     // (`AFIP-DGI (BD 7570/10/2017)`) — no es parte del nombre.
-    const actor = m[1].replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
-    const demandado = m[2].replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
-    return { actor: actor || null, demandado: demandado || null };
+    const limpiar = (s) => s.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    const normalizar = (s) => s.replace(/\s+/g, ' ').trim();
+    const actor = limpiar(m[1]);
+    const demandado = limpiar(m[2]);
+    // 🚨 F5 (2026-08-31): se devuelve TAMBIÉN la forma cruda (sin quitar los
+    // paréntesis). Quitarlos es correcto cuando el paréntesis está al final —
+    // el caso que motivó la regla, el nº de boleta de deuda del actor — pero
+    // cuando cae en el MEDIO del nombre el término limpio ya no matchea el
+    // texto original, y `regexDeTermino` no tolera un paréntesis entre tokens.
+    // Medido: con `AFIP c/ JUAN (JOSE) PEREZ s/EJECUCION`, el demandado
+    // detectado era `JUAN PEREZ` y **el nombre completo sobrevivía intacto en
+    // todo el documento**, carátula incluida. `detectarEntidades` agrega la
+    // forma cruda como variante cuando difiere, en vez de tocar
+    // `regexDeTermino`, que es el regex que usa TODO reemplazo: aflojarlo ahí
+    // para este caso arriesgaría sobre-enmascarado en todos los demás.
+    return {
+        actor: actor || null,
+        demandado: demandado || null,
+        actorCrudo: normalizar(m[1]) || null,
+        demandadoCrudo: normalizar(m[2]) || null,
+    };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -330,8 +406,25 @@ function detectarTercerosPorMarcador(markdown) {
     // el usuario lee. Encontrado inspeccionando la salida real, no por un test.
     // Tras el marcador puede venir `.`, `:`, un pipe (escapado como `\|` por
     // el render de tablas de M2) o simplemente espacios.
+    // F5 (2026-08-31), dos ampliaciones sobre el patrón original:
+    //
+    //  · SEPARADOR marcador→nombre: antes solo `.`/`:`/pipe/espacios. Medido:
+    //    `DESTINATARIO - LAURA VENTURA`, `DESTINATARIO (LAURA VENTURA)` y
+    //    `DESTINATARIO: "LAURA VENTURA"` no detectaban NADA y el nombre entero
+    //    sobrevivía. Se agregan `-`, `(` y las comillas.
+    //
+    //  · 🚨 GUION DENTRO DEL NOMBRE: la clase de captura era
+    //    `[\p{L}'’.\s]` — sin `-`. Con `DESTINATARIO: MARIA GARCIA-LOPEZ` la
+    //    captura cortaba en el guion, el mapping quedaba `MARIA GARCIA` y la
+    //    salida `MAR### GAR###-LOPEZ`: **el segundo apellido, que es la parte
+    //    que identifica, sobrevivía**. Misma dirección de falla que los 5
+    //    defectos de A0 (enmascarar el nombre de pila y dejar el apellido), por
+    //    una vía que A0 no cubrió. El guion NO puede abrir el nombre (la clase
+    //    inicial sigue exigiendo `\p{Lu}`) ni quedar suelto al final: el
+    //    `.replace(/[.,;:]+$/…)` de cada token y el corte por separador
+    //    estructural siguen aplicando.
     const re = new RegExp(
-        `(?<![\\p{L}])(?:${alternador})(?![\\p{L}])\\s*[.:]?\\s*(?:\\\\?\\|)?\\s*([\\p{Lu}][\\p{L}'’.\\s]{2,80})`,
+        `(?<![\\p{L}])(?:${alternador})(?![\\p{L}])\\s*[.:\\-]?\\s*(?:\\\\?\\|)?\\s*["'“”«()]?\\s*([\\p{Lu}][\\p{L}'’.\\-\\s]{2,80})`,
         'gu'
     );
 
@@ -384,7 +477,11 @@ function detectarTercerosPorMarcador(markdown) {
             // legitimamente minuscula.
             if (/^\p{Ll}/u.test(token)) break;
             if (PALABRAS_NO_NOMBRE.has(limpio)) break;
-            tokens.push(...pendientes, token.replace(/[.,;:]+$/, ''));
+            // El `-` se suma al recorte de cola desde F5 (ahora que la clase de
+            // captura lo admite): `PEREZ-` colgando al final de una captura no
+            // es parte del apellido. En `GARCIA-LOPEZ` el guion está en el
+            // medio, así que este `$` no lo toca.
+            tokens.push(...pendientes, token.replace(/[.,;:\-]+$/, ''));
             pendientes = [];
             if (++reales >= MAX_TOKENS_NOMBRE) break;
         }
@@ -490,15 +587,18 @@ function detectarEntidades(markdown) {
     if (expediente) agregar(expediente, REEMPLAZO_EXPEDIENTE, 'expediente');
 
     // — Partes (carátula) —
-    const { actor, demandado } = parsearCaratula(texto);
-    if (actor) {
-        agregar(actor, REEMPLAZO_ACTOR, 'parte');
-        variantesPresentes(actor, texto).forEach(v => agregar(v, REEMPLAZO_ACTOR, 'parte-variante'));
-    }
-    if (demandado) {
-        agregar(demandado, REEMPLAZO_DEMANDADO, 'parte');
-        variantesPresentes(demandado, texto).forEach(v => agregar(v, REEMPLAZO_DEMANDADO, 'parte-variante'));
-    }
+    const { actor, demandado, actorCrudo, demandadoCrudo } = parsearCaratula(texto);
+    // La forma CRUDA va primero: es la más larga, y `aplicarMapping` ordena por
+    // longitud descendente, así que gana sobre la limpia donde ambas aplican.
+    // Solo se agrega si difiere de la limpia (o sea, si había paréntesis).
+    const agregarParte = (limpio, crudo, reemplazo) => {
+        if (!limpio) return;
+        if (crudo && crudo !== limpio) agregar(crudo, reemplazo, 'parte');
+        agregar(limpio, reemplazo, 'parte');
+        variantesPresentes(limpio, texto).forEach(v => agregar(v, reemplazo, 'parte-variante'));
+    };
+    agregarParte(actor, actorCrudo, REEMPLAZO_ACTOR);
+    agregarParte(demandado, demandadoCrudo, REEMPLAZO_DEMANDADO);
 
     // — Terceros (marcadores de rol) —
     for (const tercero of detectarTercerosPorMarcador(texto)) {
@@ -607,7 +707,16 @@ function aplicarMapping(markdown, entradas) {
     for (const { original, reemplazo } of ordenadas) {
         const re = regexDeTermino(original);
         if (!re) continue;
-        salida = salida.replace(re, reemplazo);
+        // 🚨 F5 (2026-08-31): el reemplazo va como FUNCIÓN, no como string. Con
+        // un string, `String.replace` interpreta `$&`, `$'`, `` $` `` y `$$` — y
+        // el reemplazo lo escribe el USUARIO en el `mapping.txt`. Verificado:
+        // una línea `JUAN PEREZ = [$&]` producía `[JUAN PEREZ]`, o sea el
+        // nombre DE VUELTA, con el usuario convencido de haberlo enmascarado.
+        // Es exactamente el modo de falla silencioso que el encabezado de este
+        // archivo advierte. `$'` sería peor todavía: inserta todo el resto del
+        // documento en cada coincidencia. Con una función, el texto se inserta
+        // literal y `$` deja de tener significado.
+        salida = salida.replace(re, () => reemplazo);
     }
 
     // REGLA 4 — enlaces al SCW (opción A: eliminar la URL, conservar el texto).

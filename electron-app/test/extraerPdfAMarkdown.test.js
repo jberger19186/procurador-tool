@@ -143,6 +143,58 @@ function itemFake(x, y, str, height) {
     }]);
     check('renderizarInformeMarkdown: continuación sin fila previa no explota, queda como nota',
         sinFilaPrevia.markdown.includes('> texto suelto sin fecha'));
+
+    // ── F5 (2026-08-31) ──────────────────────────────────────────────────
+    // 🚨 La tabla de movimientos NUNCA cerraba: `enMovimientos` se ponía en
+    // true y no volvía atrás, así que TODA sección posterior del informe
+    // (Intervinientes, Vinculados, Recursos, Notas, Movimientos Históricos —
+    // los 7 títulos que dibuja `agregarSeccion()` en testM2.js) se pegaba con
+    // un espacio a la última fila parseada. El caso grave es Intervinientes:
+    // el roster de partes y letrados con nombres, tomo/folio y CUIT terminaba
+    // adentro de una celda de un movimiento sin relación, con sus `|`
+    // escapados a `\|`. No produce una fuga por sí solo (M4 escanea texto
+    // libre), pero hace impracticable la revisión manual del `.md` — que es la
+    // única garantía real que el módulo ofrece (ver el encabezado de
+    // anonimizar.js y los TyC).
+    const conSecciones = renderizarInformeMarkdown([{
+        numero: 1,
+        lineas: [
+            'EXP 1/2020', 'Situacion: EN TRAMITE', 'Movimientos',
+            '1/01/2020 - PRIMER MOVIMIENTO',
+            'Intervinientes',
+            'LETRADO APODERADO|APELLIDO UNO|Tomo: 1|20111111112',
+            'DEMANDADO|NOMBRE : APELLIDO DOS||',
+            'Notas', 'Una nota del expediente.',
+        ],
+    }]);
+    check('F5 — un título de sección CIERRA la tabla de movimientos',
+        /\| 1\/01\/2020 \| PRIMER MOVIMIENTO \|/.test(conSecciones.markdown), conSecciones.markdown);
+    check('F5 — "Intervinientes" queda como sección propia, no dentro de una celda',
+        conSecciones.markdown.includes('## Intervinientes') &&
+        !/\| 1\/01\/2020 \|[^\n]*Intervinientes/.test(conSecciones.markdown), conSecciones.markdown);
+    check('F5 — el roster de partes conserva una línea por interviniente',
+        /APELLIDO UNO\|Tomo: 1\|20111111112 {2}\n/.test(conSecciones.markdown), conSecciones.markdown);
+    check('F5 — las secciones siguientes (Notas) también se separan',
+        conSecciones.markdown.includes('## Notas') &&
+        conSecciones.markdown.includes('Una nota del expediente.'));
+
+    const conHistoricos = renderizarInformeMarkdown([{
+        numero: 1,
+        lineas: ['EXP 1/2020', 'Movimientos', '1/01/2020 - A', 'Movimientos Históricos', '2/01/2019 - B'],
+    }]);
+    check('F5 — "Movimientos Históricos" abre su propia tabla, no continúa la anterior',
+        conHistoricos.markdown.includes('## Movimientos Históricos') &&
+        (conHistoricos.markdown.match(/\| Fecha \| Detalle \|/g) || []).length === 2,
+        conHistoricos.markdown);
+
+    // El caso hermano del que ya estaba cubierto arriba: un "-> Ver documento"
+    // sin fila previa se descartaba en SILENCIO (el otro sí se preservaba).
+    const verDocHuerfano = renderizarInformeMarkdown([{
+        numero: 1,
+        lineas: ['EXP 1/2020', 'Movimientos', '-> Ver documento', '1/01/2020 - X'],
+    }]);
+    check('F5 — "-> Ver documento" sin fila previa no se pierde en silencio',
+        verDocHuerfano.markdown.includes('> -> Ver documento'), verDocHuerfano.markdown);
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -155,6 +207,26 @@ function itemFake(x, y, str, height) {
         nombre.startsWith('markdown_FCR 018745_2017_') && nombre.endsWith('.md') &&
         !nombre.includes('2026-08-25T18-09-54'),
         nombre);
+
+    // ── F5 (2026-08-31) ──────────────────────────────────────────────────
+    // El PDF de entrada lo elige el usuario desde un diálogo nativo: no tiene
+    // por qué venir de la app. Sin sanear, un nombre con caracteres ilegales
+    // en Windows hacía que `fs.writeFileSync` tirara un ENOENT no controlado.
+    const ILEGALES = /[\\/:"*?<>|]/;
+    const raro = derivarNombreSalida('C:/x/Informe: FCR 123 <final>.pdf');
+    check('F5 — derivarNombreSalida sanea los caracteres ilegales de Windows',
+        !ILEGALES.test(raro) && raro.endsWith('.md'), raro);
+
+    const mayus = derivarNombreSalida('C:/x/informe_FCR 018745_2017_2026-08-25T18-09-54.PDF');
+    check('F5 — la extensión .PDF en mayúsculas también se saca',
+        !/\.PDF/i.test(mayus.replace(/\.md$/, '')) && mayus.startsWith('markdown_FCR 018745_2017_'), mayus);
+
+    const largo = derivarNombreSalida('C:/x/' + 'A'.repeat(300) + '.pdf');
+    check('F5 — un nombre de origen larguísimo se recorta (límite de path de Windows)',
+        largo.length < 130, `largo=${largo.length}`);
+
+    check('F5 — un nombre vacío tras sanear cae a un stem por defecto',
+        derivarNombreSalida('C:/x/.pdf').startsWith('markdown_informe_'));
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════

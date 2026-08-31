@@ -146,6 +146,27 @@ function check(nombre, cond, detalle) {
         parsearMapping('A = B = C')[0].reemplazo === 'B = C');
 })();
 
+(function testReemplazoLiteralF5() {
+    // 🚨 F5 (2026-08-31): el reemplazo lo escribe el USUARIO en el mapping.txt,
+    // y `String.replace` con un STRING interpreta `$&`, `$'`, `` $` `` y `$$`.
+    // Verificado antes del fix: `JUAN PEREZ = [$&]` devolvía `[JUAN PEREZ]`, o
+    // sea el nombre DE VUELTA, con el usuario convencido de haberlo
+    // enmascarado — el modo de falla silencioso que el encabezado del motor
+    // advierte. Ahora el reemplazo va como función y `$` no significa nada.
+    const md = 'El deudor JUAN PEREZ debe algo. Sigue el resto del documento.';
+    const conAmp = aplicarMapping(md, [{ original: 'JUAN PEREZ', reemplazo: '[$&]', tipo: 'manual' }]);
+    check('F5 — "$&" en el reemplazo NO reinserta el original',
+        !conAmp.includes('JUAN PEREZ') && conAmp.includes('[$&]'), conAmp);
+
+    const conResto = aplicarMapping(md, [{ original: 'JUAN PEREZ', reemplazo: "X$'X", tipo: 'manual' }]);
+    check("F5 — \"$'\" en el reemplazo NO inserta el resto del documento",
+        !conResto.includes('debe algo. Sigue el resto del documento. Sigue'), conResto);
+
+    const conPesos = aplicarMapping(md, [{ original: 'JUAN PEREZ', reemplazo: '$$$', tipo: 'manual' }]);
+    check('F5 — un reemplazo con "$" queda literal, sin colapsar "$$" a "$"',
+        conPesos.includes('$$$'), conPesos);
+})();
+
 (function testIdempotencia() {
     // Decisión de diseño 2 del plan: reprocesar debe partir SIEMPRE del
     // original. Aplicar dos veces sobre el resultado daría `Ter######`.
@@ -354,6 +375,74 @@ const CORPUS = [
         fugas: [],
         preservar: [],
         sinTerceros: true,
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  F5 (2026-08-31) — fase de code-review del módulo. Los 6 defectos de
+    //  abajo comparten el origen de los de A0 (todos salieron de MIRAR la
+    //  salida real sobre entradas que el corpus no cubría, no de un test que
+    //  fallara) y 4 de ellos comparten también su dirección de falla: se
+    //  enmascara una parte del nombre y sobrevive la que identifica.
+    // ─────────────────────────────────────────────────────────────────────
+    {
+        // 🚨 El mismo defecto que A0 arregló para el honorífico, por la vía
+        // general: el presupuesto se gasta de izquierda a derecha, así que lo
+        // que queda afuera es la COLA — el apellido. Con 4 nombres de pila
+        // (nada exótico en Argentina) el tope de 4 tokens se agotaba antes de
+        // llegar a él. A0 atacó el síntoma (`DR.` comiéndose un lugar), no la
+        // causa. Salida real antes del fix: `JUA### CAR### MAR### JOS### FERNANDEZ`.
+        nombre: '🚨 F5 — el presupuesto de tokens no puede dejar afuera el apellido',
+        md: '# EXP 40/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nDESTINATARIO: JUAN CARLOS MARIA JOSE FERNANDEZ',
+        fugas: ['FERNANDEZ'],
+        preservar: [],
+    },
+    {
+        // 🚨 La clase de captura tras un marcador de rol no incluía el guion,
+        // así que un apellido compuesto se cortaba al medio y el segundo
+        // sobrevivía. Salida real antes del fix: `MAR### GAR###-LOPEZ`.
+        nombre: '🚨 F5 — apellido compuesto con guion, sin que sobreviva la mitad',
+        md: '# EXP 41/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nDESTINATARIO: MARIA GARCIA-LOPEZ',
+        fugas: ['LOPEZ'],
+        preservar: [],
+    },
+    {
+        // 🚨 `parsearCaratula` quita los paréntesis para sacar el nº de boleta
+        // de deuda del actor — correcto cuando van al final, pero cuando caen
+        // en el MEDIO del nombre el término limpio ya no matchea el original y
+        // la parte sobrevivía ENTERA, carátula incluida.
+        nombre: '🚨 F5 — paréntesis en el medio del nombre de la parte',
+        md: '# EXP 42/2020\n\n> AFIP c/ JUAN (JOSE) PEREZ s/EJECUCION\n\nSe notifica a JUAN (JOSE) PEREZ y a JUAN PEREZ.',
+        fugas: ['JUAN (JOSE) PEREZ', 'JUAN PEREZ'],
+        preservar: [],
+    },
+    {
+        // El patrón de DNI exigía la sigla pelada + a lo sumo un `:`. De las 17
+        // formas reales de escribir un documento en un escrito judicial
+        // argentino, detectaba 2. `D.N.I.` y `DNI Nº` son de las más comunes.
+        nombre: '🚨 F5 — el DNI se escribe de muchas formas (D.N.I., DNI Nº, L.E.)',
+        md: '# EXP 43/2020\n\n> ARCA c/ EMPRESA X S.A. s/EJECUCION\n\nD.N.I. Nº 32.069.435 del demandado, y su cónyuge L.E. 4.567.890.',
+        fugas: ['32.069.435', '4.567.890'],
+        preservar: [],
+    },
+    {
+        // Contrapeso del caso anterior: el número sigue exigiendo una sigla de
+        // documento adelante. Enmascarar 8 dígitos sueltos rompería importes y
+        // números de actuación — el otro modo de falla del módulo.
+        nombre: '🚨 F5 — NO enmascarar cifras sin sigla de documento (leyes, importes)',
+        md: '# EXP 44/2020\n\n> ARCA c/ EMPRESA X S.A. s/EJECUCION\n\n| 1/01/2020 | LEY 24.522 - MONTO DE PESOS 22.367.078 EN CONCEPTO DE CAPITAL |',
+        fugas: [],
+        preservar: ['LEY 24.522', '22.367.078'],
+    },
+    {
+        // La captura desbocada en prosa EN MAYÚSCULAS: ni los conectores (desde
+        // A0) ni el presupuesto (desde F5) la cortan, así que el único freno es
+        // la lista de palabras procesales — que no tenía ninguno de estos
+        // verbos, todos corrientes en un despacho. Salida real antes del fix:
+        // `FER### SOL### MED### CAU###` y `GOM### HAG### SAB### LO###`.
+        nombre: '🚨 F5 — NO enmascarar prosa procesal en mayúsculas tras un marcador',
+        md: '# EXP 45/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\n| 1/01/2020 | DR. FERNANDEZ SOLICITA MEDIDA CAUTELAR URGENTE |\n| 2/01/2020 | AL DR. GOMEZ HAGASE SABER LO RESUELTO |',
+        fugas: ['FERNANDEZ', 'GOMEZ'],
+        preservar: ['SOLICITA MEDIDA CAUTELAR URGENTE', 'HAGASE SABER LO RESUELTO'],
     },
 ];
 

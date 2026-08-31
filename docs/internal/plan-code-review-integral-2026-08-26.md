@@ -324,6 +324,20 @@ no existe la segunda vía por la que ese bug sí era real en el portal (fixes `3
 
 ### F5 — Módulo Markdown / Anonimización (código nuevo) 🟠
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F5-2026-08-31.md`](revision-F5-2026-08-31.md).
+> **20 hallazgos, los 20 corregidos.** Partida como pedía la fase: motor con Opus, resto con Sonnet.
+> Los 5 fixes de A0 quedaron verificados vigentes — y se encontró que **A0 había atacado el síntoma
+> de dos de ellos, no la causa**: el presupuesto de tokens se gasta de izquierda a derecha, así que
+> lo que queda afuera es siempre la cola (el apellido), y un nombre con 4 nombres de pila reproduce
+> el mismo defecto sin ningún honorífico de por medio. Los otros tres mayores: **la tabla de
+> Movimientos nunca cerraba** y se tragaba la sección Intervinientes —el roster de partes con
+> nombres y CUIT— dentro de una celda (verificado sobre informes reales: celda de 452 → 144 chars);
+> **de 17 formas reales de escribir un DNI el motor detectaba 2**; y el tope `MAX_BYTES_TOTAL` de
+> M3 no cortaba nada (~2 GB descargables bajo un tope de 200 MB). Corpus adversarial ampliado de
+> 22 a 30 fugas y de 10 a 14 preservaciones, **ambas tasas en 0,0 %**; suite del módulo 94/94 →
+> **111/111**. ⏳ **Sin release: los 20 fixes son código de Electron y no llegan a ningún usuario
+> hasta que se publique uno** — se suman a los de F3.
+
 | | |
 |---|---|
 | **Target** | *(fijado el 2026-08-28, con el módulo ya construido)* `electron-app/markdown/anonimizar.js` (541 líneas) · `extraerPdfAMarkdown.js` (312) · `descargarAdjuntos.js` (358) · los **3 handlers IPC** de `electron-app/main.js` (`select-markdown-pdf`, `procesar-markdown-pdf`, `reprocesar-markdown-mapping`) · el modal y su lógica en `index.html`/`renderer.js`/`preload.js` · y el gate de plan (`plans.markdown_enabled` → `GET /client/account`) |

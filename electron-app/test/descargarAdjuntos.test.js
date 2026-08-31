@@ -35,6 +35,7 @@ const {
     extraerAdjuntosAMarkdown,
     procesarAdjuntosDeInforme,
     MAX_BYTES_POR_ADJUNTO,
+    MAX_BYTES_TOTAL,
 } = require('../markdown/descargarAdjuntos');
 
 let ok = 0, fail = 0;
@@ -177,6 +178,62 @@ async function testDescargaMockeada() {
         );
         check('descargarAdjuntos: onProgress emite descarga-inicio y descarga-fin',
             eventos.includes('descarga-inicio') && eventos.includes('descarga-fin'), JSON.stringify(eventos));
+
+        // ── F5 (2026-08-31) ──────────────────────────────────────────────
+        // 🚨 El tope TOTAL no cortaba nada. Su `throw` caía en el try/catch
+        // por-link, el bucle seguía, y `bytesTotales` ya había quedado por
+        // encima del tope — así que cada adjunto siguiente se descargaba
+        // ENTERO y recién después se borraba. Con los otros límites vigentes
+        // (100 × 20 MB), el peor caso eran ~2 GB bajados por la conexión del
+        // usuario bajo un tope declarado de 200 MB.
+        let descargasReales = 0;
+        global.fetch = async () => {
+            descargasReales++;
+            return respuestaFake({ filename: `doc-tope-${descargasReales}.pdf`, bytes: Buffer.alloc(MAX_BYTES_POR_ADJUNTO) });
+        };
+        const linksMuchos = Array.from({ length: 15 }, (_, i) => (
+            { url: `https://scw.pjn.gov.ar/scw/viewer.seam?id=T${i}`, tipoDoc: 'despacho', pagina: 1 }
+        ));
+        const r5 = await descargarAdjuntos(linksMuchos, { tempDir });
+        const maximoEsperado = Math.ceil(MAX_BYTES_TOTAL / MAX_BYTES_POR_ADJUNTO) + 1;
+        check('F5 — el tope TOTAL corta el lote: deja de descargar, no solo de conservar',
+            descargasReales <= maximoEsperado,
+            `descargas reales=${descargasReales}, tope esperado=${maximoEsperado} de ${linksMuchos.length} links`);
+        check('F5 — los links no descargados por el tope quedan reportados como error, no en silencio',
+            r5.errores.length === linksMuchos.length - r5.adjuntos.length &&
+            r5.errores.some(e => /tope de/i.test(e.motivo)),
+            JSON.stringify({ adjuntos: r5.adjuntos.length, errores: r5.errores.length }));
+
+        // El JSDoc prometía `@throws … o la respuesta no es PDF` y no había
+        // NINGUNA validación. Importa por el escenario que el propio encabezado
+        // del módulo describe: si el SCW pasa a exigir sesión, responde 200 con
+        // una página de login, y sin esto se guardaba como `.pdf` y aparecía
+        // como un anexo ilegible cualquiera en vez de nombrar la causa.
+        global.fetch = async () => ({
+            ok: true, status: 200,
+            headers: { get: (h) => h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null },
+            body: { getReader: () => ({ async read() { return { done: true }; } }) },
+        });
+        const r6 = await descargarAdjuntos(
+            [{ url: 'https://scw.pjn.gov.ar/scw/viewer.seam?id=HTML', tipoDoc: 'despacho', pagina: 1 }],
+            { tempDir }
+        );
+        check('F5 — una respuesta HTML (página de login) se rechaza con un motivo legible',
+            r6.adjuntos.length === 0 && /text\/html/.test(r6.errores[0]?.motivo || ''),
+            JSON.stringify(r6.errores));
+
+        global.fetch = async () => ({
+            ok: true, status: 204,
+            headers: { get: () => null },
+            body: null,
+        });
+        const r7 = await descargarAdjuntos(
+            [{ url: 'https://scw.pjn.gov.ar/scw/viewer.seam?id=VACIO', tipoDoc: 'despacho', pagina: 1 }],
+            { tempDir }
+        );
+        check('F5 — un body vacío da un motivo legible, no un TypeError de getReader()',
+            r7.adjuntos.length === 0 && /vac[ií]a/i.test(r7.errores[0]?.motivo || ''),
+            JSON.stringify(r7.errores));
 
     } finally {
         global.fetch = fetchOriginal;

@@ -161,6 +161,22 @@ async function descargarAUnArchivo(url, destDir) {
 
     if (!res.ok) throw new Error(`HTTP ${res.status} al descargar el adjunto`);
 
+    // F5 (2026-08-31): el JSDoc de arriba prometía `@throws … o la respuesta no
+    // es PDF`, pero NO había ninguna validación de tipo — la promesa era falsa.
+    // Importa por lo que dice el encabezado de este módulo: si el SCW algún día
+    // empieza a exigir sesión, va a responder 200 con una página HTML de login,
+    // y sin este chequeo esa página se guardaba como `.pdf`, fallaba al
+    // extraerse, y aparecía en el Markdown como un anexo ilegible cualquiera —
+    // "un fallback silencioso", justo lo que ese comentario pide no hacer.
+    // Con el chequeo, el error nombra la causa real.
+    const tipo = (res.headers.get('content-type') || '').toLowerCase();
+    if (tipo && !tipo.includes('pdf') && !tipo.includes('octet-stream')) {
+        throw new Error(`El SCW respondió "${tipo.split(';')[0]}" en vez de un PDF (¿cambió el acceso al visor?)`);
+    }
+    // `res.body` puede ser null (ej. un 204) — sin esto, `getReader()` tiraba un
+    // TypeError críptico en vez de un motivo legible.
+    if (!res.body) throw new Error('El SCW devolvió una respuesta vacía');
+
     const disposition = res.headers.get('content-disposition') || '';
     const mFilename = disposition.match(/filename\s*=\s*"?([^";]+)"?/i);
     // El SCW siempre manda un filename estable (medido por M0); si algún día
@@ -222,9 +238,25 @@ async function descargarAdjuntos(links, opts) {
     const adjuntos = [];
     const errores = [];
     let bytesTotales = 0;
+    let topeTotalAlcanzado = false;
 
     for (let i = 0; i < links.length; i++) {
         const link = links[i];
+
+        // 🚨 F5 (2026-08-31): el chequeo del tope TOTAL estaba DENTRO del
+        // try/catch de abajo, así que su `throw` se capturaba como un error más
+        // del adjunto y el bucle seguía — y `bytesTotales` ya había quedado por
+        // encima del tope, de modo que cada adjunto siguiente se descargaba
+        // ENTERO a disco y recién después se borraba. O sea: el tope limitaba
+        // los bytes CONSERVADOS, no los descargados. Con los otros dos límites
+        // vigentes (100 adjuntos × 20 MB) el peor caso eran ~2 GB bajados por la
+        // conexión del abogado bajo un tope declarado de 200 MB. Ahora corta de
+        // verdad, ANTES de la petición de red.
+        if (topeTotalAlcanzado) {
+            errores.push({ url: link.url, motivo: `Se alcanzó el tope de ${MAX_BYTES_TOTAL / (1024 * 1024)} MB totales — no se descargó` });
+            continue;
+        }
+
         onProgress({ tipo: 'descarga-inicio', index: i, total: links.length, url: link.url });
 
         try {
@@ -236,7 +268,11 @@ async function descargarAdjuntos(links, opts) {
                 // se reusa el resultado guardado.
                 fs.unlinkSync(localPath);
                 const previo = registro.get(filename);
-                adjuntos.push({ ...link, filename, localPath: previo.localPath, reusado: true, bytes: 0, markdown: previo.markdown });
+                // F5: `localPath: null` — el del informe anterior apuntaba a un
+                // temporal ya borrado. Nadie lo lee en la rama `reusado` (el
+                // contenido viene de `markdown`), pero devolver una ruta muerta
+                // invita a que alguien la use más adelante.
+                adjuntos.push({ ...link, filename, localPath: null, reusado: true, bytes: 0, markdown: previo.markdown });
                 onProgress({ tipo: 'descarga-fin', index: i, total: links.length, filename, reusado: true });
                 continue;
             }
@@ -244,6 +280,7 @@ async function descargarAdjuntos(links, opts) {
             bytesTotales += bytes;
             if (bytesTotales > MAX_BYTES_TOTAL) {
                 fs.unlinkSync(localPath);
+                topeTotalAlcanzado = true;   // F5 — corta los siguientes, ver arriba
                 throw new Error(`Tope de ${MAX_BYTES_TOTAL / (1024 * 1024)} MB totales alcanzado`);
             }
 
@@ -278,6 +315,13 @@ async function extraerAdjuntosAMarkdown(adjuntos, registro, onProgress = () => {
             // El contenido ya se extrajo antes en esta misma corrida — se
             // reusa tal cual, solo se renumera el título del anexo.
             bloques.push(`${titulo}\n\n${adj.markdown}`);
+            // F5 (2026-08-31): también hay que reponer sus páginas sin texto.
+            // Antes esta rama no acumulaba nada, así que el resumen que ve el
+            // usuario ("N páginas sin texto extraíble") salía bajo justamente
+            // en los documentos escaneados, que son los que más importan —
+            // M0 midió 14,6% de páginas sin texto en los adjuntos del SCW.
+            (registro.get(adj.filename)?.paginasSinTexto || [])
+                .forEach(p => paginasSinTextoTotal.push({ filename: adj.filename, pagina: p }));
             continue;
         }
 
@@ -286,7 +330,12 @@ async function extraerAdjuntosAMarkdown(adjuntos, registro, onProgress = () => {
             const { paginas } = await extraerTextoPdf(adj.localPath);
             const { markdown, paginasSinTexto } = renderizarGenericoMarkdown(paginas);
             bloques.push(`${titulo}\n\n${markdown}`);
-            registro.set(adj.filename, { localPath: adj.localPath, markdown, tipoDoc: adj.tipoDoc });
+            // F5: se guarda `paginasSinTexto` (lo consume la rama `reusado` de
+            // arriba) y NO se guarda `localPath`: apuntaba dentro del `tempDir`
+            // que `procesarAdjuntosDeInforme` borra en su `finally`, así que era
+            // una ruta muerta apenas terminaba la corrida — y el registro está
+            // pensado para compartirse ENTRE corridas.
+            registro.set(adj.filename, { markdown, tipoDoc: adj.tipoDoc, paginasSinTexto });
             paginasSinTexto.forEach(p => paginasSinTextoTotal.push({ filename: adj.filename, pagina: p }));
             onProgress({ tipo: 'extraccion-fin', filename: adj.filename });
         } catch (error) {

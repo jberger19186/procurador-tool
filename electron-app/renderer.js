@@ -2980,6 +2980,18 @@ async function ejecutarInforme() {
 // y no dependa de que el archivo en disco siga igual a como se generó.
 let markdownEstado = null; // { pdfPath, markdownCompleto, mdPath, mdAnonimizadoPath, mappingPath }
 let markdownArchivoElegido = null;
+// F5 (2026-08-31): sin este flag, cerrar y reabrir el modal MIENTRAS un
+// "Procesar" sigue en vuelo desalineaba lo que el usuario ve de lo que
+// realmente se procesó. `openMarkdownModal()` decide si resetea la pantalla
+// mirando `!markdownEstado`, y `markdownEstado` recién se puebla cuando el
+// proceso TERMINA — o sea que durante toda la corrida la condición de reset da
+// verdadero. Con el picker y la dropzone habilitados (solo el botón Procesar
+// se deshabilitaba), el usuario podía elegir un CASO2 y ver aparecer, segundos
+// después, el resultado de CASO1 junto al nombre "CASO2" en la dropzone —
+// y abrir/compartir el `.anonimizado.md` de otro expediente creyendo que era
+// el que tenía a la vista. Es exactamente la garantía que este módulo existe
+// para dar ("sé qué documento estoy por compartir").
+let markdownProcesando = false;
 
 function setupMarkdownModal() {
     // Tabs Procesar / Editor de mapeo
@@ -2999,6 +3011,10 @@ function setupMarkdownModal() {
 
     // Seleccionar / cambiar archivo (diálogo nativo)
     const elegirArchivo = async () => {
+        if (markdownProcesando) {   // F5 — ver el comentario de `markdownProcesando`
+            markdownMostrarError('Esperá a que termine el informe en curso antes de elegir otro.');
+            return;
+        }
         const result = await window.electronAPI.selectMarkdownPdf();
         if (result.canceled || !result.success) return;
         markdownSetArchivo(result.path);
@@ -3017,11 +3033,21 @@ function setupMarkdownModal() {
     dropzone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropzone.classList.remove('md-dropzone-over');
-        const file = e.dataTransfer.files?.[0];
+        if (markdownProcesando) {   // F5 — ver el comentario de `markdownProcesando`
+            markdownMostrarError('Esperá a que termine el informe en curso antes de soltar otro.');
+            return;
+        }
+        const archivos = e.dataTransfer.files || [];
+        const file = archivos[0];
         if (!file) return;
         if (!/\.pdf$/i.test(file.name)) {
             markdownMostrarError('Solo se aceptan archivos .pdf.');
             return;
+        }
+        // F5: se procesa de a un informe. Antes los demás se descartaban en
+        // silencio y el usuario podía creer que había soltado un lote.
+        if (archivos.length > 1) {
+            markdownMostrarError(`Se soltaron ${archivos.length} archivos — se toma solo el primero (${file.name}).`);
         }
         const rutaReal = window.electronAPI.getPathForFile(file);
         markdownSetArchivo(rutaReal);
@@ -3111,7 +3137,10 @@ function openMarkdownModal() {
     document.getElementById('btnProcesarMarkdown').style.display = '';
     document.getElementById('btnReprocesarMarkdown').style.display = 'none';
 
-    if (!markdownEstado) {
+    // F5: `!markdownEstado` también es verdadero MIENTRAS un proceso está en
+    // vuelo (el estado se puebla recién al terminar), así que sin el segundo
+    // término este reset borraba el archivo elegido de una corrida activa.
+    if (!markdownEstado && !markdownProcesando) {
         markdownArchivoElegido = null;
         document.getElementById('md-dropzone-idle').style.display = '';
         document.getElementById('md-dropzone-archivo').style.display = 'none';
@@ -3132,7 +3161,13 @@ async function ejecutarProcesarMarkdown() {
     }
 
     const btn = document.getElementById('btnProcesarMarkdown');
+    if (btn.disabled || markdownProcesando) return;
     btn.disabled = true;
+    markdownProcesando = true;
+    // El path se congela ACÁ: `markdownArchivoElegido` es global y esta función
+    // es async, así que leerlo de nuevo al resolver (como hacía el `pdfPath` de
+    // `markdownEstado`) podía guardar el archivo equivocado.
+    const pdfAProcesar = markdownArchivoElegido;
     document.getElementById('md-error').style.display = 'none';
     document.getElementById('md-resultado').style.display = 'none';
     document.getElementById('md-progreso-log').innerHTML = '';
@@ -3140,14 +3175,14 @@ async function ejecutarProcesarMarkdown() {
     document.getElementById('md-progreso-label').textContent = 'Procesando...';
 
     try {
-        const r = await window.electronAPI.procesarMarkdownPdf(markdownArchivoElegido);
+        const r = await window.electronAPI.procesarMarkdownPdf(pdfAProcesar);
         if (!r.success) {
             markdownMostrarError(r.error || 'No se pudo procesar el informe.');
             return;
         }
 
         markdownEstado = {
-            pdfPath: markdownArchivoElegido,
+            pdfPath: pdfAProcesar,
             markdownCompleto: r.markdownCompleto,
             mdPath: r.mdPath,
             mdAnonimizadoPath: r.mdAnonimizadoPath,
@@ -3174,6 +3209,7 @@ async function ejecutarProcesarMarkdown() {
     } catch (error) {
         markdownMostrarError(`Error de procesamiento: ${error.message}`);
     } finally {
+        markdownProcesando = false;
         btn.disabled = false;
         document.getElementById('md-progreso').style.display = 'none';
     }

@@ -160,7 +160,32 @@ function renderizarGenericoMarkdown(paginas) {
 const RE_MOVIMIENTO = /^(\d{1,2}\/\d{1,2}\/\d{4})\s*-\s*(.+)$/;
 const RE_VER_DOCUMENTO = /^->\s*Ver documento/i;
 const RE_SITUACION = /^Situaci[oó]n:\s*(.*)$/i;
-const RE_MOVIMIENTOS_HEADER = /^movimientos$/i;
+
+// 🚨 F5 (2026-08-31): el informe NO termina en la tabla de movimientos.
+// `agregarSeccion(...)` de `testM2.js` dibuja SIETE títulos de sección, cada uno
+// como una línea suelta de texto en negrita: Resumen · Movimientos ·
+// Movimientos Históricos · Intervinientes · Vinculados · Recursos · Notas.
+// Esta función solo conocía "Movimientos", y una vez dentro de la tabla NUNCA
+// salía: todo lo que venía después caía en la rama de "continuación" y se
+// pegaba, con un espacio, a la ÚLTIMA fila parseada.
+//
+// Confirmado renderizando la estructura real: la sección **Intervinientes**
+// entera —el roster de partes y letrados con sus nombres, tomo/folio y CUIT—
+// terminaba dentro de una sola celda de un movimiento sin relación, con sus
+// `|` escapados a `\|`, o sea con la estructura original destruida y sin
+// ningún encabezado que la separe.
+//
+// No es solo una fealdad de formato: el `mapping.txt`, los TyC y el propio
+// encabezado de `anonimizar.js` apoyan TODA la seguridad del módulo en que el
+// usuario REVISE el `.md` antes de compartirlo. Con el listado de partes
+// enterrado sin marcador en medio de un evento procesal, esa revisión —que es
+// la única garantía real que el producto ofrece— se vuelve impracticable.
+const RE_SECCION_INFORME = /^(Resumen|Movimientos(?:\s+Hist[oó]ricos)?|Intervinientes|Vinculados|Recursos|Notas)$/i;
+// Cuál de esas secciones se renderiza como TABLA. Reemplaza al viejo
+// `RE_MOVIMIENTOS_HEADER` (`^movimientos$`, exacto), que dejaba a "Movimientos
+// Históricos" —que también trae filas `DD/MM/AAAA - detalle`— cayendo en la
+// rama de texto corrido en vez de abrir su propia tabla.
+const RE_SECCION_TABLA = /^Movimientos(\s+Hist[oó]ricos)?$/i;
 
 function escaparCeldaTabla(texto) {
     // Una "|" sin escapar corta la fila de una tabla Markdown en dos celdas.
@@ -188,7 +213,9 @@ function renderizarInformeMarkdown(paginas) {
 
     let tituloEmitido = false;
     let enMovimientos = false;
+    let enSeccionTexto = false;   // dentro de una sección que NO es una tabla
     const lineasCaratula = [];
+    const lineasSeccion = [];     // cuerpo de la sección de texto en curso
     let filasActuales = [];       // tabla en construcción
     let ultimaFila = null;        // para adosar "-> Ver documento" y continuaciones
 
@@ -197,6 +224,29 @@ function renderizarInformeMarkdown(paginas) {
             bloques.push(lineasCaratula.map(l => `> ${l}`).join('\n'));
             lineasCaratula.length = 0;
         }
+    };
+
+    // F5: cierra la sección de texto en curso (Intervinientes, Notas…). Se
+    // emite con doble espacio al final de cada línea para que el Markdown
+    // conserve los saltos — cada fila del roster de partes es una línea propia
+    // en el PDF y debe seguir siéndolo.
+    const flushSeccionTexto = () => {
+        if (lineasSeccion.length > 0) {
+            bloques.push(lineasSeccion.join('  \n'));
+            lineasSeccion.length = 0;
+        }
+    };
+
+    // F5: cierra lo que haya abierto (tabla o sección de texto) antes de
+    // empezar algo nuevo. Es el paso que faltaba y que hacía que la tabla de
+    // movimientos se tragara todo el resto del informe.
+    const cerrarSeccionActual = () => {
+        if (enMovimientos) {
+            flushTablaMovimientos(filasActuales, bloques);
+            filasActuales = [];
+            ultimaFila = null;
+        }
+        flushSeccionTexto();
     };
 
     for (const pagina of paginas) {
@@ -211,13 +261,27 @@ function renderizarInformeMarkdown(paginas) {
         }
 
         for (const linea of pagina.lineas) {
+            // F5 — un título de sección corta SIEMPRE lo que estuviera abierto,
+            // sin importar el estado. Va antes que todo lo demás para que ni la
+            // tabla ni la carátula se lo coman.
+            if (RE_SECCION_INFORME.test(linea)) {
+                flushCaratula();
+                cerrarSeccionActual();
+                bloques.push(`## ${linea}`);
+                enMovimientos = RE_SECCION_TABLA.test(linea);
+                enSeccionTexto = !enMovimientos;
+                // Ya pasamos el encabezado: ninguna línea posterior puede ser
+                // el título del documento.
+                tituloEmitido = true;
+                continue;
+            }
+
+            if (enSeccionTexto) {
+                lineasSeccion.push(linea);
+                continue;
+            }
+
             if (!enMovimientos) {
-                if (RE_MOVIMIENTOS_HEADER.test(linea)) {
-                    flushCaratula();
-                    bloques.push('## Movimientos');
-                    enMovimientos = true;
-                    continue;
-                }
                 if (!tituloEmitido) {
                     bloques.push(`# ${linea}`);
                     tituloEmitido = true;
@@ -239,7 +303,13 @@ function renderizarInformeMarkdown(paginas) {
 
             // ── Dentro de "Movimientos" ──
             if (RE_VER_DOCUMENTO.test(linea)) {
+                // F5: sin fila previa el marcador se descartaba en silencio —
+                // inconsistente con el caso hermano de abajo (una continuación
+                // huérfana SÍ se preserva como nota). Se perdía el dato de que
+                // ese movimiento tenía un adjunto, y M3 lo bajaba igual: quedaba
+                // un "Anexo N" sin ningún 📎 en la tabla que le correspondiera.
                 if (ultimaFila) ultimaFila.tieneDocumento = true;
+                else bloques.push(`> ${linea}`);
                 continue;
             }
             const mMov = linea.match(RE_MOVIMIENTO);
@@ -262,7 +332,7 @@ function renderizarInformeMarkdown(paginas) {
     }
 
     flushCaratula();
-    flushTablaMovimientos(filasActuales, bloques);
+    cerrarSeccionActual();   // F5: cierra la tabla Y la sección de texto en curso
 
     return { markdown: bloques.join('\n\n') + '\n', paginasSinTexto };
 }
@@ -277,11 +347,31 @@ function renderizarInformeMarkdown(paginas) {
 const RE_SUFIJO_TIMESTAMP_ISO = /_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/;
 const RE_PREFIJO_INFORME = /^(informe|expediente)_/i;
 
+// F5 (2026-08-31): el nombre del PDF de entrada lo elige el USUARIO desde un
+// diálogo nativo — no tiene por qué venir de la app, y en Windows puede traer
+// `< > : " / \ | ? *`, que son ilegales en un nombre de archivo. Sin sanear,
+// el `fs.writeFileSync` de más abajo tiraba un ENOENT no controlado (probado:
+// `Informe: FCR 123.pdf` alcanza). El sanitizador es el MISMO que M3 ya usa
+// para el `filename` del `Content-Disposition` (`descargarAdjuntos.js`) — el
+// patrón ya existía en el módulo vecino y nunca se había aplicado acá.
+// El recorte a 80 caracteres cubre el otro fallo medido: un nombre de origen
+// largo excedía el límite de path de Windows.
+const MAX_LARGO_STEM = 80;
+
 function derivarNombreSalida(pdfPath) {
-    const base = path.basename(pdfPath, '.pdf');
-    const exp = base.replace(RE_PREFIJO_INFORME, '').replace(RE_SUFIJO_TIMESTAMP_ISO, '');
+    // `.pdf` en minúscula solamente en `path.basename` — un `.PDF` en
+    // mayúsculas se arrastraba entero al nombre nuevo.
+    const nombre = path.basename(pdfPath);
+    const base = nombre.replace(/\.pdf$/i, '');
+    const exp = base
+        .replace(RE_PREFIJO_INFORME, '')
+        .replace(RE_SUFIJO_TIMESTAMP_ISO, '')
+        .replace(/[\\/:"*?<>|]/g, '_')
+        .replace(/[\s.]+$/, '')          // Windows no admite el punto/espacio final
+        .slice(0, MAX_LARGO_STEM)
+        .trim();
     const sello = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-    return `markdown_${exp}_${sello}.md`;
+    return `markdown_${exp || 'informe'}_${sello}.md`;
 }
 
 /**

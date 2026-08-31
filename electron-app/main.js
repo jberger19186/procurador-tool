@@ -2016,19 +2016,36 @@ ipcMain.handle('select-markdown-pdf', async () => {
 // Defensa en profundidad — el botón del topbar ya está oculto sin el flag,
 // pero el handler no confía ciegamente en eso (mismo criterio que el gate de
 // checkout de Bitácora: "validado en staging y prod").
+// F5 (2026-08-31): devuelve el MOTIVO, no solo un booleano. Antes colapsaba dos
+// situaciones muy distintas en el mismo `false`: "tu plan no lo incluye" y "no
+// se pudo preguntar" — y `getAccount()` NO lanza ante un fallo de red (su
+// try/catch interno devuelve `{success:false}`), así que perder la conexión a
+// mitad de sesión le mostraba al usuario, tras el timeout de 30 s del cliente
+// HTTP, "Tu plan no incluye el módulo Markdown": un mensaje falso que le dice
+// que perdió una feature que sí tiene. El gate sigue siendo fail-closed (sin
+// confirmación no se procesa); lo que cambia es qué se le explica al usuario.
 async function verificarMarkdownHabilitado() {
     try {
         const acc = await authManager.backendClient.getAccount();
-        return acc?.success && acc?.account?.markdownEnabled === true;
+        if (!acc?.success) return { habilitado: false, motivo: 'red' };
+        return acc.account?.markdownEnabled === true
+            ? { habilitado: true, motivo: null }
+            : { habilitado: false, motivo: 'plan' };
     } catch (_) {
-        return false;
+        return { habilitado: false, motivo: 'red' };
     }
 }
 
+const MSG_GATE_MARKDOWN = {
+    plan: 'Tu plan no incluye el módulo Markdown.',
+    red: 'No se pudo verificar tu plan. Revisá tu conexión a internet e intentá de nuevo.',
+};
+
 ipcMain.handle('procesar-markdown-pdf', async (event, pdfPath) => {
     try {
-        if (!(await verificarMarkdownHabilitado())) {
-            return { success: false, error: 'Tu plan no incluye el módulo Markdown.' };
+        const gate = await verificarMarkdownHabilitado();
+        if (!gate.habilitado) {
+            return { success: false, error: MSG_GATE_MARKDOWN[gate.motivo] };
         }
         if (!pdfPath || !fs.existsSync(pdfPath)) {
             return { success: false, error: 'El archivo no existe.' };
@@ -2104,6 +2121,19 @@ ipcMain.handle('procesar-markdown-pdf', async (event, pdfPath) => {
 // original), así que reprocesar 2 veces seguidas da el mismo resultado.
 ipcMain.handle('reprocesar-markdown-mapping', async (event, { markdownCompleto, mappingTexto, mdAnonimizadoPath, mappingPath }) => {
     try {
+        // F5 (2026-08-31): el gate FALTABA acá. El comentario de
+        // `procesar-markdown-pdf` dice que el handler "no confía ciegamente" en
+        // que el botón esté oculto — pero esa defensa en profundidad se había
+        // aplicado a uno solo de los dos handlers que hacen trabajo real, y
+        // éste corre el mismo motor de anonimización y escribe los mismos 2
+        // archivos. No es teórico: el menú "Ver → Herramientas de desarrollo"
+        // (main.js, menú de la ventana principal) está registrado SIN condicionar
+        // a `isDev`, así que en un build empaquetado cualquier usuario abre la
+        // consola e invoca este canal directo, sin pasar nunca por el otro.
+        const gate = await verificarMarkdownHabilitado();
+        if (!gate.habilitado) {
+            return { success: false, error: MSG_GATE_MARKDOWN[gate.motivo] };
+        }
         if (typeof markdownCompleto !== 'string' || !mdAnonimizadoPath || !mappingPath) {
             return { success: false, error: 'Faltan datos para reprocesar.' };
         }
