@@ -55,7 +55,24 @@ async function generarVisorHTML(rutaResumenJSON, config, rutaExcel = null, bitac
 
         // 5. CORRECCIÓN: Inyectar datos en el template
         // Buscar el bloque exacto y reemplazarlo completamente
-        const datosInyectados = `const DATOS_BATCH = ${JSON.stringify(datosParaInyectar, null, 12)};`;
+        //
+        // F3 (2026-08-31, code-review): JSON.stringify() por sí solo NO alcanza para
+        // embeber datos dentro de un <script> — un valor de texto libre (ej. la carátula
+        // scrapeada del PJN) que contenga literalmente la secuencia "</script>" cierra
+        // el elemento <script> ahí mismo, y todo lo que sigue se parsea como HTML/JS
+        // real, sin necesitar ningún click. Confirmado con la función real + un parser
+        // HTML (parse5): sin este reemplazo, un <img onerror> arbitrario queda fuera de
+        // cualquier <script>. esc()/escAttr() no cubren este vector — son para contexto
+        // HTML, no para el límite del propio tag <script>.
+        //
+        // El fix estándar (mismo que usan frameworks como Django/Rails al embeber JSON
+        // en HTML): reemplazar CUALQUIER '<' por su escape Unicode <. JSON.parse()
+        // del lado del cliente lo interpreta de vuelta sin cambios — < es "<" para
+        // el parser de JSON — pero el parser de HTML nunca ve un '<' literal dentro del
+        // <script>, así que ninguna secuencia de cierre (</script>, <!--, etc.) puede
+        // formarse.
+        const jsonSeguro = JSON.stringify(datosParaInyectar, null, 12).replace(/</g, '\\u003c');
+        const datosInyectados = `const DATOS_BATCH = ${jsonSeguro};`;
 
         // Verificar que el placeholder existe
         if (!htmlTemplate.includes('const DATOS_BATCH = {')) {

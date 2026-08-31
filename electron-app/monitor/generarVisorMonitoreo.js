@@ -77,7 +77,7 @@ function generarVisorMonitoreo(modo, resultados, bitacoraInfo = null) {
                     ${bitTd(e)}
                     <td class="exp-num">${esc(e.numero_expediente)}</td>
                     <td>${esc(e.dependencia)}</td>
-                    <td class="caratula" title="${esc(e.caratula)}">${esc(e.caratula)}</td>
+                    <td class="caratula" title="${escAttr(e.caratula)}">${esc(e.caratula)}</td>
                     <td><span class="situacion-badge">${esc(e.situacion)}</span></td>
                     <td class="fecha-col">${esc(e.ultima_actuacion)}</td>
                 </tr>`).join('');
@@ -219,7 +219,13 @@ function generarVisorMonitoreo(modo, resultados, bitacoraInfo = null) {
     <div class="cards-wrapper">${seccionesHTML}</div>
     <div id="bit-footer"></div>
 <script>
-    window.BITACORA_RUNTIME = ${JSON.stringify(bit)};
+    // F3 (2026-08-31, code-review): reemplazo de '<' por su escape Unicode — mismo
+    // fix que generador_visor.js, mismo motivo. bit.seguidos trae números de
+    // expediente/nombres de parte (texto libre); sin esto, un valor con la secuencia
+    // literal '</script>' termina el <script> ahí mismo. Confirmado con la función
+    // real + parse5. JSON.parse() del lado del cliente no lo necesita — nunca llega
+    // a existir uno, el objeto se lee directo como literal, no se re-parsea.
+    window.BITACORA_RUNTIME = ${JSON.stringify(bit).replace(/</g, '\\u003c')};
 
     function toggleCard(idx) {
         var tabla  = document.getElementById('tabla-'  + idx);

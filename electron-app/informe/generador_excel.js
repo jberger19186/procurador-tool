@@ -10,6 +10,24 @@ const path = require('path');
 const { buscarPdfExpediente } = require('./buscarPdfExpediente');
 
 /**
+ * F3 (2026-08-31, code-review): sin esto, `exp.expediente` (texto del batch.txt) y
+ * el mensaje de error (que puede traer `expediente.motivo`, texto del payload RESULT
+ * del script — ver motivoInformeSinPDF.js) se escribían a la celda tal cual. Un
+ * valor que empieza con `=`/`+`/`-`/`@` es la clase clásica de inyección de fórmulas
+ * de CSV/Excel (OWASP): exceljs no lo convierte en una fórmula VIVA al escribir el
+ * .xlsx (verificado inspeccionando el XML generado), pero el riesgo real es aguas
+ * abajo — si el usuario reedita esa celda a mano, si el archivo se reexporta a CSV,
+ * o si se abre con otra herramienta (Sheets, LibreOffice) que sí evalúa el prefijo
+ * al importar. Mismo patrón `sanitizeExcelCell()` que el proyecto ya usa para esta
+ * exacta clase de riesgo en el Excel de Procuración (procesarNovedadesCompleto.js) —
+ * portado acá, que nunca lo tuvo.
+ */
+function sanitizeExcelCell(value) {
+    if (typeof value !== 'string') return value;
+    return /^[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
+/**
  * Genera archivo Excel con resultados del batch
  * @param {string} rutaResumenJSON - Ruta al archivo resumen_orquestador_{timestamp}.json
  * @param {Object} config - Objeto config_proceso_informe.json
@@ -194,7 +212,7 @@ async function crearHojaExpedientes(workbook, expedientes, config) {
     expedientes.forEach((exp, index) => {
         const fila = hoja.addRow([
             index + 1,
-            exp.expediente,
+            sanitizeExcelCell(exp.expediente),
             exp.ok ? '✅ OK' : '❌ ERROR',
             exp.exitCode || 0,
             '' // Se llenará con hipervínculo
@@ -295,9 +313,9 @@ async function crearHojaErrores(workbook, expedientesFallidos) {
 
         const fila = hoja.addRow([
             index + 1,
-            exp.expediente,
+            sanitizeExcelCell(exp.expediente),
             exp.exitCode || 'N/A',
-            mensajeError
+            sanitizeExcelCell(mensajeError)
         ]);
 
         // Estilo

@@ -205,6 +205,29 @@ lo que quede se cubre en F9.
 
 ### F3 — Visores y captura del lado cliente 🟠
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F3-2026-08-31.md`](revision-F3-2026-08-31.md).
+> **9 hallazgos, los 9 corregidos — 6 son XSS reales**, confirmados no leyendo el código
+> sino ejecutando las funciones generadoras reales con datos adversariales y parseando
+> el HTML resultante con **parse5** (motor real de HTML5). **2 disparan sin ningún
+> click, solo con abrir el visor**: `</script>` breakout vía `JSON.stringify()` sin
+> escapar (en `generador_visor.js` y `generarVisorMonitoreo.js` — vector que
+> `esc()`/`escAttr()` no cubren, porque actúan sobre contexto HTML, no sobre el límite
+> del propio `<script>`) y `exp.ultimaAct` sin ningún escape en la tabla principal del
+> visor de procuración. Otros 3: el `title` de carátula usa `esc()` en vez de
+> `escAttr()` en **2 de los 4 generadores de visor** (`visor_informes_template.html`,
+> que ni definía `escAttr()`; `generarVisorMonitoreo.js`, que la define y usa
+> correctamente 10 líneas más arriba pero se olvidó acá — el mismo archivo que la
+> revisión de julio había señalado como "ya escapaba correctamente", con el concepto
+> `escAttr()` introducido en esa misma sesión y nunca reaplicado retroactivamente) ·
+> `exp.error` sin escapar en el modal · `mov.viewHref` sin ningún escape en un `href`.
+> Más 1 hallazgo de inyección de fórmulas Excel (sin `sanitizeExcelCell()`, patrón que
+> el proyecto ya tiene en otro generador) y 1 crash (`expediente.toLowerCase()` sin
+> guard, deja el visor entero sin buscador/filtros ante una sola fila malformada).
+> **Sin verificación de staging posible** (son archivos de cliente) — verificado con
+> 16/16 en un harness que ejecuta las funciones reales + parse5, incluida no-regresión.
+> ⚠️ El informe recomienda **priorizar el próximo release** dado que, a diferencia de
+> F6, varios de estos son explotación activa confirmada, no solo defensa en profundidad.
+
 | | |
 |---|---|
 | **Target** | `electron-app/visorModal_template.html`, `electron-app/informe/visor_informes_template.html`, `electron-app/informe/generador_visor.js`, `generador_excel.js`, `buscarPdfExpediente.js`, `motivoInformeSinPDF.js`, **`electron-app/monitor/generarVisorMonitoreo.js`** *(agregado 2026-08-28)*, y los bloques de post-procesado/captura de `electron-app/main.js` |

@@ -345,7 +345,12 @@
     tbody.innerHTML = '';
     expedientes.forEach((exp, index) => {
       const tr = document.createElement('tr');
-      tr.dataset.expediente = exp.expediente.toLowerCase();
+      // F3 (2026-08-31, code-review): único de los usos de exp.expediente en este
+      // archivo sin guard '|| ""' — un solo expediente con `expediente` ausente/null
+      // en el lote tiraba acá, abortando inicializar() ANTES de que corriera
+      // setupEventos() (mismo handler DOMContentLoaded) y dejando todo el visor sin
+      // buscador/filtros/botón de regenerar, no solo esa fila.
+      tr.dataset.expediente = (exp.expediente || '').toLowerCase();
       tr.dataset.estado = exp.ok ? 'ok' : 'error';
       const pdfBtn = exp.ok
         ? `<a href="${exp.rutaPDF || '#'}" class="btn-pdf">📄 Abrir PDF</a>`
@@ -360,7 +365,7 @@
         ${bitCell}
         <td style="color:var(--text-3)">${index + 1}</td>
         <td class="mono">${expCell}</td>
-        <td title="${esc(caratula)}" style="color:var(--text-1)">${esc(caratulaCorta) || '—'}</td>
+        <td title="${escAttr(caratula)}" style="color:var(--text-1)">${esc(caratulaCorta) || '—'}</td>
         <td class="center">
           <span class="status-badge ${exp.ok ? 'badge-ok' : 'badge-err'}">
             <span class="badge-dot"></span>${exp.ok ? 'OK' : 'Error'}
@@ -439,6 +444,11 @@
   var seguidosSet = new Set();
 
   function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  // F3 (2026-08-31, code-review): esc() no escapa comillas — una carátula legítima
+  // con comillas (ej. RUIZ c/ "LA CAJA" S.A.) rompía el atributo title="..." de abajo.
+  // Mismo helper que ya existe en visorModal_template.html (E4-1, julio 2026) y en
+  // generarVisorMonitoreo.js — portado acá, que nunca lo tuvo.
+  function escAttr(s) { return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
   function claveLigera(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
   function yaSeguido(exp) { return seguidosSet.has(claveLigera(exp.expediente)); }
   // Punto 9: mismo mecanismo que el visor de procuración — el link lleva el número

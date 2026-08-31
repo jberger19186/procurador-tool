@@ -474,6 +474,9 @@
         const dependencia = exp.dependencia || '';
         const situacion   = exp.situacion   || '';
         const expediente  = exp.expediente  || '';
+        // F3 (2026-08-31, code-review): ultimaAct era el único campo de esta fila sin
+        // esc() — caratula/dependencia/situacion sí lo tenían. Misma clase de texto
+        // libre del PJN que el resto (E4-1).
         const ultimaAct   = exp.ultimaAct   || '—';
         const caratulaCorta = caratula.length > 45    ? caratula.substring(0,45)    + '…' : caratula;
         const depCorta      = dependencia.length > 28 ? dependencia.substring(0,28) + '…' : dependencia;
@@ -488,7 +491,7 @@
           <td title="${escAttr(caratula)}" style="color:var(--text-1);font-weight:500">${esc(caratulaCorta)}</td>
           <td title="${escAttr(dependencia)}">${esc(depCorta)}</td>
           <td>${esc(situacion)}</td>
-          <td style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);white-space:nowrap">${ultimaAct}</td>
+          <td style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);white-space:nowrap">${esc(ultimaAct)}</td>
           <td><span class="status-badge ${ok ? 'badge-ok' : 'badge-err'}"><span class="badge-dot"></span>${ok ? 'Exitoso' : 'Error'}</span></td>
           <td><span class="${movCount > 0 ? 'movs-count' : 'movs-count zero'}">${movCount}</span></td>
           <td><button class="btn-ver" onclick="abrirModal(${index})">Ver →</button></td>
@@ -523,16 +526,23 @@
             <thead><tr><th style="width:10%">Fecha</th><th style="width:16%">Tipo</th><th>Detalle</th><th style="width:12%">Acción</th></tr></thead>
             <tbody>`;
         exp.movimientos.forEach(mov => {
+          // F3 (2026-08-31, code-review): mov.viewHref era el único campo de esta fila
+          // sin ningún escape — fecha/tipo/detalle sí lo tenían. escAttr() (no esc(), es
+          // un atributo href) protege el atributo aunque viewHref nunca traiga una
+          // comilla en la práctica; el link en sí sigue funcionando igual (los
+          // navegadores decodifican entidades HTML de un atributo antes de navegar).
           bodyHTML += `<tr>
             <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3);white-space:nowrap">${esc(mov.fecha)}</td>
             <td><span class="tipo-badge">${esc(mov.tipo)}</span></td>
             <td>${esc(mov.detalle)}</td>
-            <td>${mov.viewHref ? `<a href="${mov.viewHref}" target="_blank" class="link-scw">Ver en SCW →</a>` : '—'}</td>
+            <td>${mov.viewHref ? `<a href="${escAttr(mov.viewHref)}" target="_blank" class="link-scw">Ver en SCW →</a>` : '—'}</td>
           </tr>`;
         });
         bodyHTML += `</tbody></table>`;
       } else if (exp.estado === 'fallido') {
-        bodyHTML = `<div class="error-box"><strong>⚠️ Error al procesar este expediente</strong>${exp.error || 'Error desconocido'}</div>`;
+        // F3 (2026-08-31, code-review): exp.error puede traer texto reflejado del
+        // script de automatización/PJN, igual que caratula/dependencia — faltaba esc().
+        bodyHTML = `<div class="error-box"><strong>⚠️ Error al procesar este expediente</strong>${esc(exp.error) || 'Error desconocido'}</div>`;
       } else {
         bodyHTML = `<div class="no-data">No hay movimientos para este expediente</div>`;
       }
