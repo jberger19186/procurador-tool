@@ -122,6 +122,23 @@ que cualquier cambio del proyecto.
 
 ### F1 — Bitácora, backend completo 🔴
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F1-2026-08-31.md`](revision-F1-2026-08-31.md).
+> **9 hallazgos, 7 corregidos y en producción, 2 documentados sin aplicar.** El más serio:
+> `aplicarImport()` (el restore de un backup de Bitácora) ignoraba el parámetro `modo` en
+> el bloque de historial — un import en modo **"combinar"** (el que la propia UI promete
+> como no-destructivo) **borraba snapshots capturados después de exportar el backup**.
+> Reproducido y confirmado con datos reales contra staging (capturar → exportar → capturar
+> de nuevo → importar el backup viejo → el snapshot nuevo desaparecía), corregido para
+> fusionar en vez de reemplazar, y reverificado con el mismo escenario (30/30 PASS). Otros
+> 6: ids duplicados en un backup crasheaban el import (500) en vez de un 400 · 2 de 3
+> queries de `recolectarDatosExport` sin filtro `user_id` (latente, no explotable hoy) ·
+> N+1 de hasta 200 queries validando una lista de ids en el export por lote ·
+> `POST`/`PUT` de entradas tratan `expediente_id:0` distinto entre sí · el helper `entero()`
+> clampeaba ids/años en vez de rechazarlos. Documentados sin aplicar: la transacción de
+> `aplicarImport` hace hasta 20.000 queries secuenciales (arquitectónico, bajo impacto real)
+> y `checkBitacoraPlan` no re-chequea el status de la cuenta (mismo patrón que el resto del
+> portal, no específico de Bitácora).
+
 | | |
 |---|---|
 | **Target** | `backend-server/routes/bitacora.js`, `backend-server/routes/capture.js`, `backend-server/utils/captureDrafts.js`, `backend-server/middleware/checkBitacoraPlan.js`, `backend-server/utils/expedienteKey.js` |

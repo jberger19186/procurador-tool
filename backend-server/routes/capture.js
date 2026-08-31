@@ -39,7 +39,14 @@ const ACCIONES = ['ficha', 'snapshot', 'entrada', 'ficha-lote', 'snapshot-lote',
 const TIPOS_ENTRADA = ['vencimiento', 'audiencia', 'tarea', 'nota'];
 const ORIGENES = ['procuracion', 'informe', 'monitor'];
 
-const MAX_CASOS_LOTE = 200;   // hallazgo H3 del plan — tope de FILAS, independiente del de bytes
+// hallazgo H3 del plan — tope de FILAS, independiente del de bytes.
+// ⚠️ F1 (2026-08-31, code-review): tiene que ser <= MAX_CASOS_CAPTURE_LOTE de
+// routes/bitacora.js (mismo valor hoy, sin ningún mecanismo que los sincronice).
+// Si este quedara MAYOR que aquel, un lote que pasa el chequeo de acá (se crea
+// el draft) fallaría al confirmarse en POST /expedientes/capture-lote — el
+// usuario ve el draft creado pero no puede confirmarlo. Subir este valor exige
+// subir el de bitacora.js primero o a la vez.
+const MAX_CASOS_LOTE = 200;
 const MAX_MOVS_CASO  = 500;   // cota defensiva (el tope real de la app es maxMovimientos=15)
 
 // Longitudes alineadas con las columnas reales de expedientes_seguidos

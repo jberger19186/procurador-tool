@@ -54,7 +54,11 @@ const REPEAT_RULES  = ['weekly', 'monthly', 'yearly'];
 const SOURCES_ENTRADA = ['manual', 'visor_procuracion', 'visor_informe'];
 const KINDS_SNAPSHOT  = ['procuracion', 'informe'];
 const MAX_SNAPSHOTS_POR_KIND = 2;   // tope estructural 2+2 por caso (§7 del plan)
-const MAX_CASOS_CAPTURE_LOTE = 200; // tope de filas por captura en lote (hallazgo H3)
+// tope de filas por captura en lote (hallazgo H3).
+// ⚠️ F1 (2026-08-31, code-review): tiene que ser >= MAX_CASOS_LOTE de
+// routes/capture.js (mismo valor hoy, sin ningún mecanismo que los sincronice)
+// — ver el comentario de ese archivo para el porqué.
+const MAX_CASOS_CAPTURE_LOTE = 200;
 
 const MAX_TITLE       = 300;    // = VARCHAR(300) de la columna
 const MAX_DESCRIPTION = 5000;   // mismo criterio que el cap de tickets (hallazgo C5)
@@ -86,11 +90,29 @@ function fecha(valor) {
     return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
-/** Entero dentro de un rango, con default. */
+/** Entero dentro de un rango, con default. Usar SOLO para valores que tiene
+ * sentido acotar (ventanas de días, tamaños de página) — clampea en vez de
+ * rechazar, así que un valor fuera de rango se trata como "el límite", no
+ * como "inválido". Para ids o años, usar `enteroEstricto`. */
 function entero(valor, def, min, max) {
     const n = parseInt(valor, 10);
     if (Number.isNaN(n)) return def;
     return Math.min(Math.max(n, min), max);
+}
+
+/**
+ * Entero EXACTO dentro de un rango, o `null` si no lo es. A diferencia de
+ * `entero()`, no clampea: un id o un año fuera de rango no es "el valor
+ * válido más cercano", es un valor inválido — clampearlo puede hacer que
+ * ?year=1999 devuelva en silencio los feriados de 2000, o que un id de
+ * sugerencia inválido (ej. 0) opere sobre la sugerencia real id=1.
+ * (F1, 2026-08-31, code-review.)
+ */
+function enteroEstricto(valor, min, max) {
+    if (valor === undefined || valor === null || valor === '') return null;
+    const n = parseInt(valor, 10);
+    if (Number.isNaN(n) || n < min || n > max) return null;
+    return n;
 }
 
 /**
@@ -165,15 +187,24 @@ async function recolectarDatosExport(db, userId, { alcance, expedienteId, desde,
         // contra el usuario por el handler antes de llegar — ver `fichaDelUsuario`
         // en cada uno). "Exportar este caso" manda un array de 1 elemento; el
         // borrado/exportación en lote de Mis Expedientes manda varios.
+        // F1 (2026-08-31, code-review): las dos consultas de abajo no filtraban por
+        // user_id, a diferencia de la de bitacora_entries. Hoy es inofensivo porque
+        // el único llamador (más abajo) valida cada id contra el dueño ANTES de
+        // llegar acá — pero la protección real quedaba enteramente del lado del
+        // llamador, no del dato. Se agrega el filtro acá también: defensa en
+        // profundidad, para que un futuro caller que no pre-valide no reabra el IDOR.
         const [exp, ents, snaps] = await Promise.all([
-            db.query('SELECT * FROM expedientes_seguidos WHERE id = ANY($1::int[])', [expedienteId]),
+            db.query('SELECT * FROM expedientes_seguidos WHERE id = ANY($1::int[]) AND user_id = $2', [expedienteId, userId]),
             db.query(
                 'SELECT * FROM bitacora_entries WHERE expediente_id = ANY($1::int[]) AND user_id = $2 ORDER BY due_at ASC NULLS LAST, id',
                 [expedienteId, userId]
             ),
             db.query(
-                'SELECT * FROM expediente_snapshots WHERE expediente_id = ANY($1::int[]) ORDER BY expediente_id, kind, created_at DESC',
-                [expedienteId]
+                `SELECT s.* FROM expediente_snapshots s
+                   JOIN expedientes_seguidos x ON x.id = s.expediente_id
+                  WHERE s.expediente_id = ANY($1::int[]) AND x.user_id = $2
+                  ORDER BY s.expediente_id, s.kind, s.created_at DESC`,
+                [expedienteId, userId]
             ),
         ]);
         datos.expedientes = exp.rows;
@@ -456,13 +487,20 @@ router.get('/bitacora/export', authenticateToken, checkBitacoraPlan({ conGracia:
         if (crudos.length > MAX_CASOS_CAPTURE_LOTE) {
             return res.status(400).json({ error: `Máximo ${MAX_CASOS_CAPTURE_LOTE} expedientes por exportación.` });
         }
-        const validados = [];
-        for (const crudo of crudos) {
-            const id = await fichaDelUsuario(db, userId, crudo);
-            if (id) validados.push(id);
-        }
-        if (validados.length === 0) return res.status(404).json({ error: 'Expediente no encontrado' });
-        expedienteId = validados;
+        // F1 (2026-08-31, code-review): antes validaba cada id con una consulta
+        // SEPARADA (fichaDelUsuario, patrón N+1 — hasta 200 round-trips
+        // secuenciales para el caso límite). Una sola consulta batched hace lo
+        // mismo: los ids que no parsean a entero ni siquiera llegan a la DB, y
+        // WHERE id=ANY()+user_id es la misma defensa IDOR de siempre (un id ajeno
+        // o inexistente simplemente no aparece en el resultado).
+        const idsParseados = crudos.map(c => parseInt(c, 10)).filter(n => !Number.isNaN(n));
+        const { rows: validos } = idsParseados.length
+            ? await db.query(
+                'SELECT id FROM expedientes_seguidos WHERE id = ANY($1::int[]) AND user_id = $2',
+                [idsParseados, userId])
+            : { rows: [] };
+        if (validos.length === 0) return res.status(404).json({ error: 'Expediente no encontrado' });
+        expedienteId = validos.map(r => r.id);
     }
 
     // Mismo criterio permisivo que GET /bitacora (arriba): `fecha()` devuelve
@@ -599,6 +637,32 @@ function validarBackup(buffer, userId) {
     for (const s of snapshots) {
         if (!KINDS_SNAPSHOT.includes(s?.kind)) return { error: `El backup tiene un historial con tipo inválido: "${s?.kind}".` };
         if (!Number.isInteger(Number(s?.expediente_id))) return { error: 'Hay un historial sin expediente asociado en el backup.' };
+    }
+
+    // F1 (2026-08-31, code-review): un backup con ids duplicados dentro de
+    // `entradas` (nunca puede pasar en un export real — cada fila sale de una
+    // PK — pero sí en uno editado a mano o corrompido) rompía `aplicarImport`
+    // más adelante: `idsMios`/`idsAjenos` se calculan UNA VEZ antes del loop de
+    // inserción, así que la 2ª aparición del mismo id evalúa contra un estado
+    // stale y termina violando la PK (500 en vez de un error claro) o —si el id
+    // ya pertenecía a otro usuario— insertando la entrada duplicada dos veces
+    // en silencio. Se rechaza acá, antes de tocar la base, con el mismo criterio
+    // que el resto de esta función.
+    const idsEntradasVistos = new Set();
+    for (const e of entradasBk) {
+        const id = Number(e.id);
+        if (idsEntradasVistos.has(id)) {
+            return { error: `El backup tiene el identificador de entrada ${id} repetido más de una vez.` };
+        }
+        idsEntradasVistos.add(id);
+    }
+    const idsExpedientesVistos = new Set();
+    for (const x of expedientes) {
+        const id = Number(x.id);
+        if (idsExpedientesVistos.has(id)) {
+            return { error: `El backup tiene el identificador de expediente ${id} repetido más de una vez.` };
+        }
+        idsExpedientesVistos.add(id);
     }
 
     return { data: { expedientes, entradas: entradasBk, snapshots, exported_at: data.exported_at ?? null } };
@@ -785,9 +849,26 @@ async function aplicarImport(db, userId, backup, modo) {
         }
 
         // ── Historial (snapshots) ─────────────────────────────────────────────
-        // Hoy NADA escribe en expediente_snapshots (eso lo construye la captura desde
-        // los visores, Fase 2), así que en la práctica este bloque restaura backups con
-        // el array vacío. Se implementa completo igual para no volver acá cuando F2 exista.
+        // F1 (2026-08-31, code-review): esto era un DELETE del historial completo
+        // del caso + INSERT de lo que trajera el backup, SIN mirar `modo` en
+        // absoluto. El comentario original decía "hoy NADA escribe en
+        // expediente_snapshots... en la práctica este bloque restaura backups con
+        // el array vacío" — cierto cuando se escribió, falso desde que F2.2
+        // (capture-lote, más abajo en este mismo archivo) empezó a escribir
+        // snapshots reales en el uso normal de la app. Consecuencia real: un
+        // import en modo 'combinar' —el modo que el propio código documenta como
+        // "combinar NUNCA borra" (ver `eliminar` en calcularPreviewImport)— borraba
+        // snapshots capturados DESPUÉS de exportar el backup, sin que el dry-run
+        // avisara nada (el preview no reporta ningún conteo de snapshots).
+        //
+        // Ahora: se FUSIONA con lo que ya existe, dedup por `created_at` exacto
+        // (si el backup trae un snapshot que ya está restaurado, no lo duplica),
+        // y se respeta el tope estructural (2 por caso+tipo) quedándose con los
+        // más nuevos — el MISMO criterio que ya usa `capture-lote` más abajo
+        // (hallazgo H4), no uno nuevo. En 'reemplazar' la tabla ya quedó vacía
+        // para este usuario por el DELETE de arriba, así que "fusionar con lo
+        // existente" da exactamente el mismo resultado que insertar directo — sin
+        // necesitar una rama aparte por modo.
         const porCasoKind = new Map();
         for (const s of backup.snapshots) {
             const real = idMap.get(Number(s.expediente_id));
@@ -799,22 +880,49 @@ async function aplicarImport(db, userId, backup, modo) {
         for (const [clave, lista] of porCasoKind.entries()) {
             const [expIdStr, kind] = clave.split('|');
             const expId = Number(expIdStr);
-            // El backup pisa el historial del caso (es la foto que el usuario eligió
-            // restaurar) y se respeta el tope estructural: los 2 más nuevos.
-            lista.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-            await client.query(
-                'DELETE FROM expediente_snapshots WHERE expediente_id = $1 AND kind = $2',
+
+            const { rows: existentes } = await client.query(
+                'SELECT created_at FROM expediente_snapshots WHERE expediente_id = $1 AND kind = $2',
                 [expId, kind]
             );
-            for (const s of lista.slice(0, MAX_SNAPSHOTS_POR_KIND)) {
+            const timestampsExistentes = new Set(
+                existentes
+                    .map(e => (e.created_at ? new Date(e.created_at).getTime() : null))
+                    .filter(t => t !== null)
+            );
+
+            for (const s of lista) {
+                // El backup preserva su propio `created_at` — la fecha real de la
+                // corrida, no la del import. Sin esto, "quedate con los N más
+                // nuevos" de abajo (y el de H4) siempre favorecería lo recién
+                // importado en vez de lo genuinamente más reciente.
+                const createdAtValida = s.created_at && !Number.isNaN(new Date(s.created_at).getTime());
+                const createdAt = createdAtValida ? new Date(s.created_at).toISOString() : new Date().toISOString();
+
+                if (timestampsExistentes.has(new Date(createdAt).getTime())) continue;   // ya restaurado, no duplicar
+
                 await client.query(
-                    `INSERT INTO expediente_snapshots (expediente_id, kind, run_date, situacion, data)
-                     VALUES ($1,$2,$3,$4,$5)`,
-                    [expId, kind, fecha(s.run_date) ?? new Date().toISOString(),
-                     texto(s.situacion, MAX_TEXTO_CORTO), JSON.stringify(s.data ?? {})]
+                    `INSERT INTO expediente_snapshots (expediente_id, kind, run_date, situacion, data, created_at)
+                     VALUES ($1,$2,$3,$4,$5,$6)`,
+                    [expId, kind, fecha(s.run_date) ?? createdAt,
+                     texto(s.situacion, MAX_TEXTO_CORTO), JSON.stringify(s.data ?? {}), createdAt]
                 );
                 resumen.snapshotsCreados++;
             }
+
+            // Mismo patrón que el hallazgo H4 (capture-lote, más abajo): nunca se
+            // borra más que lo que el tope estructural exige, y se conserva lo
+            // más nuevo por created_at real (no por orden de inserción).
+            await client.query(
+                `DELETE FROM expediente_snapshots
+                  WHERE id IN (
+                    SELECT id FROM expediente_snapshots
+                     WHERE expediente_id = $1 AND kind = $2
+                     ORDER BY created_at DESC
+                     OFFSET $3
+                  )`,
+                [expId, kind, MAX_SNAPSHOTS_POR_KIND]
+            );
         }
 
         // ⚠️ NO se toca la secuencia de `bitacora_entries` — y no hace falta.
@@ -1032,7 +1140,13 @@ entradas.post('/', async (req, res) => {
 
     try {
         let fichaId = null;
-        if (expediente_id) {
+        // F1 (2026-08-31, code-review): era `if (expediente_id)` — chequeo truthy,
+        // así que `expediente_id: 0` (nunca un id real, pero sí un valor que un
+        // cliente con un bug propio podría mandar) se ignoraba EN SILENCIO: la
+        // entrada se creaba sin vincular, sin ningún aviso de que el vínculo no se
+        // aplicó. El PUT del mismo campo, más abajo, ya usa `!== undefined` y
+        // responde 404 para el mismo valor — este queda igual de estricto.
+        if (expediente_id !== undefined && expediente_id !== null) {
             fichaId = await fichaDelUsuario(db, userId, expediente_id);
             if (!fichaId) return res.status(404).json({ error: 'Expediente no encontrado' });
         }
@@ -1620,7 +1734,7 @@ const feriados = express.Router();
 feriados.get('/', async (req, res) => {
     const db = req.app.get('db');
     try {
-        const year = req.query.year ? entero(req.query.year, null, 2000, 2100) : null;
+        const year = req.query.year ? enteroEstricto(req.query.year, 2000, 2100) : null;
 
         const { rows } = year
             ? await db.query(
@@ -1691,7 +1805,7 @@ sugerencias.get('/count', async (req, res) => {
 sugerencias.post('/:id/aceptar', async (req, res) => {
     const db = req.app.get('db');
     const userId = req.user.id;
-    const sugId = entero(req.params.id, null, 1, 2147483647);
+    const sugId = enteroEstricto(req.params.id, 1, 2147483647);
     if (!sugId) return res.status(400).json({ error: 'Id inválido.' });
 
     const conEntrada = req.body?.conEntrada === true;
@@ -1787,7 +1901,7 @@ sugerencias.post('/:id/aceptar', async (req, res) => {
 // ─── POST /:id/descartar ───────────────────────────────────────────────────
 sugerencias.post('/:id/descartar', async (req, res) => {
     const db = req.app.get('db');
-    const sugId = entero(req.params.id, null, 1, 2147483647);
+    const sugId = enteroEstricto(req.params.id, 1, 2147483647);
     if (!sugId) return res.status(400).json({ error: 'Id inválido.' });
 
     try {
