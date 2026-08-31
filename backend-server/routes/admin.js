@@ -10,7 +10,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { sendTicketReplyEmail, sendAdminCreatedUserEmail } = require('../utils/mailer');
 const { validatePassword } = require('../utils/passwordPolicy');
-const { updatePreapprovalAmount, cancelSubscription, reactivateSubscription, pausePreapproval } = require('../services/subscriptionService');
+const { updatePreapprovalAmount, cancelSubscription, reactivateSubscription, pausePreapproval, resumePreapproval } = require('../services/subscriptionService');
 
 // Validación de CUIT/CUIL (mismo algoritmo que routes/auth.js)
 function validarCuitAdmin(cuit) {
@@ -24,6 +24,10 @@ function validarCuitAdmin(cuit) {
     return check === parseInt(clean[10]);
 }
 
+// F10 (2026-08-31): payments.status no tiene CHECK constraint en el schema (character
+// varying(30) sin enum) — mismos 4 valores que ofrece el <select> del dashboard.
+const PAYMENT_STATUSES = ['approved', 'pending', 'rejected', 'refunded'];
+
 // ── Multer: almacenamiento de PDFs de facturas ────────────────────────────────
 // C1 (revisión 2026-07-25): el directorio se movió FUERA de public/ — antes se servía
 // con express.static sin autenticación (ver utils/invoiceStorage.js).
@@ -33,7 +37,15 @@ const invoicesDir = ensureInvoicesDir();
 const invoiceStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, invoicesDir),
     filename: (req, file, cb) => {
-        const invoiceId = req.params.invoiceId || 'new';
+        // F10 (2026-08-31): req.params.invoiceId no se sanitizaba antes de interpolarlo
+        // en el nombre de archivo. Express decodifica el segmento de ruta DESPUÉS de
+        // matchear el patrón (un `%2F` no tiene `/` literal, así que matchea igual), y
+        // multer arma la ruta final con `path.join(destino, filename)` sin sanear `..`
+        // (verificado en node_modules/multer/storage/disk.js) — un invoiceId armado con
+        // `..%2F..%2F` podía escribir el PDF fuera de storage/invoices/. Los ids reales
+        // son siempre numéricos (PK de invoices); cualquier otra cosa cae a 'new'.
+        const rawId = req.params.invoiceId;
+        const invoiceId = (rawId && /^\d+$/.test(rawId)) ? rawId : 'new';
         const ts = Date.now();
         cb(null, `factura_${invoiceId}_${ts}.pdf`);
     }
@@ -56,6 +68,26 @@ function uploadPdfOr400(req, res, next) {
                 ? 'El archivo supera el máximo de 5 MB.'
                 : (err.message || 'Archivo inválido.');
             return res.status(400).json({ error: msg });
+        }
+        // F10 (2026-08-31): fileFilter (arriba) solo valida el header Content-Type del
+        // multipart, que el cliente controla libremente — no prueba nada del contenido
+        // real del archivo. Chequeo de magic bytes sobre el archivo YA ESCRITO en disco;
+        // si no empieza con la firma real de un PDF, se borra y se rechaza con 400 en vez
+        // de quedar persistido con extensión .pdf sin serlo.
+        if (req.file) {
+            try {
+                const fd = fs.openSync(req.file.path, 'r');
+                const head = Buffer.alloc(5);
+                fs.readSync(fd, head, 0, 5, 0);
+                fs.closeSync(fd);
+                if (head.toString('latin1') !== '%PDF-') {
+                    fs.unlinkSync(req.file.path);
+                    return res.status(400).json({ error: 'El archivo no es un PDF válido.' });
+                }
+            } catch (checkErr) {
+                try { fs.unlinkSync(req.file.path); } catch (_) {}
+                return res.status(400).json({ error: 'No se pudo validar el archivo.' });
+            }
         }
         next();
     });
@@ -388,7 +420,7 @@ router.get('/users/pending', authenticateAdmin, async (req, res) => {
 // Datos de Registro → ambos hacen exactamente lo mismo.
 async function performActivation(client, userId, expiresDays, adminId) {
     const userResult = await client.query(`
-        SELECT u.id, u.email, u.nombre, u.registration_status,
+        SELECT u.id, u.email, u.nombre, u.registration_status, u.email_verified,
                s.id AS sub_id, s.plan_id, s.plan AS plan_name,
                p.proc_executions_limit
         FROM users u
@@ -403,6 +435,18 @@ async function performActivation(client, userId, expiresDays, adminId) {
         throw e;
     }
     const u = userResult.rows[0];
+
+    // F10 (2026-08-31): sin este guard, activar una cuenta que nunca verificó su email
+    // producía el mismo "estado imposible" (registration_status='active' con
+    // email_verified=false) que el proyecto ya corrigió el 2026-06-24 para el camino
+    // inverso (bloquear 'pending_email' como destino manual del selector). El camino de
+    // cortesía (más abajo en este archivo) ya excluye explícitamente a los no
+    // verificados — acá faltaba el mismo chequeo.
+    if (!u.email_verified) {
+        const e = new Error('No se puede activar: el usuario todavía no verificó su email.');
+        e.statusCode = 400;
+        throw e;
+    }
 
     // Modelo trial-hasta-pago: la activación SOLO APRUEBA la cuenta. El usuario sigue en
     // el TRIAL hasta configurar el pago (ahí el webhook aplica los límites del plan).
@@ -443,7 +487,10 @@ async function performActivation(client, userId, expiresDays, adminId) {
 router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
     const { userId } = req.params;
-    const expires_days = (req.body && req.body.expires_days) || 30;
+    // F10 (2026-08-31): `x || 30` deja pasar un negativo (es truthy) — expires_at
+    // terminaba en el pasado, "activando" una cuenta que ya nace vencida.
+    const rawExpiresDays = req.body && req.body.expires_days;
+    const expires_days = (Number.isFinite(rawExpiresDays) && rawExpiresDays > 0) ? rawExpiresDays : 30;
 
     const client = await db.connect();
     try {
@@ -453,6 +500,12 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
 
         const mailer = require('../utils/mailer');
         mailer.sendActivationEmail(u.email, u.nombre).catch(() => {});
+        // F10 (2026-08-31): si esta cuenta había sido suspendida con billing_paused
+        // (/suspend, ahora también corregido en esta misma revisión), el preapproval
+        // real en MP quedaba pausado — sin esto, "Activar" le devolvía acceso pleno al
+        // usuario mientras MP seguía sin cobrarle. Inofensivo si nunca hubo preapproval
+        // (trial): resuelve a `false` sin tocar nada.
+        resumePreapproval(userId).catch(() => {});
 
         console.log(`✅ Usuario ${userId} (${u.email}) activado por admin ${req.user.id}`);
         res.json({ success: true, message: `Usuario ${u.email} activado correctamente` });
@@ -467,22 +520,38 @@ router.post('/users/:userId/activate', authenticateAdmin, async (req, res) => {
 });
 
 // ─── Reenviar email de verificación (admin) ──────────────────────────────────
+// F10 (2026-08-31, code-review): esta ruta estaba definida DOS VECES en el archivo —
+// Express solo corre la primera, así que una versión más completa (UPDATE atómico +
+// reset de registration_status a 'pending_email', agregada el 2026-06-24 justo para
+// resolver un "estado imposible") quedó como código muerto desde el día en que se
+// escribió. Fusionadas acá: el UPDATE atómico con guard `WHERE email_verified=false`
+// (evita la carrera SELECT-luego-UPDATE de la versión vieja) + el reset de
+// registration_status de la versión muerta + la auditoría en admin_events que esa
+// versión muerta nunca tuvo.
 router.post('/users/:userId/resend-verification', authenticateAdmin, async (req, res) => {
     const { userId } = req.params;
     const db = req.app.get('db');
     try {
-        const r = await db.query('SELECT id, email, nombre, email_verified FROM users WHERE id = $1', [userId]);
-        if (r.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
-        const u = r.rows[0];
-        if (u.email_verified) return res.status(400).json({ error: 'El email de este usuario ya está verificado.' });
-
         const crypto = require('crypto');
         const token = crypto.randomBytes(32).toString('hex');
         const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await db.query(
-            'UPDATE users SET email_verify_token = $1, email_verify_expires = $2 WHERE id = $3',
-            [token, expires, userId]
-        );
+
+        const result = await db.query(`
+            UPDATE users
+            SET email_verify_token   = $1,
+                email_verify_expires = $2,
+                email_verified       = false,
+                registration_status  = 'pending_email',
+                updated_at           = NOW()
+            WHERE id = $3 AND email_verified = false
+            RETURNING email, nombre
+        `, [token, expires, userId]);
+
+        if (result.rows.length === 0) {
+            return res.status(400).json({ error: 'El email ya fue verificado o el usuario no existe' });
+        }
+        const u = result.rows[0];
+
         const mailer = require('../utils/mailer');
         await mailer.sendEmailVerification(u.email, u.nombre || 'Usuario', token);
         await db.query(
@@ -550,6 +619,12 @@ router.post('/users/:userId/reject', authenticateAdmin, async (req, res) => {
             );
             await client.query('COMMIT');
             mailer.sendRejectionEmail(u.email, u.nombre, reason, 'block').catch(() => {});
+            // F10 (2026-08-31): esta ruta no tiene guard de estado previo — se puede
+            // rechazar/bloquear a un usuario que YA está activo y pagando, no solo a un
+            // trial pendiente. Sin esto, el preapproval real en MP seguía cobrando pese
+            // al bloqueo local. Inofensivo si nunca hubo preapproval (el caso común, un
+            // trial recién registrado): no encuentra nada y no toca MP.
+            pausePreapproval(userId).catch(() => {});
         } else {
             // keep_trial: no cambia registration_status, solo notifica
             await client.query(
@@ -646,6 +721,11 @@ router.post('/users/:userId/suspend', authenticateAdmin, async (req, res) => {
 
         const mailer = require('../utils/mailer');
         mailer.sendAdminSuspendedEmail(u.email, u.nombre, reason).catch(() => {});
+        // F10 (2026-08-31): billing_paused se guardaba como flag local (leído solo para
+        // decidir next_billing_date al reactivar) pero nunca pausaba el preapproval REAL
+        // en MercadoPago — confirmado que pausePreapproval nunca se llamaba desde acá.
+        // Un usuario pago suspendido seguía siendo cobrado mes a mes sin acceso alguno.
+        if (billing_paused) pausePreapproval(userId).catch(() => {});
 
         console.log(`⏸️ Usuario ${userId} suspendido por admin ${req.user.id}. billing_paused=${billing_paused}`);
         res.json({ success: true });
@@ -746,6 +826,10 @@ router.post('/users/:userId/reactivation-request/:action', authenticateAdmin, as
             );
             await client.query('COMMIT');
             mailer.sendReactivationResultEmail(u.email, u.nombre, true).catch(() => {});
+            // F10 (2026-08-31): reanuda el preapproval real en MP si había quedado
+            // pausado — este flujo ya reseteaba billing_paused=false a nivel local, pero
+            // nunca tocaba MercadoPago.
+            resumePreapproval(userId).catch(() => {});
 
         } else {
             await client.query(`
@@ -915,6 +999,20 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
             return res.status(400).json({ error: 'No se puede poner "Email sin verificar" manualmente. Usá "Editar email" para forzar la re-verificación.' });
         }
 
+        // F10 (2026-08-31): estos 5 estados no tenían NINGÚN efecto secundario acá — a
+        // diferencia de 'active'/'pending_activation' (manejados abajo), un flip crudo
+        // no tocaba subscriptions.status, no pausaba el cobro en MercadoPago, no mandaba
+        // email ni notificación, y no dejaba rastro en user_events/admin_events. El
+        // propio frontend solo pedía confirmación para 'active'/'pending_activation' —
+        // el riesgo ya estaba identificado en el cliente, sin cubrir en el servidor. Se
+        // bloquean (mismo criterio que 'pending_email' arriba) en vez de replicar acá la
+        // lógica de cada botón dedicado, para no arriesgar reproducirla mal.
+        const EFFECTFUL_STATUSES = ['rejected', 'suspended', 'suspended_admin', 'suspended_plan_expired', 'cancelled'];
+        if (EFFECTFUL_STATUSES.includes(registration_status) && prevStatus !== registration_status) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Ese estado tiene efectos que este formulario no aplica (cobro, email, auditoría). Usá el botón dedicado (Suspender / Rechazar / Cancelar) en vez del selector de estado.' });
+        }
+
         // Datos de perfil (siempre). El registration_status se aplica acá salvo que sea
         // 'active' viniendo de otro estado: en ese caso lo maneja performActivation abajo
         // (activación real, no flip crudo).
@@ -966,6 +1064,9 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
         if (activatedUser) {
             const mailer = require('../utils/mailer');
             mailer.sendActivationEmail(activatedUser.email, activatedUser.nombre).catch(() => {});
+            // F10 (2026-08-31): mismo fix que /activate — reanuda el preapproval real si
+            // había quedado pausado por una suspensión previa.
+            resumePreapproval(userId).catch(() => {});
         }
         res.json({ success: true, activated: !!activatedUser });
     } catch (error) {
@@ -1075,40 +1176,6 @@ router.post('/users/:userId/verify-email', authenticateAdmin, async (req, res) =
         res.json({ success: true, registration_status: u.registration_status });
     } catch (error) {
         console.error('Error verificando email:', error);
-        res.status(500).json({ error: 'Error del servidor' });
-    }
-});
-
-// ─── Reenviar email de verificación ───────────────────────────────────────────
-router.post('/users/:userId/resend-verification', authenticateAdmin, async (req, res) => {
-    const { userId } = req.params;
-    const db = req.app.get('db');
-    const crypto = require('crypto');
-    const mailer = require('../utils/mailer');
-    try {
-        const token   = crypto.randomBytes(32).toString('hex');
-        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24hs
-
-        const result = await db.query(`
-            UPDATE users
-            SET email_verify_token   = $1,
-                email_verify_expires = $2,
-                email_verified       = false,
-                registration_status  = 'pending_email',
-                updated_at           = NOW()
-            WHERE id = $3 AND email_verified = false
-            RETURNING email, nombre
-        `, [token, expires, userId]);
-
-        if (result.rows.length === 0) {
-            return res.status(400).json({ error: 'El email ya fue verificado o el usuario no existe' });
-        }
-        const u = result.rows[0];
-        await mailer.sendEmailVerification(u.email, u.nombre, token);
-        require('../utils/logger').info(`✉️ Verificación reenviada a ${u.email} por admin`);
-        res.json({ success: true, message: `Email de verificación reenviado a ${u.email}` });
-    } catch (error) {
-        console.error('Error reenviando verificación:', error);
         res.status(500).json({ error: 'Error del servidor' });
     }
 });
@@ -1235,7 +1302,10 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
         const priceKnown = planData.price_ars != null || planData.price_usd != null;
         const isCourtesy = priceKnown && planPrice(planData) === 0 && planData.id;
         if (isCourtesy) {
-            const dias = parseInt(durationDays) || 30;
+            // F10 (2026-08-31): `|| 30` deja pasar un negativo (expiry en el pasado, la
+            // cuenta de cortesía "nace" ya vencida) y de paso no permite un 0 explícito.
+            const parsedDias = parseInt(durationDays);
+            const dias = (Number.isFinite(parsedDias) && parsedDias > 0) ? parsedDias : 30;
             const expiry = new Date();
             expiry.setDate(expiry.getDate() + dias);
 
@@ -1951,53 +2021,87 @@ router.put('/tickets/:ticketId/comment/:commentId', authenticateAdmin, async (re
 // Aplicar beneficio comercial a un ticket
 // Helper: aplica el efecto del beneficio y lo registra en commercial_benefits.
 // ticketId puede ser null (beneficio aplicado desde la ficha del usuario, sin ticket).
+// F10 (2026-08-31): esta función hace 2-3 escrituras dependientes (UPDATE del efecto +
+// INSERT en commercial_benefits + INSERT en admin_events) sin ninguna transacción, a
+// diferencia del resto de este archivo (líneas 247-972 ya usan BEGIN/COMMIT/ROLLBACK
+// para este mismo patrón). Si el INSERT de historial fallaba DESPUÉS de que el efecto
+// ya se aplicó, el 500 resultante invitaba al admin a reintentar — aplicando el
+// beneficio una 2da vez sin dejar rastro del primer intento (commercial_benefits es
+// aditivo, sin idempotency-key). Envuelto en una transacción propia: no soluciona el
+// doble-submit por completo (dos requests genuinamente distintas siguen sumando dos
+// veces, eso requeriría una clave de idempotencia — fuera de alcance de esta fase),
+// pero elimina el estado a medias que lo agravaba.
 async function applyBenefitToUser(db, { userId, benefitType, benefitValue, ticketId, adminId }) {
-    if (benefitType === 'discount') {
-        const days = parseInt(benefitValue) || 30;
-        await db.query(
-            `UPDATE subscriptions SET expires_at = COALESCE(expires_at, NOW()) + ($2 || ' days')::interval WHERE user_id = $1`,
-            [userId, days]
-        );
-        console.log(`🎁 Descuento: suscripción de usuario ${userId} extendida ${days} días por admin ${adminId}`);
-    } else if (benefitType === 'plan_upgrade') {
-        // El plan debe ser uno VIGENTE (active=true) de la tabla plans.
-        const newPlan = String(benefitValue || '').toUpperCase();
-        const planRes = await db.query(`SELECT id, name FROM plans WHERE name = $1 AND active = true`, [newPlan]);
-        if (planRes.rows.length === 0) {
-            const err = new Error('Plan inválido o no vigente');
-            err.statusCode = 400;
-            throw err;
-        }
-        const pd = planRes.rows[0];
-        // Plan activo → enforcement por submódulo (límites se leen del plan);
-        // el tope global no debe cortar al mezclar módulos → usage_limit=999999.
-        await db.query(
-            `UPDATE subscriptions SET plan = $1, plan_id = $2, usage_limit = 999999, updated_at = NOW() WHERE user_id = $3`,
-            [pd.name, pd.id, userId]
-        );
-        console.log(`⬆️ Plan upgrade: usuario ${userId} → ${pd.name} por admin ${adminId}`);
-    } else if (benefitType === 'usage_reset') {
-        // benefitValue indica QUÉ resetear: global (trial) o un subsistema.
-        const colMap = {
-            global: 'usage_count',
-            proc: 'proc_usage', batch: 'batch_usage', informe: 'informe_usage',
-            monitor_novedades: 'monitor_novedades_usage'
-        };
-        const col = colMap[benefitValue] || 'usage_count';
-        await db.query(`UPDATE subscriptions SET ${col} = 0, updated_at = NOW() WHERE user_id = $1`, [userId]);
-        console.log(`🔄 Usage reset (${col}): usuario ${userId} por admin ${adminId}`);
-    }
+    const client = await db.connect();
+    try {
+        await client.query('BEGIN');
 
-    // Registrar el beneficio (historial). NO se auto-resuelve el ticket.
-    await db.query(
-        `INSERT INTO commercial_benefits (user_id, ticket_id, benefit_type, benefit_value, applied_by_admin_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [userId, ticketId || null, benefitType, benefitValue != null ? String(benefitValue) : null, adminId]
-    );
-    await db.query(
-        `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'benefit_applied', $3)`,
-        [adminId, userId, JSON.stringify({ benefit_type: benefitType, benefit_value: benefitValue, ticket_id: ticketId || null })]
-    );
+        if (benefitType === 'discount') {
+            // `|| 30` dejaba pasar un negativo (es truthy) — un "descuento" podía en
+            // realidad ACORTAR la suscripción del cliente en vez de extenderla.
+            const parsedDays = parseInt(benefitValue);
+            const days = (Number.isFinite(parsedDays) && parsedDays > 0) ? parsedDays : 30;
+            await client.query(
+                `UPDATE subscriptions SET expires_at = COALESCE(expires_at, NOW()) + ($2 || ' days')::interval WHERE user_id = $1`,
+                [userId, days]
+            );
+            console.log(`🎁 Descuento: suscripción de usuario ${userId} extendida ${days} días por admin ${adminId}`);
+        } else if (benefitType === 'plan_upgrade') {
+            // El plan debe ser uno VIGENTE (active=true) de la tabla plans.
+            const newPlan = String(benefitValue || '').toUpperCase();
+            const planRes = await client.query(`SELECT id, name FROM plans WHERE name = $1 AND active = true`, [newPlan]);
+            if (planRes.rows.length === 0) {
+                const err = new Error('Plan inválido o no vigente');
+                err.statusCode = 400;
+                throw err;
+            }
+            const pd = planRes.rows[0];
+            // Plan activo → enforcement por submódulo (límites se leen del plan);
+            // el tope global no debe cortar al mezclar módulos → usage_limit=999999.
+            await client.query(
+                `UPDATE subscriptions SET plan = $1, plan_id = $2, usage_limit = 999999, updated_at = NOW() WHERE user_id = $3`,
+                [pd.name, pd.id, userId]
+            );
+            console.log(`⬆️ Plan upgrade: usuario ${userId} → ${pd.name} por admin ${adminId}`);
+        } else if (benefitType === 'usage_reset') {
+            // benefitValue indica QUÉ resetear: global (trial) o un subsistema.
+            const colMap = {
+                global: 'usage_count',
+                proc: 'proc_usage', batch: 'batch_usage', informe: 'informe_usage',
+                monitor_novedades: 'monitor_novedades_usage'
+            };
+            // `|| 'usage_count'` caía en silencio al reset GLOBAL/trial ante cualquier
+            // valor no reconocido (typo, valor inesperado de UI) — resetear el cupo del
+            // trial cuando el admin quiso resetear otro subsistema es el peor caso
+            // posible, no un default razonable.
+            if (!Object.prototype.hasOwnProperty.call(colMap, benefitValue)) {
+                const e = new Error(`Subsistema inválido para usage_reset: '${benefitValue}'. Válidos: ${Object.keys(colMap).join(', ')}`);
+                e.statusCode = 400;
+                throw e;
+            }
+            const col = colMap[benefitValue];
+            await client.query(`UPDATE subscriptions SET ${col} = 0, updated_at = NOW() WHERE user_id = $1`, [userId]);
+            console.log(`🔄 Usage reset (${col}): usuario ${userId} por admin ${adminId}`);
+        }
+
+        // Registrar el beneficio (historial). NO se auto-resuelve el ticket.
+        await client.query(
+            `INSERT INTO commercial_benefits (user_id, ticket_id, benefit_type, benefit_value, applied_by_admin_id)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [userId, ticketId || null, benefitType, benefitValue != null ? String(benefitValue) : null, adminId]
+        );
+        await client.query(
+            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'benefit_applied', $3)`,
+            [adminId, userId, JSON.stringify({ benefit_type: benefitType, benefit_value: benefitValue, ticket_id: ticketId || null })]
+        );
+
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
 }
 
 const VALID_BENEFITS = ['discount', 'plan_upgrade', 'usage_reset'];
@@ -2154,6 +2258,18 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
         bitacora_enabled, markdown_enabled
     } = req.body;
 
+    // F10 (2026-08-31): promo_type/promo_end_date eran los ÚNICOS 2 campos de este UPDATE
+    // sin COALESCE — `promo_type !== undefined ? promo_type : undefined` es un no-op (si
+    // el campo no viene, el parámetro queda `undefined`, y `pg` lo convierte a SQL NULL
+    // antes de mandarlo — verificado contra node_modules/pg/lib/utils.js::prepareValue).
+    // Cualquier PUT parcial que no incluya estos 2 campos los borraba en silencio. Pero
+    // tampoco alcanza con envolverlos en COALESCE como el resto: "borrar la promo" es una
+    // acción real del form (mandar null a propósito), y COALESCE no puede distinguir
+    // "no vino" de "vino null" — ambos colapsan al mismo SQL NULL. Se resuelve con un
+    // flag de presencia real de la clave en el body (no de su valor).
+    const promoTypeProvided = Object.prototype.hasOwnProperty.call(req.body, 'promo_type');
+    const promoEndDateProvided = Object.prototype.hasOwnProperty.call(req.body, 'promo_end_date');
+
     try {
         const result = await db.query(`
             UPDATE plans SET
@@ -2172,8 +2288,8 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
                 price_usd = COALESCE($13, price_usd),
                 price_ars = COALESCE($14, price_ars),
                 plan_type = COALESCE($15, plan_type),
-                promo_type = $16,
-                promo_end_date = $17,
+                promo_type = CASE WHEN $24 THEN $16 ELSE promo_type END,
+                promo_end_date = CASE WHEN $25 THEN $17 ELSE promo_end_date END,
                 promo_max_users = COALESCE($18, promo_max_users),
                 promo_alert_days = COALESCE($19, promo_alert_days),
                 visibility = COALESCE($20, visibility),
@@ -2190,14 +2306,16 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
             period_days, active,
             extension_flows !== undefined ? JSON.stringify(extension_flows) : null,
             price_usd ?? null, price_ars ?? null, plan_type ?? null,
-            promo_type !== undefined ? promo_type : undefined,
-            promo_end_date !== undefined ? promo_end_date : undefined,
+            promo_type ?? null,
+            promo_end_date ?? null,
             promo_max_users ?? null,
             promo_alert_days ?? null,
             (visibility === 'public' || visibility === 'private') ? visibility : null,
             bitacora_enabled ?? null,
             markdown_enabled ?? null,
-            planId
+            planId,
+            promoTypeProvided,
+            promoEndDateProvided
         ]);
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'Plan no encontrado' });
@@ -2279,10 +2397,13 @@ router.post('/subscriptions/:userId/adjust', authenticateAdmin, async (req, res)
         }
 
         // Registrar ajuste en historial
+        // F10 (2026-08-31): admin_email es varchar — llevaba req.user.id (un entero), no
+        // el email; el JWT admin tampoco lo tenía hasta este mismo fix (ver auth.js).
+        // Confirmado que dashboard.js:3168 renderiza esta columna en "Historial de Ajustes".
         await db.query(`
             INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason, ticket_id)
             VALUES ($1, $2, $3, $4, $5, $6)
-        `, [userId, req.user.id, subsystem, parseInt(amount), reason || null, ticket_id || null]);
+        `, [userId, req.user.email, subsystem, parseInt(amount), reason || null, ticket_id || null]);
 
         const action = parseInt(amount) > 0 ? `+${amount}` : `${amount}`;
         console.log(`Ajuste ${action} usos de "${subsystem}" para usuario ${userId} por admin: ${req.user.id}. Motivo: ${reason}`);
@@ -3273,9 +3394,15 @@ const VERIF_USAGE_COL = {
 
 /**
  * Lee el estado real de cupo de la cuenta de verificación.
- * El cálculo de `remaining` replica EXACTAMENTE el de GET /client/account
- * (limit === -1 → ilimitado; si no, limit + bonus - used) — si divergiera, la recarga
- * quedaría corta o larga respecto de lo que el enforcement realmente aplica.
+ * F10 (2026-08-31): el comentario decía que esto replica EXACTAMENTE GET /client/account
+ * — es falso, verificado leyendo ambos: /client/account (routes/client.js) trata un límite
+ * NULL como "usar el default del subsistema" (`?? 50`/`20`/`10`/`3`/`10`), display-only.
+ * Lo que este cálculo replica de verdad es el ENFORCEMENT real — log-execution
+ * (routes/client.js, `effectiveLimit = (limitVal===-1||limitVal===null) ? null : ...`),
+ * que trata NULL como ilimitado. Es lo correcto (esto decide si alcanza para correr, no
+ * qué mostrar), pero el comentario apuntaba a la comparación equivocada. Hoy es inofensivo:
+ * los 6 planes reales de producción no tienen NULL en ninguna de estas columnas (verificado
+ * por SQL) — documentado por si algún día alguna sí lo tiene.
  */
 async function _verifLeerCupo(db) {
     const { rows } = await db.query(
@@ -3430,7 +3557,7 @@ router.post('/diagnostics/verification/quota/top-up', authenticateAdmin, async (
             await db.query(
                 `INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason)
                  VALUES ($1, $2, $3, $4, $5)`,
-                [cupo.userId, req.user.id, k, faltante, 'Recarga automática para la verificación funcional contra el PJN (Etapa 1.5 F2)']
+                [cupo.userId, req.user.email, k, faltante, 'Recarga automática para la verificación funcional contra el PJN (Etapa 1.5 F2)']
             );
         }
 
@@ -3461,7 +3588,7 @@ router.post('/diagnostics/verification/quota/top-up', authenticateAdmin, async (
                     await db.query(
                         `INSERT INTO usage_adjustments (user_id, admin_email, subsystem, amount, reason)
                          VALUES ($1, $2, 'global', $3, $4)`,
-                        [cupo.userId, req.user.id, faltante, 'Recarga automática para la verificación funcional contra el PJN (Etapa 1.5 F2)']
+                        [cupo.userId, req.user.email, faltante, 'Recarga automática para la verificación funcional contra el PJN (Etapa 1.5 F2)']
                     );
                 }
             }
@@ -3559,9 +3686,23 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
         return res.status(400).json({ error: 'El motivo es obligatorio' });
     }
 
+    // F10 (2026-08-31): sin este chequeo, un userId inexistente disparaba la FK de
+    // usage_extras.user_id y caía al catch genérico (500 con el mensaje crudo de
+    // Postgres) en vez de un 404 claro — a diferencia de payments/manual, que sí
+    // verifica existencia antes de escribir.
+    const client = await db.connect();
     try {
+        const { rows: [usr] } = await client.query('SELECT id FROM users WHERE id = $1', [userId]);
+        if (!usr) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+        // F10: 4 escrituras dependientes sin transacción — si el UPDATE de subscriptions
+        // fallaba DESPUÉS de que el INSERT en usage_extras ya commiteó, quedaba un
+        // registro de "se otorgaron N usos de cortesía" sin que el cupo real
+        // (usage_limit) se hubiera movido: el ledger dice una cosa, subscriptions otra.
+        await client.query('BEGIN');
+
         // Cortesía = ±N usos permanentes (sin vencimiento). expires_at queda NULL.
-        await db.query(
+        await client.query(
             `INSERT INTO usage_extras (user_id, extra_uses, remaining_uses, reason, created_by_admin_id, expires_at, created_at)
              VALUES ($1, $2, $2, $3, $4, NULL, NOW())`,
             [userId, qty, reason.trim(), req.user.id]
@@ -3570,7 +3711,7 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
         // (sin método de pago) → suman/restan al cupo global. GREATEST(0,...) evita negativo.
         // Para cuentas PAGAS el enforcement es por submódulo y se gestiona con "ajustar
         // usos manuales" (columnas *_bonus); ahí la cortesía no aplica.
-        const bumpResult = await db.query(
+        const bumpResult = await client.query(
             `UPDATE subscriptions
              SET usage_limit = GREATEST(0, usage_limit + $2), updated_at = NOW()
              WHERE user_id = $1 AND payment_provider IS NULL
@@ -3579,22 +3720,26 @@ router.post('/users/:userId/extra-usage', authenticateAdmin, async (req, res) =>
         );
         const aplicado = bumpResult.rowCount > 0;
         const ticketRef = ticket_id ? parseInt(ticket_id, 10) || null : null;
-        await db.query(
+        await client.query(
             `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'extra_usage_assigned', $3)`,
             [req.user.id, userId, JSON.stringify({ extra_uses: qty, reason, aplicado_al_trial: aplicado, ticket_id: ticketRef })]
         );
         // Notificación in-app SOLO al sumar (restar es una corrección interna del admin).
         if (qty > 0) {
-            await db.query(
+            await client.query(
                 `INSERT INTO notifications (user_id, type, message) VALUES ($1, 'extra_usage_assigned', $2)`,
                 [userId, `Se te asignaron ${qty} usos adicionales de cortesía.`]
             );
         }
+        await client.query('COMMIT');
         console.log(`🎁 ${qty > 0 ? '+' : ''}${qty} usos de cortesía a usuario ${userId} por admin ${req.user.id}: ${reason}`);
         res.json({ success: true, extra_uses: qty });
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error('[extra-usage POST] Error:', err.message);
         res.status(500).json({ error: 'Error del servidor' });
+    } finally {
+        client.release();
     }
 });
 
@@ -3827,7 +3972,7 @@ router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadPdfOr400, as
 
     const pdfUrl = `/invoices/${req.file.filename}`;
     try {
-        await db.query(
+        const upd = await db.query(
             `UPDATE invoices
              SET pdf_url      = $1,
                  numero       = COALESCE($2, numero),
@@ -3839,6 +3984,13 @@ router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadPdfOr400, as
              WHERE id = $5`,
             [pdfUrl, numero || null, invoice_type || null, cae || null, invoiceId]
         );
+        // F10 (2026-08-31): sin este chequeo, un invoiceId inexistente respondía éxito
+        // igual — falso positivo — y el PDF recién subido quedaba huérfano sin ningún
+        // registro en la DB que lo referencie.
+        if (upd.rowCount === 0) {
+            try { fs.unlinkSync(req.file.path); } catch (_) {}
+            return res.status(404).json({ error: 'Factura no encontrada' });
+        }
         res.json({ ok: true, pdf_url: pdfUrl });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -3850,14 +4002,28 @@ router.post('/invoices/:invoiceId/upload', authenticateAdmin, uploadPdfOr400, as
 router.post('/invoices/manual', authenticateAdmin, uploadPdfOr400, async (req, res) => {
     const db = req.app.get('db');
     const { user_id, amount, issued_at, numero, invoice_type, cae, plan, notes } = req.body;
+    // F10 (2026-08-31): uploadPdfOr400 ya escribió el PDF a disco ANTES de que esta
+    // validación corra — si se rechaza sin borrarlo, queda huérfano en storage/invoices/.
+    const cleanupOrphanFile = () => { if (req.file) { try { fs.unlinkSync(req.file.path); } catch (_) {} } };
 
-    if (!user_id || !amount || !issued_at) {
-        return res.status(400).json({ error: 'user_id, amount e issued_at son obligatorios' });
-    }
     if (!req.file) return res.status(400).json({ error: 'PDF requerido' });
+    // F10: antes solo chequeaba truthiness (!amount) — "-500" es truthy y pasaba, a
+    // diferencia de payments/manual (su hermano), que sí exige un monto positivo.
+    if (!user_id || amount == null || isNaN(Number(amount)) || Number(amount) <= 0 || !issued_at) {
+        cleanupOrphanFile();
+        return res.status(400).json({ error: 'user_id, un amount positivo e issued_at son obligatorios' });
+    }
 
     const pdfUrl = `/invoices/${req.file.filename}`;
+    let invoiceCreated = false; // solo limpiar el PDF huérfano si el error fue ANTES del
+                                 // INSERT — después, el archivo ya tiene una fila que lo referencia.
     try {
+        const { rows: [usr] } = await db.query('SELECT id FROM users WHERE id = $1', [user_id]);
+        if (!usr) {
+            cleanupOrphanFile();
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+
         const { rows: [inv] } = await db.query(
             `INSERT INTO invoices
                (user_id, amount, pdf_url, numero, invoice_type, cae, status, issued_at, created_at)
@@ -3865,6 +4031,7 @@ router.post('/invoices/manual', authenticateAdmin, uploadPdfOr400, async (req, r
              RETURNING id`,
             [user_id, amount, pdfUrl, numero || null, invoice_type || 'C', cae || null, issued_at]
         );
+        invoiceCreated = true;
 
         // Registrar plan en el campo invoice_type si aplica (como referencia adicional)
         if (plan) {
@@ -3876,6 +4043,7 @@ router.post('/invoices/manual', authenticateAdmin, uploadPdfOr400, async (req, r
 
         res.json({ ok: true, invoice_id: inv.id, pdf_url: pdfUrl });
     } catch (err) {
+        if (!invoiceCreated) cleanupOrphanFile();
         res.status(500).json({ error: err.message });
     }
 });
@@ -3968,6 +4136,14 @@ router.post('/payments/manual', authenticateAdmin, async (req, res) => {
     if (!user_id || amount == null || isNaN(Number(amount)) || Number(amount) <= 0) {
         return res.status(400).json({ error: 'user_id y un monto válido (> 0) son obligatorios' });
     }
+    // F10 (2026-08-31): payments.status no tiene CHECK constraint en el schema — sin
+    // esta whitelist, un typo vía API directa (no vía UI, que sí usa un <select> fijo)
+    // podía dejar un pago con un status arbitrario que las queries de negocio
+    // (`WHERE status='approved'` en invoices/pending, refund-preview, etc.) simplemente
+    // no encuentran, sin ningún error visible. Mismos 4 valores que ofrece el <select>.
+    if (!PAYMENT_STATUSES.includes(status)) {
+        return res.status(400).json({ error: `status inválido. Válidos: ${PAYMENT_STATUSES.join(', ')}` });
+    }
     try {
         // Validar que el usuario exista
         const { rows: [usr] } = await db.query('SELECT id FROM users WHERE id = $1', [user_id]);
@@ -4031,7 +4207,8 @@ router.post('/invoices/:invoiceId/unlink-payment', authenticateAdmin, async (req
     const db = req.app.get('db');
     const { invoiceId } = req.params;
     try {
-        await db.query('UPDATE invoices SET payment_id = NULL, updated_at = NOW() WHERE id = $1', [invoiceId]);
+        const upd = await db.query('UPDATE invoices SET payment_id = NULL, updated_at = NOW() WHERE id = $1', [invoiceId]);
+        if (upd.rowCount === 0) return res.status(404).json({ error: 'Factura no encontrada' });
         res.json({ ok: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -4041,12 +4218,22 @@ router.post('/invoices/:invoiceId/unlink-payment', authenticateAdmin, async (req
 // Helper: vincula una factura a un pago validando coherencia y unicidad.
 // invoices.payment_id es UNIQUE → un pago no puede tener dos facturas.
 async function linkInvoiceToPayment(db, invoiceId, paymentId) {
-    const { rows: [inv] } = await db.query('SELECT id, user_id FROM invoices WHERE id = $1', [invoiceId]);
+    const { rows: [inv] } = await db.query('SELECT id, user_id, payment_id FROM invoices WHERE id = $1', [invoiceId]);
     if (!inv) { const e = new Error('Factura no encontrada'); e.statusCode = 404; throw e; }
     const { rows: [pmt] } = await db.query('SELECT id, user_id FROM payments WHERE id = $1', [paymentId]);
     if (!pmt) { const e = new Error('Pago no encontrado'); e.statusCode = 404; throw e; }
     if (inv.user_id && pmt.user_id && inv.user_id !== pmt.user_id) {
         const e = new Error('El pago y la factura pertenecen a usuarios distintos'); e.statusCode = 400; throw e;
+    }
+    // F10 (2026-08-31): el chequeo de abajo solo mira el lado del PAGO (¿ya tiene otra
+    // factura?) — nunca chequeaba el lado de la FACTURA (¿ya está vinculada a OTRO
+    // pago?). invoices.payment_id es UNIQUE y nullable, sin trigger que lo proteja: el
+    // UPDATE final reasignaba en silencio, dejando el pago viejo huérfano sin factura y
+    // sin ningún aviso. La única defensa era client-side (un <select> deshabilitado en
+    // dashboard.js), trivial de saltear llamando el endpoint directo.
+    if (inv.payment_id && inv.payment_id !== paymentId) {
+        const e = new Error(`Esa factura ya está asociada al pago #${inv.payment_id}. Desvinculala primero.`);
+        e.statusCode = 409; throw e;
     }
     // ¿Ya hay otra factura asociada a este pago?
     const { rows: [other] } = await db.query(
@@ -4074,6 +4261,12 @@ router.put('/payments/:id', authenticateAdmin, async (req, res) => {
         }
         if (amount != null && (isNaN(Number(amount)) || Number(amount) <= 0)) {
             return res.status(400).json({ error: 'Monto inválido' });
+        }
+        // F10 (2026-08-31): mismo problema que en payments/manual — sin CHECK constraint
+        // en el schema, un status fuera de los 4 que ofrece el <select> queda persistido
+        // sin error, y las queries de negocio que filtran por status no lo encuentran.
+        if (status && !PAYMENT_STATUSES.includes(status)) {
+            return res.status(400).json({ error: `status inválido. Válidos: ${PAYMENT_STATUSES.join(', ')}` });
         }
         await db.query(
             `UPDATE payments SET

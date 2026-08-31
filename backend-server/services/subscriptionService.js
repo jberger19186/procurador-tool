@@ -882,8 +882,43 @@ async function pausePreapproval(userId, externalSubId = null) {
   }
 }
 
+/**
+ * resumePreapproval — reanuda un preapproval PAUSADO en MercadoPago (paused→authorized).
+ * F10 (2026-08-31, code-review): contraparte de pausePreapproval que faltaba. A diferencia
+ * de reactivateSubscription (pensada para "deshacer una cancelación", exige cancel_at
+ * seteado y sin vencer), esta no tiene precondición alguna — best-effort, NO toca la DB,
+ * nunca lanza. Usada cuando un admin reactiva una cuenta que había sido suspendida (si
+ * /suspend o /reject pausaron el preapproval real, esto es lo único que lo reanuda; sin
+ * esto, un usuario reactivado con acceso pleno quedaba con el cobro real pausado para
+ * siempre en MP). Llamarla en un usuario que nunca tuvo preapproval (trial) es inofensivo:
+ * resolveRealPreapprovalId no encuentra nada y devuelve false sin tocar MP.
+ * @param {number} userId
+ * @param {string|null} externalSubId
+ */
+async function resumePreapproval(userId, externalSubId = null) {
+  try {
+    let extId = externalSubId;
+    if (!extId) {
+      const { rows: [sub] } = await db.query('SELECT external_subscription_id FROM subscriptions WHERE user_id = $1', [userId]);
+      extId = sub?.external_subscription_id || null;
+    }
+    const preapprovalId = await resolveRealPreapprovalId(userId, extId);
+    if (!preapprovalId) {
+      logger.warn('[SubscriptionService] resumePreapproval: sin preapproval identificable', { userId });
+      return false;
+    }
+    await preApprovalClient.update({ id: preapprovalId, body: { status: 'authorized' } });
+    logger.info('[SubscriptionService] Preapproval reanudado (reactivación de admin)', { userId, preapprovalId });
+    return true;
+  } catch (err) {
+    logger.error('[SubscriptionService] Error reanudando preapproval (reactivación de admin)', { userId, err: err.message });
+    return false;
+  }
+}
+
 module.exports = {
   pausePreapproval,
+  resumePreapproval,
   createPreapproval,
   createReactivationPreapproval,
   createUpdatePreapproval,

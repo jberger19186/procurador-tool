@@ -3990,7 +3990,16 @@ async function renderDiagnostico() {
 }
 
 function diagColorLog(log) {
-    return log
+    // F10 (2026-08-31): sin escapar, esto era XSS almacenado — diagRenderPjn/
+    // diagRenderExtension (report-pjn/report-extension, cuyo `result.logs` llega en el
+    // body de un POST y puede contener texto scrapeado del sitio del PJN, un tercero
+    // fuera de control) se inyectaba vía innerHTML sin ningún escape. Mismo patrón que
+    // XSS-1, ya corregido en otras partes de este archivo — acá faltaba (diagRenderCanary,
+    // más abajo, sí lo hacía bien). Se usa escAttr() y no escHtml() a propósito: escHtml()
+    // convierte \n en "<br>" ANTES de que corran los regex de abajo, que dependen del modo
+    // multilínea (^/$/gm) sobre saltos de línea REALES — escAttr() no toca \n, preservando
+    // el comportamiento visual de siempre (el contenedor ya usa white-space:pre).
+    return escAttr(log)
         .replace(/✅/g, '<span class="ok">✅</span>')
         .replace(/❌/g, '<span class="err">❌</span>')
         .replace(/^(\[.*?\] ─+.*)$/gm, '<span class="sep">$1</span>')

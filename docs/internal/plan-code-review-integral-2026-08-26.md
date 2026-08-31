@@ -488,6 +488,29 @@ cambiado sería repetir E1 — el error que este plan existe para evitar.
 
 ### F10 — Backend admin y observabilidad 🔴 *(fase nueva, agregada 2026-08-28)*
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F10-2026-08-31.md`](revision-F10-2026-08-31.md).
+> **Los 4 módulos de observabilidad y el cron de `server.js` están bien diseñados, sin
+> hallazgos.** El trabajo real estuvo en `admin.js`. **19 hallazgos, los 19 corregidos.** El
+> más consecuente, encontrado en la revisión manual (no por los agentes): **el JWT del admin
+> nunca tuvo `email`** — confirmado en producción que `verification-results.json` tenía
+> `reportedBy: null` en TODAS las entradas, y que `usage_adjustments.admin_email` (varchar)
+> recibía el ID numérico del admin en 3 sitios, no su email. El segundo, de mayor impacto de
+> negocio: **suspender o rechazar un usuario pago nunca pausaba el cobro real en
+> MercadoPago** — confirmado grepeando todo el backend que `pausePreapproval()` nunca se
+> llamaba desde `/suspend` ni `/reject`; un cliente suspendido seguía siendo cobrado
+> indefinidamente. Su contraparte simétrica también estaba rota: reactivar nunca reanudaba
+> el preapproval pausado (se agregó `resumePreapproval()`, función nueva en
+> `subscriptionService.js`). Otros de peso: **path traversal** al subir el PDF de una
+> factura (`req.params.invoiceId` sin sanitizar en el nombre de archivo de multer) · **XSS
+> almacenado** en el visor de logs de diagnóstico · un `PUT /plans/:planId` que borraba la
+> promo de un plan en cualquier update parcial · una reasignación silenciosa de facturas ya
+> vinculadas a otro pago · el selector "Estado de registro" del dashboard, que flipeaba 5 de
+> sus 7 destinos sin ningún efecto secundario (ni MP, ni email, ni auditoría). **Verificado
+> con un harness E2E real contra staging (25/25 aserciones, HTTP real + estado real de la
+> DB)** para los hallazgos más complejos, y tests standalone de la lógica extraída del
+> archivo real para los 2 de seguridad. Desplegado a staging→prod, md5 verificado en los 4
+> archivos, smoke 200, sin errores nuevos.
+
 | | |
 |---|---|
 | **Target** | `backend-server/routes/admin.js` (200 KB) · `backend-server/scripts/health-check.js` · `backend-server/utils/healthAlertCheck.js` · `backend-server/utils/dbIntegrityChecks.js` · `backend-server/utils/verificationAlertCheck.js` · el cron nuevo de `server.js` (`0 12 * * *`, alerta de verificación) |

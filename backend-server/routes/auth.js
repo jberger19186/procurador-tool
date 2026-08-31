@@ -511,8 +511,14 @@ router.post('/admin-login', loginLimiter, async (req, res) => {
 
         await db.query(`UPDATE users SET last_login = NOW() WHERE id = $1`, [user.id]);
 
+        // F10 (2026-08-31, code-review): el payload no llevaba `email` — admin.js lee
+        // `req.user.email` en 5 sitios (reportedBy de diagnóstico, logs de auditoría) y
+        // 3 más lo confundían con `req.user.id` para una columna admin_email (ver esos
+        // fixes) — en los 5 primeros, sin este campo, quedaba `undefined` en cada reporte
+        // guardado. Confirmado en producción: verification-results.json tenía
+        // reportedBy:null en TODAS las entradas.
         const token = jwt.sign(
-            { id: user.id, role: user.role },
+            { id: user.id, role: user.role, email: user.email },
             process.env.JWT_SECRET,
             { expiresIn: '8h' }
         );
