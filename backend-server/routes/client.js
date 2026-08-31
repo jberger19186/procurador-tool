@@ -144,6 +144,18 @@ router.get('/scripts/check/:scriptName', authenticateToken, async (req, res) => 
 
         const normalizedName = scriptName.endsWith('.js') ? scriptName : `${scriptName}.js`;
 
+        // F6 (2026-08-31): la whitelist de A.1 (E5-1/P-1) se había aplicado en
+        // /download y /available pero NO acá — el tercero del trío quedó afuera.
+        // Verificado contra staging: `GET /client/scripts/check/backup-db` devolvía
+        // 200 con el hash SHA-256 del texto plano de los 7 scripts NO distribuibles
+        // (los 6 del hallazgo P-1 más health-check.js, que processScripts sumó solo
+        // al crearse en agosto). No entrega contenido, pero confirma qué scripts de
+        // operación corren en el servidor y da un oráculo para verificar byte a byte
+        // una copia sospechada — justo lo que P-1 quiso cerrar.
+        if (!SCRIPTS_DISTRIBUIBLES.has(normalizedName)) {
+            return res.status(404).json({ error: 'Script no encontrado' });
+        }
+
         const result = await db.query(`
             SELECT hash, version
             FROM encrypted_scripts
@@ -227,13 +239,17 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
         let securityData = null;
         try {
             const signatureCache = getSignatureCache();
-            const signResult = signatureCache.getOrCalculate(scriptName, decryptedCode);
+            // F6: la clave del caché de firmas usa el nombre NORMALIZADO. Con el
+            // nombre crudo, `testM2` y `testM2.js` (el cliente puede pedir cualquiera
+            // de los dos) creaban 2 entradas para el mismo script, cada una con su
+            // firma RSA propia, en un caché de maxSize 100 con evicción FIFO.
+            const signResult = signatureCache.getOrCalculate(normalizedName, decryptedCode);
             securityData = {
                 checksum: signResult.checksum,
                 signature: signResult.signature,
                 signedAt: signResult.signedAt
             };
-            console.log(`🔏 Script firmado: ${scriptName}`);
+            console.log(`🔏 Script firmado: ${normalizedName}`);
         } catch (signError) {
             console.error(`[SEGURIDAD] No se pudo firmar ${scriptName}: ${signError.message}`);
             return res.status(500).json({

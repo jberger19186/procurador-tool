@@ -330,6 +330,21 @@ buscar; leer la salida es lo que muestra lo que no.
 
 ### F6 — Cadena de cifrado y distribución de scripts 🔴 **Opus** — *pedido explícito del operador*
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F6-2026-08-31.md`](revision-F6-2026-08-31.md).
+> Harness versionado en [`backend-server/dev-tools/verify-f6-cadena-cifrado.js`](../../backend-server/dev-tools/verify-f6-cadena-cifrado.js)
+> — **144 PASS / 0 FAIL** contra staging tras corregir el único punto que fallaba.
+> **La respuesta a la pregunta del operador es sí**: los 13 scripts se cifran, se firman y se
+> verifican correctamente, y hay **cero drift** entre repo, staging y producción.
+> **5 hallazgos**, ninguno en el cifrado en sí: **F6-1** (`/scripts/check` quedó fuera de la
+> whitelist de P-1 y exponía el hash de los 7 no distribuibles — corregido y **en producción**)
+> · **F6-2** (la etapa 2 se auto-certificaba desde la 2ª ejecución de cada sesión, confirmado
+> con el verifier real) · **F6-3** (la etapa 3 verificaba el `.enc` y dejaba sin verificar el
+> **wrapper**, que es lo que `fork()` ejecuta) · **F6-4** (el 3er call site que C6/F5 de Q6 no
+> alcanzó: una dependencia con firma rechazada se salteaba en silencio) · **F6-5** (P-1 es
+> estructural: `processScripts` ingesta todo `.js` como activo — apareció `health-check.js`, así
+> que ya no son "los 6 filtrados" sino 7; documentado, sin aplicar). Los 3 del cliente
+> **esperan release de Electron**. **Cero líneas tocadas en `src/security/`.**
+
 | | |
 |---|---|
 | **Target (revisión)** | `backend-server/utils/scriptEncryption.js`, `backend-server/reencrypt_scripts.js`, `backend-server/routes/client.js` (`/scripts/download`, `/check`, `/available`), `electron-app/src/auth/authManager.js` (las 3 etapas de verificación) |

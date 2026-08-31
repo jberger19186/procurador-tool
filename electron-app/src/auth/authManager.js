@@ -487,10 +487,30 @@ class AuthManager {
                     for (const dep of dependencies[scriptName]) {
                         let depCode = this.scriptCache.get(dep);
                         if (!depCode) {
-                            await this.loadScript(dep);
+                            // F6 (2026-08-31): el tercer call site de loadScript() que
+                            // C6/F5 de Q6 no alcanzó — descartaba el resultado. Si la
+                            // firma de una dependencia era rechazada, la caché quedaba
+                            // vacía, el `if (depCode)` de abajo la salteaba EN SILENCIO
+                            // y el script principal se ejecutaba igual: abría Chrome,
+                            // consumía el lock, y recién explotaba al hacer require()
+                            // de un módulo inexistente, con un error que no decía nada
+                            // de integridad. Y `testM2.js` —la librería núcleo de la que
+                            // dependen los 6 scripts— entra por acá.
+                            const depResult = await this.loadScript(dep);
+                            if (!depResult.success) {
+                                console.error(`🚨 DEPENDENCIA RECHAZADA: ${dep} (de ${scriptName}) - ${depResult.error}`);
+                                return reject({ success: false, error: depResult.error || ERROR_INTEGRIDAD });
+                            }
                             depCode = this.scriptCache.get(dep);
                         }
-                        if (depCode) {
+                        if (!depCode) {
+                            // loadScript() dijo success pero la caché no tiene el código:
+                            // estado incoherente, no se puede afirmar que la dependencia
+                            // sea legítima. Mismo criterio fail-closed de las 3 etapas.
+                            console.error(`🚨 DEPENDENCIA NO DISPONIBLE TRAS CARGA: ${dep} (de ${scriptName})`);
+                            return reject({ success: false, error: ERROR_INTEGRIDAD });
+                        }
+                        {
                             // ✅ SEGURIDAD: Encriptar dependencia con GCM
                             const encryptionResult = this.fileEncryption.encrypt(depCode);
 
@@ -553,6 +573,17 @@ class AuthManager {
                 const tempScriptPath = path.join(tempDir, scriptName);
                 fs.writeFileSync(tempScriptPath, wrapperCode, 'utf8');
 
+                // F6 (2026-08-31): mismo hash-al-escribir que Q6/C7-F6 hizo para el .enc,
+                // pero sobre el WRAPPER — que es el archivo que fork() ejecuta realmente.
+                // La etapa 3 verificaba el .enc (datos) y dejaba sin verificar el .js
+                // (código): un atacante capaz de reescribir el .enc en esa ventana —el
+                // modelo de amenaza que la propia etapa 3 declara defender— puede reescribir
+                // el wrapper, que además corre con DECRYPT_KEY/DECRYPT_IV en su env y con
+                // NODE_PATH apuntando a los node_modules de la app. El .enc está autenticado
+                // por GCM (manipularlo sin la clave de sesión hace fallar el descifrado);
+                // el wrapper es texto plano y no lo protegía nada.
+                const wrapperDiskHash = this.scriptVerifier.calculateChecksum(wrapperCode);
+
                 console.log(`✅ Script principal encriptado y guardado`);
 
                 // 7. Obtener ruta a node_modules
@@ -590,8 +621,22 @@ class AuthManager {
                         return reject({ success: false, error: ERROR_INTEGRIDAD });
                     }
 
+                    // F6: y el wrapper, que es lo que fork() ejecuta. Sin esto la etapa 3
+                    // verificaba el archivo de datos y dejaba pasar el de código.
+                    const wrapperOnDisk = fs.readFileSync(tempScriptPath, 'utf8');
+                    const wrapperChecksum = this.scriptVerifier.calculateChecksum(wrapperOnDisk);
+
+                    if (wrapperChecksum !== wrapperDiskHash) {
+                        this.securityAudit.logChecksumMismatch(scriptName, 3, {
+                            expected: wrapperDiskHash,
+                            actual: wrapperChecksum
+                        });
+                        console.error(`🚨 CHECKSUM ETAPA 3 FALLIDO (wrapper en disco manipulado): ${scriptName}`);
+                        return reject({ success: false, error: ERROR_INTEGRIDAD });
+                    }
+
                     this.securityAudit.logScriptVerified(scriptName, { stage: 3 });
-                    console.log(`✅ [ScriptVerifier] Checksum Etapa 3 OK (disco): ${scriptName}`);
+                    console.log(`✅ [ScriptVerifier] Checksum Etapa 3 OK (disco: .enc + wrapper): ${scriptName}`);
                 } catch (checksumError) {
                     // Q6 (2026-07-30, C5/F3): fail-CLOSED, mismo criterio que las etapas 1 y 2.
                     // Cubre también un fallo de fs.readFileSync (ej: el .enc no está
@@ -842,7 +887,25 @@ class AuthManager {
                         this.securityMetrics.printReport();
                         this.securityAudit.printReport();        // ← NUEVO
                         this.securityAudit.exportSession();       // ← NUEVO: Guardar sesión
-                        this.scriptVerifier.clearAllRegistries(); // ← NUEVO: Limpiar checksums
+
+                        // F6 (2026-08-31): acá había un clearAllRegistries(). Borraba el
+                        // ancla de la etapa 1 mientras scriptCache CONSERVABA el código
+                        // (esa caché solo se limpia en logout), así que en la 2ª ejecución
+                        // del mismo script en la misma sesión el código salía de caché sin
+                        // volver a pasar por etapa 1 y la etapa 2 caía en su rama
+                        // "No hay registro de etapa 1... Usando checksum actual": comparaba
+                        // el contenido contra el hash de ese mismo contenido y devolvía
+                        // valid:true SIEMPRE, incluso sobre código adulterado (verificado
+                        // con el ScriptVerifier real, sin mocks). Es el mismo defecto que
+                        // Q6/C7-F6 corrigió en la etapa 3, sobreviviendo en la etapa 2 por
+                        // otra vía: no por el código de la etapa, sino por cuándo el
+                        // llamador borraba el ancla.
+                        // El registro se limpia ahora en logout(), junto con la caché, para
+                        // que ancla y código vivan y mueran juntos — que es la invariante
+                        // que la etapa 2 necesita para verificar algo. Cuando el servidor
+                        // publica una versión nueva, scriptCache.delete() + loadScript()
+                        // re-anclan solos con el checksum nuevo. Costo en memoria: 13
+                        // entradas de metadata, unos pocos KB.
 
                         resolve({ success: true, output, executionTime: totalTime });
                     } else {
@@ -886,6 +949,12 @@ class AuthManager {
 
             // Limpiar caché (eliminar scripts de RAM)
             this.scriptCache.clear();
+
+            // F6 (2026-08-31): el ancla de checksums se limpia JUNTO con la caché, no
+            // al terminar cada ejecución. Mientras haya código cacheado tiene que haber
+            // ancla contra la cual verificarlo — ver el comentario largo en el handler
+            // de cierre de executeRemoteScriptAsLocal().
+            this.scriptVerifier.clearAllRegistries();
 
             // Logout del backend
             this.backendClient.logout();
