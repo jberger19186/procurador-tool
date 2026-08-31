@@ -107,6 +107,9 @@ const PAYMENTS = [
 ];
 const INVOICES = [
     { id: 1, amount: 15000, status: 'emitida', issued_at: '2026-08-02T12:00:00.000Z', pdf_url: null },
+    // F2 (2026-08-31): fixture de una factura de $0 real (plan de cortesía) —
+    // para verificar que ya no se muestra como "—" (ver el fix en app.js).
+    { id: 2, amount: 0, invoice_type: 'C', numero: '0001-00000002', status: 'emitida', issued_at: '2026-08-15T12:00:00.000Z', pdf_url: null },
 ];
 
 // ─── Monitor de partes ──────────────────────────────────────────────────────
@@ -161,7 +164,9 @@ const BITACORA = [
 // Feriado de seed para el probe "plazo que cruza un feriado": desde el
 // 2026-08-24 (lunes) + 3 días hábiles da 27/08 sin feriado; con el feriado del
 // 26/08 seedeado acá, el resultado correcto pasa a ser 28/08.
-const FERIADOS = { 2026: [{ fecha: '2026-08-26' }] };
+// F2 (2026-08-31): 2028 agregado para probar el fix de calcularPlazoBitacora
+// (cargar feriados del año real de vencimiento, no fijo [anioBase, anioBase+1]).
+const FERIADOS = { 2026: [{ fecha: '2026-08-26' }], 2028: [{ fecha: '2028-01-03' }] };
 
 const SUGERENCIAS = [
     { id: 1, expediente: 'FCR 99999/2026', caratula: 'DEMO c/ TEST s/ VERIFY',
@@ -349,10 +354,16 @@ http.createServer(async (req, res) => {
         if (p === '/client/notifications' && req.method === 'GET')
             return json(res, { success: true, notifications: NOTIFICATIONS });
         {
-            const m = p.match(/^\/client\/notifications\/(\d+)\/read$/);
+            // F2 (2026-08-31): 'all' además de \d+ — el shortcut real del backend
+            // (routes/client.js) que markAllNotificationsRead() pasó a usar.
+            const m = p.match(/^\/client\/notifications\/(all|\d+)\/read$/);
             if (req.method === 'POST' && m) {
-                const n = NOTIFICATIONS.find((x) => x.id === Number(m[1]));
-                if (n) n.read_at = new Date().toISOString();
+                if (m[1] === 'all') {
+                    NOTIFICATIONS.forEach((n) => { n.read_at = n.read_at || new Date().toISOString(); });
+                } else {
+                    const n = NOTIFICATIONS.find((x) => x.id === Number(m[1]));
+                    if (n) n.read_at = new Date().toISOString();
+                }
                 return json(res, { success: true });
             }
         }

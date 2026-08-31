@@ -10,43 +10,49 @@ const TOKEN_KEY = 'psc_user_token';
 const BASE_URL = '';  // Misma origin
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
-const state = {
-    token: null,
-    account: null,
-    currentSection: 'plan',
-    tickets: [],
-    currentTicket: null,
-    chatMessages: [],
-    chatLoading: false,
-    plans: [],
-    bitacora: {
-        view: 'mes',            // 'mes' | 'semana' | 'lista'
-        monthCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-        selectedDay: null,      // 'YYYY-MM-DD'
-        tipo: '',                // filtro por chip ('' = todos)
-        estado: '',
-        expedienteId: '',
-        search: '',
-        entries: [],            // último listado cargado (según filtros/rango vigente)
-        expedientes: [],        // fichas del usuario, para el <select> de vínculo/filtro
-        feriados: new Set(),    // 'YYYY-MM-DD' del año(s) cargado(s), para el cálculo de plazos
-        _cache: new Map(),       // id → entrada, alimentado por cada fetch (avisos/mes/lista)
-        _feriadosYears: new Set(),
-        _lastDoneAction: null,   // { id, done } — el último toggle, para deshacer con Ctrl+Z
-    },
-    miExp: {
-        loaded: false,
-        list: [],           // último listado de expedientes seguidos
-        search: '',
-        fichaId: null,       // id de la ficha abierta (null = vista listado)
-        ficha: null,         // { expediente, entradas, snapshots } de la ficha abierta
-        selected: new Set(), // ids tildados en el listado, para borrado múltiple
-        _visibleIds: [],      // ids que pasan el filtro vigente (para "seleccionar todo")
-        _eliminarIds: null,   // ids objetivo del modal de eliminar abierto (1 o varios)
-        _exportMultiIds: null, // ids objetivo del modal de exportar, cuando viene de "Exportar seleccionados" (varios)
-    },
-    captureLote: null,      // { casos, origen, tipo } — pantalla de revisión del lote (F2.3)
-};
+// F2 (2026-08-31): extraído a una función (no un objeto literal suelto) para que
+// doLogout() pueda pedir una copia nueva y completa en vez de tener una segunda
+// lista incompleta de qué resetear — ver el comentario en doLogout().
+function freshState() {
+    return {
+        token: null,
+        account: null,
+        currentSection: 'plan',
+        tickets: [],
+        currentTicket: null,
+        chatMessages: [],
+        chatLoading: false,
+        plans: [],
+        bitacora: {
+            view: 'mes',            // 'mes' | 'semana' | 'lista'
+            monthCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            selectedDay: null,      // 'YYYY-MM-DD'
+            tipo: '',                // filtro por chip ('' = todos)
+            estado: '',
+            expedienteId: '',
+            search: '',
+            entries: [],            // último listado cargado (según filtros/rango vigente)
+            expedientes: [],        // fichas del usuario, para el <select> de vínculo/filtro
+            feriados: new Set(),    // 'YYYY-MM-DD' del año(s) cargado(s), para el cálculo de plazos
+            _cache: new Map(),       // id → entrada, alimentado por cada fetch (avisos/mes/lista)
+            _feriadosYears: new Set(),
+            _lastDoneAction: null,   // { id, done } — el último toggle, para deshacer con Ctrl+Z
+        },
+        miExp: {
+            loaded: false,
+            list: [],           // último listado de expedientes seguidos
+            search: '',
+            fichaId: null,       // id de la ficha abierta (null = vista listado)
+            ficha: null,         // { expediente, entradas, snapshots } de la ficha abierta
+            selected: new Set(), // ids tildados en el listado, para borrado múltiple
+            _visibleIds: [],      // ids que pasan el filtro vigente (para "seleccionar todo")
+            _eliminarIds: null,   // ids objetivo del modal de eliminar abierto (1 o varios)
+            _exportMultiIds: null, // ids objetivo del modal de exportar, cuando viene de "Exportar seleccionados" (varios)
+        },
+        captureLote: null,      // { casos, origen, tipo } — pantalla de revisión del lote (F2.3)
+    };
+}
+const state = freshState();
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
 function getToken() {
@@ -78,8 +84,16 @@ async function apiFetch(path, options = {}) {
     });
 
     if (res.status === 401 || res.status === 403) {
-        // Token expirado o inválido
-        const data = await res.json().catch(() => ({}));
+        // F2 (2026-08-31): clonar ANTES de leer el body. El body de un Response solo se
+        // puede leer UNA vez — sin clonar, cualquier 403 que NO fuera por token (ej. el
+        // checkout bloqueado por cuenta sin activar, un guard de plan) dejaba el body de
+        // `res` ya consumido acá adentro, y el caller (el patrón de TODO este archivo es
+        // `const res = await apiFetch(...); ...; await res.json()`) reventaba con "Body
+        // is unusable: Body has already been read" — capturado por su propio try/catch,
+        // mostrando "Error de conexión" en vez del mensaje real que el backend ya había
+        // devuelto correctamente. Verificado con Response reales (no mocks): sin clone(),
+        // la 2da lectura lanza; con clone(), ambas lecturas devuelven el mismo JSON.
+        const data = await res.clone().json().catch(() => ({}));
         if (res.status === 401 || (data.error && (data.error.includes('Token') || data.error.includes('token')))) {
             doLogout();
             return null;
@@ -102,6 +116,34 @@ function formatDateTime(dateStr) {
 function escapeHtml(str) {
     if (!str) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// F2 (2026-08-31, code-review): escapeHtml() NO alcanza para un valor interpolado dentro
+// de un string-literal JS embebido en un atributo onclick="...('${valor}')" — no escapa
+// comillas simples en absoluto, así que un email/nombre con un apóstrofe (válido por RFC
+// 5322 para emails, y de tipeo libre para el nombre de una parte en Monitor) rompe el
+// string y ejecuta JS arbitrario con la sesión del usuario al hacer un solo clic.
+// Verificado con parse5 + compilación real del atributo decodificado: escapeHtml() deja
+// pasar el ataque intacto. Un intento previo de tapar esto en un solo sitio
+// (escapeHtml(x).replace(/'/g,"\\'")) también resultó bypasseable: un backslash puesto a
+// propósito justo antes del apóstrofe original hace que el \\' resultante se lea como
+// "backslash escapado" + comilla SUELTA, cerrando el string igual — confirmado con el
+// mismo harness. La única forma correcta es escapar PRIMERO para sintaxis de
+// string-literal JS (\ y ' con backslash) y RECIÉN DESPUÉS para el atributo HTML que lo
+// envuelve, en ese orden — mismo fix ya aplicado en dashboard.js (escJsAttr) por el mismo
+// motivo. Usar SIEMPRE que un valor de texto libre se interpole dentro de un
+// string-literal JS en un onclick (no para texto visible o value="", donde escapeHtml()
+// sigue siendo correcto).
+function escJsAttr(str) {
+    return String(str ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 function showAlert(el, type, msg) {
@@ -150,6 +192,16 @@ function showToast(message, type = 'info') {
 function showConfirm(message, { confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' } = {}) {
     return new Promise((resolve) => {
         const overlay = document.createElement('div');
+        // F2 (2026-08-31): la clase `modal-overlay` es lo que initPortalTabDedup()
+        // busca (`.modal-overlay:not(.hidden)`) para no cerrar una pestaña con "algo
+        // a medio escribir" — sin ella, este overlay (creado dinámicamente, sin la
+        // clase de los 9 modales estáticos del HTML) era invisible para ese guard:
+        // una confirmación pendiente (ej. "¿Eliminar la parte X? No se puede
+        // deshacer.") se descartaba en silencio si se abría una pestaña nueva del
+        // portal mientras estaba abierta. El z-index/background inline siguen
+        // ganando sobre la regla de la clase (más específicos); lo único que suma
+        // es el blur de fondo, ya consistente con el resto de los modales.
+        overlay.className = 'modal-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:10001;display:flex;align-items:center;justify-content:center;padding:20px';
         overlay.innerHTML = `
             <div style="background:var(--card-bg,#fff);border-radius:12px;padding:24px;max-width:420px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)">
@@ -181,8 +233,19 @@ function getRememberedUsers() {
 }
 
 function saveRememberedUser(email, password) {
+    // F2 (2026-08-31): btoa() lanza InvalidCharacterError para cualquier char
+    // fuera de Latin-1 (emoji, comillas tipográficas, alfabetos no latinos) — la
+    // política de contraseñas del proyecto no restringe el juego de caracteres,
+    // así que una contraseña legítima con uno de esos caracteres es perfectamente
+    // posible. Esta función se llama DENTRO del try de doLogin(), antes de
+    // guardar el token — sin este try/catch, el login entero fallaba con "Error
+    // de conexión" pese a que el backend ya había autenticado bien, solo porque
+    // "Recordar cuenta" estaba tildado. Es una comodidad, no puede bloquear el
+    // login: si no se puede codificar, se omite en silencio.
+    let encoded;
+    try { encoded = btoa(password); } catch (_) { return; }
     const users = getRememberedUsers().filter(u => u.email !== email);
-    users.unshift({ email, pw: btoa(password) }); // mover al frente si ya existía
+    users.unshift({ email, pw: encoded }); // mover al frente si ya existía
     localStorage.setItem(REMEMBERED_KEY, JSON.stringify(users.slice(0, 5)));
 }
 
@@ -194,7 +257,12 @@ function removeRememberedUser(email) {
 
 function fillLoginForm(email, pw) {
     document.getElementById('login-email').value = email;
-    document.getElementById('login-password').value = pw ? atob(pw) : '';
+    // F2 (2026-08-31): atob() puede lanzar si `psc_remembered_users` quedó con una
+    // entrada corrupta (edición manual del storage, formato viejo) — sin este
+    // try/catch rompía el render de todo el panel de "cuentas recordadas".
+    let decoded = '';
+    if (pw) { try { decoded = atob(pw); } catch (_) { decoded = ''; } }
+    document.getElementById('login-password').value = decoded;
     document.getElementById('remember-me').checked = true;
 }
 
@@ -234,14 +302,14 @@ function renderRememberedUsers() {
     // click nativo, que es lo que ejecuta removeRememberedUser().
     list.innerHTML = users.map(u => `
         <div class="remembered-user-btn" role="button" tabindex="0"
-             onclick="selectRememberedUser('${escapeHtml(u.email)}', '${u.pw}')"
+             onclick="selectRememberedUser('${escJsAttr(u.email)}', '${u.pw}')"
              onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();this.click();}">
             <div class="remembered-user-avatar">${escapeHtml(u.email[0].toUpperCase())}</div>
             <div class="remembered-user-info">
                 <div class="remembered-user-email">${escapeHtml(u.email)}</div>
                 <div class="remembered-user-hint">Toca para ingresar</div>
             </div>
-            <button type="button" class="remembered-user-remove" onclick="event.stopPropagation(); removeRememberedUser('${escapeHtml(u.email)}')" title="Olvidar cuenta">✕</button>
+            <button type="button" class="remembered-user-remove" onclick="event.stopPropagation(); removeRememberedUser('${escJsAttr(u.email)}')" title="Olvidar cuenta">✕</button>
         </div>
     `).join('');
 }
@@ -298,10 +366,21 @@ function doLogout() {
     const _t = getToken();
     if (_t) fetch(BASE_URL + '/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${_t}` } }).catch(() => {});
     clearToken();
-    state.account = null;
-    state.currentSection = 'perfil';
-    state.tickets = [];
-    state.chatMessages = [];
+    // F2 (2026-08-31): antes solo se reseteaban 4 campos — state.bitacora,
+    // state.miExp (con la ficha completa de un expediente y sus litigantes, si
+    // había una abierta), state.plans, state.captureLote y state.currentTicket
+    // seguían con los datos de la cuenta anterior EN MEMORIA. Es una SPA sin
+    // recarga de página entre logout y login (acá abajo solo se cambia qué se
+    // ve, el JS del módulo sigue vivo) — en una PC/pestaña compartida entre 2
+    // cuentas de un mismo estudio, si la cuenta B se loguea justo después de A
+    // en la misma pestaña, había una ventana en la que datos de casos
+    // judiciales de A podían seguir accesibles hasta que el primer fetch fresco
+    // de B los pisara. `state` es `const` (no se puede reasignar) y otras
+    // funciones lo referencian por identidad, así que se copian las claves de
+    // una instancia nueva encima de la existente — cada Set/Map anidado de
+    // bitacora/miExp queda reemplazado, no mutado.
+    Object.assign(state, freshState());
+    state.currentSection = 'perfil'; // decisión ya existente: la pantalla de login no aterriza en 'plan'
     document.getElementById('app').classList.remove('visible');
     document.getElementById('login-page').style.display = 'flex';
     document.getElementById('login-form').reset();
@@ -1058,7 +1137,7 @@ function renderMonitorPartes(partes, limite, usadas) {
                 <span class="parte-nombre">${escapeHtml(p.nombre_parte)}</span>
                 ${p.jurisdiccion_sigla ? `<span class="parte-juris">${escapeHtml(p.jurisdiccion_sigla)}</span>` : ''}
             </div>
-            <button class="btn-icon-danger" onclick="deleteMonitorParte(${p.id}, '${escapeHtml(p.nombre_parte).replace(/'/g,"\\'")}')">🗑</button>
+            <button class="btn-icon-danger" onclick="deleteMonitorParte(${p.id}, '${escJsAttr(p.nombre_parte)}')">🗑</button>
         </div>
     `).join('');
 }
@@ -1067,7 +1146,16 @@ async function deleteMonitorParte(id, nombre) {
     const ok = await showConfirm(`¿Eliminar la parte "${nombre}" y todos sus expedientes asociados? Esta acción no se puede deshacer.`);
     if (!ok) return;
     try {
-        await apiFetch(`/monitor/partes/${id}`, { method: 'DELETE' });
+        const res = await apiFetch(`/monitor/partes/${id}`, { method: 'DELETE' });
+        // F2 (2026-08-31): antes se removía la fila SIEMPRE, sin chequear si el DELETE
+        // realmente tuvo éxito — apiFetch() no lanza para un error HTTP (solo para un
+        // fallo de red), así que un 500/403 real quedaba indistinguible de un éxito: la
+        // fila desaparecía de la UI aunque el backend no hubiera borrado nada, hasta que
+        // la parte "eliminada" reaparecía sola en el próximo refresh, sin explicación.
+        if (!res || !res.ok) {
+            showToast('No se pudo eliminar la parte. Intentá de nuevo.', 'error');
+            return;
+        }
         const row = document.getElementById(`parte-row-${id}`);
         if (row) row.remove();
         // Actualizar contador
@@ -1409,7 +1497,7 @@ function renderPlansModal() {
                 <span>Batch: ${batchLim}</span>
             </div>
             ${!isCurrent && canChange ? `<div style="margin-top:10px">
-                <button class="btn btn-primary btn-sm" onclick="changePlan('${escapeHtml(p.name)}')">Seleccionar este plan</button>
+                <button class="btn btn-primary btn-sm" onclick="changePlan('${escJsAttr(p.name)}')">Seleccionar este plan</button>
             </div>` : ''}
         </div>`;
     }).join('');
@@ -1567,7 +1655,7 @@ function renderTicketDetail(ticket) {
                         <label>Agregar comentario</label>
                         <textarea id="new-comment" placeholder="Escribí tu consulta o actualización..."></textarea>
                     </div>
-                    <button class="btn btn-primary btn-sm" onclick="submitComment(${ticket.id})">Enviar comentario</button>
+                    <button id="btn-submit-comment" class="btn btn-primary btn-sm" onclick="submitComment(${ticket.id})">Enviar comentario</button>
                 </div>` : `<p style="font-size:13px;color:var(--text-muted);margin-top:8px">Este ticket está cerrado.</p>`}
             </div>
         </div>
@@ -1583,6 +1671,14 @@ async function submitComment(ticketId) {
         showAlert(alertEl, 'error', 'El comentario no puede estar vacío.');
         return;
     }
+
+    // F2 (2026-08-31): mismo guard que saveBitacoraEntrada (354fbcc) y submitNewTicket
+    // (línea ~1695, "Mismo guard que saveBitacoraEntrada") — sin esto, un doble clic
+    // (común en conexión lenta) disparaba 2 POST concurrentes y duplicaba el
+    // comentario en el ticket. Esta función hermana nunca había recibido el fix.
+    const btn = document.getElementById('btn-submit-comment');
+    if (btn && btn.disabled) return;
+    if (btn) btn.disabled = true;
 
     try {
         const res = await apiFetch(`/tickets/${ticketId}/comment`, {
@@ -1602,6 +1698,8 @@ async function submitComment(ticketId) {
         }
     } catch (e) {
         showAlert(alertEl, 'error', 'Error de conexión.');
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -1738,15 +1836,30 @@ async function renderFact() {
     container.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:32px;color:var(--text-muted)">Cargando...</div></div>`;
 
     // Cargar datos en paralelo
+    // F2 (2026-08-31): Promise.allSettled, no Promise.all — con .all(), si CUALQUIERA
+    // de las 3 llamadas rechaza (timeout, red inestable en una sola), la promesa
+    // combinada rechazaba entera y el catch descartaba TAMBIÉN los resultados de
+    // las otras 2 que sí habían tenido éxito: el usuario veía "Sin pagos
+    // registrados aún"/"Sin facturas emitidas aún" aunque sí tuviera datos, solo
+    // porque una petición no relacionada tuvo un hiccup transitorio. Mismo
+    // criterio que F2.1 de Bitácora (documentado en CLAUDE.md): llamadas en
+    // paralelo e independientes entre sí.
     let subData = null, payments = [], invoices = [];
+    const [subOut, paymentsOut, invoicesOut] = await Promise.allSettled([
+        apiFetch('/usuarios/api/subscription/current'),
+        apiFetch('/usuarios/api/payments?limit=12'),
+        apiFetch('/usuarios/api/invoices?limit=12'),
+    ]);
     try {
-        const [subRes, paymentsRes, invoicesRes] = await Promise.all([
-            apiFetch('/usuarios/api/subscription/current'),
-            apiFetch('/usuarios/api/payments?limit=12'),
-            apiFetch('/usuarios/api/invoices?limit=12'),
-        ]);
+        const subRes = subOut.status === 'fulfilled' ? subOut.value : null;
         if (subRes && subRes.ok) subData = await subRes.json();
+    } catch (e) { /* continua con datos del state */ }
+    try {
+        const paymentsRes = paymentsOut.status === 'fulfilled' ? paymentsOut.value : null;
         if (paymentsRes && paymentsRes.ok) { const d = await paymentsRes.json(); payments = d.payments || []; }
+    } catch (e) { /* continua con datos del state */ }
+    try {
+        const invoicesRes = invoicesOut.status === 'fulfilled' ? invoicesOut.value : null;
         if (invoicesRes && invoicesRes.ok) { const d = await invoicesRes.json(); invoices = d.invoices || []; }
     } catch (e) { /* continua con datos del state */ }
 
@@ -1928,7 +2041,12 @@ async function renderFact() {
                 <td style="font-size:13px;padding:8px 6px 8px 20px">${inv.issued_at ? formatDate(inv.issued_at) : formatDate(inv.created_at)}</td>
                 <td style="font-size:13px;padding:8px 6px">${tipo}</td>
                 <td style="font-size:13px;padding:8px 6px;font-weight:500">${inv.numero ? escapeHtml(inv.numero) : '—'}</td>
-                <td style="font-size:13px;padding:8px 6px">$${inv.amount ? Number(inv.amount).toLocaleString('es-AR') : '—'}</td>
+                <!-- F2 (2026-08-31): != null, no truthy — el proyecto tiene planes de precio
+                     EXPLÍCITO $0 ("cortesía", ej. plan CORTESIA, documentado en CLAUDE.md) con
+                     facturas manuales reales; con el chequeo truthy viejo, una factura de $0
+                     legítima se mostraba como "—" (dato faltante) en vez de "$0" (monto
+                     correcto) — el Historial de pagos, 2 líneas más abajo, nunca tuvo ese bug. -->
+                <td style="font-size:13px;padding:8px 6px">$${inv.amount != null ? Number(inv.amount).toLocaleString('es-AR') : '—'}</td>
                 <td style="font-size:11px;padding:8px 6px;color:var(--text-muted);font-family:monospace">${inv.cae ? escapeHtml(inv.cae) : '—'}</td>
                 <td style="padding:8px 20px 8px 6px">${inv.pdf_url
                     ? `<button onclick="openInvoicePdf(${Number(inv.id)}, this)" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 10px">Ver PDF</button>`
@@ -1994,9 +2112,20 @@ async function openInvoicePdf(invoiceId, btn) {
 }
 
 // Inicia el checkout MP para configurar tarjeta
+// F2 (2026-08-31): guard por flag de módulo, no por botón — a diferencia de
+// changePlan/cancelScheduledPlan/confirmCancelSubscription/confirmReactivateSubscription
+// (que van detrás de un showConfirm() cuyo overlay bloquea físicamente un segundo
+// clic), initCheckout() se llama desde 6 botones onclick="initCheckout()" distintos
+// (según el estado de la cuenta, en renderFact) directo al POST, sin `disabled` ni
+// confirmación previa. Un doble clic disparaba 2 checkouts de MercadoPago
+// concurrentes — el proyecto documenta haber tenido que limpiar preapprovals
+// huérfanos/duplicados en MP manualmente más de una vez (sesiones jul-ago 2026).
+let _checkoutInFlight = false;
 async function initCheckout(planName) {
     const acc = state.account;
     if (!acc) return;
+    if (_checkoutInFlight) return;
+    _checkoutInFlight = true;
     // planName opcional: en la reactivación de un plan vencido el usuario elige un plan
     // nuevo; en el resto se usa el plan actual de la cuenta.
     const targetPlan = planName || acc.plan?.name || acc.plan;
@@ -2029,6 +2158,8 @@ async function initCheckout(planName) {
         }
     } catch (e) {
         showToast('Error de conexión. Intentá de nuevo más tarde.', 'error');
+    } finally {
+        _checkoutInFlight = false;
     }
 }
 
@@ -2502,9 +2633,14 @@ function renderIA() {
 
 // ─── SECCIÓN: NOTIFICACIONES ──────────────────────────────────────────────────
 
-function escHtml(str) {
-    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+// F2 (2026-08-31): escHtml() era una copia casi idéntica de escapeHtml() (línea
+// 110), con una diferencia sutil de manejo de falsy (`str ?? ''` vs `!str`) que
+// nadie explota hoy (los 3 usos son siempre string: título/mensaje de
+// notificación, Error.message) pero que es exactamente el patrón de "misma
+// lógica duplicada, deriva silenciosa entre copias" que el proyecto ya
+// identificó como causa raíz de bugs reales al menos 3 veces (ver CLAUDE.md:
+// generador_visor/generador_excel, VERIF_FLUJOS_ORDEN, tokenizar()). Eliminada,
+// los 3 call sites pasan a usar escapeHtml() directo.
 
 async function refreshNotifBadge() {
     try {
@@ -2559,12 +2695,12 @@ async function renderNotificaciones() {
                 <div style="font-size:22px;flex-shrink:0;line-height:1.2">${icon}</div>
                 <div style="flex:1;min-width:0">
                     <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
-                        <div style="font-weight:${unread ? 700 : 500};font-size:14px;color:#111827">${escHtml(n.title)}
+                        <div style="font-weight:${unread ? 700 : 500};font-size:14px;color:#111827">${escapeHtml(n.title)}
                             ${unread ? '<span style="background:'+color+';color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;margin-left:6px;font-weight:600;letter-spacing:0.3px">NUEVA</span>' : ''}
                         </div>
                         <div style="font-size:11px;color:#6b7280;white-space:nowrap">${date}</div>
                     </div>
-                    <div style="font-size:13px;color:#374151;line-height:1.5;margin-top:4px;white-space:pre-wrap">${escHtml(n.message)}</div>
+                    <div style="font-size:13px;color:#374151;line-height:1.5;margin-top:4px;white-space:pre-wrap">${escapeHtml(n.message)}</div>
                     ${unread ? `<button class="btn btn-sm btn-secondary notif-mark-btn" data-id="${n.id}" style="margin-top:8px;font-size:12px">✓ Marcar como leída</button>` : ''}
                 </div>
             </div>`;
@@ -2585,7 +2721,7 @@ async function renderNotificaciones() {
             });
         });
     } catch (e) {
-        container.innerHTML = `<div class="alert alert-error">Error al cargar notificaciones: ${escHtml(e.message)}</div>`;
+        container.innerHTML = `<div class="alert alert-error">Error al cargar notificaciones: ${escapeHtml(e.message)}</div>`;
     }
 }
 
@@ -2593,16 +2729,22 @@ async function markAllNotificationsRead() {
     const btn = document.getElementById('btn-mark-all-notifs');
     if (!btn) return;
     btn.disabled = true;
+    // F2 (2026-08-31): antes hacía 1 GET + N POST secuenciales (uno por
+    // notificación, `await` dentro del loop) sin ningún catch propio — un fallo
+    // de red a mitad de un lote grande dejaba algunas marcadas y otras no, sin
+    // aviso al usuario, y sin refrescar lista/badge. El backend YA expone el
+    // atajo `id='all'` que hace todo en un solo UPDATE atómico (routes/client.js,
+    // documentado en CLAUDE.md) — nunca se usó desde acá.
     try {
-        const res = await apiFetch('/client/notifications');
-        if (!res || !res.ok) return;
-        const data = await res.json();
-        const unread = (data.notifications || []).filter(n => !n.read_at);
-        for (const n of unread) {
-            await apiFetch(`/client/notifications/${n.id}/read`, { method: 'POST' });
+        const res = await apiFetch('/client/notifications/all/read', { method: 'POST' });
+        if (!res || !res.ok) {
+            showToast('No se pudieron marcar las notificaciones como leídas.', 'error');
+            return;
         }
         await renderNotificaciones();
         refreshNotifBadge();
+    } catch (e) {
+        showToast('Error de conexión.', 'error');
     } finally {
         btn.disabled = false;
     }
@@ -3130,9 +3272,35 @@ async function calcularPlazoBitacora(ids) {
         showToast('Completá la fecha de notificación y la cantidad de días hábiles.', 'error');
         return;
     }
+    // F2 (2026-08-31): el input tiene max="365" en el HTML, pero eso es puramente
+    // decorativo — se lee con parseInt() crudo, sin checkValidity(). Sin este
+    // guard, un typo (ej. "3650") no se rechazaba: bitAddBusinessDays() es un
+    // `while` sincrónico sin yield, así que un valor absurdo cuelga la pestaña
+    // un rato, y de paso agranda mucho el hueco de feriados sin cargar de abajo.
+    if (dias > 365) {
+        showToast('El plazo máximo es de 365 días hábiles.', 'error');
+        return;
+    }
     const anioBase = bitParseLocalDate(desde).getFullYear();
-    await bitEnsureFeriados([anioBase, anioBase + 1]); // el vencimiento puede caer en el año siguiente
-    const resultado = bitAddBusinessDays(desde, dias);
+    // F2 (2026-08-31): antes cargaba fijo [anioBase, anioBase+1] — con `dias`
+    // cerca de 365 (el propio tope de la UI) el vencimiento real puede caer en
+    // anioBase+2 (365 días hábiles ≈ 511 días calendario; alcanza con un `desde`
+    // a partir de agosto para que ya se reproduzca, no hace falta un caso
+    // extremo). Los feriados de ese 3er año nunca se cargaban y se contaban
+    // como día hábil, adelantando la fecha calculada — un error real de plazo
+    // legal, no cosmético. Iterativo en vez de agrandar el número fijo: cubre
+    // cualquier `dias` dentro del tope de arriba sin adivinar cuántos años
+    // hacen falta, y se autocorrige si algún día cambia el tope.
+    let anioTope = anioBase + 1;
+    await bitEnsureFeriados([anioBase, anioTope]);
+    let resultado = bitAddBusinessDays(desde, dias);
+    let anioResultado = bitParseLocalDate(resultado).getFullYear();
+    while (anioResultado > anioTope) {
+        anioTope++;
+        await bitEnsureFeriados([anioTope]);
+        resultado = bitAddBusinessDays(desde, dias);
+        anioResultado = bitParseLocalDate(resultado).getFullYear();
+    }
     document.getElementById(p.due).value = resultado;
     showToast(`Vencimiento calculado: ${formatDate(resultado)}`, 'success');
 }
@@ -4570,7 +4738,18 @@ async function descargarRespaldoAutomatico() {
         headers: { Authorization: `Bearer ${getToken()}` }
     });
     if (!res.ok) return false;
-    const blobUrl = URL.createObjectURL(await res.blob());
+    const blob = await res.blob();
+    // F2 (2026-08-31): antes solo importaba res.ok — un 200 con body vacío o
+    // truncado (conexión cortada a mitad de la respuesta) igual devolvía true, y
+    // confirmarImport() procedía con `reemplazar` (el único modo destructivo de
+    // todo el portal) creyendo que había un respaldo válido. Esto NO confirma que
+    // el navegador terminó de escribir el archivo a disco — ninguna API de JS lo
+    // garantiza para una descarga por <a download>, es una limitación real del
+    // browser — pero sí descarta el caso más barato y más probable de detectar:
+    // un export corrupto que ni siquiera es JSON válido.
+    if (!blob || blob.size < 20) return false;
+    try { JSON.parse(await blob.text()); } catch (_) { return false; }
+    const blobUrl = URL.createObjectURL(blob);
     const sello = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     const a = document.createElement('a');
     a.href = blobUrl;
@@ -4720,7 +4899,10 @@ function mensajeCapturaError(code) {
 
 async function procesarCaptureDraft(draftId) {
     try {
-        const res = await apiFetch(`/usuarios/api/capture-draft/${draftId}`);
+        // F2 (2026-08-31): encodeURIComponent — draftId viene sin sanear de un
+        // parámetro de URL (?draft=..., vía sessionStorage). Mismo criterio que
+        // abrirFichaPorNumero() (más abajo) aplica a su `exp`; acá faltaba.
+        const res = await apiFetch(`/usuarios/api/capture-draft/${encodeURIComponent(draftId)}`);
         if (!res) return;
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
@@ -4836,7 +5018,14 @@ async function abrirEntradaIndividualDesdeDraft(caso, origen, tipo) {
         openBitacoraModal(fichaId, {
             kind: tipo,
             title: tituloSugeridoDesdeCaso(caso, tipo),
-            description: (caso.movimientos || [])[0]?.detalle || '',
+            // F2 (2026-08-31): caso?. — casos viene de aplicarCaptureDraft(), que solo
+            // valida Array.isArray(casos) && casos.length>0, no que cada elemento sea
+            // un objeto (el origen último es /usuarios/capture, un endpoint anónimo).
+            // Un elemento malformado tiraba un TypeError sin escape claro, atrapado
+            // varios frames más arriba por un catch no relacionado — "Error de
+            // conexión" para lo que en realidad era un dato malformado. Mismo patrón
+            // ya usado en tituloSugeridoDesdeCaso().
+            description: (caso?.movimientos || [])[0]?.detalle || '',
         });
     } catch (e) {
         showToast('Error de conexión al procesar la captura.', 'error');
@@ -4873,7 +5062,7 @@ function abrirRevisionLoteDesdeDraft(casos, origen, tipo) {
             title: '', // se completa perezoso en el primer render (recién ahí se conoce `tipo` si vino del selector)
             due: bitLocalYmd(new Date()),
             repeat: '',
-            description: (c.movimientos || [])[0]?.detalle || '',
+            description: (c?.movimientos || [])[0]?.detalle || '', // F2 (2026-08-31): ver comentario en abrirEntradaIndividualDesdeDraft
         })),
         fichaMap: null, // expediente → expediente_id, resuelto una sola vez para TODO el lote
         estado: casos.map(() => ({ status: 'pendiente', entryId: null })), // 'pendiente'|'guardado'|'descartado'
@@ -4959,7 +5148,7 @@ function loteRenderPasoCaso() {
     if (!fila.title) fila.title = tituloSugeridoDesdeCaso(caso, tipo); // default una sola vez, no pisa una edición
     const est = estado[idx];
     const esVencimiento = tipo === 'vencimiento';
-    const ultimaActividad = (caso.movimientos || [])[0]?.fecha || (caso.fecha_corrida ? formatDate(caso.fecha_corrida) : '');
+    const ultimaActividad = (caso?.movimientos || [])[0]?.fecha || (caso?.fecha_corrida ? formatDate(caso.fecha_corrida) : ''); // F2 (2026-08-31): ver comentario en abrirEntradaIndividualDesdeDraft
 
     document.getElementById('lote-modal-content').innerHTML = `
         <div class="bit-lote-progress">Caso ${idx + 1} de ${casos.length} — ${BIT_TIPO_ENTRADA_LABELS[tipo] || tipo}</div>

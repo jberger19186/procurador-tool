@@ -180,6 +180,18 @@ es de corrección, no de superficie crítica — y el ángulo de seguridad tiene
 
 ### F2 — Portal de usuarios (frontend) 🔴
 
+> ✅ **EJECUTADA 2026-08-31.** Informe: [`revision-F2-2026-08-31.md`](revision-F2-2026-08-31.md).
+> **17 hallazgos, los 17 corregidos y en producción.** El más serio, encontrado en la revisión
+> manual antes de despachar los agentes: 4 sitios interpolaban texto libre dentro de un
+> string-literal JS en un `onclick` usando `escapeHtml()` (que no escapa comillas simples) —
+> uno de los 4 tenía además un parche ad-hoc previo que también resultó bypasseable. Corregido
+> con `escJsAttr()`, mismo patrón que F10 introdujo en `dashboard.js`. Los otros dos más
+> consecuentes: la calculadora de plazos de Bitácora cargaba feriados de un rango fijo de años
+> que un `dias` cercano al tope de 365 podía exceder, adelantando un vencimiento legal real
+> (confirmado en runtime, difiere en 1 día exacto); y `doLogout()` solo reseteaba 4 de 10
+> campos de `state` — en una PC compartida entre 2 cuentas, datos de casos judiciales de la
+> cuenta anterior podían seguir en memoria tras el logout.
+
 | | |
 |---|---|
 | **Target** | `backend-server/public/usuarios/app.js` (+ `index.html`, `app.css` como contexto) |
