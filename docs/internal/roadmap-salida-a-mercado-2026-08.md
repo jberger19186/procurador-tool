@@ -33,7 +33,8 @@
               │
               ▼
   ETAPA 2 — CODE REVIEW INTEGRAL  (incluye /verify V4+V5+V6)
-    F6 cifrado → F1/F2/F3/F4/F10 → F5 → F8 → F7 cobranza (gate) → F9 verify
+    F6 cifrado → F1/F2/F3/F4/F10 → F5 → F8 → F9a verify (ya SIN operador)
+    (F9b — spike de la extensión, con operador si el spike no alcanza — no bloquea el cierre)
               │
               ▼
   ETAPA 3 — SECURITY REVIEW
@@ -41,7 +42,8 @@
               │
               ▼
   ETAPA 4 — MERCADOPAGO PRODUCCIÓN (B3)
-    Fase A/B → Fase C (primer cobro real) → S8 (fraude con cobro real)
+    F7 cobranza (gate, movida acá el 2026-08-31 — arranca fresca)
+    → Fase A/B → Fase C (primer cobro real) → S8 (fraude con cobro real)
     → code-review y security-review focalizados del delta
               │
               ▼
@@ -61,7 +63,10 @@ Cuatro razones, todas económicas — ninguna estética:
    SEC-2. Auditar primero obliga a auditar dos veces.
 3. **Todo antes que MercadoPago.** El día que las credenciales de MP sean reales, cada bug del camino
    del pago cuesta dinero. B3 debe entrar sobre código ya revisado y auditado, no al revés. Por eso
-   la fase **F7 (cobranza) del code-review es un gate duro** de la Etapa 4.
+   **F7 (cobranza) se ejecuta al arranque mismo de la Etapa 4** *(movida el 2026-08-31 — antes iba al
+   final de la campaña de code-review)*: correrla ahí y entrar a B3 después de toda la Etapa 3 dejaba
+   exactamente la misma distancia de revalidación que esta regla buscaba evitar, solo corrida un
+   lugar. Moviéndola al arranque de la Etapa 4 queda genuinamente fresca — es el gate duro real.
 4. **AZ va al FINAL** *(decisión del operador, 2026-08-30 — antes decía "arranca el día 0")*.
    Es lo único cuyo tiempo no lo controlamos (Certificate Profile: 1-3 días
    hábiles). No bloquea nada, pero si se deja para el final, el lanzamiento queda esperando un
@@ -251,12 +256,12 @@ consumo de cupo cuadrando exacto con el modelo documentado.
 | | |
 |---|---|
 | **Plan** | [`plan-code-review-integral-2026-08-26.md`](plan-code-review-integral-2026-08-26.md) ⭐ **nuevo** |
-| **Fases** | **10** — F1 a F8 + **F10** de `/code-review` + **F9 = los bloques V4/V5/V6 de `/verify`** que quedaron bloqueados por el entorno |
-| **Modelo** | Sonnet en 6. **Opus en 2**: F6 (cadena de cifrado de scripts) y F7 (cobranza) |
-| **Esfuerzo** | `xhigh` en las 4 áreas grandes nunca revisadas · `high` en 4 · `medium` en 1 |
-| **Sesiones** | **10–15** *(actualizado 2026-08-28: +1–2 por F10)* |
+| **Fases** | **9** — F1 a F6, F8 y **F10** de `/code-review` + **F9a/F9b = los bloques V4/V5/V6 de `/verify`**. **F7 (cobranza) se movió a la Etapa 4** *(2026-08-31)*, ver §6 |
+| **Modelo** | Sonnet en 7 (incluye F9a/F9b). **Opus en 1**: F6 (cadena de cifrado de scripts) — F7 sigue en Opus pero se cuenta en la Etapa 4 |
+| **Esfuerzo** | `xhigh` en las 4 áreas grandes nunca revisadas · `high` en 3 · `medium` en 2 |
+| **Sesiones** | **9–13** *(actualizado 2026-08-31: -1–2 por la salida de F7, F9a ya no depende del operador)* |
 | **Depende de** | Etapa 1 cerrada ✅ |
-| **Habilita** | Etapa 3, y vía F7 la Etapa 4 |
+| **Habilita** | Etapa 3. F7 ya no habilita la Etapa 4 desde acá — corre dentro de ella, como su primer paso |
 
 **El hueco que justifica la campaña, medido el 2026-08-26:** todo el módulo Bitácora
 (`routes/bitacora.js` **84 KB**, el único endpoint anónimo del sistema, y el crecimiento de
@@ -336,10 +341,10 @@ punto de partida del auditor externo el día que se contrate.
 
 | | |
 |---|---|
-| **Plan** | [`plan-mercadopago-produccion-2026-08-24.md`](plan-mercadopago-produccion-2026-08-24.md) (ya escrito, con datos medidos en vivo) |
-| **Fases** | A (endurecimiento del código, Sonnet/alto) + B (trámite del operador, en paralelo) → **C (Opus/alto, con el operador presente — el switch y el primer cobro real)** → D (facturación, no bloqueante) → E (post-lanzamiento) |
-| **Sesiones** | 3–5 |
-| **Gate duro de entrada** | **F7 del code-review cerrada.** Es la fase que revisa la transacción atómica de `handlePaymentEvent` y la atribución de preapprovals por ventana de tiempo — lo único de la cadena de cobro que V7 no pudo verificar en runtime |
+| **Plan** | [`plan-mercadopago-produccion-2026-08-24.md`](plan-mercadopago-produccion-2026-08-24.md) (ya escrito, con datos medidos en vivo) — la **Fase A0** de abajo vive en `plan-code-review-integral-2026-08-26.md` como F7, ver esa sección para el target y el checklist completo |
+| **Fases** | **A0 — F7, cobranza** (Opus/alto, movida acá el 2026-08-31 — arranca la etapa) → A (endurecimiento del código, Sonnet/alto) + B (trámite del operador, en paralelo) → **C (Opus/alto, con el operador presente — el switch y el primer cobro real)** → D (facturación, no bloqueante) → E (post-lanzamiento) |
+| **Sesiones** | 4–6 *(+1 por F7, movida acá desde la Etapa 2 el 2026-08-31)* |
+| **Por qué F7 abre la etapa, no la cierra** | Revisa la transacción atómica de `handlePaymentEvent` y la atribución de preapprovals por ventana de tiempo — lo único de la cadena de cobro que V7 no pudo verificar en runtime. Corría al final de la campaña de code-review, pero entre ese cierre y el primer cobro real (Fase C) seguían las 8–13 sesiones completas de la Etapa 3 — la misma distancia de revalidación que el gate buscaba evitar, solo corrida un lugar. Moverla al arranque de esta etapa, justo antes de la Fase A —con la que además comparte archivos (`checkout.js`, `webhooks.js`, `subscriptionService.js`)—, la deja genuinamente fresca al llegar a la Fase C |
 | **Después de la Fase C** | **S8 de SEC-2** (fraude con cobro real, Opus) + un code-review y un security-review **focalizados en el delta** que introdujo la Fase A |
 
 **Lo que hay que tener presente al llegar acá** (medido el 2026-08-24, corrige creencias previas):
@@ -452,7 +457,7 @@ Las que este roadmap existe para hacer visibles. Cada una es un error concreto q
 | **1** | **S8 de SEC-2 se ejecuta en la Etapa 4, no en la 3** | Se da "SEC-2 ejecutado" por cerrado con el bloque de fraude con dinero real sin correr |
 | **2** | **La demo debe ser regenerable por script, no un set de PNG** | Las Etapas 2 y 3 cambian la UI **después** de armar la demo. En 11 días de agosto se publicaron 3 releases que cambiaron los visores y el topbar |
 | **3** | **Todo lo que necesita escritorio real se agrupa en las mismas sesiones** | Ver §9. Eran 4 trabajos en 3 planes distintos; **desde el 2026-08-27 son 3** — las capturas de la demo se automatizaron con Playwright vía CDP y salieron de la lista |
-| **4** | **F7 (cobranza) es el gate de B3, y va al final de la Etapa 2** | Correrla al principio y entrar a B3 ocho sesiones después obliga a revalidarla |
+| **4** | ~~**F7 (cobranza) es el gate de B3, y va al final de la Etapa 2**~~ → **F7 pasa a ser el primer paso de la Etapa 4** *(cambiado 2026-08-31)* | Era: correrla al final de la Etapa 2 y entrar a B3 después de toda la Etapa 3 dejaba la misma distancia de revalidación que la regla decía evitar, solo corrida un lugar — se corrige moviéndola al arranque mismo de la Etapa 4 |
 | **5** | **Los TyC de beta se publican antes del primer cobro real** | Se cobra con términos que no dicen que el producto está en prueba |
 | **6** | ~~**1.3 (landing) y 1.6 (demo) tocan el mismo archivo**~~ — ✅ **resuelto**: 1.3 se cerró el 2026-08-26, así que 1.6 ya no compite con nadie por `landing/index.html` | (era: dos sesiones editando el mismo archivo en paralelo = conflicto) |
 | **7** | ~~AZ arranca el día 0~~ → **AZ va al final** *(cambiado 2026-08-30)* | La consecuencia asumida: el lanzamiento espera hasta **3 días hábiles** por el Certificate Profile. Se acepta porque la ventana es corta y el trámite tiene costo mensual que conviene no abrir antes de tiempo |
@@ -466,14 +471,15 @@ Las que este roadmap existe para hacer visibles. Cada una es un error concreto q
 
 ## §9 — Las sesiones que necesitan al operador presente
 
-**Cuatro trabajos distintos, en tres planes distintos, necesitan exactamente el mismo handle:** una
-máquina con la app Electron lanzada desde la sesión de Windows que computer-use ve, y —para lo de
-Chrome— un navegador real con la extensión cargada.
+**Solo un trabajo genuinamente lo necesita hoy** — bajó de 4 a 1 en dos pasos: el 2026-08-27 las
+capturas de la demo salieron por un hallazgo de CDP; el 2026-08-31 **V4 y V5 salen por el mismo
+mecanismo**, y **V6 se parte en tres**, con solo un tercio dependiendo de verdad de un handle.
 
 | Trabajo | De dónde viene | Qué necesita |
 |---|---|---|
-| **V4 + V5** (Electron sin/con PJN) | Etapa 2, fase F9 | computer-use con handle real de la app · V5 consume cupo del PJN |
-| **V6** (extensión Chrome) | Etapa 2, fase F9 | Chrome real con la extensión + credenciales PJN |
+| ~~**V4 + V5** (Electron sin/con PJN)~~ | ~~Etapa 2, fase F9~~ | ✅ **YA NO** — ver la nota de abajo |
+| ~~**V6-a/V6-b** (código de la extensión + gates por backend)~~ | ~~Etapa 2, fase F9~~ | ✅ **Nunca necesitaron handle** — lectura de código y HTTP contra staging |
+| **V6-c** (los 5 flujos reales de la extensión contra el PJN) | Etapa 2, fase **F9b** | **Spike primero, sin operador**; si no alcanza, Chrome real con la extensión + credenciales PJN |
 | ~~**Capturas de la demo** (app Electron)~~ | ~~Etapa 1.6, bloque D3~~ | ✅ **YA NO** — ver la nota de abajo |
 | **Capturas de la demo** (extensión + PJN) | Etapa 1.6, bloque **D4** | el operador saca las capturas a mano (~15 min) — **no es automatizable** |
 | **Fase C de B3** (primer cobro real) | Etapa 4 | el operador completando un checkout real |
@@ -486,19 +492,41 @@ Chrome— un navegador real con la extensión cargada.
 > siendo correcto **sobre computer-use**; lo que cambió es que para este trabajo ya no hace falta.
 > Detalle en §0.1 de [`plan-demo-producto-2026-08-26.md`](plan-demo-producto-2026-08-26.md).
 >
-> **V4/V5/V6 NO se destraban con esto** — son verificación *conducida* (clicks reales, diálogos
-> nativos, la extensión en un Chrome real), no captura de pantallas. Siguen necesitando al operador.
+> **En 2026-08-27, V4/V5/V6 no se destrababan con esto todavía** — eran verificación *conducida*
+> (clicks reales, diálogos nativos, la extensión en un Chrome real), no captura de pantallas. Eso
+> cambió el 2026-08-31 para V4/V5 — ver la actualización siguiente.
 
-**La causa del bloqueo, acotada (no es prioridad ni tiempo):** `request_access` de computer-use
-devuelve `notInstalled` para "Procurador SCW" **incluso con la app abierta** — aislamiento de sesiones
-de Windows: un proceso lanzado desde la shell vive en una sesión que la herramienta no ve. **Hay
-precedente de que funciona**: el 2026-07-23 una sesión condujo la instalación NSIS completa con
-computer-use. La condición se reproduce lanzando la app desde la sesión visible al agente.
+> ✅ **Actualización 2026-08-31 — V4 y V5 salieron de esta lista, mismo tipo de hallazgo que las
+> capturas de la demo pero desde F0 del script de prueba diaria (2026-08-27):** el `.exe` instalado
+> acepta `--remote-debugging-port`, así que **Playwright se conecta por CDP** en vez de necesitar
+> computer-use — el mismo camino que ya prueba los 6 flujos reales en `tests/daily/`. El diagnóstico
+> de `notInstalled` (abajo, conservado como referencia histórica) sigue siendo correcto **sobre
+> computer-use específicamente**; lo que cambió es que ya no hace falta esa herramienta acá. El
+> playbook de V5 (`docs/internal/plan-verificacion-runtime-2026-08-23.md`) es, literalmente, "seguir
+> el playbook de la prueba diaria" — que corre sin nadie presente más que para aprobar el permiso de
+> computer-use una vez, y solo para lo que V4 todavía necesita: los diálogos nativos del selector de
+> archivo.
+>
+> **V6-a (revisión de código) y V6-b (gates por plan vía HTTP) nunca necesitaron handle de escritorio**
+> — solo faltaba decirlo explícito en esta tabla. **Solo V6-c** sigue necesitando algo, con un
+> candidato sin probar antes de asumir que requiere al operador: ver F9b en el plan de code-review.
 
-**Recomendación:** agrupar V4 + V5 + las capturas de la app en **una sola sesión de operador**, con
-la app ya abierta por él antes de empezar. V6 y las capturas de la extensión, en otra (necesitan
-Chrome, no la app). Es la diferencia entre 2 sesiones coordinadas y 5 intentos sueltos que fallan por
-el mismo motivo.
+**Histórico — por qué V4/V5 estaban bloqueados (ya no aplica, se conserva como referencia):**
+`request_access` de computer-use devolvía `notInstalled` para "Procurador SCW" incluso con la app
+abierta — aislamiento de sesiones de Windows: un proceso lanzado desde la shell vive en una sesión
+que la herramienta no ve. La solución no fue evitar ese aislamiento, fue dejar de necesitar
+computer-use para este trabajo.
+
+**Por qué V6-c sigue distinto:** `list_connected_browsers` de computer-use devuelve `[]` — no hay
+Chrome conectado por la extensión Claude for Chrome, así que no hay camino directo a un navegador
+real con la extensión del PJN cargada, y computer-use otorga los navegadores en tier "read" (se ven,
+no se clickean). El spike de F9b prueba una vía distinta: Playwright lanzando Chrome con
+`--load-extension` más el `ChromeProfile` que ya tiene las credenciales guardadas.
+
+**Recomendación:** correr el spike de V6-c primero (barato, decide si este bloque necesita operador
+o no). Si falla, agruparlo con las capturas de la extensión (D4) en **una sola sesión** — comparten
+el mismo requisito (Chrome real con la extensión + credenciales PJN) — en vez de dos intentos
+sueltos.
 
 **Ya cerrado y no vuelve a pedirse:** **R9.1 / R9.2** — el operador confirmó el 2026-08-26 el login
 del popup de la extensión y un flujo completo contra el PJN real. Con eso el Bloque R del plan de
@@ -511,9 +539,9 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 | Etapa | Sesiones | Notas |
 |---|---|---|
 | **1** — Producto | ~~13–21~~ → **✅ 0 restantes — ETAPA CERRADA** | Los 6 ítems cerrados (2026-08-26/27): 1.1, 1.2 (con release y flag encendidos), 1.3, 1.4, 1.5 y **1.6** (41/43 pasos, 8.3/8.4 descartados por el operador el 2026-08-27) |
-| **2** — Code review | **10–15** | 4 fases `xhigh` consumen sesión propia o más. Incluye **F10** (+1–2), agregada el 28/08 |
+| **2** — Code review | **9–13** | 4 fases `xhigh` consumen sesión propia o más. Incluye **F10** (+1–2, 28/08). **F7 salió** (-1–2, 31/08) — ahora abre la Etapa 4. F9a ya no depende del operador |
 | **3** — Security review | **8–13** | S1+S2, S3+S4 y S10+S11 agrupables. Incluye **S10** (+1–2, 26/08) y **S11** (+1, 28/08) |
-| **4** — MercadoPago | **3–5** | + S8 + los reviews del delta |
+| **4** — MercadoPago | **4–6** | **F7 entró** (+1, 31/08) como su primer paso + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
 | **Total aproximado** | ~~32–50~~ → ~~19–29~~ → **21–33 restantes** | Más las sesiones con operador presente de §9. Actualizado el **2026-08-28**, tras la revisión de los planes de las Etapas 2/3/4 contra lo que la Etapa 1 realmente construyó (+1–2 por F10, +1 por S11) |
 

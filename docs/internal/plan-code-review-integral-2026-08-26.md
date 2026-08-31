@@ -12,6 +12,14 @@
 > y auditar seguridad sobre una superficie que el code-review va a cambiar obliga a
 > auditar dos veces.
 >
+> 🔄 **Movido el 2026-08-31: F7 (cobranza) ya NO se ejecuta dentro de esta campaña.** Corría al
+> final para llegar "fresca" a B3, pero entre ese cierre y el primer cobro real seguían las 8–13
+> sesiones completas de la Etapa 3 — la misma distancia de revalidación que la regla buscaba
+> evitar, solo corrida un lugar. Pasa a ser el primer paso de la Etapa 4 (ver roadmap §6). El
+> target, el porqué de Opus y el checklist siguen viviendo en la sección F7 de este documento —
+> solo cambió CUÁNDO se ejecuta, no QUÉ cubre. De paso, F9 se partió en F9a/F9b: la mitad que
+> necesitaba al operador (V4/V5) dejó de necesitarlo, ver la sección F9a/F9b más abajo.
+>
 > ✅ **Confirmado el 2026-08-26:** los ítems 1.1 (Bitácora F3.4) y 1.2 (módulo Markdown) de la Etapa 1
 > **fueron aprobados por el operador** y se van a construir. Este plan ya lo asumía: **F5 es el módulo
 > Markdown** y **F1 declara depender de Etapa 1 cerrada** porque el `.ics` de F3.4 toca
@@ -32,13 +40,13 @@
 
 | | |
 |---|---|
-| **Fases** | **10** (F1–F8 + **F10** de `/code-review` + F9 de `/verify` en runtime) |
-| **Modelo dominante** | Sonnet (6 de 9). **Opus en 2**: cadena de cifrado/firma de scripts (F6) y cobranza (F7). El motor de anonimización dentro de F5 también va en Opus. |
+| **Fases** | **9** (F1–F6, F8, **F10** de `/code-review` + **F9a/F9b** de `/verify` en runtime). **F7 (cobranza) se movió a la Etapa 4** *(31/08)* — sigue en este documento como referencia del target |
+| **Modelo dominante** | Sonnet (7 de 9, incluye F9a/F9b). **Opus en 1**: cadena de cifrado/firma de scripts (F6). El motor de anonimización dentro de F5 también va en Opus. F7 (cobranza, Opus) corre en la Etapa 4, no en esta campaña |
 | **Esfuerzo dominante** | `xhigh` en las 4 fases de código grande y nunca revisado (F1, F2, F4, F10); `high` en 4; `medium` en 1 |
 | **`ultra` (multi-agente en la nube)** | **Ninguna fase lo justifica hoy.** Ver §5 — se reserva como escalamiento de F7 si el code-review encuentra algo en el camino del dinero |
-| **Sesiones estimadas** | **10–15**. Las 4 fases `xhigh` (F1, F2, F4, **F10**) consumen sesión propia y probablemente más de una; F9 depende del operador |
+| **Sesiones estimadas** | **9–13** *(-1–2 el 31/08 por la salida de F7)*. Las 4 fases `xhigh` (F1, F2, F4, **F10**) consumen sesión propia y probablemente más de una; **F9a ya no depende del operador**, solo F9b si su spike no alcanza |
 | **Depende de** | Etapa 1 cerrada (si no, F2/F3/F5 revisan código que va a cambiar) |
-| **Habilita** | Etapa 3 (SEC-2, auditoría de seguridad) y — vía F7 — la Etapa 4 (MercadoPago producción) |
+| **Habilita** | Etapa 3 (SEC-2, auditoría de seguridad). F7 ya no se habilita desde acá hacia la Etapa 4 — corre dentro de ella, como su primer paso |
 
 ---
 
@@ -460,6 +468,15 @@ que, **contra staging**:
 
 ### F7 — Cobranza 🔴 **Opus** — *gate duro de la Etapa 4*
 
+> 🔄 **MOVIDA el 2026-08-31 — ya no se ejecuta dentro de esta campaña, es el primer paso de la
+> Etapa 4.** Corría al final de esta campaña para llegar "fresca" a B3, pero entre el cierre de F7
+> y el primer cobro real (Fase C) seguían las 8–13 sesiones completas de la Etapa 3 — la misma
+> distancia de revalidación que la regla original decía evitar, solo corrida un lugar. Se corrige
+> moviéndola al arranque mismo de la Etapa 4, justo antes de la Fase A del plan de MercadoPago —con
+> la que además comparte archivos, conviene correrlas como una sola pasada. El target, el porqué de
+> Opus y el checklist de abajo siguen siendo la referencia completa; lo único que cambió es CUÁNDO
+> se ejecuta.
+
 | | |
 |---|---|
 | **Target** | `backend-server/routes/checkout.js`, `routes/webhooks.js`, `services/subscriptionService.js`, `services/invoiceService.js`, `utils/mercadopago.js`, y los crons de cobro/vencimiento de `server.js` |
@@ -594,34 +611,77 @@ verificado y no re-testeado) y el barrido de S9. Y el **frontend** del panel, qu
 
 ---
 
-### F9 — `/verify` V4 + V5 + V6 (runtime, con el operador) 🟠 **no es un `/code-review`**
+### F9a — `/verify` V4 + V5 + V6-a/V6-b (runtime, ya sin operador) 🟢
+
+> 🔄 **Reescrita el 2026-08-31.** Era "F9", un solo bloque que necesitaba al operador entero.
+> Se parte en F9a (esto — V4, V5, y las 2/3 de V6 que no tocan el PJN real) y F9b (V6-c, más
+> abajo). El motivo: el mismo hallazgo de CDP que sacó las capturas de la demo de la lista de
+> "necesita operador" (F0 del script de prueba diaria, 27/08) también aplica acá.
 
 | | |
 |---|---|
-| **Qué es** | Los 3 bloques de `docs/internal/plan-verificacion-runtime-2026-08-23.md` que quedaron **bloqueados por el entorno, no por prioridad**. Los playbooks ya están escritos ahí — esto es ejecución, no diseño. |
-| **V4** | Electron **sin** PJN — computer-use, no consume cupo · 🟡 |
-| **V5** | Electron **con** PJN (5 flujos reales) — computer-use + credenciales · **consume cupo** · 🔴 |
-| **V6** | Extensión Chrome (5 flujos) — Chrome real + credenciales · **consume cupo** · 🔴 |
-| **Modelo / esfuerzo** | Sonnet · medio (V4/V6) — **Opus no hace falta**: ningún bloque toca cobro |
-| **Depende de** | **el handle del entorno** (ver abajo) y de que F1–F5 hayan aplicado sus fixes |
+| **Qué es** | V4/V5 de `docs/internal/plan-verificacion-runtime-2026-08-23.md`, más las 2/3 de V6 que no tocan un flujo real contra el PJN. Estaban bloqueados por computer-use, no por el producto — el bloqueo ya no existe para V4/V5 y nunca existió para V6-a/V6-b. |
+| **V4** | Electron **sin** PJN — CDP/Playwright, no consume cupo · 🟡 |
+| **V5** | Electron **con** PJN (5 flujos reales) — CDP/Playwright + credenciales · **consume cupo** · 🔴 |
+| **V6-a** | Revisión de código de `extension-app/` (~10 archivos chicos, solo tuvo la pasada parcial de D5 en julio) · 🟢 sin handle |
+| **V6-b** | Gates por plan del backend (`extension-login`, `/client/extension-auth`) — HTTP contra staging, mismo patrón que V3 con Bitácora · 🟢 sin handle |
+| **Modelo / esfuerzo** | Sonnet · medio |
+| **Depende de** | que F1–F5 y F10 hayan aplicado sus fixes — **ya no del operador** |
 
-**Por qué siguen abiertos, con la causa acotada (no es prioridad ni tiempo):**
+**Por qué V4/V5 ya no están bloqueados.** El diagnóstico original (`request_access` de
+computer-use → `notInstalled` para "Procurador SCW", incluso con la app abierta — aislamiento de
+sesiones de Windows, un proceso lanzado desde la shell vive en una sesión que la herramienta no
+ve) sigue siendo correcto **sobre computer-use**. Pero desde F0 del script de prueba diaria
+(2026-08-27), el `.exe` instalado acepta `--remote-debugging-port` y **Playwright se conecta por
+CDP** — `tests/daily/` ya automatiza los 6 flujos reales por ese camino. El playbook de V5 en
+`plan-verificacion-runtime-2026-08-23.md` es, literalmente, "seguir el playbook de la prueba
+diaria". Lo único que sigue necesitando al operador es aprobar el permiso de computer-use una vez,
+para lo que V4 sí sigue usando: los diálogos nativos del selector de archivo.
 
-- **V4/V5** — `request_access` de computer-use devuelve `notInstalled` para "Procurador SCW"
-  **incluso con la app abierta**; es el aislamiento de sesiones de Windows ya documentado en la
-  sesión de F3.1 (un proceso lanzado desde la shell vive en una sesión que la herramienta no ve).
-  **Precedente de que sí se puede:** el 2026-07-23 la sesión de R2.1 condujo la instalación NSIS
-  completa con computer-use sin problema — la condición existe, hay que reproducirla (app lanzada
-  desde la sesión visible al agente, no desde la shell).
-- **V6** — `list_connected_browsers` devuelve `[]`: no hay Chrome conectado por la extensión
-  Claude-in-Chrome, así que no hay camino a un navegador real con la extensión del PJN cargada.
+**Qué cubre V4** (todo lo que no lanza Puppeteer): login y sus estados bloqueantes, Mi Cuenta,
+Estadísticas, banners de cuota/gracia/cancelación, modales de configuración, tabs del topbar,
+botón 📔 Bitácora, tour de onboarding completo, "Ver resultados" sobre archivos existentes.
 
-**Ajuste de alcance de V6 respecto del plan original:** **R9.1 / R9.2 ya están cerrados** — el
-operador confirmó el 2026-08-26 el login del popup y un flujo completo contra el PJN real. Eso
-era la mitad *funcional* de V6. Lo que queda es la parte estructurada: los 5 flujos con
-aserciones, los gates por plan desde la extensión, y el manejo de errores — más una **revisión
-de código de `extension-app/`** (~10 archivos chicos; solo tuvo la pasada parcial de D5 en julio),
-que conviene hacer en la misma sesión.
+**Por qué V6-a/V6-b nunca necesitaron el handle.** El ajuste de alcance de julio-agosto (abajo) ya
+apuntaba en esta dirección: R9.1/R9.2 cerraban la mitad *funcional* de V6. Lo que quedaba —revisión
+de código y gates por plan— es lectura pura y HTTP contra staging, sin ningún handle de escritorio
+de por medio. Solo el tercio restante (V6-c, los 5 flujos reales) sigue necesitando algo — es F9b,
+más abajo.
+
+**Ajuste de alcance de V6 respecto del plan original, ya cerrado:** **R9.1 / R9.2** — el operador
+confirmó el 2026-08-26 el login del popup y un flujo completo contra el PJN real. Eso era la mitad
+*funcional* de V6, y ya está hecho. Lo que queda estructurado (V6-a/V6-b arriba) no necesita nada
+más que lectura de código y HTTP.
+
+---
+
+### F9b — `/verify` V6-c (extensión, flujos reales contra el PJN) 🟠 **spike primero**
+
+| | |
+|---|---|
+| **Qué es** | El único tercio de V6 que sigue genuinamente trabado: los 5 flujos de autocompletado (Consulta SCW, Escritos 1, Escritos 2, Notificaciones, DEOX) contra las páginas reales del PJN. |
+| **Modelo / esfuerzo** | Sonnet · medio para el spike; si sale, el resto es ejecución directa, mismo esfuerzo |
+| **Depende de** | el resultado del spike de abajo |
+
+**Por qué sigue trabado.** `list_connected_browsers` de computer-use devuelve `[]` — no hay Chrome
+conectado por la extensión Claude for Chrome, así que no hay camino directo a un navegador real
+con la extensión del PJN cargada. computer-use tampoco sirve acá: otorga navegadores en tier
+"read" (se ven, no se clickean), y la propia prueba diaria documenta que ni siquiera puede cerrar
+las pestañas que abre.
+
+**La hipótesis sin probar, y el spike que la confirma o la descarta antes de gastar la sesión
+completa:** Playwright puede lanzar Chrome con `--load-extension=<ruta a extension-app/>` y
+`--user-data-dir` apuntando al `ChromeProfile` que ya tiene guardadas las credenciales del PJN —
+es la forma estándar de testear una extensión MV3, y no depende de computer-use ni de
+Claude-in-Chrome. **Gate de una sola pregunta, mismo criterio que M0 y F0:** ¿el content script de
+la extensión se inyecta y responde en una página real del PJN lanzada así? Si sí, F9b se ejecuta
+sin operador, igual que F9a. Si no, el spike acota el motivo (¿el perfil bloquea extensiones sin
+firma de la Web Store? ¿el login SSO del PJN detecta el `user-data-dir` prestado?) y el bloque
+queda genuinamente en manos del operador, con la causa ya diagnosticada.
+
+**Si el spike falla:** requiere Chrome real con la extensión cargada y credenciales del PJN — el
+bloque con menos probabilidad de ejecutarse sin operador. Si sigue trabado después del spike,
+decirlo explícitamente en vez de dejarlo abierto otro trimestre.
 
 ---
 
@@ -641,10 +701,10 @@ que conviene hacer en la misma sesión.
        │
    F8 ─┤  delta del motor Puppeteer (barato, cierra el círculo)
        │
-   F7 ─┤  COBRANZA — Opus ── gate duro ──► habilita Etapa 4 (B3)
-       │
-   F9 ─┘  /verify V4+V5+V6 ── requiere operador ── DESPUÉS de que
-          los fixes de F1–F5 y F10 estén desplegados
+   F9a ─┘  /verify V4+V5+V6-a/V6-b ── SIN operador ── cierra la campaña
+       ⋮   (F9b — V6-c, spike primero — no bloquea el cierre)
+
+   F7 (cobranza, Opus) SALIÓ de esta campaña — abre la Etapa 4, ver roadmap §6
 ```
 
 **Las tres decisiones de orden que importan:**
@@ -652,12 +712,17 @@ que conviene hacer en la misma sesión.
 1. **F6 va primero aunque no sea la más grande.** Si la cadena de cifrado tiene un problema real,
    deja de tener sentido revisar features: cambia la prioridad del proyecto entero. Además es la
    más barata de las dos fases Opus.
-2. **F7 va al final de la campaña, no al principio.** No porque sea menos importante — es la más
-   importante — sino porque su valor es servir de **gate inmediato a B3**: si se corre primero y
-   después pasan 8 sesiones de campaña, hay que revalidarla. Correrla último la deja fresca al
-   entrar a la Etapa 4.
-3. **F9 va después de los fixes, no antes.** Verificar en runtime un producto al que le faltan los
-   arreglos de F1–F5 y F10 produce hallazgos que se corrigen solos al aplicar esos fixes.
+2. ~~**F7 va al final de la campaña...**~~ **F7 salió de esta campaña — corre al arranque de la
+   Etapa 4** *(cambiado 2026-08-31)*. El razonamiento sigue siendo válido, aplicado al lugar
+   correcto: corría al final para llegar "fresca" a B3, pero entre ese cierre y el primer cobro
+   real seguían las 8–13 sesiones completas de la Etapa 3 — la misma distancia que la regla decía
+   evitar. Moverla al arranque mismo de la Etapa 4 la deja genuinamente fresca. El target y el
+   checklist se conservan en la sección F7 de este documento; el roadmap §6 tiene el detalle de
+   la nueva ubicación.
+3. **F9a va después de los fixes, no antes.** Verificar en runtime un producto al que le faltan
+   los arreglos de F1–F5 y F10 produce hallazgos que se corrigen solos al aplicar esos fixes. Ya
+   no depende además de la presencia del operador (ver F9a). F9b (el spike de la extensión) no
+   tiene dependencias de orden — puede correr en paralelo con cualquier otra fase.
 
 **Dónde entra F10** *(2026-08-28)*: es paralelizable con el grupo del medio —no comparte un solo
 archivo con F1/F2/F3/F4— así que no altera el orden ni suma tiempo al camino crítico salvo por su
@@ -720,8 +785,16 @@ Dicho explícitamente para que "campaña ejecutada" no se confunda con "proyecto
 > admin), y al final el código de observabilidad, donde lo que más importa es que la deduplicación de
 > alertas no se rompa hacia el lado silencioso.
 
-**F7:**
+**F7** (movida — este prompt se usa al ARRANCAR la Etapa 4, no esta campaña):
 
 > Ejecutá la fase F7 de `docs/internal/plan-code-review-integral-2026-08-26.md` — cobranza.
 > **Opus, esfuerzo alto.** Leé primero `docs/internal/verify-V7-2026-08-24.md` para no repetir lo
 > ya verificado en runtime, y concentrate en los 3 puntos que V7 declaró NO cubiertos.
+
+**F9a** (Sonnet, medio):
+
+> Ejecutá la fase F9a de `docs/internal/plan-code-review-integral-2026-08-26.md` — V4+V5 de
+> `/verify` por CDP/Playwright (no computer-use, ver la sección) + V6-a (revisión de código de
+> `extension-app/`) + V6-b (gates por plan, HTTP contra staging). Empezá por V6-a/V6-b, que no
+> necesitan nada del entorno; para V4/V5 seguí el playbook "Prueba diaria de la app Electron" de
+> `CLAUDE.md`.
