@@ -1251,6 +1251,91 @@ router.put('/users/:userId/cuit', authenticateAdmin, async (req, res) => {
     }
 });
 
+// F6 cadena AG (2026-09-01), decisión 3.1 del informe de cierre de la Etapa 3 (S3):
+// el cron de liberación de CUIT solo anula ESE campo a los 90 días — nombre, apellido,
+// domicilio, teléfono y email nunca se borraban de ninguna forma automatizada, pese a
+// que la Política de Privacidad promete "supresión". Este endpoint es el mecanismo
+// inmediato que faltaba (decisión del operador: opción A, endpoint admin de borrado
+// completo), separado a propósito del ciclo de vida de la suscripción — cancelar y
+// borrar PII son 2 decisiones distintas, este endpoint solo hace la segunda.
+router.post('/users/:userId/delete-pii', authenticateAdmin, async (req, res) => {
+    const { userId } = req.params;
+    const { reason, confirmActiveAccount } = req.body || {};
+    const db = req.app.get('db');
+
+    if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: 'El motivo es obligatorio' });
+    }
+
+    const client = await db.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { rows } = await client.query(
+            `SELECT u.id, u.email, u.nombre, u.role, u.registration_status, s.payment_provider
+               FROM users u
+               LEFT JOIN subscriptions s ON s.user_id = u.id
+              WHERE u.id = $1`,
+            [userId]
+        );
+        if (rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        const u = rows[0];
+
+        // Nunca borrar la identidad de una cuenta admin por este camino — no hay
+        // override posible, a diferencia del chequeo de abajo.
+        if (u.role === 'admin') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'No se puede borrar la PII de una cuenta admin' });
+        }
+
+        // El email queda reemplazado por un placeholder → la cuenta deja de poder
+        // loguearse con su email real. Sobre una cuenta activa y pagando, eso corta
+        // el servicio en el acto sin pasar por el flujo de cancelación (que además
+        // pausa MercadoPago) — requiere confirmación explícita para no hacerlo sin
+        // querer sobre un cliente que sigue operando.
+        if (u.registration_status === 'active' && u.payment_provider && !confirmActiveAccount) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+                error: 'La cuenta está activa y con pago configurado. Si igual querés borrar su PII, ' +
+                       'reenviá con confirmActiveAccount:true (considerá cancelar la suscripción primero).'
+            });
+        }
+
+        const emailAnonimizado = `borrado-${userId}@procuradortool.invalid`;
+
+        await client.query(
+            `UPDATE users
+                SET nombre = NULL, apellido = NULL, domicilio = NULL, telefono = NULL,
+                    cuit = NULL, cuit_deleted_at = COALESCE(cuit_deleted_at, NOW()),
+                    email = $2, updated_at = NOW()
+              WHERE id = $1`,
+            [userId, emailAnonimizado]
+        );
+        await client.query(
+            `INSERT INTO user_events (user_id, event_type, payload) VALUES ($1, 'pii_deleted_by_admin', $2)`,
+            [userId, JSON.stringify({ reason, admin_id: req.user.id })]
+        );
+        await client.query(
+            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'delete_pii', $3)`,
+            [req.user.id, userId, JSON.stringify({ reason })]
+        );
+
+        await client.query('COMMIT');
+        console.log(`🗑️ PII del usuario ${userId} borrada por admin ${req.user.id}. Motivo: ${reason}`);
+        res.json({ success: true, email: emailAnonimizado });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error borrando PII:', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    } finally {
+        client.release();
+    }
+});
+
 // ==================== SUSCRIPCIONES ====================
 
 // Crear/actualizar suscripción
