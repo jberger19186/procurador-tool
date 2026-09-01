@@ -673,9 +673,11 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 >
 > ## Lo que sigue, en una línea
 >
-> > **Triage de las 14 decisiones de producto** que dejó la Etapa 3 (§3 del informe de cierre) — 5
-> > familias, cada una con opciones y recomendación, ninguna es un bug. Después: Etapa 4
-> > (MercadoPago) y el carril AG (Antigravity, A1/A2 ya con el gate abierto).
+> > **Cadena AG + triage**, con el runbook propio:
+> > [`runbook-cadena-ag-triage-2026-09.md`](docs/internal/runbook-cadena-ag-triage-2026-09.md) — 9
+> > fases, **3 paradas** donde el agente no puede seguir solo (decisión del gate de la demo, correr
+> > A1, correr A2). ⏸️ **La Etapa 4 (MercadoPago) queda DIFERIDA por decisión del operador** —
+> > consecuencia asumida: mientras no corra, **el producto no puede cobrar**.
 >
 > ## El orden completo
 >
@@ -683,10 +685,10 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 > 0 · ETAPA 2 — code review (9 fases)       ✅ CERRADA (2026-08-31) — ver la nota de abajo: no quedó vacía
 > 0 · ETAPA 3 — SEC-2 (9 bloques)           ✅ CERRADA (2026-09-01) — 9/11: S9 diferido, S8 en Etapa 4
 > 1 · DEPLOY de los fixes de la Etapa 3     ✅ HECHO (2026-09-01) — 18 fixes + release 2.7.53
-> 2 · Triage de las 14 decisiones abiertas  1–2 sesiones      ← ACÁ ESTAMOS · §3 del informe de cierre
-> 3 · AG · A1 y A2                          2 sesiones        ✅ LOS DOS GATES ABIERTOS (ver §7b)
-> 4 · ETAPA 4 — B3 MercadoPago              4–6 sesiones      abre con F7 (cobranza), su primer paso
-> 5 · AG — triage final + informe unificado
+> 2 · CADENA AG + TRIAGE (9 fases, 3 paradas) 4–6 sesiones   ← ACÁ ESTAMOS · runbook propio
+>       F1 revalidar A1/A2 · F2 ⏸️decisión demo · F3 implementar · F4 copia sanitizada
+>       F5 ⏸️correr A1 · F6 triage 3.1–3.4 · F7 triage A1 · F8 ⏸️correr A2 · F9 cierre AG
+> 3 · ETAPA 4 — B3 MercadoPago              4–6 sesiones      ⏸️ DIFERIDA (2026-09-01) — sin esto NO se cobra
 > 6 · AZ — Azure Trusted Signing            trámite externo de 1-3 días hábiles
 > ∥  S9 Strix (fuera del camino crítico)    ⛔ gate: no hay Docker en ningún lado — plan propio
 > ```
@@ -734,9 +736,10 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 > ## Frase para arrancar
 >
 > ```
-> Hagamos el triage de las 14 decisiones de producto que dejó la Etapa 3 — están
-> en §3 de docs/internal/revision-etapa3-cierre-2026-09-01.md, cada una con
-> opciones y recomendación del bloque que la encontró.
+> Ejecutá la cadena de docs/internal/runbook-cadena-ag-triage-2026-09.md desde la
+> F1, con el gate de §4 entre fases y las reglas de §3. Respetá las 3 paradas de
+> §2: en cada una, parás y me decís exactamente qué tengo que hacer. Si algún gate
+> falla, no improvises una salida: parás y me consultás cómo seguir.
 > ```
 >
 > ---
@@ -810,7 +813,8 @@ Para activar el módulo de pagos solo se necesitan las credenciales externas (ve
 > ⭐⭐ **Documentos LISTOS PARA EJECUTAR (el que queda, más 2 trabajos que salen de la Etapa 3):** ninguno tiene diseño ni decisión pendiente.
 > *(el plan de la Etapa 1.5 salió de esta lista el 2026-08-27; el de mejora del smoke, el mismo día; el script de la prueba diaria (F0-F4 en código, F5 deliberadamente sin activar) también el 27/08; los 2 ítems de la Etapa 1 (F3.4 y Markdown) el 26/27-08. **Y el 2026-08-31 salió el 3º: `plan-code-review-integral-2026-08-26.md`** — las 9 fases (F1-F6, F8, F10, F9a) ejecutadas, cierra la Etapa 2. Queda **F9b** abierta dentro de ese plan (spike de la extensión, no bloqueante — ver roadmap §9), pero no es un "documento listo para ejecutar" nuevo, es la cola de uno ya ejecutado. Con eso la lista queda con las Etapas 3 y 4.)*
 > 1. ⭐ **DEPLOY a producción de los fixes de la Etapa 3 — ES LO QUE SIGUE AHORA, y es una pasada CON EL OPERADOR.** No tiene plan propio: la lista de qué vive dónde está en **§2 de [`revision-etapa3-cierre-2026-09-01.md`](docs/internal/revision-etapa3-cierre-2026-09-01.md)**. Son **18 fixes, ninguno en producción**: 4 archivos de backend en staging (`middleware/checkBitacoraPlan.js`, `server.js`, `public/dashboard/dashboard.js`, `routes/extension.js` + `middleware/rateLimiter.js` + `ecosystem.config.js`), los de Electron **solo locales** (necesitan release), y el de la landing **ni siquiera en staging** (no existe staging de la landing — el vhost `procuradortool.com` apunta al directorio de producción, documentado desde D6 de la Etapa 1.6). ⚠️ **Entre los de backend hay 2 XSS ejecutables del dashboard admin y el gate de Bitácora que dejaba entrar a cuentas suspendidas** — no conviene que sigan esperando. **El release de Electron acumula ~40 fixes de cliente** (6 XSS de F3 + 20 de F5 + **3 de F6** + 3 de S6 + 8 de S10), todos sin llegar a ningún usuario desde el 2.7.52. *(Corregido el 2026-09-01: la primera cuenta decía ~37 y omitía los 3 de F6 — `authManager.js`, §7 de su informe los marca ⏳ esperando release.)*
-> 2. ⭐ **TRIAGE de las 14 decisiones de producto que dejó la Etapa 3** — listadas juntas en **§3 de [`revision-etapa3-cierre-2026-09-01.md`](docs/internal/revision-etapa3-cierre-2026-09-01.md)**, cada una con opciones y recomendación del bloque que la encontró. Ninguna es un bug: son decisiones que **por regla del runbook ningún agente podía tomar**. Las 5 familias: borrado completo de PII (Ley 25.326) · 3 contradicciones entre la Política de Privacidad publicada y lo que el código hace · registro público abierto sin fricción · el rate limit que autodeniega a un estudio de 12+ abogados tras la misma IP · y cómo cerrar el gate de la demo (token efímero vs. headers en el vhost). **1–2 sesiones**, y varias se resuelven con una respuesta tuya de una línea.
+> 2. ⭐ **[`runbook-cadena-ag-triage-2026-09.md`](docs/internal/runbook-cadena-ag-triage-2026-09.md)** — **ES LO QUE SIGUE AHORA.** Cadena de 9 fases con **3 paradas obligatorias** (decisión del gate de la demo · correr A1 · correr A2), gate mecánico de 6 chequeos entre fases, y el paralelismo verificado de que **F6 corre mientras A1 trabaja** (los targets de AG y los archivos del triage no se solapan en ningún archivo). Absorbe el triage de las 14 decisiones y el carril AG completo. ⏸️ **Deja la Etapa 4 explícitamente afuera**, con la consecuencia escrita en §0.
+> 2b. **TRIAGE de las 14 decisiones de producto que dejó la Etapa 3** *(absorbido por el runbook de arriba — F2 y F6)* — listadas juntas en **§3 de [`revision-etapa3-cierre-2026-09-01.md`](docs/internal/revision-etapa3-cierre-2026-09-01.md)**, cada una con opciones y recomendación del bloque que la encontró. Ninguna es un bug: son decisiones que **por regla del runbook ningún agente podía tomar**. Las 5 familias: borrado completo de PII (Ley 25.326) · 3 contradicciones entre la Política de Privacidad publicada y lo que el código hace · registro público abierto sin fricción · el rate limit que autodeniega a un estudio de 12+ abogados tras la misma IP · y cómo cerrar el gate de la demo (token efímero vs. headers en el vhost). **1–2 sesiones**, y varias se resuelven con una respuesta tuya de una línea.
 > 3. ~~**[`plan-seguridad-lanzamiento-2026-08.md`](docs/internal/plan-seguridad-lanzamiento-2026-08.md)** — Etapa 3~~ ✅ **EJECUTADO el 2026-09-01** en cadena desatendida (runbook [`runbook-cadena-etapa3-desatendida.md`](docs/internal/runbook-cadena-etapa3-desatendida.md), 7 agentes, 9/9 bloques OK). **S9 diferido** y **S8 es de la Etapa 4** → cerró con **9 de 11**, y el informe unificado lo dice así. Queda como referencia de qué audita cada bloque. (S11 agregado el 2026-08-28). Ver el ítem 6c más abajo para el detalle de los 8 bloques originales. **Actualizado dos veces el 2026-08-26:** primero con **S9 (Strix)** — pentest agéntico en runtime contra staging, con 4 precondiciones duras porque staging comparte SMTP real (Brevo) y token de MP con producción — la partición S1–S7+S9 / S8, y **§8 nuevo que responde si esto reemplaza a la auditoría externa** (respuesta corta: cubre el trabajo técnico, no la atestación independiente); después con **S10 (módulo Markdown)**, al confirmarse que 1.2 se construye en la Etapa 1 y por lo tanto **existirá cuando esta etapa corra**. **Depende de:** Etapa 2 cerrada y sus fixes desplegados — ✅ cumplido el 2026-08-31.
 > 4. ⭐ **[`plan-mercadopago-produccion-2026-08-24.md`](docs/internal/plan-mercadopago-produccion-2026-08-24.md)** — Etapa 4 (B3). **Abre con F7** (cobranza, Opus/alto, movida acá el 2026-08-31 — ver su sección en el plan de code-review) → **A** (endurecimiento del código, Sonnet/alto — `Idempotency-Key`, guard de coherencia y la rama `refunded`) + **B** (trámite del operador, en paralelo) → **C** (Opus/alto, **con el operador presente** — el switch y el primer cobro real) → D (facturación, no bloqueante) → E (post-lanzamiento). **4–6 sesiones.** Ver el ítem 6b de la referencia histórica para los 4 datos medidos que corrigen creencias previas sobre este switch.
 
