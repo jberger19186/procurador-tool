@@ -446,8 +446,46 @@ function consumirTokenDesdeHash() {
 }
 consumirTokenDesdeHash();
 
+// S11 (2026-09-01, revision-S11-2026-09-01.md): antes, haySesion() solo miraba si el
+// token EXISTÍA — nunca si seguía vigente. El JWT del portal dura 8h (routes/auth.js,
+// /auth/portal-login) y este origen NO lo borra nunca por sí solo (no hay logout acá,
+// y el logout del portal tampoco lo alcanza — son orígenes distintos, ver el comentario
+// de arriba). Sin este chequeo, un token robado o simplemente vencido seguía
+// "desbloqueando" la demo indefinidamente.
+//
+// Esto NO verifica la firma (no hay clave pública en el cliente ni hace falta — el
+// backend sigue siendo quien valida cualquier request real). Solo lee el claim `exp`
+// para decidir si conviene seguir mostrando la sesión como activa en ESTE origen, y
+// si venció, la borra — mismo criterio que cualquier cliente que decodifica su propio
+// JWT para UI (no para autorización).
+function base64UrlDecode(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  return atob(str);
+}
+
+function tokenVencido(token) {
+  try {
+    const partes = token.split('.');
+    if (partes.length !== 3) return true; // no tiene forma de JWT → tratar como inválido
+    const payload = JSON.parse(base64UrlDecode(partes[1]));
+    if (!payload || typeof payload.exp !== 'number') return false; // sin exp, no se puede decidir — no rompe el caso legítimo
+    return (Date.now() / 1000) >= payload.exp;
+  } catch (_) {
+    return true; // corrupto/no decodificable → fail-closed, tratarlo como vencido
+  }
+}
+
 function haySesion() {
-  try { return !!localStorage.getItem(TOKEN_KEY); } catch (_) { return false; }
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return false;
+    if (tokenVencido(token)) {
+      localStorage.removeItem(TOKEN_KEY);
+      return false;
+    }
+    return true;
+  } catch (_) { return false; }
 }
 
 function capituloBloqueado(chapter) {
