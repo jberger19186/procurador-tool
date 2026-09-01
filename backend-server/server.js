@@ -758,13 +758,38 @@ cron.schedule('10 11 * * *', async () => {
 }, { timezone: 'America/Argentina/Buenos_Aires' });
 
 // 5e. Liberación de CUIT a 90 días post-cancelación (diario 08:15 ART)
+//
+// Fix S3 (2026-09-01, security review): 2 bugs reales encontrados por inspección directa,
+// nunca ejercitados en producción (0 filas calificaron nunca — 0 usuarios cancelled >90 días).
+//
+// (1) La condición original medía `updated_at < NOW() - 90 días`, pero `updated_at` se
+//     pisa en CUALQUIER UPDATE de la fila (trigger `update_users_updated_at`, sin
+//     condición de columna) — incluido el login. `/auth/portal-login` permite loguearse
+//     a cuentas `cancelled` a propósito (para ver facturas o re-suscribirse) y hace
+//     `UPDATE users SET last_login = NOW()` en cada login exitoso. Resultado: un usuario
+//     cancelado que entra al portal aunque sea una vez en la ventana de 90 días reinicia
+//     el contador indefinidamente — el mecanismo de liberación de CUIT nunca dispararía
+//     para la cuenta que más se espera que use el portal para re-suscribirse.
+//     Fix: medir desde el evento real de la transición a 'cancelled'
+//     (user_events.event_type='subscription_cancelled_expired', insertado una sola vez
+//     por transición en el cron 5f de abajo, MAX() por si hubo cancel→reactivar→cancel),
+//     que ningún login posterior toca.
+// (2) La columna `users.cuit_deleted_at` (migración 005_fase5_payments.sql, comentario
+//     "CUIT anulado 90 días post-cancelación") existía desde Fase 5 pero NINGÚN código la
+//     escribía nunca (grep completo del repo, 0 coincidencias fuera de la migración/schema) —
+//     quedaba en NULL para siempre, sin que nada la usara ni para auditoría ni para nada.
+//     Fix: se completa junto con el nulleo del CUIT.
 cron.schedule('15 11 * * *', async () => {
     try {
         const result = await pool.query(`
-            UPDATE users SET cuit = NULL, updated_at = NOW()
-            WHERE registration_status = 'cancelled'
-              AND updated_at < NOW() - INTERVAL '90 days'
-              AND cuit IS NOT NULL
+            UPDATE users u SET cuit = NULL, cuit_deleted_at = NOW(), updated_at = NOW()
+            WHERE u.registration_status = 'cancelled'
+              AND u.cuit IS NOT NULL
+              AND (
+                SELECT MAX(ev.created_at) FROM user_events ev
+                WHERE ev.user_id = u.id
+                  AND ev.event_type = 'subscription_cancelled_expired'
+              ) < NOW() - INTERVAL '90 days'
             RETURNING id
         `);
         if (result.rowCount > 0) logger.info(`[CRON] cuit_released: ${result.rowCount} CUITs liberados`);
