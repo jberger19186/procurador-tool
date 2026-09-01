@@ -39,7 +39,7 @@
               ▼
   ETAPA 3 — SECURITY REVIEW                                    ✅ CERRADA (2026-09-01)
     SEC-2: S1–S7 + S10 Markdown + S11 landing/demo — 9/9 bloques OK, 32 hallazgos
-    (S9 Strix DIFERIDO · S8 fraude = Etapa 4 — cerró con 9 de 11)
+    (cerró con 9 de 11: S8 → Etapa 4 · S9 Strix → fuera del camino crítico, ver §7c)
     ⏳ los 18 fixes viven en staging/local — el deploy a prod es una pasada supervisada
               │
               ▼
@@ -470,6 +470,40 @@ pasar el apellido**. Detalle y consecuencias en la ficha **F5** del plan de code
 📌 **La copia del código (`repo-auditoria`) se borró al cerrar A3.** Se regenera en 2 minutos cuando
 llegue A1 — y conviene que sea así: para entonces la Etapa 2 va a haber cambiado justo el código que
 A1 tiene que mirar.
+
+---
+
+## §7c — S9 (Strix) — reclasificado FUERA DEL CAMINO CRÍTICO *(2026-09-01)*
+
+**Qué cambió y por qué.** S9 se difirió el 2026-08-31 por su naturaleza operativa (agente autónomo de
+ataque, Docker en el servidor, SMTP real de por medio — nunca desatendido). Con la Etapa 3 ya cerrada,
+queda claro que **no es un pendiente *de* la Etapa 3: es un ítem propio, fuera del camino crítico**,
+igual que EXT. Se reclasifica.
+
+**El fundamento, y es el que importa:** S9 y **EXT (auditoría externa profesional) cierran el MISMO
+eje** — la explotación dinámica demostrada, que las 9 fases de lectura no dan. No son dos pendientes
+independientes: son **dos caminos al mismo lugar**, y EXT además incluye lo que S9 no puede dar (la
+atestación independiente firmada).
+
+| | S9 — Strix | EXT — auditoría externa |
+|---|---|---|
+| Explotación dinámica demostrada | ✅ | ✅ |
+| Verificación de que el parche resiste | ✅ | ✅ |
+| **Atestación independiente firmada** | ❌ | ✅ **solo esto la da** |
+| Costo | tokens + 1 sesión con el operador | tarifa profesional |
+| Bloquea el lanzamiento Beta | **No** | **No** |
+| Antes del lanzamiento MASIVO | hay que cerrar el eje — **con uno de los dos** | |
+
+**La recomendación no cambia respecto de §8 del plan SEC-2, se precisa:** para el **Beta** no hace
+falta ninguno de los dos. Para el **lanzamiento masivo** hay que cerrar el eje, y si se va a contratar
+EXT igual, **correr S9 antes sigue conviniendo** — es lo que convierte ese encargo de *descubrimiento*
+a *confirmación*, más corto y más barato. Si NO se va a contratar EXT, entonces S9 pasa de opcional a
+recomendado antes del masivo.
+
+**Lo que NO cambia con esta reclasificación:** la Etapa 3 sigue habiendo cerrado con **9 de 11**
+bloques de SEC-2, y el informe de cierre lo dice textual. Mover S9 de "pendiente de la Etapa 3" a
+"fuera del camino crítico" es una precisión de *dónde vive el ítem*, no un borrado — el eje que no
+cubrió sigue sin cubrir hasta que corra S9 o EXT.
 
 ---
 
