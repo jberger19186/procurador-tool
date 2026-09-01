@@ -3366,6 +3366,44 @@ function legalNextVersion(ver) {
     return parts.join('.');
 }
 
+// S5 (2026-09-01, security review): documento legal envuelto en un <html> completo con
+// su propio CSS de lectura (Georgia, tablas). Compartido por legalPreview() y por
+// legalTogglePreviewEditor() -- antes cada uno tenía su propia copia del wrapper, y
+// solo uno de los dos vivía dentro de un <iframe> (ver la nota de seguridad en ambos
+// call sites). Un solo lugar evita que una futura edición del estilo actualice uno y
+// deje el otro desincronizado.
+function legalWrapDocHtml(bodyContent) {
+    return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,serif;line-height:1.8;font-size:14px;padding:28px 36px;color:#1f2937}
+h1,h2,h3,h4{font-weight:700;margin-top:1.4em;margin-bottom:0.5em}
+h1{font-size:22px}h2{font-size:18px}h3{font-size:15px}
+p{margin:0.75em 0}
+ul,ol{margin:0.75em 0 0.75em 1.5em}li{margin-bottom:0.3em}
+table{width:100%;border-collapse:collapse;margin:1em 0;font-size:13px;font-family:system-ui,sans-serif}
+th{background:#f9fafb;padding:10px 14px;font-weight:600;text-align:left;border:1px solid #e5e7eb;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280}
+td{padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top}
+a{color:#3b82f6}blockquote{border-left:3px solid #e5e7eb;margin:1em 0;padding-left:1em;color:#6b7280}
+</style></head><body>${bodyContent}</body></html>`;
+}
+
+// S5: ata el auto-alto del iframe a su propio contentDocument.scrollHeight -- funciona
+// porque el sandbox usa 'allow-same-origin' (sin 'allow-scripts'): el contenido queda
+// same-origin para que este código pueda leer su altura, pero sin poder ejecutar un
+// solo script propio. Si por lo que sea el acceso falla (navegador raro, timing), cae
+// a una altura fija en vez de romper.
+function legalWireFrameAutoHeight(frame, fallbackPx) {
+    frame.onload = function () {
+        try {
+            const h = this.contentDocument.body.scrollHeight;
+            if (h > 0) this.style.height = (h + 24) + 'px';
+        } catch (e) {
+            this.style.height = fallbackPx + 'px';
+        }
+    };
+}
+
 async function renderLegal() {
     const content = document.getElementById('content');
     legalEditorMode  = null;
@@ -3589,7 +3627,15 @@ function legalEditorHTML(prefill, type, typeLabel, mode) {
                 <textarea id="le-content" rows="20" style="font-family:'Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.5;width:100%;resize:vertical;background:#f9fafb">${escTextarea(prefill.html_content)}</textarea>
             </div>
 
-            <div id="le-preview-box" style="display:none;border:1px solid var(--border);border-radius:8px;padding:24px 32px;max-height:480px;overflow-y:auto;background:#fff;font-family:Georgia,serif;line-height:1.75;font-size:14px;margin-bottom:12px"></div>
+            <!-- S5 (2026-09-01): antes era un <div id="le-preview-box"> con innerHTML=textarea.value
+                 directo -- un <script> tipeado/pegado en el editor se ejecutaba de inmediato en el
+                 DOM real del dashboard, sin NINGUNA aislación (ni siquiera la del iframe que ya
+                 protegía a legalPreview()). Mismo patrón que ahí: iframe + srcdoc + sandbox sin
+                 'allow-scripts' -- bloquea toda ejecución de script/handler sin depender de un
+                 allowlist de tags que se pueda esquivar. -->
+            <div id="le-preview-box" style="display:none;border:1px solid var(--border);border-radius:8px;max-height:480px;overflow-y:auto;margin-bottom:12px">
+                <iframe id="le-preview-frame" sandbox="allow-same-origin" style="width:100%;border:none;display:block;min-height:200px"></iframe>
+            </div>
 
             <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:16px;border-top:1px solid var(--border)">
                 <button class="btn btn-secondary" onclick="document.getElementById('legal-detail-panel').innerHTML=''">Cancelar</button>
@@ -3613,7 +3659,13 @@ function legalTogglePreviewEditor() {
         textarea.style.display = '';
         if (btn) btn.textContent = '👁 Vista previa';
     } else {
-        preview.innerHTML      = textarea.value;
+        // S5: ver la nota de seguridad en legalEditorHTML() -- el contenido va por
+        // srcdoc de un iframe sandboxeado, nunca por innerHTML del dashboard real.
+        const frame = document.getElementById('le-preview-frame');
+        if (frame) {
+            frame.srcdoc = legalWrapDocHtml(textarea.value);
+            legalWireFrameAutoHeight(frame, 400);
+        }
         preview.style.display  = 'block';
         textarea.style.display = 'none';
         if (btn) btn.textContent = '✏️ Editar HTML';
@@ -3726,19 +3778,16 @@ async function legalPreview(id) {
         // Encapsulamos el HTML del documento en un iframe para que su CSS quede
         // completamente aislado y no afecte el sidebar, topbar ni las tablas del dashboard.
         // Asignamos srcdoc como propiedad JS (no atributo HTML) para evitar problemas de escaping.
-        const docHtml = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Georgia,serif;line-height:1.8;font-size:14px;padding:28px 36px;color:#1f2937}
-h1,h2,h3,h4{font-weight:700;margin-top:1.4em;margin-bottom:0.5em}
-h1{font-size:22px}h2{font-size:18px}h3{font-size:15px}
-p{margin:0.75em 0}
-ul,ol{margin:0.75em 0 0.75em 1.5em}li{margin-bottom:0.3em}
-table{width:100%;border-collapse:collapse;margin:1em 0;font-size:13px;font-family:system-ui,sans-serif}
-th{background:#f9fafb;padding:10px 14px;font-weight:600;text-align:left;border:1px solid #e5e7eb;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280}
-td{padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top}
-a{color:#3b82f6}blockquote{border-left:3px solid #e5e7eb;margin:1em 0;padding-left:1em;color:#6b7280}
-</style></head><body>${doc.html_content}</body></html>`;
+        //
+        // S5 (2026-09-01, security review): esto NO era suficiente. `doc.html_content` se
+        // renderizaba sin ningún escape ni sandbox -- un documento legal con un <script>
+        // (pegado por error, o guardado por un admin comprometido) se ejecutaba de verdad
+        // al abrir la vista previa, confirmado con un payload real. El iframe aislaba el
+        // CSS, no el JS. Fix: sandbox="allow-same-origin" en el <iframe> de abajo -- sin
+        // 'allow-scripts' NINGÚN script ni handler inline corre, sea cual sea su forma
+        // (<script>, onerror=, javascript: URIs); 'allow-same-origin' se deja para que
+        // contentDocument siga siendo accesible y el auto-alto de abajo no se rompa.
+        const docHtml = legalWrapDocHtml(doc.html_content);
 
         panel.innerHTML = `
         <div class="card section-gap">
@@ -3756,6 +3805,7 @@ a{color:#3b82f6}blockquote{border-left:3px solid #e5e7eb;margin:1em 0;padding-le
                     : ''}
                 <iframe
                     id="legal-preview-frame"
+                    sandbox="allow-same-origin"
                     style="width:100%;min-height:300px;border:1px solid #e5e7eb;border-radius:8px;display:block"
                     frameborder="0"
                 ></iframe>
@@ -3766,14 +3816,7 @@ a{color:#3b82f6}blockquote{border-left:3px solid #e5e7eb;margin:1em 0;padding-le
         // directamente como HTML sin ningún escaping adicional de atributo HTML.
         const frame = document.getElementById('legal-preview-frame');
         frame.srcdoc = docHtml;
-        frame.onload = function() {
-            try {
-                const h = this.contentDocument.body.scrollHeight;
-                if (h > 0) this.style.height = (h + 32) + 'px';
-            } catch(e) {
-                this.style.height = '500px';
-            }
-        };
+        legalWireFrameAutoHeight(frame, 500);
     } catch (e) {
         panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
     }
