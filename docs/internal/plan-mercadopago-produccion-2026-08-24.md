@@ -1,5 +1,18 @@
 # Plan de implementación — MercadoPago a producción (cierre de B3)
 
+> ## ⏸️ DIFERIDO — decisión del operador, 2026-09-01
+>
+> **Este plan NO es lo que sigue ahora.** Antes va la
+> [cadena AG + triage](runbook-cadena-ag-triage-2026-09.md) (carril de auditoría independiente +
+> las 14 decisiones de producto de la Etapa 3).
+>
+> 🚨 **Consecuencia que se asume, escrita para que nadie la redescubra: mientras este plan no corra,
+> el producto NO PUEDE COBRAR.** `PAYMENT_MODULE_ENABLED` está en `true`, pero las credenciales son
+> de sandbox, **no hay ningún webhook registrado** en el panel de MP, y los `MP_PLAN_*_ID` de
+> producción apuntan a la cuenta sandbox. Es el **camino crítico** al lanzamiento.
+>
+> Todo lo de abajo sigue vigente y medido — **el diferimiento es de cuándo, no de qué**.
+
 > Fecha: 2026-08-24 · Diseñado con Opus 5 · **Solo diseño, no se tocó código**
 > Objetivo: dejar el producto en condiciones de **cobrar dinero real** a clientes.
 > Reemplaza al ítem suelto «B3 — MercadoPago producción» de la lista de pendientes de `CLAUDE.md`.

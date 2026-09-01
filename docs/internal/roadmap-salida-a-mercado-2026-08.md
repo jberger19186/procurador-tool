@@ -40,13 +40,20 @@
   ETAPA 3 — SECURITY REVIEW                                    ✅ CERRADA (2026-09-01)
     SEC-2: S1–S7 + S10 Markdown + S11 landing/demo — 9/9 bloques OK, 32 hallazgos
     (cerró con 9 de 11: S8 → Etapa 4 · S9 Strix → fuera del camino crítico, ver §7c)
-    ⏳ los 18 fixes viven en staging/local — el deploy a prod es una pasada supervisada
+    ✅ los 18 fixes DESPLEGADOS a producción el 2026-09-01 + release electron-v2.7.53
               │
               ▼
-  ETAPA 4 — MERCADOPAGO PRODUCCIÓN (B3)
+  CADENA AG + TRIAGE  (runbook-cadena-ag-triage-2026-09.md)          ← ACÁ ESTAMOS
+    9 fases, 3 paradas: F1 revalidar A1/A2 · F2 ⏸️decisión gate demo · F3 implementar
+    F4 copia sanitizada · F5 ⏸️correr A1 · F6 triage 3.1–3.4 · F7 triage A1
+    F8 ⏸️correr A2 · F9 informe unificado del carril AG
+              │
+              ▼
+  ETAPA 4 — MERCADOPAGO PRODUCCIÓN (B3)          ⏸️ DIFERIDA (decisión del operador, 2026-09-01)
     F7 cobranza (gate, movida acá el 2026-08-31 — arranca fresca)
     → Fase A/B → Fase C (primer cobro real) → S8 (fraude con cobro real)
     → code-review y security-review focalizados del delta
+    🚨 mientras no corra, el producto NO PUEDE COBRAR
               │
               ▼
   LANZAMIENTO  →  post-lanzamiento: L1 planes · C1 Facturante · L2 KB IA
@@ -305,7 +312,7 @@ y F5 fijó su target real ahora que el módulo Markdown existe.
 | **Sesiones** | **8–13** *(la cadena desatendida no se mide en sesiones; el número se conserva como referencia de volumen de trabajo)* |
 | **Depende de** | Etapa 2 cerrada y sus fixes desplegados — ✅ cumplido el 2026-08-31 |
 | **Deja pendiente** | El deploy a **producción** de los fixes (pasada supervisada aparte) · las 2 decisiones de producto de S3 y S11 · **S9** |
-| **Estado** | ✅ **CERRADA (2026-09-01)** — cadena desatendida, **9/9 bloques OK**, 32 hallazgos / 18 corregidos / 14 decisiones abiertas. Informe unificado: [`revision-etapa3-cierre-2026-09-01.md`](revision-etapa3-cierre-2026-09-01.md). ⏳ **Ningún fix está en producción todavía** |
+| **Estado** | ✅ **CERRADA (2026-09-01)** — cadena desatendida, **9/9 bloques OK**, 32 hallazgos / 18 corregidos / 14 decisiones abiertas. Informe unificado: [`revision-etapa3-cierre-2026-09-01.md`](revision-etapa3-cierre-2026-09-01.md). ✅ **Los 18 fixes desplegados a producción el 2026-09-01** (6 archivos de backend + release `electron-v2.7.53` con ~40 fixes de cliente), verificados por hash local=prod |
 
 **S9 — Strix. ⏸️ DIFERIDO el 2026-08-31 por decisión del operador** — sale de la Etapa 3 y de la
 cadena desatendida; se retoma cuando el operador lo decida, con él presente. **La consecuencia, dicha
@@ -604,10 +611,10 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 |---|---|---|
 | **1** — Producto | ~~13–21~~ → **✅ 0 restantes — ETAPA CERRADA** | Los 6 ítems cerrados (2026-08-26/27): 1.1, 1.2 (con release y flag encendidos), 1.3, 1.4, 1.5 y **1.6** (41/43 pasos, 8.3/8.4 descartados por el operador el 2026-08-27) |
 | **2** — Code review | ~~9–13~~ → **✅ 0 restantes — ETAPA CERRADA (2026-08-31)** | Las 9 fases ejecutadas: F1-F6, F8, F10, F9a. Queda **F9b** abierta (spike de la extensión), no bloqueante |
-| **3** — Security review | ~~8–13~~ → **✅ 0 restantes — ETAPA CERRADA (2026-09-01)** | 9/9 bloques OK en **una sola corrida desatendida**. 32 hallazgos, 18 corregidos. **S9 diferido** y **S8** es de la Etapa 4 → cerró con **9 de 11**. ⏳ Queda el **deploy a producción** (1 sesión supervisada) y el **triage de 14 decisiones** (1–2) |
+| **3** — Security review | ~~8–13~~ → **✅ 0 restantes — ETAPA CERRADA (2026-09-01)** | 9/9 bloques OK en **una sola corrida desatendida**. 32 hallazgos, 18 corregidos. **S9 diferido** y **S8** es de la Etapa 4 → cerró con **9 de 11**. ✅ **Deploy a producción hecho el 2026-09-01.** El **triage de las 14 decisiones** pasó a la cadena AG (F2 y F6 de su runbook) |
 | **4** — MercadoPago | **4–6** | **F7 entró** (+1, 31/08) como su primer paso + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
-| **Total aproximado** | ~~32–50~~ → ~~19–29~~ → ~~21–33~~ → ~~12–20~~ → **8–14 restantes** | Actualizado el **2026-09-01**: Etapas 2 y 3 cerradas. Resta: deploy de los fixes (1, con operador) + triage de las 14 decisiones (1–2) + Etapa 4 (4–6) + AG A1/A2 en paralelo (2) + F9b/D4/Fase C con operador (§9) |
+| **Total aproximado** | ~~32–50~~ → ~~19–29~~ → ~~21–33~~ → ~~12–20~~ → ~~8–14~~ → **8–12 restantes** | Actualizado el **2026-09-01 (cont.)**: Etapas 2 y 3 cerradas **y desplegadas**. Resta: **cadena AG + triage** (4–6, incluye A1/A2 y las 14 decisiones — [runbook propio](runbook-cadena-ag-triage-2026-09.md)) + **Etapa 4** (4–6, ⏸️ **diferida por el operador**) + F9b/Fase C con operador (§9) |
 
 **Después del lanzamiento** — son **exactamente estos tres** (sección "⚪ Post-lanzamiento" de
 `CLAUDE.md`, que hasta el 2026-08-26 se llamaba "Diferidos a decisión de negocio" y tenía además a

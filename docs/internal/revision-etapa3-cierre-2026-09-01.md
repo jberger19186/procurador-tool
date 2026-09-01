@@ -62,7 +62,23 @@ de una sesión con el operador presente y S8 pendiente de que exista cobro real.
 
 ---
 
-## 2. Dónde viven los fixes — ninguno en producción
+## 2. Dónde viven los fixes — ninguno en producción *(al momento de esta corrida)*
+
+> ✅ **ACTUALIZACIÓN 2026-09-01 (mismo día, más tarde): los 18 fixes YA ESTÁN EN PRODUCCIÓN.**
+> La pasada supervisada que esta sección anticipa **se ejecutó**: los 6 archivos de backend
+> desplegados staging→prod y verificados byte-idénticos por hash (local = staging = prod), y los de
+> Electron publicados en el release **`electron-v2.7.53`** junto con los de F3/F5/F6 (~40 fixes de
+> cliente en total). El de la landing (S11) fue directo a producción porque **la landing no tiene
+> entorno de staging** — documentado desde D6 de la Etapa 1.6.
+>
+> **Verificación de daño real del gate de Bitácora** (consulta de solo lectura, sin fixtures):
+> **0 usuarios reales** estuvieron alguna vez en un estado bloqueado con `bitacora_enabled=true`
+> mientras el gate no miraba `registration_status` — la ventana estuvo abierta pero nadie la cruzó
+> (solo 3 cuentas en toda la base: los 2 admins + la de verificación).
+>
+> **La tabla de abajo se conserva sin editar** porque describe el estado real *al cerrar la cadena*,
+> que es lo que este informe documenta.
+
 
 | Bloque | Los fixes de código quedaron en… |
 |---|---|

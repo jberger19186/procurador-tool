@@ -1,5 +1,18 @@
 # Plan de campaña `/code-review` integral — ProcuradorTool (2026-08-26)
 
+> ## ✅ ETAPA 2 CERRADA — 2026-08-31 · las 9 fases ejecutadas
+>
+> **F1–F6, F8, F10 y F9a corrieron.** Informes: `revision-F*-2026-08-31.md` (9 archivos).
+> Sus fixes de cliente salieron en el release **`electron-v2.7.53`** (2026-09-01).
+>
+> ⚠️ **"Cerrada" NO es "no quedó nada".** Sigue abierto, todo deliberado y **ninguno bloqueante**:
+> **(a) F9b** — fase de este mismo plan, nunca ejecutada, gateada tras un spike ·
+> **(b) ~5 hallazgos menores documentados y NO corregidos a propósito** — F4 #13
+> (`routes/admin.js`, causa raíz fuera del target), F5 (carátula sin `s/`, CUIT con puntos, 2 de
+> `reconstruirLineasPagina` confirmados con sintéticos pero **no observados en los 39 informes
+> reales**), F9a (`client.js:352`, `monitor.js:107`).
+> **2 de los que F5 dejó abiertos ya los cerró S10** de la Etapa 3 — la campaña siguiente los absorbió.
+
 > **Qué es esto.** El plan de ejecución de una campaña de `/code-review` sobre todo el
 > proyecto, más los 3 bloques de `/verify` que quedaron bloqueados por el entorno
 > (V4/V5/V6). **No es un informe de hallazgos** — no se revisó código para escribirlo;

@@ -1,5 +1,20 @@
 # Plan de auditoría de seguridad — Lanzamiento público (SEC-2)
 
+> ## ✅ ETAPA 3 EJECUTADA — 2026-09-01 · 9 de 11 bloques
+>
+> Corrida en **cadena desatendida** ([runbook](runbook-cadena-etapa3-desatendida.md)), 7 agentes,
+> **9/9 bloques OK · 32 hallazgos · 18 corregidos · 14 decisiones abiertas**.
+> Informe unificado: [`revision-etapa3-cierre-2026-09-01.md`](revision-etapa3-cierre-2026-09-01.md).
+> **Los 18 fixes están en producción desde el 2026-09-01.**
+>
+> **Los 2 bloques que no corrieron, y son casos distintos:**
+> **S8** (fraude con cobro real) → **cambió de etapa**: siempre fue de la **Etapa 4**, necesita que
+> exista cobro real. **S9** (Strix) → **se pospuso** y quedó **fuera del camino crítico**, con
+> [plan propio](plan-strix-pentest-runtime-2026-09.md) y un gate bloqueante medido (no hay Docker
+> ni en el VPS ni en la máquina del operador).
+>
+> Este documento queda como **referencia de qué audita cada bloque**, no como trabajo pendiente.
+
 > Fecha: 2026-08-24 · Diseñado con Opus 5 · **Solo diseño, no se tocó código ni producción**
 > Sucesor de `informe-seguridad-sec1-2026-07-13.md`, cuyo veredicto fue **"apto para Beta
 > controlada"** y explícitamente **no** para lanzamiento masivo.
