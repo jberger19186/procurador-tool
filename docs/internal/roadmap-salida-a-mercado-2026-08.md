@@ -438,24 +438,21 @@ el sesgo.
 > atestación firmada, que es lo que pide un cliente institucional. La **abarata**: el auditor llega a
 > un producto más limpio y su encargo pasa de *descubrimiento* a *confirmación*.
 
-### Estado del carril *(2026-08-30)*
+### Estado del carril — ✅ CARRIL COMPLETO (2026-09-01)
 
 | Fase | Estado | Resultado |
 |---|---|---|
 | **A0** — gate, motor de anonimización | ✅ **corrida** · 3.1 Pro `High` | **Gate PASA.** 4 defectos reales — más 1 quinto encontrado al verificar. **Los 5 corregidos**, con tests de regresión. Informe: `informe-A0-2026-08-30.md` |
 | **A3** — runtime, portal y dashboard | ✅ **corrida** · 3.7 Flash `Medium` | 1 hallazgo menor (🔵) + **1 falso positivo descartado midiendo**. Confirmó desde afuera 4 fixes nuestros. Informe: `informe-A3-2026-08-30.md` |
-| **A1** — code review | ✅ **GATE ABIERTO desde el 2026-08-31** — la Etapa 2 cerró (9/9 fases) | corrible ya |
-| **A2** — security review | ✅ **GATE ABIERTO desde el 2026-09-01** — la Etapa 3 cerró (9/9 bloques) | corrible ya |
+| **A1** — code review (Etapa 1) | ✅ **corrida** · 3.7 Flash `High` | **8 hallazgos, 6 corregidos** — 2 bugs reales genuinamente nuevos que ni F5 ni S10 habían visto (`STATUS:COMPLETED` inválido en RFC 5545, desfase de día en eventos `all_day`). Triage: [`revision-F7-cadena-ag-2026-09-01.md`](revision-F7-cadena-ag-2026-09-01.md) |
+| **A2** — security review (Etapa 3) | ✅ **corrida** · 3.7 Flash `High` | **2 hallazgos, 0 acciones nuevas** — ambos coinciden con decisiones ya tomadas por S1/S11, uno de ellos con menos rigor que el original de S1. Triage: [`revision-F9-cadena-ag-2026-09-01.md`](revision-F9-cadena-ag-2026-09-01.md) |
 
-> ✅ **Actualización 2026-09-01 — los dos gates que quedaban se abrieron, con un día de diferencia.**
-> A1 esperaba la Etapa 2 (cerrada el 31/08) y A2 la Etapa 3 (cerrada hoy). **Las dos se pueden correr
-> ahora, y no compiten con nada del camino crítico** — las corre el operador desde Antigravity
-> mientras Claude avanza con el deploy y la Etapa 4. **Antes de correrlas hay que regenerar la copia
-> sanitizada** (se borró al cerrar A3, a propósito: así A1 mira el código que las Etapas 2 y 3
-> realmente cambiaron, no el de agosto). **Y para A2 la exclusión de `docs/internal/` importa más que
-> nunca:** ahora esa carpeta tiene los 8 informes de la Etapa 3 con los 32 hallazgos ya encontrados —
-> si A2 los lee, confirma nuestros supuestos en vez de aportar los propios, que es exactamente lo
-> contrario de para qué existe este carril.
+**El balance del carril completo, en una línea:** A0 y A1 demostraron que vale la pena — encontraron
+juntos 7 bugs reales que las campañas de Claude no habían visto, sobre superficies que Claude había
+revisado 1-2 veces cada una. A3 y A2 llegaron a superficies ya peinadas con más profundidad (harnesses
+reales, evidencia de ejecución) y no aportaron nada que esas auditorías no hubieran encontrado ya. La
+copia sanitizada (`repo-auditoria/`) se borró al cerrar — regenerarla desde cero es el primer paso si
+se decide correr el carril de nuevo sobre una superficie nueva.
 
 **El gate se justificó.** La pregunta que A0 tenía que responder era si el corpus adversarial del
 motor estaba construido a la medida del motor. **Lo estaba:** probaba un apellido con partícula solo
