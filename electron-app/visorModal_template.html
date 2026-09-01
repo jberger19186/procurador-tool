@@ -359,6 +359,14 @@
     // el atributo igual si se usara esc() ahí — ver docs/internal/revision-bitacora-vs-correcciones-2026-07-27.md.
     function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
     function escAttr(s) { return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    // S6 (security review, Etapa 3): mov.viewHref es el único href de este archivo que
+    // llegaba a un <a href> sin chequeo de esquema — escAttr() escapa comillas, no el
+    // esquema. Sale de `el.closest('a').href` sobre el DOM real del SCW (testM2.js), así
+    // que hoy requeriría que el propio scw.pjn.gov.ar sirviera un <a href="javascript:...">
+    // — no hay ningún camino conocido para que un tercero lo controle — pero es la misma
+    // clase de chequeo que `isSafeHttpUrl()` ya aplica en main.js antes de abrir cualquier
+    // URL, y acá cuesta una función. Mismo criterio: solo http(s) pasa.
+    function esUrlSegura(s) { return typeof s === 'string' && /^https?:\/\//i.test(s); }
 
     function cargarDatosEmbebidos(datos) {
       datosCompletos = datos;
@@ -531,11 +539,12 @@
           // un atributo href) protege el atributo aunque viewHref nunca traiga una
           // comilla en la práctica; el link en sí sigue funcionando igual (los
           // navegadores decodifican entidades HTML de un atributo antes de navegar).
+          // S6: además del escape del atributo, se exige esquema http(s) — ver esUrlSegura().
           bodyHTML += `<tr>
             <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3);white-space:nowrap">${esc(mov.fecha)}</td>
             <td><span class="tipo-badge">${esc(mov.tipo)}</span></td>
             <td>${esc(mov.detalle)}</td>
-            <td>${mov.viewHref ? `<a href="${escAttr(mov.viewHref)}" target="_blank" class="link-scw">Ver en SCW →</a>` : '—'}</td>
+            <td>${esUrlSegura(mov.viewHref) ? `<a href="${escAttr(mov.viewHref)}" target="_blank" class="link-scw">Ver en SCW →</a>` : '—'}</td>
           </tr>`;
         });
         bodyHTML += `</tbody></table>`;

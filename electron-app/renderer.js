@@ -2325,6 +2325,16 @@ async function loadNotifications() {
             if (notifs.length === 0) {
                 listEl.innerHTML = '<div style="text-align:center;color:var(--text-3);padding:24px;font-size:13px">No tenés notificaciones</div>';
             } else {
+                // S6 (security review, Etapa 3): `n.message` se renderizaba sin escapar —
+                // único sink de esta clase en todo renderer.js que quedó afuera de F3/S5.
+                // `notifications.message` NO es siempre texto fijo del sistema: 3 rutas de
+                // `routes/admin.js` (account_rejected/account_suspended/reactivation_rejected)
+                // interpolan el `reason` que el admin tipea a mano en el modal de suspensión/
+                // rechazo del dashboard (`showPrompt`, ver VF-3) directo dentro de `message`.
+                // Un admin —o una sesión de admin robada vía la cadena que S5 ya cerró— podía
+                // dejar HTML/JS en la bandeja de notificaciones de CUALQUIER usuario. Mismo
+                // `escapeHtml()` que ya usa este archivo para title/description/comment.message
+                // de tickets (línea ~2720), portado acá.
                 const typeIcon = { account_activated:'✅', account_suspended:'🚫', account_reactivated:'🔓', account_rejected:'❌', plan_changed:'📦', plan_downgrade_scheduled:'⏳', cancellation_scheduled:'🗓️', email_verified:'📧', trial_review_pending:'🔍', reactivation_rejected:'❌', test_badge:'🔔' };
                 listEl.innerHTML = notifs.map(n => {
                     const icon = typeIcon[n.type] || '🔔';
@@ -2334,7 +2344,7 @@ async function loadNotifications() {
                         <div style="display:flex;gap:8px;align-items:flex-start">
                             <span style="font-size:16px;flex-shrink:0">${icon}</span>
                             <div style="flex:1;min-width:0">
-                                <div style="font-size:13px;color:var(--text-1);line-height:1.4">${n.message}</div>
+                                <div style="font-size:13px;color:var(--text-1);line-height:1.4">${escapeHtml(n.message)}</div>
                                 <div style="font-size:11px;color:var(--text-3);margin-top:3px">${date}</div>
                             </div>
                             ${!n.read ? `<button onclick="markNotifRead(${n.id})" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:11px;white-space:nowrap;padding:2px 6px;border-radius:4px;hover:background:#f3f4f6" title="Marcar como leída">✓ Leída</button>` : ''}

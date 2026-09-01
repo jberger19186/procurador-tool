@@ -1,6 +1,30 @@
 ﻿// ============ ESTADO ============
 let isLoading = false;
 
+// S6 (security review, Etapa 3): las cuentas recordadas (`chip.innerHTML` con
+// `acc.email`) y `showErrorHTML()` interpolaban texto dinámico dentro de HTML
+// sin escapar. Hoy `acc.email` es lo que el propio usuario tipeó en su login
+// (self-XSS de bajo valor salvo que alguien ya tenga escritura sobre
+// `psc_accounts.enc`, que solo se descifra con DPAPI del mismo usuario de
+// Windows) y el `err` de `showErrorHTML` sale de textos 100% hardcodeados de
+// `/auth/login` (verificado en `routes/auth.js` — ningún estado bloqueante
+// interpola `reason`/`suspension_reason` en el campo `error`). Ninguno de los
+// dos sinks es explotable HOY, pero son landmines: el día que alguien agregue
+// un mensaje con un solo campo dinámico más (ej. la fecha de vencimiento,
+// o — peor — que el backend empiece a devolver `suspension_reason`, que SÍ es
+// texto libre de admin), quedan abiertos sin que nadie lo note. Mismo criterio
+// que E4-1/F3/S5 en el resto del proyecto: escapar el sink, no solo confiar en
+// que el dato de hoy sea seguro. `esc()` es puro (sin DOM), mismo patrón que
+// `escHtml()` en `visorModal_template.html`/`renderer.js`.
+function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // ============ INICIALIZACIÓN ============
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🔐 Pantalla de login cargada');
@@ -127,7 +151,7 @@ async function loadRememberedCredentials() {
     accounts.forEach(acc => {
         const chip = document.createElement('div');
         chip.style.cssText = 'display:flex;align-items:center;gap:4px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:20px;padding:4px 10px;font-size:12px;cursor:pointer;transition:background 0.15s;';
-        chip.innerHTML = `<span>${acc.email}</span><button data-email="${acc.email}" title="Olvidar" style="background:none;border:none;cursor:pointer;color:#9ca3af;font-size:14px;line-height:1;padding:0 0 0 2px;">&times;</button>`;
+        chip.innerHTML = `<span>${esc(acc.email)}</span><button data-email="${esc(acc.email)}" title="Olvidar" style="background:none;border:none;cursor:pointer;color:#9ca3af;font-size:14px;line-height:1;padding:0 0 0 2px;">&times;</button>`;
 
         // Clic en el chip → pre-completar formulario
         chip.addEventListener('click', (e) => {
@@ -287,8 +311,10 @@ async function handleLogin(email, password) {
                     // suspendida, rechazada, cancelada, trial agotado, sin suscripción, etc.):
                     // mostramos el mensaje del backend + un link directo al portal para que el
                     // usuario no tenga que abrir el navegador a mano.
+                    // S6: `err` se escapa antes de concatenar — el resto del HTML es literal
+                    // de este archivo, no datos del backend (ver nota de esc() más arriba).
                     showErrorHTML(
-                        (err || 'No pudimos iniciar tu sesión.') +
+                        esc(err || 'No pudimos iniciar tu sesión.') +
                         '<br><a href="https://api.procuradortool.com/usuarios/" target="_blank" ' +
                         'style="color:inherit;font-weight:700;text-decoration:underline;">' +
                         'Abrir el portal de usuarios →</a>'
