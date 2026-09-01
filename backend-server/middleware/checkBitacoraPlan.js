@@ -40,6 +40,29 @@ const MSG_SIN_PLAN =
 const MSG_GRACIA_VENCIDA =
     `El período de ${DIAS_GRACIA_EXPORT} días para exportar tu Bitácora ya venció. ` +
     'Contactá a soporte si necesitás recuperar tus datos.';
+const MSG_CUENTA_NO_ELEGIBLE =
+    'Tu cuenta no tiene acceso al módulo Bitácora en este momento.';
+
+// S2 (Etapa 3, 2026-09-01): estados que NUNCA deben tener acceso al módulo, sin
+// importar lo que diga plans.bitacora_enabled — MISMA lista que `blockedStatuses`
+// de /auth/login (routes/auth.js), reutilizada acá tal cual en vez de inventar una
+// política nueva. Antes de este fix, este gate solo miraba plans.bitacora_enabled
+// vía el JOIN con subscriptions/plans y NUNCA leía users.registration_status ni
+// subscriptions.status — así que una cuenta `rejected`/`suspended_admin`/
+// `suspended_plan_expired`/`cancelled` conservaba acceso COMPLETO (lectura Y
+// escritura, no solo exportación) mientras el JWT siguiera vivo. Y no era un caso
+// de "token viejo que todavía no venció": `/auth/portal-login` bloquea SOLO
+// `rejected` al loguearse (a propósito — `cancelled`/`suspended_admin` pueden
+// entrar al portal para ver facturas o volver a suscribirse), así que una cuenta
+// suspendida por el admin podía loguearse de nuevo en cualquier momento, sacar un
+// token de 8h fresco, y usarlo íntegro contra Bitácora — sin relación con cuánto
+// hacía que fue suspendida. `pending_email` se incluye porque nunca verificó el
+// correo: no hay ninguna razón para que toque datos reales.
+// Deliberadamente AFUERA de esta lista: `suspended` (gracia de pago, service
+// continúa por diseño) y `pending_activation` (trial — algunos planes de prueba
+// pueden traer el flag encendido, y bloquearlo ahí sería un cambio de alcance no
+// pedido por este hallazgo).
+const ESTADOS_BLOQUEADOS = ['pending_email', 'rejected', 'suspended_admin', 'suspended_plan_expired', 'cancelled'];
 
 /**
  * @param {Object}  [opciones]
@@ -63,13 +86,21 @@ function checkBitacoraPlan(opciones = {}) {
 
         try {
             const { rows } = await db.query(
-                `SELECT p.bitacora_enabled, u.bitacora_lost_access_at
+                `SELECT u.registration_status, p.bitacora_enabled, u.bitacora_lost_access_at
                    FROM users u
                    LEFT JOIN subscriptions s ON s.user_id = u.id
                    LEFT JOIN plans p         ON p.id      = s.plan_id
                   WHERE u.id = $1`,
                 [userId]
             );
+
+            // S2: fail-closed también contra un estado bloqueado, ANTES de mirar el flag
+            // del plan y ANTES de la ventana de gracia — una cuenta rechazada/suspendida
+            // por el admin/cancelada no debe recibir ni el acceso normal ni la gracia de
+            // exportación (esa gracia es para "perdí el plan", no para "me expulsaron").
+            if (rows.length > 0 && ESTADOS_BLOQUEADOS.includes(rows[0].registration_status)) {
+                return res.status(403).json({ error: MSG_CUENTA_NO_ELEGIBLE, code: 'BITACORA_CUENTA_NO_ELEGIBLE' });
+            }
 
             // Sin fila = usuario inexistente; sin suscripción o sin plan, el LEFT JOIN
             // deja `bitacora_enabled` en NULL → falsy → sin acceso. Correcto.
