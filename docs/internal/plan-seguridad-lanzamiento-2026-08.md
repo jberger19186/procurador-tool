@@ -304,6 +304,17 @@ este documento existe para prevenir.
 
 ### 🟠 S9 — Validación dinámica con Strix (pentest agéntico en runtime) *(agregado 2026-08-26)*
 
+> ⏸️ **DIFERIDO — decisión del operador, 2026-08-31.** S9 **sale de la Etapa 3** y no forma parte de
+> la cadena desatendida. El motivo es su propia naturaleza: es un agente autónomo de ataque con
+> presupuesto de tokens sin techo, que exige Docker en el servidor (*"instalar Docker en el servidor
+> de producción para correr una herramienta de ataque es una decisión del operador, no un detalle de
+> implementación"* — este mismo bloque), más neutralizar el SMTP de staging (hereda **Brevo real**),
+> `MP_ENV` fuera de `sandbox` y backup+restore de la base. Nada de eso corre sin alguien presente.
+> **Se retoma cuando el operador lo decida, con las 4 precondiciones de abajo cumplidas y verificadas
+> una por una.** 🚨 **Su diferimiento tiene consecuencia sobre §8 — está escrita ahí, no la
+> redescubras:** sin S9, la Etapa 3 entrega el eje de lectura (white-box) pero **no** el de
+> explotación demostrada en runtime.
+
 > **Sonnet 5 para la conducción · esfuerzo MEDIO** · **solo contra staging** · corre **último de la
 > Etapa 3**, después de S1–S7 y de S10 — nunca antes
 
@@ -610,8 +621,14 @@ con `escHtml`/`escAttr`. La migración de los 71 sitios **no** reintrodujo XSS-1
 | **S7** | Rate limits y DoS | Sonnet 5 | 🟡 Medio | **solo staging** | 7 |
 | **S10** | **Módulo Markdown / anonimización** | Sonnet 5 (Opus si M0 = B/C) | 🟠 Medio-alto | local + staging (gate) | 8 |
 | **S11** | **Landing pública + gate de la demo** | Sonnet 5 | 🟡 Medio | landing (lectura) + local | 9 |
-| **S9** | **Strix — pentest agéntico en runtime** | Sonnet 5 (conducción) | 🟡 Medio | **solo staging** | 10 (último de la Etapa 3) |
-| **S8** | Fraude con cobro real | **Opus 5** | 🔴 Alto | prod (post-B3) | **condicional — se ejecuta en la Etapa 4** |
+| ~~**S9**~~ | ~~Strix — pentest agéntico en runtime~~ | Sonnet 5 (conducción) | 🟡 Medio | solo staging | ⏸️ **DIFERIDO (2026-08-31)** — fuera de la Etapa 3 y de la cadena desatendida. Se retoma con el operador presente |
+| **S8** | Fraude con cobro real | **Opus 5** | 🔴 Alto | prod (post-B3) | **NO es de esta etapa — se ejecuta en la ETAPA 4**, después de la Fase C de B3 |
+
+> 🚨 **Los 2 bloques que NO corren en la Etapa 3, y por qué importa decirlo:** **S8** siempre estuvo
+> asignado a la Etapa 4 (necesita cobro real); **S9** se difirió el 2026-08-31. **La Etapa 3 cierra
+> con 9 de 11 bloques**, y el informe unificado de cierre tiene que decirlo con esas palabras — si no,
+> alguien lee "SEC-2 ejecutado" y da por auditado lo que nadie corrió. Es exactamente la trampa que el
+> roadmap ya señalaba para S8, ahora con dos bloques en vez de uno.
 
 **Orden por relación riesgo/costo:** S1 y S2 primero — son la superficie más expuesta (anónima) y la
 más destructiva, y ambas son código chico y acotado, así que rinden rápido. S3 y S4 después porque son
@@ -697,7 +714,9 @@ Explícito, para que **"plan ejecutado" no se confunda con "producto auditado"**
 > operador** entre las dos opciones del bloque: token propio efímero, o headers en el vhost + descarte
 > del token vencido.
 
-**S9** (Sonnet 5, esfuerzo medio, **último bloque de la Etapa 3**):
+**S9** (Sonnet 5, esfuerzo medio) — ⏸️ **DIFERIDO el 2026-08-31, fuera de la Etapa 3.** Este prompt
+queda vigente para el día que el operador lo retome, **con él presente**; no forma parte de la cadena
+desatendida:
 > Ejecutá el bloque **S9** de `docs/internal/plan-seguridad-lanzamiento-2026-08.md` — Strix contra
 > staging. **Antes de lanzar nada**, ejecutá y confirmá las 4 precondiciones de seguridad del bloque
 > (SMTP neutralizado, `MP_ENV` fuera de `sandbox` para que el guard anule el token, backup de
@@ -726,8 +745,8 @@ Un pentest profesional hace, en esencia, cuatro cosas. Tres las cubre esta combi
 | Lo que hace un pentest | ¿Lo cubre SEC-2 + Strix? |
 |---|---|
 | **Revisión de código / white-box** (auth, IDOR, inyección, validación) | ✅ **Mejor que un pentest típico.** Un auditor externo trabaja con horas contadas y rara vez lee 300 KB de frontend; S1–S7 sí, y con contexto histórico del proyecto que un externo no tiene |
-| **Explotación dinámica / black-box** | ✅ Es exactamente lo que aporta S9 |
-| **Verificación de que el parche resiste** | ✅ El circuito parche → re-corrida de Strix del bloque S9 |
+| **Explotación dinámica / black-box** | ⏸️ **Era exactamente lo que aportaba S9 — y S9 quedó diferido el 2026-08-31.** Hoy este eje **no está cubierto** |
+| **Verificación de que el parche resiste** | ⏸️ Dependía del circuito parche → re-corrida de Strix (S9). Con S9 diferido queda en la verificación propia de cada bloque: harness + re-test, sin demostración externa |
 | **Atestación independiente** | ❌ **Nada de esto la da** |
 
 ### Lo que NO reemplaza, y por qué importa comercialmente
@@ -750,6 +769,17 @@ Un pentest profesional hace, en esencia, cuatro cosas. Tres las cubre esta combi
 **Para el lanzamiento Beta: alcanza con SEC-2 completo (S1–S7 + S9 + S10 + S11).** Con pocos clientes, sin
 tarjetas tocando nuestro sistema (las maneja MP) y con la superficie ya endurecida por SEC-1, el
 riesgo residual es aceptable y el costo de un pentest externo no se justifica todavía.
+
+> ⚠️ **Actualización 2026-08-31 — esta recomendación se apoyaba en "SEC-2 completo", y con S9
+> diferido eso ya no se cumple.** Lo que cambia, dicho sin adornos: la Etapa 3 va a entregar los 9
+> bloques de búsqueda dirigida (lectura de código con hipótesis escritas), pero **el eje de
+> explotación no dirigida y demostrada queda sin cubrir**. Eso **no bloquea el lanzamiento Beta** —el
+> argumento de fondo sigue en pie: pocos clientes, sin tarjetas en nuestro sistema, superficie ya
+> endurecida por SEC-1— pero **sí baja el grado de la respuesta** a "¿tienen auditoría de seguridad?".
+> **Antes del lanzamiento masivo hay que cerrar el eje**, y hay dos formas: correr S9, o contratar la
+> auditoría externa (que lo cubre y además da la atestación que ningún bloque de este plan da). Si se
+> va a contratar el externo igual, **correr S9 antes sigue conviniendo**: es lo que vuelve ese encargo
+> de *descubrimiento* a *confirmación*.
 
 **Para el lanzamiento masivo con cobro real: contratarla igual, pero después.** Correrla *después* de
 SEC-2 + Strix es lo que la vuelve barata: el externo llega a un producto ya limpio y su trabajo pasa

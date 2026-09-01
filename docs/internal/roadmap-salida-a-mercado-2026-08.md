@@ -38,7 +38,8 @@
               │
               ▼
   ETAPA 3 — SECURITY REVIEW
-    SEC-2: S1–S7 + S9 Strix + S10 Markdown + S11 landing/demo
+    SEC-2: S1–S7 + S10 Markdown + S11 landing/demo   → 9 bloques, cadena desatendida
+    (S9 Strix DIFERIDO 31/08 · S8 fraude = Etapa 4 — la etapa cierra con 9 de 11)
               │
               ▼
   ETAPA 4 — MERCADOPAGO PRODUCCIÓN (B3)
@@ -296,12 +297,21 @@ y F5 fijó su target real ahora que el módulo Markdown existe.
 | | |
 |---|---|
 | **Plan** | [`plan-seguridad-lanzamiento-2026-08.md`](plan-seguridad-lanzamiento-2026-08.md) (SEC-2, **actualizado el 2026-08-26** con los bloques S9 y S10) |
-| **Bloques en esta etapa** | **S1–S7 + S9 + S10 + S11**. **S8 NO** — ver abajo |
-| **Modelo** | Sonnet en todos los de esta etapa |
-| **Sesiones** | **8–13** (S1+S2, S3+S4 y S10+S11 son agrupables) *(actualizado 2026-08-28)* |
-| **Depende de** | Etapa 2 cerrada y sus fixes desplegados |
+| **Cómo se ejecuta** | ⭐ [`runbook-cadena-etapa3-desatendida.md`](runbook-cadena-etapa3-desatendida.md) *(nuevo, 2026-08-31)* — **7 agentes secuenciales, desatendidos**, con gate mecánico entre fases y apagado de la máquina al terminar |
+| **Bloques en esta etapa** | **S1–S7 + S10 + S11 = 9 bloques.** **S8 NO** (Etapa 4) · **S9 tampoco** (⏸️ diferido el 2026-08-31) — ver abajo |
+| **Modelo** | **Sonnet en los 9.** El único Opus de SEC-2 es S8, que corre en la Etapa 4 |
+| **Esfuerzo** | 🔴 Alto en 4 (S1+S2, S5, S6, S10) · 🟡 Medio en 5. ⚠️ **No es una perilla del sistema** — se implementa como contrato de salida verificable, ver §2 del runbook |
+| **Sesiones** | **8–13** *(la cadena desatendida no se mide en sesiones; el número se conserva como referencia de volumen de trabajo)* |
+| **Depende de** | Etapa 2 cerrada y sus fixes desplegados — ✅ cumplido el 2026-08-31 |
+| **Deja pendiente** | El deploy a **producción** de los fixes (pasada supervisada aparte) · las 2 decisiones de producto de S3 y S11 · **S9** |
 
-**Lo nuevo: S9 — Strix.** Pentest agéntico en runtime (`github.com/usestrix`, Apache 2.0, Docker + CLI).
+**S9 — Strix. ⏸️ DIFERIDO el 2026-08-31 por decisión del operador** — sale de la Etapa 3 y de la
+cadena desatendida; se retoma cuando el operador lo decida, con él presente. **La consecuencia, dicha
+para que no se redescubra: sin S9 la Etapa 3 entrega el eje de lectura (white-box) pero NO el de
+explotación demostrada en runtime.** No bloquea el lanzamiento Beta, pero sí baja el grado de la
+respuesta a *"¿tienen auditoría de seguridad?"*, y antes del lanzamiento masivo hay que cerrar ese eje
+—con S9 o con la auditoría externa—. Está desarrollado en §8 del plan SEC-2. *Descripción original,
+vigente para cuando se retome:* pentest agéntico en runtime (`github.com/usestrix`, Apache 2.0, Docker + CLI).
 Aporta el eje que S1–S8 no tienen: **exploración no dirigida y explotación demostrada**, en vez de
 confirmación de hipótesis escritas. Corre **solo contra staging**, y **antes hay que cortar dos
 salidas reales**: el SMTP de staging (hereda Brevo real → un agente registrando cuentas dispara emails
@@ -317,9 +327,11 @@ hostil?"* — el módulo descarga archivos desde URLs que salen del **documento*
 
 **🚨 Resolución de una contradicción real entre planes:** el bloque **S8 (fraude con cobro real)** del
 plan SEC-2 exige que B3 esté cerrado, pero este roadmap pone la seguridad **antes** que MercadoPago.
-No es un conflicto: es una partición. **S1–S7 + S9 + S10 + S11 corren en la Etapa 3; S8 corre dentro de la Etapa
-4**, después del primer cobro real. Sin decirlo explícito, alguien da "SEC-2 ejecutado" por cerrado
-con un bloque sin correr.
+No es un conflicto: es una partición. **S1–S7 + S10 + S11 corren en la Etapa 3; S8 corre dentro de la
+Etapa 4**, después del primer cobro real. Sin decirlo explícito, alguien da "SEC-2 ejecutado" por
+cerrado con un bloque sin correr. **Desde el 2026-08-31 son DOS los bloques que no corren en la etapa**
+(S8 por diseño, S9 por diferimiento), así que el informe unificado de cierre tiene que decir
+**"9 de 11"** con esas palabras.
 
 **Lo tercero, agregado el 2026-08-28 al cerrarse la Etapa 1: S11 — la landing y el gate de la demo.**
 Mismo mecanismo que S10, un capítulo después. El 24/08 `procuradortool.com` era una landing estática
@@ -541,7 +553,7 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 |---|---|---|
 | **1** — Producto | ~~13–21~~ → **✅ 0 restantes — ETAPA CERRADA** | Los 6 ítems cerrados (2026-08-26/27): 1.1, 1.2 (con release y flag encendidos), 1.3, 1.4, 1.5 y **1.6** (41/43 pasos, 8.3/8.4 descartados por el operador el 2026-08-27) |
 | **2** — Code review | ~~9–13~~ → **✅ 0 restantes — ETAPA CERRADA (2026-08-31)** | Las 9 fases ejecutadas: F1-F6, F8, F10, F9a. Queda **F9b** abierta (spike de la extensión), no bloqueante |
-| **3** — Security review | **8–13** | S1+S2, S3+S4 y S10+S11 agrupables. Incluye **S10** (+1–2, 26/08) y **S11** (+1, 28/08) |
+| **3** — Security review | **8–13** | 9 bloques (S1–S7 + S10 + S11). **S9 diferido** el 31/08 y **S8** es de la Etapa 4 → la etapa cierra con **9 de 11**. Se ejecuta como [cadena desatendida](runbook-cadena-etapa3-desatendida.md) |
 | **4** — MercadoPago | **4–6** | **F7 entró** (+1, 31/08) como su primer paso + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
 | **Total aproximado** | ~~32–50~~ → ~~19–29~~ → ~~21–33~~ → **12–20 restantes** | Actualizado el **2026-08-31**: Etapa 2 cerrada, resta Etapa 3 (8–13) + Etapa 4 (4–6) + F9b/D4/Fase C con operador (§9) |
