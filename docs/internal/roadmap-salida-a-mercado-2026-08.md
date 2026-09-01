@@ -480,6 +480,11 @@ ataque, Docker en el servidor, SMTP real de por medio — nunca desatendido). Co
 queda claro que **no es un pendiente *de* la Etapa 3: es un ítem propio, fuera del camino crítico**,
 igual que EXT. Se reclasifica.
 
+📄 **Plan de ejecución propio: [`plan-strix-pentest-runtime-2026-09.md`](plan-strix-pentest-runtime-2026-09.md)**
+*(2026-09-01)* — 8 fases, con el **gate bloqueante medido**: no hay Docker ni en el VPS ni en la
+máquina del operador, así que antes de correr nada hay que decidir dónde instalarlo (3 opciones con
+su costo y riesgo). El bloque S9 del plan de seguridad queda como referencia de *qué audita*.
+
 **El fundamento, y es el que importa:** S9 y **EXT (auditoría externa profesional) cierran el MISMO
 eje** — la explotación dinámica demostrada, que las 9 fases de lectura no dan. No son dos pendientes
 independientes: son **dos caminos al mismo lugar**, y EXT además incluye lo que S9 no puede dar (la

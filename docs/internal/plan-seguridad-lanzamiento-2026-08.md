@@ -304,8 +304,17 @@ este documento existe para prevenir.
 
 ### 🟠 S9 — Validación dinámica con Strix (pentest agéntico en runtime) *(agregado 2026-08-26)*
 
+> 📄 **TIENE PLAN PROPIO DESDE EL 2026-09-01: [`plan-strix-pentest-runtime-2026-09.md`](plan-strix-pentest-runtime-2026-09.md).**
+> Ese documento es el *cómo* (fases, gate de Docker medido, precondiciones verificables, circuito de
+> triage, presupuesto); este bloque queda como el *qué audita* y la tabla de cobertura. **Si vas a
+> ejecutar S9, andá al plan propio** — trae 3 datos que este bloque daba por abiertos: **no hay
+> Docker ni en el VPS ni en la máquina del operador** (medido), la RAM del servidor (1.963 MB
+> compartidos con producción) desaconseja instalarlo ahí, y el basic-auth de staging se resuelve con
+> un **túnel SSH a `localhost:3444`** en vez de pelear con credenciales.
+>
 > ⏸️ **DIFERIDO — decisión del operador, 2026-08-31.** S9 **sale de la Etapa 3** y no forma parte de
-> la cadena desatendida. El motivo es su propia naturaleza: es un agente autónomo de ataque con
+> la cadena desatendida. **Reclasificado el 2026-09-01 como ítem FUERA DEL CAMINO CRÍTICO** (roadmap
+> §7c), junto con EXT — los dos cierran el mismo eje. El motivo es su propia naturaleza: es un agente autónomo de ataque con
 > presupuesto de tokens sin techo, que exige Docker en el servidor (*"instalar Docker en el servidor
 > de producción para correr una herramienta de ataque es una decisión del operador, no un detalle de
 > implementación"* — este mismo bloque), más neutralizar el SMTP de staging (hereda **Brevo real**),
