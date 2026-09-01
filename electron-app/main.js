@@ -38,6 +38,18 @@ let onboardingWindow = null;
 // (antes de los awaits) y se limpia en su finally.
 let isExecuting = false;
 let stopRequested  = false;  // flag para cortar loops batch
+// F7 cadena AG (2026-09-01, hallazgo H-A1-07): guard PROPIO del módulo Markdown, no
+// comparte `isExecuting` con los flujos Puppeteer — son recursos independientes (este
+// módulo nunca abre Chrome ni toca el candado del PJN, ver la cabecera de
+// descargarAdjuntos.js), así que reusar `isExecuting` bloquearía sin motivo un
+// procesamiento de PDF local mientras corre una procuración, y viceversa. Cubre los 2
+// handlers que hacen trabajo real y escriben los mismos archivos (`procesar-markdown-pdf`
+// y `reprocesar-markdown-mapping`) — antes ninguno tenía guard, y una doble invocación
+// (doble clic rápido, o el canal invocado directo desde la consola de DevTools, ver el
+// comentario de F5 en `reprocesar-markdown-mapping`) corría 2 pipelines en paralelo
+// emitiendo eventos cruzados por `markdown-progress` y compitiendo por los mismos 3
+// archivos de salida.
+let isProcesandoMarkdown = false;
 let authManager;
 let executionLockTimer = null; // Heartbeat interval para lock multi-dispositivo
 let shouldShowTour = false;   // true cuando el usuario completó el wizard con tour
@@ -2042,6 +2054,12 @@ const MSG_GATE_MARKDOWN = {
 };
 
 ipcMain.handle('procesar-markdown-pdf', async (event, pdfPath) => {
+    // F7 cadena AG (H-A1-07): ver el comentario de `isProcesandoMarkdown` más arriba.
+    // Seteado sincrónicamente antes del primer `await`, mismo patrón que `isExecuting`.
+    if (isProcesandoMarkdown) {
+        return { success: false, error: 'Ya hay un procesamiento de Markdown en curso.' };
+    }
+    isProcesandoMarkdown = true;
     try {
         const gate = await verificarMarkdownHabilitado();
         if (!gate.habilitado) {
@@ -2110,6 +2128,8 @@ ipcMain.handle('procesar-markdown-pdf', async (event, pdfPath) => {
         };
     } catch (error) {
         return { success: false, error: error.message };
+    } finally {
+        isProcesandoMarkdown = false;
     }
 });
 
@@ -2144,6 +2164,13 @@ function confinarRutaMarkdown(rutaCandidata, baseDir, extensionesPermitidas) {
 // el brief. `anonimizar()` es idempotente por diseño (parte siempre del
 // original), así que reprocesar 2 veces seguidas da el mismo resultado.
 ipcMain.handle('reprocesar-markdown-mapping', async (event, { markdownCompleto, mappingTexto, mdAnonimizadoPath, mappingPath }) => {
+    // F7 cadena AG (H-A1-07): mismo guard que `procesar-markdown-pdf` — comparten el
+    // mismo flag a propósito, escriben archivos superpuestos (`.anonimizado.md`,
+    // `.mapping.txt` del mismo stem) y correrlos en paralelo puede pisarse entre sí.
+    if (isProcesandoMarkdown) {
+        return { success: false, error: 'Ya hay un procesamiento de Markdown en curso.' };
+    }
+    isProcesandoMarkdown = true;
     try {
         // F5 (2026-08-31): el gate FALTABA acá. El comentario de
         // `procesar-markdown-pdf` dice que el handler "no confía ciegamente" en
@@ -2174,6 +2201,8 @@ ipcMain.handle('reprocesar-markdown-mapping', async (event, { markdownCompleto, 
         return { success: true, markdownAnonimizado: r.markdownAnonimizado, mappingTexto: r.mappingTexto };
     } catch (error) {
         return { success: false, error: error.message };
+    } finally {
+        isProcesandoMarkdown = false;
     }
 });
 

@@ -52,8 +52,17 @@ const PATH_PREFIJO_PERMITIDO = '/scw/viewer.seam';
 function esUrlPermitida(urlStr) {
     let u;
     try { u = new URL(urlStr); } catch (_) { return false; }
+    // F7 cadena AG (2026-09-01, hallazgo H-A1-05, confirmado con Node real):
+    // `u.hostname` (WHATWG URL) NO incluye el puerto — `new
+    // URL('https://scw.pjn.gov.ar:9443/...').hostname` sigue dando
+    // 'scw.pjn.gov.ar', así que un enlace con un puerto no estándar pasaba
+    // la allowlist. El destino real sigue atado al mismo hostname (esto no
+    // habilita apuntar a una IP distinta), pero la allowlist decía "host
+    // scw.pjn.gov.ar" sin más — se cierra el gap exigiendo además el puerto
+    // por defecto de https (`u.port===''`) o el 443 explícito.
     return u.protocol === ESQUEMA_PERMITIDO &&
            u.hostname === HOST_PERMITIDO &&
+           (u.port === '' || u.port === '443') &&
            u.pathname.startsWith(PATH_PREFIJO_PERMITIDO);
 }
 
@@ -284,7 +293,18 @@ async function procesarRespuestaAdjunto(res, url, destDir) {
  * @param {Array<{url:string, tipoDoc:string|null, pagina:number}>} links - ya deduplicados por URL
  * @param {object} opts
  * @param {string} opts.tempDir - directorio temporal de descarga (ver crearDirTemporalSeguro)
- * @param {Map} [opts.registro] - registro compartido para dedup por filename entre informes
+ * @param {Map} [opts.registro] - registro compartido para dedup por filename ENTRE
+ *   INFORMES DEL MISMO EXPEDIENTE. F7 cadena AG (2026-09-01, hallazgo H-A1-01): el
+ *   filename del SCW (`docNNNNNNNNN.pdf`) es estable entre corridas del MISMO
+ *   expediente (M0 lo confirmó con md5 byte-idéntico), pero NO es único entre
+ *   expedientes DISTINTOS — nada impide que dos causas tengan un adjunto con nombre
+ *   coincidente. Compartir este `Map` entre expedientes distintos hace que el
+ *   segundo pise el resultado del primero en silencio (fuga de contenido de una
+ *   causa a otra). Hoy el único llamador real (`main.js:procesar-markdown-pdf`) NO
+ *   pasa este parámetro — cada llamada crea su propio registro vacío, así que la
+ *   condición no es alcanzable en el código que se distribuye. Si en el futuro se
+ *   agrega un modo batch que SÍ comparta un registro, tiene que namespacearlo por
+ *   expediente (ver `expedienteKey()`), nunca pasar uno global.
  * @param {(evento: object) => void} [opts.onProgress] - callback opcional para UI (M5)
  * @returns {Promise<{ adjuntos: Array, errores: Array }>}
  *   adjuntos: [{ url, tipoDoc, pagina, filename, localPath, reusado, bytes }]

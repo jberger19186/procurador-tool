@@ -469,7 +469,15 @@ function tokenVencido(token) {
     const partes = token.split('.');
     if (partes.length !== 3) return true; // no tiene forma de JWT → tratar como inválido
     const payload = JSON.parse(base64UrlDecode(partes[1]));
-    if (!payload || typeof payload.exp !== 'number') return false; // sin exp, no se puede decidir — no rompe el caso legítimo
+    // F7 cadena AG (2026-09-01, hallazgo H-A1-04, confirmado real): un JWT con
+    // forma válida pero sin claim `exp` (o `exp` no numérico) devolvía `false`
+    // ("no vencido") — un token sintético armado a mano, sin firmar por el
+    // backend real, desbloqueaba la demo para siempre. `/auth/portal-login`
+    // SIEMPRE firma con `expiresIn`, así que todo JWT legítimo trae `exp`
+    // numérico — la ausencia del claim es en sí misma la señal de un token
+    // no genuino. Fail-closed: sin `exp` → tratarlo como vencido, igual que
+    // el caso ya corrupto de abajo.
+    if (!payload || typeof payload.exp !== 'number') return true;
     return (Date.now() / 1000) >= payload.exp;
   } catch (_) {
     return true; // corrupto/no decodificable → fail-closed, tratarlo como vencido

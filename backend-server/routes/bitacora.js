@@ -376,15 +376,25 @@ function icsFechaHoraUtc(d) {
            `T${icsPad2(d.getUTCHours())}${icsPad2(d.getUTCMinutes())}${icsPad2(d.getUTCSeconds())}Z`;
 }
 
-// El proyecto es para abogados argentinos: `due_at` se guarda a MEDIODÍA
-// horario local (bitToIsoMidday, en el portal) — mediodía en cualquier huso
-// entre UTC-11 y UTC+11 no cruza el borde del día en UTC, así que leer el día
-// calendario con los getters UTC es correcto sin que el servidor necesite
-// conocer el huso real del cliente. Documentado a propósito, no adivinado:
-// mismo razonamiento que causó los 3 bugs de timezone de F3.0 (P-F3.0-a) si
-// se hace sin pensarlo — acá se piensa y se deja escrito por qué funciona.
+// F7 cadena AG (2026-09-01, hallazgo H-A1-03, confirmado real): la versión
+// anterior asumía que TODO `due_at` llega a mediodía hora local (comentario
+// original: "documentado a propósito, no adivinado"), pero esa convención la
+// respeta el FRONTEND (`bitToIsoMidday`), no el servidor — `fecha()` (más
+// arriba en este archivo) no normaliza nada, y una entrada creada por
+// import/reemplazar (F1.7), por `POST /bitacora` con un payload armado a
+// mano, o por una captura futura, puede traer cualquier hora. Con
+// `due_at='...T22:00:00-03:00'` (medianoche pasada en UTC, `01:00Z` del día
+// SIGUIENTE), los getters UTC directos corrían el evento un día — el mismo
+// defecto de fondo que ya produjo los 3 bugs de timezone de F3.0
+// (P-F3.0-a), reintroducido acá por la misma clase de error.
+//
+// Fix: leer el día calendario con el offset FIJO de Argentina (-3, sin
+// horario de verano desde 2009) en vez de UTC crudo — así el día correcto se
+// deriva de la hora que sea que traiga `due_at`, sin depender de que el
+// autor de la fila haya respetado la convención de mediodía.
+const ARG_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC-3, fijo, sin DST
 function icsDiaCalendarioUtc(dueAt) {
-    const d = new Date(dueAt);
+    const d = new Date(new Date(dueAt).getTime() - ARG_OFFSET_MS);
     return `${d.getUTCFullYear()}${icsPad2(d.getUTCMonth() + 1)}${icsPad2(d.getUTCDate())}`;
 }
 
@@ -423,7 +433,11 @@ function construirVeventsIcs(datos) {
 
             const icon = ICS_ICONS[e.kind] || '';
             const label = KIND_LABELS_ENTRADA[e.kind] || e.kind;
-            lineas.push(icsLine('SUMMARY', icsEscapeText(`${icon} ${label} — ${e.title || ''}`.trim())));
+            // F7 cadena AG (2026-09-01, hallazgo H-A1-02): antes iba un checkmark
+            // solo si e.done_at, mezclado con el icon por `kind` — se lo separa acá
+            // para que el estado "hecha" sea visible sin depender de qué tipo sea.
+            const marcaHecha = e.done_at ? '✅ ' : '';
+            lineas.push(icsLine('SUMMARY', icsEscapeText(`${marcaHecha}${icon} ${label} — ${e.title || ''}`.trim())));
 
             // `e.expediente` viene del LEFT JOIN de recolectarDatosExport solo en
             // alcance='entradas'; en 'todo'/'expediente' hay que resolverlo por
@@ -440,7 +454,15 @@ function construirVeventsIcs(datos) {
             const freq = ICS_RRULE_FREQ[e.repeat_rule];
             if (freq) lineas.push(icsLine('RRULE', `FREQ=${freq}`));
 
-            lineas.push(icsLine('STATUS', e.done_at ? 'COMPLETED' : 'CONFIRMED'));
+            // F7 cadena AG (2026-09-01, hallazgo H-A1-02, confirmado real): RFC 5545
+            // §3.8.3.8 reserva COMPLETED para VTODO — nunca es un valor válido de
+            // STATUS en un VEVENT (ahí solo TENTATIVE/CONFIRMED/CANCELLED). Antes
+            // este código emitía COMPLETED para toda entrada con done_at, lo que
+            // clientes de calendario estrictos (Outlook corporativo, validadores
+            // RFC) pueden rechazar — el archivo entero, no solo ese evento. El
+            // estado "hecha" ahora viaja en el prefijo de SUMMARY (arriba), que es
+            // texto libre y no tiene esa restricción de esquema.
+            lineas.push(icsLine('STATUS', 'CONFIRMED'));
             lineas.push(icsLine('CATEGORIES', icsEscapeText(label)));
             lineas.push(icsLine('END', 'VEVENT'));
             return lineas.join('\r\n');
