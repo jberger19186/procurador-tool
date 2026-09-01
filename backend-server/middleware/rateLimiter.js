@@ -1,5 +1,18 @@
 ﻿const rateLimit = require('express-rate-limit');
 
+// S7 (revisión 2026-09-01, Etapa 3/SEC-2): ninguno de los 9 limiters de este archivo pasa
+// una opción `store` — los 9 usan el `MemoryStore` default de express-rate-limit, es decir
+// un contador EN MEMORIA del proceso, igual que la blacklist de tokens
+// (middleware/tokenBlacklist.js) y el almacén de borradores de captura
+// (utils/captureDrafts.js), ambos ya documentados en `ecosystem.config.js` como
+// bloqueantes para escalar `instances` sin resolver antes el estado compartido. Este es
+// un TERCER mecanismo con la misma dependencia, no mencionado hasta ahora: con
+// `instances > 1` cada worker llevaría su PROPIO contador — un limiter de "300/5min" se
+// volvería efectivamente "300×N/5min" repartido al azar entre los workers (según a cuál
+// enrute el balanceador cada request), degradando en silencio el propio control de
+// disponibilidad que este archivo implementa. NO subir `instances` de `procurador-api`
+// sin mover estos 9 limiters a un store compartido (ej. `rate-limit-redis`) primero.
+
 // Rate limiter para login (prevenir fuerza bruta)
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos

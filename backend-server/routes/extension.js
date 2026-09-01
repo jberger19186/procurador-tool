@@ -6,6 +6,20 @@
  *   GET /api/extension/electron-token    — genera un token temporal (60s) de descarga
  *   GET /api/extension/electron-download — redirige al .exe del último release (GitHub)
  *
+ * S7 (revisión 2026-09-01, Etapa 3/SEC-2): `electron-download` llamaba a la API de GitHub
+ * SIN CACHE en cada request — confirmado en vivo desde este mismo servidor (`curl -s
+ * https://api.github.com/rate_limit`, IP compartida con producción): el límite anónimo
+ * es 60/hora, y `apiLimiter` (100/min, que sí protege esta ruta) deja pasar hasta 100
+ * requests por MINUTO sin bloquear — o sea que el rate limiter que debía protegerla no
+ * alcanza a frenar el consumo antes de agotar el cupo real de GitHub. Como pocos son 1
+ * request = 1 unidad consumida (confirmado: `core.remaining` bajó de 60 a 59 con una sola
+ * llamada real), 60 requests en la misma hora agotan el flujo de descarga del instalador
+ * para TODOS los usuarios — de staging y de PRODUCCIÓN, porque comparten la misma IP de
+ * salida (mismo VPS) — hasta que la ventana de GitHub resetee. Fix: cache de 5 minutos
+ * sobre la respuesta de `releases/latest` (el asset del último release no cambia entre
+ * releases, que son eventos poco frecuentes) — reduce el consumo real a ≤12 llamadas/hora
+ * pase lo que pase con el volumen de clicks reales, muy por debajo del cupo de 60.
+ *
  * RI-4 (revisión 2026-07-19, ejecutado 2026-07-22): se eliminaron los endpoints
  * `version`/`hashes`/`download` de la distribución CRX/ZIP de la extensión, deprecada
  * desde que la extensión pasó a la Chrome Web Store (v1.3.2+). Confirmado antes de
@@ -39,6 +53,42 @@ router.get('/electron-token', authenticateToken, (req, res) => {
     res.json({ token });
 });
 
+// ── S7 (2026-09-01): cache de la respuesta de GitHub, 5 minutos ────────────────
+// Ver el comentario de arriba: sin esto, cada descarga real consume 1/60 del cupo
+// horario anónimo compartido con producción. Un release nuevo tarda minutos en
+// publicarse y el usuario que actualiza justo en ese margen simplemente recibe el
+// asset anterior por unos segundos más — no hay downside real de correctitud.
+let _releaseCache = { asset: null, fetchedAt: 0 };
+const RELEASE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function fetchLatestAsset() {
+    const https = require('https');
+    const data = await new Promise((resolve, reject) => {
+        const r2 = https.get(
+            'https://api.github.com/repos/jberger19186/procurador-tool/releases/latest',
+            { headers: { 'User-Agent': 'procurador-api', 'Accept': 'application/vnd.github+json' } },
+            (r) => { let b = ''; r.on('data', c => b += c); r.on('end', () => resolve(JSON.parse(b))); }
+        );
+        r2.on('error', reject);
+    });
+    return data.assets?.find(a => a.name.endsWith('.exe') && !a.name.endsWith('.blockmap')) || null;
+}
+
+async function getLatestAsset() {
+    const fresco = _releaseCache.asset && (Date.now() - _releaseCache.fetchedAt) < RELEASE_CACHE_TTL_MS;
+    if (fresco) return _releaseCache.asset;
+    try {
+        const asset = await fetchLatestAsset();
+        if (asset) _releaseCache = { asset, fetchedAt: Date.now() };
+        return asset;
+    } catch (e) {
+        // GitHub caído/lento: si hay una copia vieja en memoria, mejor servirla
+        // (aunque haya vencido el TTL) que romper la descarga por completo.
+        if (_releaseCache.asset) return _releaseCache.asset;
+        throw e;
+    }
+}
+
 // GET /api/extension/electron-download?token=xxx — descarga directa sin blob.
 // El token (60s, un solo uso) reemplaza al header Authorization para que la
 // navegación del navegador (que no envía Bearer) pueda descargar el instalador.
@@ -55,17 +105,10 @@ router.get('/electron-download', async (req, res) => {
     // Siempre redirige al ÚLTIMO instalador publicado en GitHub Releases — misma
     // fuente que usa el auto-updater de la app. (No se sirven archivos locales:
     // un instalador viejo en downloads/ entregaría una versión desactualizada.)
+    // La consulta a GitHub está cacheada 5 minutos (ver arriba) — no golpea la API
+    // en cada click de descarga.
     try {
-        const https = require('https');
-        const data = await new Promise((resolve, reject) => {
-            const r2 = https.get(
-                'https://api.github.com/repos/jberger19186/procurador-tool/releases/latest',
-                { headers: { 'User-Agent': 'procurador-api', 'Accept': 'application/vnd.github+json' } },
-                (r) => { let b = ''; r.on('data', c => b += c); r.on('end', () => resolve(JSON.parse(b))); }
-            );
-            r2.on('error', reject);
-        });
-        const asset = data.assets?.find(a => a.name.endsWith('.exe') && !a.name.endsWith('.blockmap'));
+        const asset = await getLatestAsset();
         if (!asset) return res.status(404).json({ error: 'El instalador no está disponible aún. Contactá a soporte.' });
         return res.redirect(asset.browser_download_url);
     } catch (e) {

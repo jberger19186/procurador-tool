@@ -11,6 +11,13 @@ module.exports = {
             // expiración natural — rompe el logout de admin (M-1) y del portal (RI-5) en
             // silencio, sin ningún error visible. NO subir `instances` de este proceso sin
             // antes resolver la blacklist compartida (read-through a la tabla, o mover a Redis).
+            // S7 (2026-09-01): mismo problema en otros DOS mecanismos en memoria — el almacén
+            // de borradores de captura (utils/captureDrafts.js, comentario propio con el mismo
+            // aviso) y, no documentado hasta ahora, los 9 rate limiters de
+            // middleware/rateLimiter.js (usan el MemoryStore default de express-rate-limit,
+            // sin `store` compartido) — con instances>1 cada uno se volvería N contadores
+            // independientes en vez de uno solo, multiplicando el umbral real sin que nadie
+            // lo note. Los 3 mecanismos comparten la misma condición de esta nota.
             name: 'procurador-api',
             script: 'server.js',
             instances: 1,
