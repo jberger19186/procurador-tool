@@ -37,9 +37,10 @@
     (F9b — spike de la extensión queda abierta, no bloqueaba el cierre)
               │
               ▼
-  ETAPA 3 — SECURITY REVIEW
-    SEC-2: S1–S7 + S10 Markdown + S11 landing/demo   → 9 bloques, cadena desatendida
-    (S9 Strix DIFERIDO 31/08 · S8 fraude = Etapa 4 — la etapa cierra con 9 de 11)
+  ETAPA 3 — SECURITY REVIEW                                    ✅ CERRADA (2026-09-01)
+    SEC-2: S1–S7 + S10 Markdown + S11 landing/demo — 9/9 bloques OK, 32 hallazgos
+    (S9 Strix DIFERIDO · S8 fraude = Etapa 4 — cerró con 9 de 11)
+    ⏳ los 18 fixes viven en staging/local — el deploy a prod es una pasada supervisada
               │
               ▼
   ETAPA 4 — MERCADOPAGO PRODUCCIÓN (B3)
@@ -304,6 +305,7 @@ y F5 fijó su target real ahora que el módulo Markdown existe.
 | **Sesiones** | **8–13** *(la cadena desatendida no se mide en sesiones; el número se conserva como referencia de volumen de trabajo)* |
 | **Depende de** | Etapa 2 cerrada y sus fixes desplegados — ✅ cumplido el 2026-08-31 |
 | **Deja pendiente** | El deploy a **producción** de los fixes (pasada supervisada aparte) · las 2 decisiones de producto de S3 y S11 · **S9** |
+| **Estado** | ✅ **CERRADA (2026-09-01)** — cadena desatendida, **9/9 bloques OK**, 32 hallazgos / 18 corregidos / 14 decisiones abiertas. Informe unificado: [`revision-etapa3-cierre-2026-09-01.md`](revision-etapa3-cierre-2026-09-01.md). ⏳ **Ningún fix está en producción todavía** |
 
 **S9 — Strix. ⏸️ DIFERIDO el 2026-08-31 por decisión del operador** — sale de la Etapa 3 y de la
 cadena desatendida; se retoma cuando el operador lo decida, con él presente. **La consecuencia, dicha
@@ -435,8 +437,18 @@ el sesgo.
 |---|---|---|
 | **A0** — gate, motor de anonimización | ✅ **corrida** · 3.1 Pro `High` | **Gate PASA.** 4 defectos reales — más 1 quinto encontrado al verificar. **Los 5 corregidos**, con tests de regresión. Informe: `informe-A0-2026-08-30.md` |
 | **A3** — runtime, portal y dashboard | ✅ **corrida** · 3.7 Flash `Medium` | 1 hallazgo menor (🔵) + **1 falso positivo descartado midiendo**. Confirmó desde afuera 4 fixes nuestros. Informe: `informe-A3-2026-08-30.md` |
-| **A1** — code review | ⏳ espera la **Etapa 2** cerrada | — |
-| **A2** — security review | ⏳ espera la **Etapa 3** cerrada | — |
+| **A1** — code review | ✅ **GATE ABIERTO desde el 2026-08-31** — la Etapa 2 cerró (9/9 fases) | corrible ya |
+| **A2** — security review | ✅ **GATE ABIERTO desde el 2026-09-01** — la Etapa 3 cerró (9/9 bloques) | corrible ya |
+
+> ✅ **Actualización 2026-09-01 — los dos gates que quedaban se abrieron, con un día de diferencia.**
+> A1 esperaba la Etapa 2 (cerrada el 31/08) y A2 la Etapa 3 (cerrada hoy). **Las dos se pueden correr
+> ahora, y no compiten con nada del camino crítico** — las corre el operador desde Antigravity
+> mientras Claude avanza con el deploy y la Etapa 4. **Antes de correrlas hay que regenerar la copia
+> sanitizada** (se borró al cerrar A3, a propósito: así A1 mira el código que las Etapas 2 y 3
+> realmente cambiaron, no el de agosto). **Y para A2 la exclusión de `docs/internal/` importa más que
+> nunca:** ahora esa carpeta tiene los 8 informes de la Etapa 3 con los 32 hallazgos ya encontrados —
+> si A2 los lee, confirma nuestros supuestos en vez de aportar los propios, que es exactamente lo
+> contrario de para qué existe este carril.
 
 **El gate se justificó.** La pregunta que A0 tenía que responder era si el corpus adversarial del
 motor estaba construido a la medida del motor. **Lo estaba:** probaba un apellido con partícula solo
@@ -553,10 +565,10 @@ pruebas integral queda **37/37, sin ningún caso abierto**.
 |---|---|---|
 | **1** — Producto | ~~13–21~~ → **✅ 0 restantes — ETAPA CERRADA** | Los 6 ítems cerrados (2026-08-26/27): 1.1, 1.2 (con release y flag encendidos), 1.3, 1.4, 1.5 y **1.6** (41/43 pasos, 8.3/8.4 descartados por el operador el 2026-08-27) |
 | **2** — Code review | ~~9–13~~ → **✅ 0 restantes — ETAPA CERRADA (2026-08-31)** | Las 9 fases ejecutadas: F1-F6, F8, F10, F9a. Queda **F9b** abierta (spike de la extensión), no bloqueante |
-| **3** — Security review | **8–13** | 9 bloques (S1–S7 + S10 + S11). **S9 diferido** el 31/08 y **S8** es de la Etapa 4 → la etapa cierra con **9 de 11**. Se ejecuta como [cadena desatendida](runbook-cadena-etapa3-desatendida.md) |
+| **3** — Security review | ~~8–13~~ → **✅ 0 restantes — ETAPA CERRADA (2026-09-01)** | 9/9 bloques OK en **una sola corrida desatendida**. 32 hallazgos, 18 corregidos. **S9 diferido** y **S8** es de la Etapa 4 → cerró con **9 de 11**. ⏳ Queda el **deploy a producción** (1 sesión supervisada) y el **triage de 14 decisiones** (1–2) |
 | **4** — MercadoPago | **4–6** | **F7 entró** (+1, 31/08) como su primer paso + S8 + los reviews del delta |
 | **AZ** — paralelo | 1 + trámite | No suma al camino crítico |
-| **Total aproximado** | ~~32–50~~ → ~~19–29~~ → ~~21–33~~ → **12–20 restantes** | Actualizado el **2026-08-31**: Etapa 2 cerrada, resta Etapa 3 (8–13) + Etapa 4 (4–6) + F9b/D4/Fase C con operador (§9) |
+| **Total aproximado** | ~~32–50~~ → ~~19–29~~ → ~~21–33~~ → ~~12–20~~ → **8–14 restantes** | Actualizado el **2026-09-01**: Etapas 2 y 3 cerradas. Resta: deploy de los fixes (1, con operador) + triage de las 14 decisiones (1–2) + Etapa 4 (4–6) + AG A1/A2 en paralelo (2) + F9b/D4/Fase C con operador (§9) |
 
 **Después del lanzamiento** — son **exactamente estos tres** (sección "⚪ Post-lanzamiento" de
 `CLAUDE.md`, que hasta el 2026-08-26 se llamaba "Diferidos a decisión de negocio" y tenía además a
