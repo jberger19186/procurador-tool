@@ -444,7 +444,120 @@ const CORPUS = [
         fugas: ['FERNANDEZ', 'GOMEZ'],
         preservar: ['SOLICITA MEDIDA CAUTELAR URGENTE', 'HAGASE SABER LO RESUELTO'],
     },
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  S10 (2026-09-01) — security review, input hostil. Casos nuevos que el
+    //  corpus de F5 no cubría: marcadores en Title Case (documentado como gap
+    //  ABIERTO por F5 — "no se corrige acá, merece su propia verificación
+    //  medida"), y su contrapeso de sobre-enmascarado. Relevante en especial
+    //  para los ADJUNTOS que baja M3 (cédulas/sentencias de origen
+    //  heterogéneo, a menudo en redacción normal), no tanto para el informe
+    //  propio (el PJN lo escribe en mayúsculas).
+    // ─────────────────────────────────────────────────────────────────────
+    {
+        // Medido ANTES del fix: 0 detecciones — el marcador "letrado"/"Sr." en
+        // minúscula o Title Case no matcheaba ninguna de las 2 alternativas
+        // (el regex de marcadores no llevaba flag `i`). Un anexo del SCW en
+        // redacción normal (no en mayúsculas del PJN) dejaba pasar el nombre
+        // completo.
+        nombre: '🚨 S10 — marcador de rol en Title Case (anexo en redacción normal, no PJN)',
+        md: '# EXP 50/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nEl letrado Dr. Laura Ventura presentó el escrito en nombre de su cliente.\nNotificado el Sr. Roberto Gimenez en su domicilio real.',
+        fugas: ['Laura Ventura', 'Roberto Gimenez'],
+        preservar: [],
+    },
+    {
+        // Contrapeso del caso anterior: agregar el flag `i` no debe convertir
+        // cualquier uso corriente en minúscula de esas palabras (sustantivo
+        // común, no marcador de un nombre) en un tercero fantasma. La clase
+        // que abre la captura sigue exigiendo mayúscula inicial en la palabra
+        // que sigue — acá ninguna de las 3 oraciones tiene un nombre propio
+        // pegado al marcador.
+        nombre: 'S10 — el marcador en minúscula NO debe disparar sobre prosa común (contrapeso del caso anterior)',
+        md: '# EXP 51/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nDurante la audiencia el letrado consultó el expediente. El perito debe presentarse en el juzgado. La síndico informó sobre el estado del concurso.',
+        fugas: [],
+        preservar: [],
+        sinTerceros: true,
+    },
+    {
+        // DNI dentro de una celda de tabla Markdown, con el separador `|`
+        // pegado al número (sin espacio) — variante real de cómo M2 renderiza
+        // filas de "Movimientos". El fix de F5 para DNI no se probó dentro de
+        // una tabla en el corpus original.
+        nombre: 'S10 — DNI dentro de una celda de tabla, pegado al separador de columna',
+        md: '# EXP 52/2020\n\n> ARCA c/ EMPRESA X S.A. s/EJECUCION\n\n| Fecha | Detalle |\n|---|---|\n| 1/01/2020 |CEDULA: D.N.I. 30.111.222 notificado|',
+        fugas: ['30.111.222'],
+        preservar: [],
+    },
+    {
+        // Apellido con acento en el MARCADOR DE ROL (no en la carátula, que ya
+        // tiene su propio caso). Mismo defecto de A0 (defecto 3, tolerancia a
+        // tildes) pero por el camino de tercero en vez de parte.
+        nombre: 'S10 — tercero con tilde en la mención real, marcador sin tilde en la fuente',
+        md: '# EXP 53/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nDESTINATARIO: JOSÉ MARTÍNEZ NÚÑEZ.\nSe notificó a JOSE MARTINEZ NUÑEZ en el domicilio constituido.',
+        fugas: ['JOSÉ MARTÍNEZ NÚÑEZ', 'JOSE MARTINEZ NUÑEZ'],
+        preservar: [],
+    },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────
+//  S10 (2026-09-01) — categorías de datos personales FUERA DEL ALCANCE DEL
+//  MOTOR, medidas por separado y a propósito.
+// ─────────────────────────────────────────────────────────────────────────
+// El propio encabezado de `anonimizar.js` declara "4 fuentes" (carátula,
+// marcadores de rol, CUIT/CUIL, variantes) — domicilio, teléfono, email y
+// número de cuenta/CBU NUNCA estuvieron en el diseño, y el `mapping.txt`
+// solo tiene 4 secciones (Expediente/Partes/Terceros/Identificadores CUIT-
+// CUIL-DNI), ninguna las nombra. No se mezclan con el CORPUS de arriba
+// (que exige 0% y frena la suite si no lo cumple) porque agregarlas ahí
+// convertiría un gap de DISEÑO conocido en un fallo de regresión — el mismo
+// criterio que F5 ya usó para "carátula sin s/" y "CUIT con puntos": medir
+// y documentar, no fingir que el corpus principal las cubre. El número
+// SÍ se reporta, tal como pide el bloque S10 del plan de seguridad
+// ("datos personales que no son nombres: CUIT, DNI, domicilios, teléfonos,
+// emails, números de cuenta" — medir la tasa de falsos negativos).
+const CORPUS_FUERA_DE_ALCANCE = [
+    {
+        nombre: 'Domicilio real de una parte',
+        md: '# EXP 60/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nCon domicilio real en Av. Rivadavia 4567, Piso 3° Depto "B", CABA.',
+        fugas: ['Av. Rivadavia 4567'],
+    },
+    {
+        nombre: 'Teléfono de contacto',
+        md: '# EXP 61/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nTE de contacto: 11-4567-8900.',
+        fugas: ['11-4567-8900'],
+    },
+    {
+        nombre: 'Email de notificación',
+        md: '# EXP 62/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nNotifíquese a juan.perez@estudio-legal.com.ar.',
+        fugas: ['juan.perez@estudio-legal.com.ar'],
+    },
+    {
+        nombre: 'CBU / número de cuenta bancaria',
+        md: '# EXP 63/2020\n\n> AFIP c/ SOSA s/EJECUCION\n\nSe embargó la CBU 0170099220000067797390 del demandado.',
+        fugas: ['0170099220000067797390'],
+    },
+];
+
+function medirCorpusFueraDeAlcance() {
+    let totalFugas = 0, fugasNoDetectadas = 0;
+    const detalle = [];
+    for (const caso of CORPUS_FUERA_DE_ALCANCE) {
+        const { markdownAnonimizado } = anonimizar(caso.md);
+        for (const fuga of caso.fugas) {
+            totalFugas++;
+            if (markdownAnonimizado.includes(fuga)) {
+                fugasNoDetectadas++;
+                detalle.push(`${caso.nombre} → sobrevivió: "${fuga}"`);
+            }
+        }
+    }
+    const tasa = totalFugas === 0 ? 0 : (fugasNoDetectadas / totalFugas) * 100;
+    console.log('\n▶ CATEGORÍAS FUERA DE ALCANCE DEL MOTOR (informativo — NO gatea la suite)\n');
+    console.log(`   📊 Domicilio/teléfono/email/CBU: ${totalFugas - fugasNoDetectadas}/${totalFugas} detectados · tasa de falsos negativos: ${tasa.toFixed(1)}%`);
+    detalle.forEach(d => console.log(`      · ${d}`));
+    console.log('   (esperado 100% de falsos negativos — el motor no las cubre por diseño, ver comentario arriba)\n');
+    return { tasa, totalFugas, fugasNoDetectadas };
+}
 
 function correrCorpus() {
     console.log('\n▶ CORPUS ADVERSARIAL — tasa de falsos negativos medida\n');
@@ -573,10 +686,12 @@ async function testIntegracionReal() {
 }
 
 const resultadoCorpus = correrCorpus();
+const resultadoFueraDeAlcance = medirCorpusFueraDeAlcance();
 
 testIntegracionReal().then(() => {
     console.log(`\n${ok}/${ok + fail} PASS`);
     console.log(`Tasa de falsos negativos del corpus adversarial: ${resultadoCorpus.tasaFN.toFixed(1)}%`);
+    console.log(`Tasa de falsos negativos FUERA de alcance (domicilio/teléfono/email/CBU, informativo): ${resultadoFueraDeAlcance.tasa.toFixed(1)}%`);
     if (fail > 0) process.exit(1);
 }).catch(e => {
     console.error('❌ Error inesperado:', e);

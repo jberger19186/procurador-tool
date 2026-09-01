@@ -184,8 +184,38 @@ const RE_DNI = /\b(?:D\.?N\.?I\.?|L\.?E\.?|L\.?C\.?|DOCUMENTO\s+NACIONAL\s+DE\s+
 // documento original SIN autenticación y sus tokens no expiran, así que un
 // `.md` con los nombres enmascarados y los enlaces vivos entrega el
 // expediente sin anonimizar. Es anonimización teatral.
-const RE_ENLACE_SCW = /\[([^\]]*)\]\(\s*https?:\/\/[^)\s]*viewer\.seam[^)\s]*\s*\)/gi;
-const RE_URL_SCW_SUELTA = /https?:\/\/[^\s)<>\]]*viewer\.seam[^\s)<>\]]*/gi;
+//
+// 🚨 S10 (2026-09-01): el regex original exigía el token "viewer.seam" y el
+// resto de la URL CONTIGUOS (sin `\s`). El mismo modo de falla que ya
+// apareció una vez en este motor —un nombre partido por el guion de corte
+// del PDF, resuelto para nombres con `CORTE_DE_GUION`/`patronDeToken`— aplica
+// igual acá: si el PDF envuelve por ancho una URL impresa como texto plano
+// (un despacho/cédula que la muestra de referencia) justo en medio de
+// "viewer.seam" o de la query string, la URL queda partida en dos "líneas"
+// del `.md` y el regex original NO la reconocía — confirmado con un caso
+// sintético: `viewer.se` + salto de línea + `am?id=...` sobrevivía intacto,
+// reconstruible con solo borrar el salto de línea. Es EXACTAMENTE el defecto
+// que este punto del plan pedía descartar, y no estaba descartado.
+// Mismo mecanismo que `patronDeToken` (tolerar un quiebre entre cada
+// carácter), aplicado a los 2 literales fijos (esquema y host+path) y, para
+// el resto dinámico de la URL (query string), un patrón que tolera el mismo
+// quiebre entre segmentos de caracteres "de URL" — sin asumir de antemano
+// dónde va a caer el corte.
+const QUIEBRE_LINEA_PDF = '(?:\\s*\\n\\s*>?\\s*)?';
+function patronLiteralConQuiebres(literal) {
+    return [...literal].map(escaparRegex).join(QUIEBRE_LINEA_PDF);
+}
+const PATRON_ESQUEMA_URL_SCW =
+    `(?:${patronLiteralConQuiebres('http')}${patronLiteralConQuiebres('s')}?${QUIEBRE_LINEA_PDF}:${QUIEBRE_LINEA_PDF}\\/${QUIEBRE_LINEA_PDF}\\/${QUIEBRE_LINEA_PDF})`;
+const PATRON_HOST_PATH_SCW = patronLiteralConQuiebres('scw.pjn.gov.ar/scw/viewer.seam');
+// Resto de la URL (query string: id, tipoDoc…) — contenido dinámico, no un
+// literal fijo. Consume una tanda de caracteres "de URL" y, opcionalmente,
+// otra tanda tras un quiebre — repetido, así tolera más de un corte.
+const PATRON_RESTO_URL = `(?:[^\\s<>\\]]*(?:\\s*\\n\\s*>?\\s*[^\\s<>\\]]*)*)`;
+const PATRON_URL_SCW_COMPLETO = PATRON_ESQUEMA_URL_SCW + PATRON_HOST_PATH_SCW + PATRON_RESTO_URL;
+
+const RE_ENLACE_SCW = new RegExp(`\\[([^\\]]*)\\]\\(\\s*${PATRON_URL_SCW_COMPLETO}\\s*\\)`, 'gi');
+const RE_URL_SCW_SUELTA = new RegExp(PATRON_URL_SCW_COMPLETO, 'gi');
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Helpers de texto
@@ -423,9 +453,25 @@ function detectarTercerosPorMarcador(markdown) {
     //    inicial sigue exigiendo `\p{Lu}`) ni quedar suelto al final: el
     //    `.replace(/[.,;:]+$/…)` de cada token y el corte por separador
     //    estructural siguen aplicando.
+    // S10 (2026-09-01): flag `i` agregada — el marcador ya NO exige mayúsculas.
+    // Documentado en F5 (2026-08-31) como gap sin cerrar: "Marcadores de rol en
+    // Title Case (Dr. Laura Ventura) no se detectan — irrelevante para el
+    // informe propio (el PJN escribe en mayúsculas) pero SÍ aplica a los
+    // anexos que baja M3 — cédulas y sentencias de origen heterogéneo, a
+    // menudo en redacción normal." Medido antes del fix: "El letrado Dr. Laura
+    // Ventura presentó…" → 0 detecciones (el marcador "letrado" en minúscula
+    // no matcheaba ninguna de las 2 alternativas). El resto del patrón ya
+    // defendía contra el riesgo obvio de agrandar la superficie de captura en
+    // prosa: la clase que abre el nombre sigue exigiendo `\p{Lu}` — una
+    // palabra-marcador en minúscula ("el perito debe presentarse") solo
+    // dispara una captura si la SIGUIENTE palabra empieza con mayúscula, que
+    // en prosa normal (no en un documento del PJN) es la señal de un nombre
+    // propio, no de una oración cualquiera. Verificado con el corpus
+    // adversarial: "el perito debe presentarse en el juzgado" sigue sin
+    // detectar nada (nada arranca en mayúscula después del marcador).
     const re = new RegExp(
         `(?<![\\p{L}])(?:${alternador})(?![\\p{L}])\\s*[.:\\-]?\\s*(?:\\\\?\\|)?\\s*["'“”«()]?\\s*([\\p{Lu}][\\p{L}'’.\\-\\s]{2,80})`,
-        'gu'
+        'giu'
     );
 
     let m;
@@ -433,6 +479,28 @@ function detectarTercerosPorMarcador(markdown) {
         const crudo = m[1];
         // Cortar en el primer separador estructural.
         const hastaSeparador = crudo.split(/\\?\||,| - |\s{2,}|\n/)[0];
+
+        // 🚨 S10 (2026-09-01): el grupo de captura es GREEDY hasta 80
+        // caracteres e incluye `\s` (con saltos de línea). Sin este ajuste,
+        // `re.exec()` deja `lastIndex` al FINAL de esos 80 caracteres —
+        // mucho más allá de `hastaSeparador`, que es lo único que realmente
+        // se usa — así que un SEGUNDO marcador que cae dentro de esa ventana
+        // quedaba salteado por completo, nunca se le daba la chance de
+        // matchear. Medido: dos líneas `DESTINATARIO: <NOMBRE> ...\nDESTINATARIO:
+        // <OTRO NOMBRE> ...` (exactamente la forma en que un informe lista
+        // varias partes/letrados seguidos) detectaban SOLO la primera — la
+        // segunda persona quedaba con su nombre intacto en el archivo
+        // "anonimizado", sin ningún error visible. No es un caso exótico: es
+        // el modo de falla silencioso que advierte el encabezado del archivo,
+        // encontrado por el mismo método (construir una entrada que el
+        // corpus anterior no cubría e inspeccionar la salida real). Fix:
+        // retomar el escaneo justo después de `hastaSeparador` — no del final
+        // del capture greedy — así el resto del documento, incluido lo que la
+        // codicia del regex se había "comido", se vuelve a examinar.
+        const capturaInicio = m.index + m[0].length - crudo.length;
+        const finSeguro = capturaInicio + hastaSeparador.length;
+        re.lastIndex = Math.max(finSeguro, m.index + 1);
+
         // Cortar ante la primera palabra que no puede ser parte de un nombre.
         const brutos = tokensDe(hastaSeparador);
 

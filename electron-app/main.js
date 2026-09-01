@@ -2113,6 +2113,30 @@ ipcMain.handle('procesar-markdown-pdf', async (event, pdfPath) => {
     }
 });
 
+// S10 (security review, 2026-09-01): confinamiento de ruta para los 2 archivos que este
+// handler escribe. `reprocesar-markdown-mapping` recibe `mdAnonimizadoPath`/`mappingPath`
+// DEL RENDERER y los pasaba tal cual a `fs.writeFileSync()` — un path traversal
+// (`../../../algo`) o una ruta absoluta arbitraria escribía fuera de la carpeta del
+// usuario. Documentado en la revisión F5 del code-review (2026-08-31), asignado a este
+// bloque a propósito ("el ángulo de input hostil no es de esa fase") y confirmado sin
+// corregir hasta ahora. Mismo patrón que `open-file` (E2-3, más abajo en este archivo:
+// `path.resolve` + confinamiento con `startsWith(base + path.sep)`) y `safe-storage-*`
+// (E2-1) — la lección ya existe en este mismo código, acá no se había aplicado. A
+// diferencia de `open-file` (que confina a `userData`, la raíz de toda la app), acá se
+// confina a la carpeta de descargas del usuario (`resolveUserDescargasDir()`), que es
+// donde `procesar-markdown-pdf` YA escribe estos 2 archivos — y se exige además que la
+// extensión sea exactamente la que este handler produce, para no convertirlo en un
+// "escribir cualquier archivo de texto en cualquier lugar de la carpeta".
+function confinarRutaMarkdown(rutaCandidata, baseDir, extensionesPermitidas) {
+    if (typeof rutaCandidata !== 'string' || !rutaCandidata) return null;
+    const resolved = path.resolve(rutaCandidata);
+    const baseResolved = path.resolve(baseDir);
+    if (resolved !== baseResolved && !resolved.startsWith(baseResolved + path.sep)) return null;
+    const nombreLower = resolved.toLowerCase();
+    if (!extensionesPermitidas.some(ext => nombreLower.endsWith(ext))) return null;
+    return resolved;
+}
+
 // Reprocesamiento del mapping — SIEMPRE en memoria, nunca releyendo el PDF ni
 // volviendo a descargar adjuntos. `markdownCompleto` viaja desde el renderer
 // (donde quedó guardado tras el primer procesamiento), nunca se re-lee del
@@ -2137,9 +2161,16 @@ ipcMain.handle('reprocesar-markdown-mapping', async (event, { markdownCompleto, 
         if (typeof markdownCompleto !== 'string' || !mdAnonimizadoPath || !mappingPath) {
             return { success: false, error: 'Faltan datos para reprocesar.' };
         }
+        // S10: confinamiento — ver `confinarRutaMarkdown()` arriba.
+        const descargas = await resolveUserDescargasDir();
+        const mdAnonSeguro = confinarRutaMarkdown(mdAnonimizadoPath, descargas, ['.anonimizado.md']);
+        const mappingSeguro = confinarRutaMarkdown(mappingPath, descargas, ['.mapping.txt']);
+        if (!mdAnonSeguro || !mappingSeguro) {
+            return { success: false, error: 'Ruta no permitida.' };
+        }
         const r = anonimizar(markdownCompleto, mappingTexto);
-        fs.writeFileSync(mdAnonimizadoPath, r.markdownAnonimizado, 'utf8');
-        fs.writeFileSync(mappingPath, r.mappingTexto, 'utf8');
+        fs.writeFileSync(mdAnonSeguro, r.markdownAnonimizado, 'utf8');
+        fs.writeFileSync(mappingSeguro, r.mappingTexto, 'utf8');
         return { success: true, markdownAnonimizado: r.markdownAnonimizado, mappingTexto: r.mappingTexto };
     } catch (error) {
         return { success: false, error: error.message };

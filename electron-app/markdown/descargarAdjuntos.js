@@ -152,13 +152,46 @@ async function descargarAUnArchivo(url, destDir) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_POR_ADJUNTO_MS);
 
-    let res;
+    // S10 (2026-09-01): 🚨 EL `clearTimeout` VIVÍA EN EL `finally` DEL `fetch()`
+    // DE ARRIBA — así que el timer de 30 s solo protegía el tiempo hasta que
+    // LLEGARAN LOS HEADERS, no la descarga completa. Un servidor que responde
+    // 200 al instante y después gotea el cuerpo (`res.write()` sin cerrar nunca
+    // la respuesta — el caso "1 byte por segundo" del bloque) hace que `fetch()`
+    // resuelva enseguida, el timer se cancele ahí mismo, y el bucle de
+    // `reader.read()` de más abajo quede esperando bytes que nunca llegan **sin
+    // ningún límite de tiempo**. Confirmado con un servidor local real: colgado
+    // más de 40 s sin que el módulo abortara solo — el propio comentario de
+    // `TIMEOUT_POR_ADJUNTO_MS` prometía cubrir justo este caso y no lo cubría.
+    // Fix: el `AbortController` es el MISMO para el fetch inicial y para el
+    // streaming del cuerpo (`res.body`), así que basta con NO cancelar el timer
+    // hasta que la descarga completa termine (éxito o error) — todo el bloque
+    // que sigue queda envuelto en un try/finally externo con ese único
+    // `clearTimeout`. Verificado: con el fix, el mismo servidor colgado aborta
+    // a los ~30 s en vez de nunca.
     try {
-        res = await fetch(url, { signal: controller.signal });
+        let res;
+        // S10: `redirect: 'manual'` — sin esto, `fetch()` sigue redirects por
+        // default y el destino REAL termina siendo el que devuelva el
+        // `Location` del servidor, que la allowlist de arriba NUNCA valida (esa
+        // solo mira `link.url`, la URL original extraída del PDF, en
+        // `extraerLinksInforme`). Confirmado con 2 servidores locales: un
+        // `fetch()` por default siguió un 302 de un host a otro sin ninguna
+        // advertencia — si `scw.pjn.gov.ar` alguna vez respondiera con un
+        // redirect (servidor comprometido, DNS envenenado, MITM sin pinning),
+        // este `fetch` lo seguía ciegamente hacia CUALQUIER host, incluida una
+        // IP interna. M0 midió que el endpoint real siempre responde 200
+        // directo, nunca redirect — así que rechazar cualquier 3xx no rompe el
+        // camino feliz. Con `redirect:'manual'` una respuesta 3xx llega con
+        // `res.ok=false` (status real, ej. 302), así que el chequeo `!res.ok`
+        // de abajo ya la rechaza sin cambios adicionales.
+        res = await fetch(url, { signal: controller.signal, redirect: 'manual' });
+        return await procesarRespuestaAdjunto(res, url, destDir);
     } finally {
         clearTimeout(timer);
     }
+}
 
+async function procesarRespuestaAdjunto(res, url, destDir) {
     if (!res.ok) throw new Error(`HTTP ${res.status} al descargar el adjunto`);
 
     // F5 (2026-08-31): el JSDoc de arriba prometía `@throws … o la respuesta no
@@ -183,17 +216,49 @@ async function descargarAUnArchivo(url, destDir) {
     // no lo manda, se sintetiza uno a partir del token para no perder el
     // documento — nunca se asume un nombre fijo genérico que colisionaría
     // entre adjuntos distintos.
-    const filename = mFilename
+    //
+    // S10 (2026-09-01): `path.basename()` neutraliza un traversal normal
+    // (`../../evil.pdf` → `evil.pdf`), pero un `filename` que es LITERALMENTE
+    // `.` o `..` sobrevive intacto — ninguno de los dos tiene separador que
+    // `basename()` pueda recortar, y el replace de símbolos no toca los
+    // puntos. `path.join(destDir, '..')` resuelve al PADRE de `destDir` (que
+    // existe, es `os.tmpdir()`), y como `os.tmpdir()` existe como directorio,
+    // `fs.createWriteStream()` sobre esa ruta falla con EISDIR — confirmado en
+    // este mismo cambio que, SIN el listener de error agregado más abajo, ese
+    // fallo tira una excepción no capturada que mata el proceso entero de
+    // Electron (no solo el módulo Markdown). Se cierra la clase completa:
+    // cualquier nombre saneado que quede en `.`/`..`/vacío cae al nombre
+    // sintético, igual que la rama "sin Content-Disposition".
+    let filename = mFilename
         ? path.basename(mFilename[1]).replace(/[\\/:"*?<>|]/g, '_')
-        : `adjunto_${crypto.createHash('sha1').update(url).digest('hex').slice(0, 16)}.pdf`;
+        : null;
+    if (!filename || filename === '.' || filename === '..') {
+        filename = `adjunto_${crypto.createHash('sha1').update(url).digest('hex').slice(0, 16)}.pdf`;
+    }
 
     const localPath = path.join(destDir, filename);
+    // S10: confinamiento de defensa en profundidad — aun con el filtro de
+    // arriba, si `localPath` resolviera fuera de `destDir` por cualquier vía
+    // no anticipada, se rechaza antes de tocar el disco en vez de confiar en
+    // que el saneo de más arriba sea exhaustivo.
+    const destDirResuelto = path.resolve(destDir);
+    if (path.resolve(localPath) !== path.join(destDirResuelto, filename)) {
+        throw new Error('Nombre de archivo de adjunto no permitido');
+    }
     const writeStream = fs.createWriteStream(localPath);
+    // S10: sin este listener, cualquier error de escritura (EISDIR, ENOSPC,
+    // permisos) queda como 'error' sin oyente — Node lo re-lanza como
+    // excepción NO capturada y tira abajo el proceso completo de Electron.
+    // Confirmado reproduciendo el caso `filename===".."` de arriba antes del
+    // fix: crasheaba el proceso entero, no solo esta descarga.
+    let errorEscritura = null;
+    writeStream.on('error', (e) => { errorEscritura = e; });
 
     let bytes = 0;
     const reader = res.body.getReader();
     try {
         while (true) {
+            if (errorEscritura) throw errorEscritura;
             const { done, value } = await reader.read();
             if (done) break;
             bytes += value.length;
