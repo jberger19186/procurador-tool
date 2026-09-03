@@ -329,6 +329,23 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
     const db = req.app.get('db');
     const userId = req.user.id;
 
+    // H-FE-01 (fase E1): `scriptName`, `errorMessage` y `subsystem` llegan del cuerpo del
+    // request y terminan en `usage_logs`, que el dashboard admin renderiza con innerHTML.
+    // Se validan acá, en el escritor, además del escape del lado del dashboard (defensa en
+    // profundidad). El cliente Electron manda siempre nombres de archivo de script
+    // (`testM2.js`, `procesarNovedadesCompleto.js`, …), que cumplen el patrón.
+    if (typeof scriptName !== 'string' || !/^[\w.-]{1,80}$/.test(scriptName)) {
+        return res.status(400).json({ error: 'scriptName inválido' });
+    }
+    // Mismas 4 claves que el mapa `usageCol` de abajo. `null`/ausente sigue siendo válido
+    // (backendClient.js:140 manda null cuando el script no mapea a ningún subsistema).
+    const VALID_SUBSYSTEMS = ['proc', 'batch', 'informe', 'monitor_novedades'];
+    if (subsystem != null && !VALID_SUBSYSTEMS.includes(subsystem)) {
+        return res.status(400).json({ error: 'subsystem inválido' });
+    }
+    // Diagnóstico: se acota, no se rechaza (un mensaje largo legítimo no debe perder el log).
+    const safeErrorMessage = String(errorMessage || '').slice(0, 500) || null;
+
     // Determinar columna de uso según subsistema
     const usageCol = {
         'proc':               'proc_usage',
@@ -436,7 +453,7 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
         await db.query(`
             INSERT INTO usage_logs (user_id, script_name, success, error_message, subsystem, expedientes_count)
             VALUES ($1, $2, $3, $4, $5, $6)
-        `, [userId, scriptName, success, errorMessage || null, subsystem || null, expedientesCount || null]);
+        `, [userId, scriptName, success, safeErrorMessage, subsystem || null, expedientesCount || null]);
 
         // Obtener estado actualizado
         const updatedSub = await db.query(`

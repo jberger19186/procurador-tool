@@ -383,7 +383,7 @@ async function renderOverview() {
             <div class="card-body">
                 ${s.topScripts.length === 0 ? '<p style="color:var(--text-muted);font-size:13px">Sin datos aún.</p>' : `
                 <table><thead><tr><th>Script</th><th>Ejecuciones</th></tr></thead>
-                <tbody>${s.topScripts.map(r => `<tr><td>${r.script_name}</td><td>${r.executions}</td></tr>`).join('')}</tbody>
+                <tbody>${s.topScripts.map(r => `<tr><td>${escHtml(r.script_name)}</td><td>${r.executions}</td></tr>`).join('')}</tbody>
                 </table>`}
             </div>
         </div>`;
@@ -915,11 +915,11 @@ async function renderUserDetail(userId) {
                 <div class="table-wrapper">
                     <table><thead><tr><th>Script</th><th>Subsistema</th><th>Resultado</th><th>Fecha</th><th>Error</th></tr></thead>
                     <tbody>${logs.map(l => `<tr>
-                        <td>${l.script_name || '—'}</td>
-                        <td style="font-size:11px;color:var(--text-muted)">${l.subsystem || '—'}</td>
+                        <td>${escHtml(l.script_name || '—')}</td>
+                        <td style="font-size:11px;color:var(--text-muted)">${escHtml(l.subsystem || '—')}</td>
                         <td>${l.success ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">Error</span>'}</td>
                         <td>${fmtDate(l.execution_date)}</td>
-                        <td style="font-size:12px;color:var(--text-muted)">${l.error_message || ''}</td>
+                        <td style="font-size:12px;color:var(--text-muted)">${escHtml(l.error_message || '')}</td>
                     </tr>`).join('')}
                     </tbody></table>
                 </div>`}
@@ -2002,12 +2002,12 @@ async function renderScripts() {
             <div class="table-wrapper">
                 <table><thead><tr><th>Nombre</th><th>Versión</th><th>Estado</th><th>Hash</th><th>Actualizado</th><th></th></tr></thead>
                 <tbody>${scripts.map(s => `<tr>
-                    <td><strong>${s.script_name}</strong></td>
+                    <td><strong>${escHtml(s.script_name)}</strong></td>
                     <td>${s.version}</td>
                     <td>${s.active ? '<span class="badge badge-green">Activo</span>' : '<span class="badge badge-gray">Inactivo</span>'}</td>
                     <td style="font-family:monospace;font-size:11px;color:var(--text-muted)">${s.hash.slice(0,16)}…</td>
                     <td style="font-size:12px">${fmtDate(s.updated_at)}</td>
-                    <td><button class="btn btn-sm btn-secondary" onclick="toggleScript('${s.script_name}',${!s.active})">${s.active ? 'Desactivar' : 'Activar'}</button></td>
+                    <td><button class="btn btn-sm btn-secondary" onclick="toggleScript('${escJsAttr(s.script_name)}',${!s.active})">${s.active ? 'Desactivar' : 'Activar'}</button></td>
                 </tr>`).join('')}</tbody>
                 </table>
             </div>

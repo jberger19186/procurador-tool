@@ -192,7 +192,11 @@ app.use('/privacidad', express.static(path.join(__dirname, 'public', 'privacidad
 // Rutas
 app.use('/auth', require('./routes/auth'));
 app.use('/api/extension', require('./routes/extension'));
-app.use('/scripts', require('./routes/scripts'));
+// H-BE-01 (fase E1): el router '/scripts' (POST /execute) se eliminó. Ejecutaba cualquier
+// script activo de `encrypted_scripts` con `vm` + `require` real dentro del proceso de la
+// API, alcanzable con el JWT de cualquier cuenta con suscripción activa. Sin consumidores
+// (ni Electron ni la extensión ni el portal lo llamaban). La ejecución real de scripts pasa
+// por el cliente: /client/scripts/download + fork local.
 app.use('/admin', require('./routes/admin'));
 app.use('/client', require('./routes/client'));
 // RI-3 (revisión 2026-07-19): estos 5 routers no tenían ningún rate-limit de red
