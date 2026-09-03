@@ -70,6 +70,43 @@ app.use(helmet({
     }
 }));
 
+// C.2 paso 0 (fase E2) — SEGUNDA CSP, en modo "solo avisar". La de arriba (enforced) NO
+// cambia: sigue permitiendo 'unsafe-inline' y los ~293 handlers inline siguen andando.
+// Esta segunda solo REPORTA lo que la CSP estricta bloquearía si estuviera activa, para
+// que E12 (C.2 paso 3) sepa, con datos y no por grep, qué quedó sin convertir antes de
+// endurecer. Un header Content-Security-Policy-Report-Only nunca bloquea nada.
+//
+// Es un espejo exacto de la enforced salvo por las dos directivas que E12 va a endurecer
+// (scriptSrc sin 'unsafe-inline', scriptSrcAttr en 'none') más el report-uri. styleSrc,
+// fontSrc y el resto se dejan IGUALES a propósito: relajarlas acá para "limpiar el log"
+// sería deshacer el trabajo, y hacerlas más estrictas metería ruido de otra directiva.
+app.use(helmet.contentSecurityPolicy({
+    reportOnly: true,
+    useDefaults: true,
+    directives: {
+        defaultSrc:    ["'self'"],
+        scriptSrc:     ["'self'"],                 // sin 'unsafe-inline' (lo que viene en E12)
+        scriptSrcAttr: ["'none'"],                 // sin handlers inline (idem)
+        styleSrc:      ["'self'", "'unsafe-inline'"],
+        imgSrc:        ["'self'", "data:"],
+        fontSrc:       ["'self'", "data:"],
+        connectSrc:    ["'self'"],
+        objectSrc:     ["'none'"],
+        baseUri:       ["'self'"],
+        frameAncestors: ["'self'"],
+        formAction:    ["'self'"],
+        reportUri:     ['/csp-report']
+    }
+}));
+
+// Receptor de esos reportes. Va ACÁ, antes del `express.json` global de más abajo, por una
+// sola razón: su parser propio es path-scoped a /csp-report y así el tope de 16 kb aplica
+// de verdad (si corriera después, un body `application/json` ya vendría parseado por el
+// global, con el tope de 100 kb). Al ser path-scoped NO toca /webhooks, así que el hook
+// `verify` que captura el rawBody de la firma de MercadoPago queda intacto — que es lo que
+// protege el bloque marcado "PUNTO CRÍTICO P2" de más abajo.
+app.use('/csp-report', require('./routes/cspReport'));
+
 // CORS — rutas públicas HTML (navegador) no tienen restricción de origen
 const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',')
