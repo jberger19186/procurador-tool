@@ -643,6 +643,19 @@ function sanitizeExcelCell(value) {
     return /^[=+\-@]/.test(value) ? `'${value}` : value;
 }
 
+// H-EL-09 (revision Fable, E3): el href sale del HTML del PJN y termina como
+// hipervinculo clickeable en el Excel. Solo se admiten http/https; cualquier otro
+// esquema (javascript:, file:, ms-msdt:) queda como texto plano, sin link.
+function hrefSeguroExcel(value) {
+    if (typeof value !== 'string') return null;
+    try {
+        const u = new URL(value);
+        return (u.protocol === 'http:' || u.protocol === 'https:') ? value : null;
+    } catch (_) {
+        return null;
+    }
+}
+
 async function generarExcel(resultados, timestamp, incluirMovimientos) {
     try {
         const workbook = new ExcelJS.Workbook();
@@ -698,7 +711,7 @@ async function generarExcel(resultados, timestamp, incluirMovimientos) {
         resultados.expedientes.forEach((exp, index) => {
             sheetExpedientes.addRow({
                 numero: index + 1,
-                expediente: exp.expediente,
+                expediente: sanitizeExcelCell(exp.expediente),   // H-EL-09
                 // E4-2 (seguimiento, sesión 2026-07-28): mismo campo (caratula) que la hoja
                 // "Movimientos" ya sanea — quedó afuera del alcance original del hallazgo
                 // (limitado a esa hoja), pero es la misma clase de texto libre del PJN
@@ -740,22 +753,24 @@ async function generarExcel(resultados, timestamp, incluirMovimientos) {
                     exp.movimientos.forEach(mov => {
                         // Agregar la fila con los datos
                         const row = sheetMovimientos.addRow({
-                            expediente: exp.expediente,
+                            expediente: sanitizeExcelCell(exp.expediente),   // H-EL-09
                             fecha: mov.fecha,
                             tipo: sanitizeExcelCell(mov.tipo),
                             detalle: sanitizeExcelCell(mov.detalle),
                             oficina: sanitizeExcelCell(mov.oficina || ''),
                             caratula: sanitizeExcelCell(exp.caratula),  // ← Carátula del expediente
-                            href: mov.viewHref || '',            // ← URL (se convertirá a hipervínculo)
+                            href: sanitizeExcelCell(mov.viewHref || ''),   // H-EL-09
                             separador: '-'                       // ← Siempre "-"
                         });
 
-                        // Convertir la celda hRef en hipervínculo clickeable si existe
-                        if (mov.viewHref) {
+                        // Convertir la celda hRef en hipervínculo clickeable si existe.
+                        // H-EL-09: solo si el esquema es http/https (ver hrefSeguroExcel).
+                        const hrefSeguro = hrefSeguroExcel(mov.viewHref);
+                        if (hrefSeguro) {
                             const hrefCell = row.getCell('href');
                             hrefCell.value = {
-                                text: mov.viewHref,              // Texto que se muestra
-                                hyperlink: mov.viewHref,         // URL clickeable
+                                text: hrefSeguro,                // Texto que se muestra
+                                hyperlink: hrefSeguro,           // URL clickeable
                                 tooltip: 'Click para abrir'      // Tooltip al pasar el mouse
                             };
                             hrefCell.font = {
@@ -837,6 +852,17 @@ Ver archivos adjuntos para más detalles.`,
 }
 
 // ============ GENERAR VISOR CON DATOS EMBEBIDOS ============
+// H-EL-14 / H-EL-03 (revision Fable, E3): serializa un objeto para embeberlo dentro de
+// un bloque <script>. Escapa `<` (unico caracter que puede cerrar el bloque, via
+// </script>) y los separadores de linea U+2028/U+2029, que son saltos de linea validos
+// en JS y romperian el literal. El resultado sigue siendo JSON valido.
+function inyectarJsonEnScript(obj) {
+    return JSON.stringify(obj, null, 2)
+        .replace(/</g, '\\u003c')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
 async function generarVisorConDatos(resultados, timestamp) {
     // Detectar si estamos en producción sin usar electron.app
     // Si process.resourcesPath existe y es diferente de __dirname, estamos empaquetados
@@ -872,7 +898,7 @@ async function generarVisorConDatos(resultados, timestamp) {
     const template = fs.readFileSync(templatePath, 'utf8');
 
     const scriptEmbebido = `<script>
-const datosEmbebidos = ${JSON.stringify(resultados, null, 2)};
+const datosEmbebidos = ${inyectarJsonEnScript(resultados)};
 window.addEventListener('DOMContentLoaded', function() {
   if (typeof cargarDatosEmbebidos === 'function') {
     cargarDatosEmbebidos(datosEmbebidos);
@@ -880,7 +906,10 @@ window.addEventListener('DOMContentLoaded', function() {
 });
 </script>`;
 
-    const htmlFinal = template.replace('<!-- DATOS_EMBEBIDOS -->', scriptEmbebido);
+    // H-EL-14: el reemplazo va con funcion, no con string. String.replace interpreta los
+    // patrones $&, $`, $' y $1 dentro del texto de reemplazo, y esos caracteres
+    // pueden venir del PJN dentro de `resultados`.
+    const htmlFinal = template.replace('<!-- DATOS_EMBEBIDOS -->', () => scriptEmbebido);
 
     const ts = timestamp || new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
     const visorPath = path.join(getDataPath(), 'descargas', `procurar-individual_visor_${ts}.html`);

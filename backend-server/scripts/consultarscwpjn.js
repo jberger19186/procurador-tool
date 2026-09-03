@@ -192,7 +192,7 @@ console.log(`📄 PROGRESS: Expedientes recibidos: ${expedientesInput.length}`);
         ({ browser, page } = await testM2.configuracionesGenerales(profilePath));
 
         process.stdout.write("🔑 PROGRESS: Inicio de Sesion...\n");
-        const loginURL = "http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1";
+        const loginURL = "https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1";
         await testM2.iniciarSesion(page, loginURL, identificador);
         console.log("✅ PROGRESS: Sesión iniciada.");
 

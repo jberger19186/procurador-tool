@@ -16,7 +16,7 @@ const puppeteer = require('puppeteer');
 const fs        = require('fs');
 const path      = require('path');
 
-const HOME_URL      = 'http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1';
+const HOME_URL      = 'https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1';
 const NOMBRE_PARTE  = 'PARDO MONTOYA';
 const JURISDICCION  = '14'; // FCR — Justicia Federal de Comodoro Rivadavia
 
@@ -71,7 +71,9 @@ async function ejecutar() {
     const browser = await puppeteer.launch({
         headless: false,
         executablePath: chromePath,
-        args: [`--user-data-dir=${profilePath}`, '--no-sandbox', '--ignore-certificate-errors'],
+        // H-COV-Z4-01: sin '--no-sandbox' ni '--ignore-certificate-errors'
+        // (CLAUDE-arquitectura § "Flags de Chrome a NO usar").
+        args: [`--user-data-dir=${profilePath}`],
         defaultViewport: null,
     });
 

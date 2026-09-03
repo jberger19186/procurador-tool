@@ -31,11 +31,23 @@ const PID_FILE_PATH = path.join(process.env.PROCURADOR_DATA_DIR || __dirname, 'p
 // Evitar límite de listeners para no generar memory leaks
 process.setMaxListeners(0);
 
-// Capturar SIGTERM (en Windows equivale a terminate) y salir al instante
-process.on('SIGTERM', () => {
+// Capturar SIGTERM y cerrar Chrome antes de salir.
+// H-EL-10 (revision Fable, E3): antes salia con process.exit(0) dejando chrome.exe
+// huerfano con la sesion judicial abierta.
+// ATENCION - alcance real: en Windows este handler NUNCA corre. subprocess.kill(signal)
+// ignora la senal y termina el proceso de forma forzada (equivalente a SIGKILL), asi que
+// ni el boton "Detener" ni el cierre de la app llegan aca. El control efectivo contra
+// Chrome huerfano es closeChromeProfile() en stop-process y before-quit (main.js), que va
+// en el release de Electron. Esto cubre el caso POSIX y deja de ser una salida sucia.
+process.on('SIGTERM', async () => {
     console.log('🔔 SIGTERM recibido: solicitando fin inmediato');
     if (fs.existsSync(PID_FILE_PATH)) fs.unlinkSync(PID_FILE_PATH);
     console.log('RESULT: {"navegador_cerrado":true}');
+    try {
+        await cerrarNavegadorSeguro(browserActivo);
+    } catch (err) {
+        console.warn(`⚠️ No se pudo cerrar el navegador en SIGTERM: ${err.message}`);
+    }
     process.exit(0);
 });
 
@@ -826,7 +838,7 @@ async function main() {
 
             // Iniciar sesión
             process.stdout.write("PROGRESS: Inicio de Sesión...\n");
-            const loginURL = "http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1";
+            const loginURL = "https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1";
             await Promise.race([
                 iniciarSesion(page, loginURL, identificador),
                 new Promise((_, reject) => browser.once('disconnected', () => reject(new Error('Desconexión durante iniciarSesion'))))

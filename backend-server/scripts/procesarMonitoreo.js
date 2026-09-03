@@ -87,6 +87,7 @@ async function apiCall(endpoint, method = 'GET', body = null) {
         const fullUrl = `${apiBase}${endpoint}`;
         const parsed  = new URL(fullUrl);
         const isHttps = parsed.protocol === 'https:';
+        const esLocal = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
         const mod     = isHttps ? https : http;
         const bodyStr = body ? JSON.stringify(body) : null;
         const headers = {
@@ -101,7 +102,10 @@ async function apiCall(endpoint, method = 'GET', body = null) {
             path:               parsed.pathname + (parsed.search || ''),
             method,
             headers,
-            rejectUnauthorized: false,   // acepta certs auto-firmados del backend local
+            // H-EL-02: solo se acepta un cert auto-firmado si el backend es local.
+            // Contra api/staging (https real) se valida la cadena: sin esto, un MitM
+            // en la ruta del usuario ve el JWT que viaja en el header Authorization.
+            rejectUnauthorized: !esLocal,
         }, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
@@ -122,7 +126,7 @@ async function apiCall(endpoint, method = 'GET', body = null) {
 
 // ─── Proceso principal ────────────────────────────────────────────────────────
 const profilePath = path.join(process.env.LOCALAPPDATA, 'ProcuradorSCW', 'ChromeProfile');
-const loginURL    = 'http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1';
+const loginURL    = 'https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1';
 
 let identificador = '27320694359';
 try {

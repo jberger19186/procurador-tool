@@ -163,7 +163,7 @@ try {
 process.env.IDENTIFICADOR = identificador;
 
 const profilePath = path.join(process.env.LOCALAPPDATA, 'ProcuradorSCW', 'ChromeProfile');
-const loginURL = "http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1";
+const loginURL = "https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1";
 
 process.stdout.write(`📁 PROGRESS: Procurar Custom — ${expedientesInput.length} expediente${expedientesInput.length !== 1 ? 's' : ''}${fechaLimite ? ` — fecha límite: ${fechaLimite}` : ''}\n`);
 

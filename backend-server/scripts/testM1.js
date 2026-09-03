@@ -31,7 +31,7 @@ function detectarChrome() {
     throw new Error('❌ No se encontró Google Chrome instalado. Por favor instálelo desde https://www.google.com/chrome/');
 }
 
-const URL = "http://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1";
+const URL = "https://scw.pjn.gov.ar/scw/consultaListaRelacionados.seam?cid=1";
 
 /**
  * Configura el navegador usando el perfil indicado y aplica monitoreo y manejo de errores.
@@ -59,8 +59,9 @@ async function configuracionesGenerales(profilePath) {
             `--user-data-dir=${profilePath}`,
             `--window-position=0,0`,
             `--window-size=${halfWidth},${screenHeight}`,
-            '--no-sandbox',
-            '--ignore-certificate-errors',
+            // H-COV-Z4-01: sin '--no-sandbox' ni '--ignore-certificate-errors'
+            // (CLAUDE-arquitectura § "Flags de Chrome a NO usar"). No reponerlos: si en una
+            // máquina aparece el interstitial de certificado, es un MitM real de esa red.
         ],
         defaultViewport: null,
     });
@@ -869,7 +870,7 @@ async function consultarExpedientes(page, opcion, intentos = 3) {
                 // como "Navigating frame was detached". Capturamos ese error específico
                 // y esperamos a que la navegación se estabilice antes de continuar.
                 try {
-                    await page.goto('http://scw.pjn.gov.ar/scw/consultaListaFavoritos.seam', {
+                    await page.goto('https://scw.pjn.gov.ar/scw/consultaListaFavoritos.seam', {
                         waitUntil: 'networkidle2',
                         timeout: 30000
                     });
@@ -879,7 +880,7 @@ async function consultarExpedientes(page, opcion, intentos = 3) {
                         await delay(3000);
                         // Volver a navegar con criterio menos estricto por si la redirección
                         // ya completó pero Puppeteer perdió el track del frame original.
-                        await page.goto('http://scw.pjn.gov.ar/scw/consultaListaFavoritos.seam', {
+                        await page.goto('https://scw.pjn.gov.ar/scw/consultaListaFavoritos.seam', {
                             waitUntil: 'domcontentloaded',
                             timeout: 30000
                         });

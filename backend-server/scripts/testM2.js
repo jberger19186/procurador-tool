@@ -160,8 +160,9 @@ async function configuracionesGenerales(profilePath) {
             `--user-data-dir=${profilePath}`,
             `--window-position=0,0`,
             `--window-size=${halfWidth},${screenHeight}`,
-            '--no-sandbox',
-            '--ignore-certificate-errors',
+            // H-COV-Z4-01: sin '--no-sandbox' ni '--ignore-certificate-errors'
+            // (CLAUDE-arquitectura § "Flags de Chrome a NO usar"). No reponerlos: si en una
+            // máquina aparece el interstitial de certificado, es un MitM real de esa red.
         ],
         defaultViewport: null,
     });
