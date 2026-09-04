@@ -337,9 +337,19 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
 //   2. Un camino de conteo RESIDUAL, para las ejecuciones que hoy NO piden
 //      permiso: `run-informe` y `run-monitoreo` de `electron-app/main.js` llaman
 //      a `executeRemoteScriptAsLocal` sin pasar por `execution/start`. Si se
-//      quitara el conteo de acá antes del release de cliente de E8, informes y
-//      monitoreo quedarían gratis e ilimitados. Ese camino se retira cuando E8
-//      esté desplegado y los clientes viejos hayan sido reemplazados.
+//      quitara el conteo de acá, informes y monitoreo quedarían gratis e
+//      ilimitados.
+//
+//      ⚠️ NO alcanza con que E8 esté desplegado. Verificado el 2026-09-04 sobre
+//      el commit `90021c0` (E8, cliente 2.7.55): `runInformeLogic` y
+//      `run-monitoreo` de `electron-app/main.js` SIGUEN sin llamar a
+//      `acquireExecutionLock` — los únicos 4 call sites son los de procuración.
+//      La condición real para retirar este camino es que ESOS DOS FLUJOS pasen
+//      por `execution/start`, lo que exige otro release de cliente y, para el
+//      monitoreo, decidir antes con qué unidad se cobra (hoy es por parte
+//      consultada; `start` entrega un permiso por corrida).
+//      Antes de tocar esto: `grep -n acquireExecutionLock electron-app/main.js`
+//      y confirmar que informe y monitor están entre los llamadores.
 //
 // `quota_counted` de `active_executions` es lo que decide: si el permiso de esta
 // ejecución YA descontó, acá no se descuenta nada. Es la única fuente de verdad
