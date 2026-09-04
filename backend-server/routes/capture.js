@@ -84,6 +84,10 @@ function normalizarCaso(src) {
         situacion_actual: texto(src?.sit, MAX_TEXTO_CORTO),
         fecha_corrida:    texto(src?.fproc, 40),
         movimientos:      parseMovs(src?.movs),
+        // Solo el visor de informe lo manda: nombre del PDF que produjo esa corrida.
+        // Es un nombre de archivo, nunca una ruta ni una URL — el portal lo muestra
+        // como texto para que el usuario sepa qué archivo mirar en su carpeta.
+        pdf:              texto(src?.pdf, MAX_TEXTO_CORTO),
     };
 }
 

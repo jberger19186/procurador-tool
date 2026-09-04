@@ -434,11 +434,14 @@
   // directamente (ver H1 del plan) — `DATOS_BATCH.bitacora` ya viene poblado
   // sin necesidad de post-procesado ni marcador de reemplazo.
   //
-  // Modelo de datos más simple que el de procuración: solo hay `expediente` /
-  // `ok` / `exitCode` / `rutaPDF`, sin carátula/dependencia/situación ni
-  // movimientos — el informe no trae esos campos. La ficha que se guarda desde
-  // acá queda con solo el número de expediente; el usuario la completa después
-  // desde Mis Expedientes si quiere.
+  // El modelo de datos es más chico que el de procuración, pero menos de lo que
+  // decía esta nota. Se corrigió dos veces por el mismo motivo: el script SÍ sabía
+  // el dato y se perdía en el camino, no era que "el informe no lo trae".
+  //   · carátula  → B4 (puntos 19/20): venía en el payload RESULT y este visor la tiraba.
+  //   · movimientos → el script los persiste en listaMovimientos.json para armar el PDF;
+  //     acá iban fijos en '[]' y dejaban todo snapshot de informe vacío.
+  // Lo que genuinamente NO trae este flujo es jurisdicción/dependencia/situación:
+  // esas quedan vacías y el usuario las completa desde Mis Expedientes si quiere.
   // ═══════════════════════════════════════════════════════════════════════
   var seleccionados = new Set();
   var seguidosSet = new Set();
@@ -552,10 +555,29 @@
     setTimeout(function () { form.remove(); }, 500);
   }
 
+  // Nombre del PDF a partir de la ruta relativa que ya arma el generador
+  // (`./<archivo con encodeURIComponent>`). Es lo único propio del informe que la
+  // procuración no tiene, y da contexto en el modal del portal: el snapshot deja
+  // dicho QUÉ archivo salió de esa corrida. Se manda el nombre, no la ruta: el PDF
+  // vive en el disco del usuario y un origen http no puede abrir un file://.
+  function nombrePdfDe(exp) {
+    if (!exp.rutaPDF) return '';
+    try { return decodeURIComponent(String(exp.rutaPDF).replace(/^\.\//, '')); }
+    catch (_) { return String(exp.rutaPDF).replace(/^\.\//, ''); }
+  }
+
   function campoDeCaso(exp) {
     // Punto 20: `car` salía siempre vacío — el dato existía (el script lo scrapea para
     // el PDF) pero se perdía en el camino antes de B4. Ver generador_visor.js/prepararDatos.
-    return { exp: exp.expediente || '', jur: '', dep: '', car: exp.caratula || '', sit: '', fproc: DATOS_BATCH.fechaEjecucion || '', movs: '[]' };
+    // `movs` tenía el mismo defecto y era peor: iba fijo en '[]', así que TODO snapshot
+    // de informe quedaba vacío y el portal mostraba "Sin movimientos registrados" sobre
+    // un informe que sí los tenía (2 de 2 en producción). Ver movimientosInforme.js.
+    return {
+      exp: exp.expediente || '', jur: '', dep: '', car: exp.caratula || '', sit: '',
+      fproc: DATOS_BATCH.fechaEjecucion || '',
+      movs: JSON.stringify(exp.movimientos || []),
+      pdf: nombrePdfDe(exp)
+    };
   }
   function accionLote(accion, tipo) {
     if (seleccionados.size === 0) return;

@@ -4619,6 +4619,17 @@ function renderMexpSnapshot(s, titleEl, body) {
         Corrida del ${bitFormatUtcDate(s.run_date)}${s.situacion ? ` · Situación registrada: ${escapeHtml(s.situacion)}` : ''}
     </p>`;
 
+    // Lo único que el informe tiene y la procuración no: el PDF que produjo esa
+    // corrida. Va como texto (nombre de archivo), no como link: el PDF vive en el
+    // disco del usuario y el navegador bloquea un file:// abierto desde https.
+    const pdf = typeof s.data?.pdf === 'string' ? s.data.pdf : '';
+    if (pdf) {
+        html += `<p style="font-size:13px;margin-bottom:12px">
+            📄 Informe generado: <strong>${escapeHtml(pdf)}</strong><br>
+            <span style="color:var(--text-muted)">Está en tu carpeta de descargas de la app.</span>
+        </p>`;
+    }
+
     if (movimientos.length === 0) {
         html += '<div class="empty-state"><p>Sin movimientos registrados en esta corrida</p></div>';
     } else {

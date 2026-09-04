@@ -1429,7 +1429,13 @@ expedientes.post('/capture-lote', async (req, res) => {
                     [
                         fichaId, kind,
                         texto(c?.situacion_actual, MAX_TEXTO_CORTO),
-                        JSON.stringify({ movimientos: Array.isArray(c?.movimientos) ? c.movimientos : [] })
+                        // `pdf` solo viene del visor de informe (nombre del archivo que
+                        // generó esa corrida). Se omite la clave cuando no hay dato, para
+                        // no ensuciar con `"pdf":""` los snapshots de procuración.
+                        JSON.stringify(Object.assign(
+                            { movimientos: Array.isArray(c?.movimientos) ? c.movimientos : [] },
+                            (kind === 'informe' && typeof c?.pdf === 'string' && c.pdf) ? { pdf: c.pdf } : {}
+                        ))
                     ]
                 );
                 // Hallazgo H4: el recorte 2+2 va en la MISMA transacción que el insert.

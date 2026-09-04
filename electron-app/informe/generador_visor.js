@@ -166,7 +166,12 @@ function prepararDatos(expedientes, config, rutaExcel, bitacoraInfo) {
             // B4 (puntos 19/20): antes se descartaba acá aunque `main.js` ya la mandara
             // — el modelo de datos del informe "no tenía" carátula porque este generador
             // la tiraba, no porque el script no la supiera.
-            caratula: exp.caratula || null
+            caratula: exp.caratula || null,
+            // Mismo caso que la carátula, un escalón más: el informe SÍ tiene movimientos
+            // (el script los deja en listaMovimientos.json y arma el PDF con ellos), pero
+            // se perdían acá y el visor terminaba mandando `movs: '[]'` a Bitácora. Ver
+            // electron-app/informe/movimientosInforme.js.
+            movimientos: Array.isArray(exp.movimientos) ? exp.movimientos : []
         };
     });
 
