@@ -370,6 +370,37 @@ async function testE8() {
     check('B.3-D: el visor ya NO embebe el JWT de login como ssoToken',
         !/ssoToken\s*=\s*authManager/.test(mainJs));
 
+    // ── B.3-A / B.5 (fase E11) — LLAVE DE CAPTURA ────────────────────────────
+    // Guardas ESTÁTICAS a propósito: el modo de falla que vigilan es silencioso.
+    // Si alguien edita uno de los 3 visores y se lleva puesto el campo oculto
+    // `capture_token`, todo sigue "funcionando" —la captura importa igual— pero el
+    // borrador vuelve a nacer ANÓNIMO y B.5 (H-COV-Z2-02: solo el dueño reclama su
+    // borrador) queda desactivado sin que falle ningún test de comportamiento.
+    // El fragmento `#sso=` solo no alcanza: el servidor nunca lo ve.
+    check('B.3-A: main.js pide la llave de captura al backend',
+        /\/client\/bitacora\/capture-token/.test(mainJs));
+    check('B.3-A: la llave se pide SOLO si la cuenta tiene Bitácora habilitada',
+        /if\s*\(enabled\)\s*\{[\s\S]{0,400}capture-token/.test(mainJs));
+    check('B.3-A: fetchBitacoraRuntimeInfo devuelve captureToken',
+        /return\s*\{\s*enabled,\s*seguidos,\s*ssoToken,\s*captureToken\s*\}/.test(mainJs));
+
+    const visores = {
+        'procuración': fs.readFileSync(path.join(__dirname, '..', 'visorModal_template.html'), 'utf8'),
+        'informe':     fs.readFileSync(path.join(__dirname, '..', 'informe', 'visor_informes_template.html'), 'utf8'),
+        'monitor':     fs.readFileSync(path.join(__dirname, '..', 'monitor', 'generarVisorMonitoreo.js'), 'utf8'),
+    };
+    for (const [nombre, src] of Object.entries(visores)) {
+        check(`B.5: el visor de ${nombre} manda capture_token en el CUERPO del form`,
+            /todos\.capture_token\s*=\s*captureToken/.test(src));
+        check(`B.3-A: el visor de ${nombre} manda la llave en el fragmento #sso=`,
+            /'#sso='\s*\+\s*encodeURIComponent\(captureToken\)/.test(src));
+        check(`B.3-D: el visor de ${nombre} ya no arma el action con el viejo ssoToken`,
+            !/encodeURIComponent\(ssoToken\)/.test(src));
+    }
+    const genVisor = fs.readFileSync(path.join(__dirname, '..', 'informe', 'generador_visor.js'), 'utf8');
+    check('B.3-A: generador_visor propaga captureToken a DATOS_BATCH.bitacora',
+        /captureToken:\s*bitacoraInfo\?\.captureToken/.test(genVisor));
+
     check('H-EL-08: open-file usa ALLOWLIST de extensiones, no denylist',
         /EXTENSIONES_ABRIBLES/.test(mainJs) && /!EXTENSIONES_ABRIBLES\.has\(/.test(mainJs) &&
         !/EXTENSIONES_EJECUTABLES/.test(mainJs));

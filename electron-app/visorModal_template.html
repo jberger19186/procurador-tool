@@ -625,11 +625,18 @@
           // esto — mismo "POST binding" que usan SSO/SAML). Mismo mecanismo que
           // `openPortalSection()` en la app — acá viaja embebido porque el visor es un
           // archivo estático, no hay IPC al que pedírselo en el momento del click.
-          var ssoToken = BITACORA_RUNTIME.ssoToken || null;
-          form.action = 'https://api.procuradortool.com/usuarios/capture' + (ssoToken ? ('#sso=' + encodeURIComponent(ssoToken)) : '');
+          // B.3 (A), fase E11: lo que viaja ya NO es el JWT de login (8 h, acceso
+          // completo) sino la LLAVE DE CAPTURA: 30 minutos, `scope: 'capture'`, un solo
+          // uso, y el backend la rechaza en todos los endpoints salvo el reclamo de ESTE
+          // borrador. Va en DOS lugares y hacen falta los dos: `#sso=` para el portal, y
+          // el campo oculto `capture_token` para el servidor —que sin él no puede saber
+          // de quién es la captura (B.5: el borrador nace con dueño).
+          var captureToken = BITACORA_RUNTIME.captureToken || null;
+          form.action = 'https://api.procuradortool.com/usuarios/capture' + (captureToken ? ('#sso=' + encodeURIComponent(captureToken)) : '');
           form.target = 'procurador_portal';
           form.style.display = 'none';
           var todos = Object.assign({ goto: 'bitacora-nueva', origen: 'procuracion' }, campos);
+          if (captureToken) todos.capture_token = captureToken;
           Object.keys(todos).forEach(function (k) {
             if (todos[k] === undefined || todos[k] === null) return;
             var input = document.createElement('input');

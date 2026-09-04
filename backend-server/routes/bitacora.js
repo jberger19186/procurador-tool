@@ -40,7 +40,10 @@ const authenticateToken = require('../middleware/authenticateToken');
 const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
 const requireLegalOk = require('../middleware/requireLegalOk');
 const { expedienteKey, esExpedienteValido } = require('../utils/expedienteKey');
-const { reclamarDraft } = require('../utils/captureDrafts');
+const { reclamarDraft, inspeccionarDraft } = require('../utils/captureDrafts');
+// B.3-A (E11): único endpoint del sistema que acepta la llave de captura.
+const allowCaptureToken = require('../middleware/allowCaptureToken');
+const { blacklistToken } = require('../middleware/tokenBlacklist');
 
 const router = express.Router();
 
@@ -979,14 +982,64 @@ async function aplicarImport(db, userId, backup, modo) {
 //
 // USO ÚNICO: reclamar borra el borrador. Un refresh del portal no vuelve a traerlo,
 // que es justamente lo que el patrón PRG busca evitar (reenvío de formulario).
-router.get('/capture-draft/:id', authenticateToken, checkBitacoraPlan(), (req, res) => {
-    const payload = reclamarDraft(req.params.id);
+//
+// ═══════════════════════════════════════════════════════════════════════════
+//  B.3-A / B.5 (fase E11) — DUEÑO DEL BORRADOR Y LLAVE DE UN SOLO USO
+// ═══════════════════════════════════════════════════════════════════════════
+// H-COV-Z2-02: antes, CUALQUIER cuenta con el plan podía reclamar CUALQUIER id
+// de borrador. El id no es adivinable (32 bytes aleatorios), pero el atacante no
+// necesita adivinarlo: se lo lleva del `Location` de su propio POST y después
+// consigue que la víctima abra ese link. Desde esta fase el borrador nace con
+// `user_id` cuando el visor manda su llave de captura, y acá se exige que quien
+// reclama sea ese mismo usuario.
+//
+// `allowCaptureToken` va PRIMERO, antes de `authenticateToken`: es el único
+// lugar de todo el sistema que levanta el rechazo global de `scope: 'capture'`.
+// Ver `middleware/allowCaptureToken.js` para por qué la habilitación es una
+// bandera y no una comparación de `req.path`.
+router.get('/capture-draft/:id', allowCaptureToken, authenticateToken, checkBitacoraPlan(), (req, res) => {
+    const id = req.params.id;
+
+    // Peek antes de consumir: el chequeo de pertenencia NO puede destruir el
+    // borrador de otro (ver `inspeccionarDraft`).
+    const meta = inspeccionarDraft(id);
+
+    if (meta && meta.user_id !== null && meta.user_id !== req.user.id) {
+        return res.status(403).json({
+            error: 'Este borrador de captura pertenece a otra cuenta.',
+            code: 'CAPTURE_DRAFT_AJENO'
+        });
+    }
+
+    // Una llave de captura solo sirve para SU PROPIO borrador. Un borrador sin
+    // dueño (visor viejo, o llave vencida/gastada al postear) se reclama con una
+    // sesión normal, nunca con una llave: si llegara una llave hasta acá con un
+    // borrador anónimo, el camino correcto es el login del portal.
+    if (req.isCaptureToken && (!meta || meta.user_id === null)) {
+        return res.status(403).json({
+            error: 'Iniciá sesión en el portal para importar esta captura.',
+            code: 'CAPTURE_DRAFT_SIN_DUENO'
+        });
+    }
+
+    const payload = reclamarDraft(id);
     if (!payload) {
         return res.status(404).json({
             error: 'El borrador de captura no existe o expiró. Volvé al visor y hacé clic de nuevo.',
             code: 'CAPTURE_DRAFT_NO_ENCONTRADO'
         });
     }
+
+    // UN SOLO USO de la llave, y recién ACÁ — nunca en el POST que crea el
+    // borrador: entre los dos requests la llave tiene que seguir viva. Se
+    // invalida el token completo (la blacklist indexa por SHA-256 del JWT, así
+    // que invalidar el token es invalidar exactamente ese `jti` y ningún otro).
+    // A partir de este punto, `authenticateToken` la rechaza con 403 en todos
+    // lados, incluido este endpoint.
+    if (req.isCaptureToken && req.token) {
+        blacklistToken(req.token);
+    }
+
     res.json({ success: true, draft: payload });
 });
 

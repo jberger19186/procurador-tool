@@ -19,7 +19,7 @@
 function claveLigeraBit(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
 function generarVisorMonitoreo(modo, resultados, bitacoraInfo = null) {
-    const bit = bitacoraInfo || { enabled: false, seguidos: [], ssoToken: null };
+    const bit = bitacoraInfo || { enabled: false, seguidos: [], ssoToken: null, captureToken: null };
     const bitSeguidosSet = new Set((bit.seguidos || []).map(claveLigeraBit));
     const ahora  = new Date();
     const fecha  = ahora.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' })
@@ -261,11 +261,18 @@ function generarVisorMonitoreo(modo, resultados, bitacoraInfo = null) {
             function enviarCaptura(campos) {
                 var form = document.createElement('form');
                 form.method = 'POST';
-                var ssoToken = window.BITACORA_RUNTIME.ssoToken || null;
-                form.action = 'https://api.procuradortool.com/usuarios/capture' + (ssoToken ? ('#sso=' + encodeURIComponent(ssoToken)) : '');
+                // B.3 (A), fase E11: LLAVE DE CAPTURA (30 min, scope 'capture', un solo
+                // uso) en vez del JWT de login. Va en el fragmento SSO para el portal y en
+                // el campo oculto capture_token para el servidor: sin ese campo el
+                // fragmento no llega al backend y el borrador no puede nacer con dueño (B.5).
+                // (Sin comillas invertidas acá: este bloque se escribe dentro de un template
+                //  literal de Node, una sola rompe la generación entera del visor.)
+                var captureToken = window.BITACORA_RUNTIME.captureToken || null;
+                form.action = 'https://api.procuradortool.com/usuarios/capture' + (captureToken ? ('#sso=' + encodeURIComponent(captureToken)) : '');
                 form.target = 'procurador_portal';
                 form.style.display = 'none';
                 var todos = Object.assign({ goto: 'bitacora-nueva', origen: 'monitor' }, campos);
+                if (captureToken) todos.capture_token = captureToken;
                 Object.keys(todos).forEach(function (k) {
                     if (todos[k] === undefined || todos[k] === null) return;
                     var input = document.createElement('input');

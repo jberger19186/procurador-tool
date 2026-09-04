@@ -324,6 +324,10 @@ function conNombreExpediente(e) {
     return { ...e, expediente: x ? x.expediente : null };
 }
 
+// B.3-A (fase E11): registro de los reclamos de borrador que llegaron, para poder
+// inspeccionar desde el navegador con QUÉ credencial los pidió el portal.
+const CAPTURE_CLAIMS = [];
+
 // ─── Servidor ───────────────────────────────────────────────────────────────
 http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://localhost');
@@ -686,6 +690,46 @@ http.createServer(async (req, res) => {
                     return json(res, { success: true, entradasBorradas });
                 }
             }
+        }
+
+        // ── B.3-A (fase E11): reclamo del borrador de captura ──────────────
+        // El stub NO reimplementa el control de acceso real (dueño del borrador,
+        // un solo uso, rechazo por `scope`): todo eso se verifica contra los
+        // routers REALES con `dev-tools/verify-e11-capture-token.js`. Acá lo único
+        // que hace falta observar es qué hace el PORTAL: con qué credencial pide
+        // el borrador, si la guarda en algún lado, y dónde termina el usuario.
+        //
+        // Convención para simular una llave gastada/vencida sin montar toda la
+        // cadena: si el JWT del header trae `jti: 'GASTADA'`, se responde 403,
+        // que es exactamente lo que devuelve el backend real en ese caso.
+        if (req.method === 'GET' && p.startsWith('/usuarios/api/capture-draft/')) {
+            const auth = req.headers['authorization'] || '';
+            let jti = null;
+            try { jti = JSON.parse(Buffer.from(auth.split(' ')[1].split('.')[1], 'base64').toString()).jti; } catch (_) {}
+            CAPTURE_CLAIMS.push({ id: p.split('/').pop(), auth, jti });
+            if (jti === 'GASTADA') {
+                return json(res, { error: 'Token invalidado' }, 403);
+            }
+            return json(res, {
+                success: true,
+                draft: {
+                    accion: 'ficha', tipo: null, origen: 'procuracion',
+                    creado: new Date().toISOString(),
+                    casos: [{
+                        expediente: 'FCR 18745/2017', jurisdiccion: 'FCR',
+                        dependencia: 'JUZGADO FEDERAL', caratula: 'CAPTURA E11 c/ PRUEBA s/ VERIFICACION',
+                        situacion_actual: '', fecha_corrida: '', movimientos: [], pdf: ''
+                    }]
+                }
+            });
+        }
+        // Inspección desde el navegador: qué credenciales llegaron al reclamo.
+        // `?reset=1` vacía el registro — el proceso del stub sobrevive entre
+        // corridas del verificador, y sin esto la segunda corrida ve los reclamos
+        // de la primera y falla por acumulación, no por un defecto del producto.
+        if (req.method === 'GET' && p === '/debug/capture-claims') {
+            if (q.get('reset') === '1') CAPTURE_CLAIMS.length = 0;
+            return json(res, { claims: CAPTURE_CLAIMS });
         }
 
         // ── Catch-all: cualquier otro POST/PUT/DELETE dentro de /usuarios/api

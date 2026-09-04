@@ -1987,6 +1987,7 @@ async function fetchBitacoraRuntimeInfo() {
     let enabled = false;
     let seguidos = [];
     let ssoToken = null;
+    let captureToken = null;
     try {
         const client = authManager.backendClient.client;
         const [accRes, segRes] = await Promise.allSettled([
@@ -2015,10 +2016,33 @@ async function fetchBitacoraRuntimeInfo() {
         // `scope: 'capture'` y un solo uso, fabricado al generar el visor. NO
         // reponer el token de login acá.
         ssoToken = null;
+
+        // ── B.3 (A) — fase E11: la LLAVE DE CAPTURA ──────────────────────────
+        // Reemplaza al JWT de login que se sacó arriba, con tres diferencias que
+        // son todo el punto de la fase: dura 30 minutos (no 8 horas), tiene
+        // `scope: 'capture'` —el backend la rechaza en TODOS los endpoints salvo
+        // el reclamo del borrador— y es de un solo uso.
+        //
+        // Se pide DESPUÉS de conocer `enabled`, en un request aparte y no dentro
+        // del `allSettled` de arriba, a propósito: sin Bitácora habilitada no hay
+        // captura posible, y emitir llaves que nadie va a usar sería regalar
+        // credenciales de más. Cuesta un round-trip extra, acotado por el mismo
+        // timeout corto que el resto de este bloque.
+        //
+        // Fail-safe igual que todo lo demás acá: si falla, el visor sale sin llave
+        // y la captura cae al flujo manual (login en el portal), que es
+        // exactamente el comportamiento que dejó E8.
+        if (enabled) {
+            try {
+                const capRes = await client.post('/client/bitacora/capture-token', {}, { timeout: BITACORA_TIMEOUT_MS });
+                const t = capRes?.data?.captureToken;
+                if (typeof t === 'string' && t.length > 0) captureToken = t;
+            } catch (_) { /* sin llave → flujo manual */ }
+        }
     } catch (_) {
         // fail-closed: sin botonera, el visor se abre igual sin este bloque
     }
-    return { enabled, seguidos, ssoToken };
+    return { enabled, seguidos, ssoToken, captureToken };
 }
 
 /**

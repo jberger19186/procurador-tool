@@ -908,6 +908,54 @@ router.get('/bitacora/seguidos', authenticateToken, checkBitacoraPlan(), async (
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  BITÁCORA (B.3-A, fase E11) — POST /client/bitacora/capture-token
+// ═══════════════════════════════════════════════════════════════════════════
+// Emite la LLAVE DE CAPTURA que la app embebe en el visor al generarlo.
+//
+// De dónde viene: hasta la fase E8, el visor llevaba embebido
+// `authManager.backendClient.token` — el JWT de LOGIN, 8 horas, acceso completo a
+// la API — dentro de un archivo .html que queda en la carpeta de descargas y que
+// el producto invita a compartir. E8 lo sacó (paso previo D de la spec: el visor
+// dejó de llevar cualquier llave). Esta fase repone una llave, pero chica:
+//
+//     30 minutos · scope 'capture' · un solo uso · sirve para UN endpoint
+//
+// ⚠️ Se firma con `JWT_SECRET`, NO con un secreto propio. No es una comodidad:
+// `authenticateToken` hace un ÚNICO `jwt.verify(token, JWT_SECRET)`, así que una
+// llave firmada con otro secreto sale por el `catch` con 403 y el reclamo del
+// borrador —lo único para lo que la llave existe— nunca funcionaría. Quien lo
+// intente se va a topar con un 403 inexplicable y con la tentación de "arreglarlo"
+// aflojando el middleware por el que pasa toda la autenticación del producto.
+// El aislamiento no lo da el secreto: lo da el `scope` más el rechazo global de
+// `authenticateToken` (ver ahí) más el habilitador único de
+// `middleware/allowCaptureToken.js`.
+//
+// Gate estricto de plan, igual que el resto de `/bitacora/*`: sin Bitácora no hay
+// captura que hacer. Y `authenticateToken` ya impide que una llave de captura
+// fabrique otra (este endpoint no está en la allowlist), así que no se puede
+// encadenar para extender su vida.
+const CAPTURE_TOKEN_TTL_S = 30 * 60;   // 30 min — decisión (A) del operador, 2026-09-02
+
+router.post('/bitacora/capture-token', authenticateToken, checkBitacoraPlan(), (req, res) => {
+    try {
+        const token = jwt.sign(
+            {
+                id: req.user.id,       // lo que lee todo el backend (`req.user.id`)
+                sub: String(req.user.id),
+                scope: 'capture',
+                jti: crypto.randomUUID(),
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: CAPTURE_TOKEN_TTL_S }
+        );
+        res.json({ success: true, captureToken: token, expiresIn: CAPTURE_TOKEN_TTL_S });
+    } catch (error) {
+        console.error('Error emitiendo llave de captura (Bitácora):', error);
+        res.status(500).json({ error: 'Error del servidor' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  BITÁCORA (F3.1) — GET /client/bitacora/pendientes
 // ═══════════════════════════════════════════════════════════════════════════
 // Cuenta rápida para el badge del botón "📔 Bitácora" del topbar de la app —

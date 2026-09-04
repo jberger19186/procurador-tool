@@ -187,7 +187,14 @@ function prepararDatos(expedientes, config, rutaExcel, bitacoraInfo) {
             seguidos: Array.isArray(bitacoraInfo?.seguidos) ? bitacoraInfo.seguidos : [],
             // F2.6: SSO en el POST de captura — ver la nota extensa en fetchBitacoraRuntimeInfo()
             // (main.js). `main.js` ya lo entrega `null` si el módulo no está habilitado.
-            ssoToken: bitacoraInfo?.ssoToken || null
+            // ⚠️ B.3 paso (D), fase E8: SIEMPRE null desde entonces. El campo se conserva
+            // para no romper visores/tests que lo leen; la llave real es `captureToken`.
+            ssoToken: bitacoraInfo?.ssoToken || null,
+            // B.3 (A), fase E11: llave de captura de 30 min, `scope: 'capture'`, un solo
+            // uso. Viaja al servidor en un campo oculto del form (`capture_token`) y al
+            // portal en el fragmento `#sso=`. No es una sesión: el backend la rechaza en
+            // todos los endpoints salvo el reclamo del borrador.
+            captureToken: bitacoraInfo?.captureToken || null
         }
     };
 }

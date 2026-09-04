@@ -544,6 +544,40 @@ async function initDashboard() {
     const pendingCapturaError = sessionStorage.getItem('pending_capture_error');
     sessionStorage.removeItem('pending_capture_draft');
     sessionStorage.removeItem('pending_capture_error');
+
+    // B.3-A (fase E11): borrador ya rescatado con la llave de captura antes del
+    // login (ver `preReclamarDraftConLlave`). Va primero porque ese id ya se
+    // consumió del lado del servidor — reclamarlo de nuevo daría 404.
+    //
+    // Observación del revisor (fix-reviewer, 2026-09-04): el rescate ocurre ANTES
+    // de que exista sesión, así que no sabe todavía quién se va a terminar
+    // logueando en esta misma pestaña. En una máquina compartida, si la cuenta A
+    // abre el visor sin sesión (rescata su borrador) y quien completa el login es
+    // la cuenta B, sin este chequeo B vería el diálogo "¿Confirmás guardar N
+    // casos?" sobre contenido que en realidad es de A — el borrador ya no tiene
+    // forma de reclamarse de nuevo (server-side quedó consumido), así que la
+    // única defensa posible es del lado del cliente: comparar contra quién
+    // terminó logueado. Mismo helper (`parseJwtPayload`) que ya usa el branch de
+    // SSO normal (línea ~3249) para la misma comparación de identidad.
+    if (captureDraftPreReclamado) {
+        const draft = captureDraftPreReclamado;
+        const draftOwnerId = captureDraftPreReclamadoOwnerId;
+        captureDraftPreReclamado = null;
+        captureDraftPreReclamadoOwnerId = null;
+        const cuentaActualId = parseJwtPayload(getToken() || '').id;
+        if (draftOwnerId != null && cuentaActualId != null && String(draftOwnerId) !== String(cuentaActualId)) {
+            // Falla cerrado: se descarta en silencio, no se ofrece guardar nada.
+            // El borrador ya está consumido del lado del servidor (uso único), así
+            // que no hay un "reintentar" — la captura original se pierde, que es
+            // preferible a aplicarla a la cuenta equivocada.
+        } else {
+            sessionStorage.removeItem('pending_goto');
+            navigateTo('bitacora');
+            await aplicarCaptureDraft(draft);
+            return;
+        }
+    }
+
     if (pendingDraftId) {
         sessionStorage.removeItem('pending_goto');
         navigateTo('bitacora');
@@ -3202,29 +3236,59 @@ document.addEventListener('DOMContentLoaded', async () => {
         history.replaceState(null, '', window.location.pathname);
 
         const entrante = parseJwtPayload(ssoToken);
-        const vigente  = !!entrante && typeof entrante.exp === 'number' && entrante.exp * 1000 > Date.now();
-        const actual   = parseJwtPayload(getToken() || '');
-        const cambiaDeCuenta = !!actual && !!entrante && actual.id !== entrante.id;
 
-        let aceptar = !!ssoToken && vigente;
-        if (aceptar && cambiaDeCuenta) {
-            // El JWT de Electron trae { id, role } sin email — de ahí el fallback.
-            aceptar = await showConfirm(
-                'Este enlace inicia sesión como ' + (entrante.email || 'otro usuario') +
-                ' y cierra tu sesión actual. ¿Continuar?',
-                { confirmLabel: 'Cambiar de cuenta' }
-            );
-        }
+        // ── B.3-A (fase E11): LLAVE DE CAPTURA, NO SESIÓN ────────────────────
+        // El visor generado a partir de esta fase manda por `#sso=` una llave de
+        // 30 minutos con `scope: 'capture'`, no el JWT de login de 8 h que llevaba
+        // hasta E8. Se decodifica el payload SIN verificar (esto es enrutamiento;
+        // la verificación de verdad la hace el servidor en cada request).
+        //
+        // Lo que NUNCA hay que hacer con ella: `saveToken()` / `initDashboard()`.
+        // Guardarla como sesión reabriría la fijación de sesión de H-COV-Z2-01
+        // con una llave que además dura media hora, y dejaría en `localStorage`
+        // una credencial que llegó dentro de un archivo compartible.
+        //
+        // Todo lo que hace la llave es reclamar SU PROPIO borrador, una vez. El
+        // portal la usa para un único request y la descarta; nunca se persiste.
+        if (entrante && entrante.scope === 'capture') {
+            const draftPendiente = sessionStorage.getItem('pending_capture_draft');
+            // Con sesión propia viva, la llave sobra: el reclamo va con la sesión
+            // (que además es la única que puede escribir después).
+            if (draftPendiente && !getToken()) {
+                // Se reclama YA, antes del login. Motivo: el borrador vive 10
+                // minutos y un login puede llevarse varios; si se esperara, la
+                // captura se perdería. Reclamarlo acá la rescata y la deja lista
+                // para aplicarse apenas haya sesión.
+                await preReclamarDraftConLlave(draftPendiente, ssoToken, entrante.id);
+            }
+            // Cae al flujo normal del final del handler (sesión existente o login).
+            // La llave queda fuera de `state` y de `localStorage`: muere con esta
+            // variable local al terminar el handler.
+        } else {
+            const vigente  = !!entrante && typeof entrante.exp === 'number' && entrante.exp * 1000 > Date.now();
+            const actual   = parseJwtPayload(getToken() || '');
+            const cambiaDeCuenta = !!actual && !!entrante && actual.id !== entrante.id;
 
-        if (aceptar) {
-            saveToken(ssoToken);
-            state.token = ssoToken;
-            await initDashboard();
-            // initDashboard() ya consume pending_goto y navega
-            return;
+            let aceptar = !!ssoToken && vigente;
+            if (aceptar && cambiaDeCuenta) {
+                // El JWT de Electron trae { id, role } sin email — de ahí el fallback.
+                aceptar = await showConfirm(
+                    'Este enlace inicia sesión como ' + (entrante.email || 'otro usuario') +
+                    ' y cierra tu sesión actual. ¿Continuar?',
+                    { confirmLabel: 'Cambiar de cuenta' }
+                );
+            }
+
+            if (aceptar) {
+                saveToken(ssoToken);
+                state.token = ssoToken;
+                await initDashboard();
+                // initDashboard() ya consume pending_goto y navega
+                return;
+            }
+            // Token ausente, malformado, vencido, o el usuario canceló el cambio de cuenta:
+            // sigue el flujo normal de abajo con la sesión que ya hubiera (o el login).
         }
-        // Token ausente, malformado, vencido, o el usuario canceló el cambio de cuenta:
-        // sigue el flujo normal de abajo con la sesión que ya hubiera (o el login).
     }
 
     // Si solo había ?goto=/draft=/captura= sin SSO, limpiar la URL (ya están en sessionStorage)
@@ -5009,6 +5073,58 @@ async function descargarExportBitacora() {
 function mensajeCapturaError(code) {
     if (code === 'lote_grande') return 'La selección era demasiado grande para capturar de una vez (máximo 200 casos, y hasta 256 KB de datos). Probá con una selección más chica.';
     return 'No se pudo procesar la captura desde el visor. Volvé al visor y probá de nuevo.';
+}
+
+// B.3-A (fase E11) — borrador ya reclamado con la llave de captura, esperando que
+// haya sesión para poder aplicarse. Vive SOLO en memoria de la página: nunca en
+// `localStorage` ni en `sessionStorage`. El login del portal no recarga la página
+// (es una SPA: `doLogin` esconde el login y llama a `initDashboard`), así que esta
+// variable sobrevive el ciclo de login sin necesidad de persistirla.
+let captureDraftPreReclamado = null;
+// Id de la cuenta dueña de la llave que rescató el borrador de arriba — no
+// necesariamente la que termina logueada (ver el chequeo en `initDashboard`,
+// observación del revisor de E11, 2026-09-04).
+let captureDraftPreReclamadoOwnerId = null;
+
+/**
+ * Reclama el borrador con la LLAVE DE CAPTURA (30 min, un solo uso) antes de que
+ * haya sesión, y guarda el resultado en memoria.
+ *
+ * Por qué acá y no después del login: el borrador vive 10 minutos. Si se esperara
+ * a que el usuario se loguee, una demora normal lo dejaría vencido y la captura se
+ * perdería sin explicación. Reclamarlo primero la rescata.
+ *
+ * Por qué NO usa `apiFetch`: `apiFetch` toma el token de `localStorage` (que acá
+ * justamente no existe) y, ante un 401, llama a `doLogout()`. La llave se manda
+ * a mano en `Authorization` de este único request y se descarta al salir.
+ *
+ * Nunca lanza: cualquier fallo (llave gastada, vencida, borrador de otro, red)
+ * deja `captureDraftPreReclamado` en null y el usuario cae al flujo manual —
+ * login + `?draft=` reclamado con la sesión, que es el camino de compatibilidad
+ * que sigue vivo para los visores viejos.
+ *
+ * @param {string} ownerId - id de la cuenta dueña de `captureKey` (`entrante.id`
+ *   del JWT de captura ya decodificado por el llamador). Se guarda junto al
+ *   borrador para poder comparar contra quién termine logueado.
+ */
+async function preReclamarDraftConLlave(draftId, captureKey, ownerId) {
+    try {
+        const res = await fetch(BASE_URL + `/usuarios/api/capture-draft/${encodeURIComponent(draftId)}`, {
+            headers: { Authorization: `Bearer ${captureKey}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.draft) {
+            captureDraftPreReclamado = data.draft;
+            captureDraftPreReclamadoOwnerId = ownerId != null ? ownerId : null;
+            // El id ya se consumió del lado del servidor (uso único): sacarlo de
+            // sessionStorage evita que `initDashboard` intente reclamarlo otra vez
+            // y muestre un 404 confuso encima de una captura que sí funcionó.
+            sessionStorage.removeItem('pending_capture_draft');
+        }
+    } catch (_) {
+        // silencio deliberado: el flujo manual sigue disponible
+    }
 }
 
 async function procesarCaptureDraft(draftId) {

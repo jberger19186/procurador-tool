@@ -47,7 +47,16 @@ const MAX_DRAFTS = 100;          // tope de borradores vivos simultáneos
 const MAX_DRAFT_BYTES = 256 * 1024;        // 256 KB por borrador
 const MAX_TOTAL_BYTES = 16 * 1024 * 1024;  // 16 MB retenidos entre todos
 
-const drafts = new Map();        // id → { payload, bytes, expiresAt }
+// B.5 (fase E11): además del payload, cada borrador guarda a QUIÉN pertenece.
+// `user_id` sale de la llave de captura que el visor manda en el POST (nunca de
+// un campo del formulario, que es entrada no confiable). `jti` es el
+// identificador de esa llave, guardado para trazabilidad. Los dos van FUERA de
+// `payload` a propósito: `payload` es lo único que se le devuelve al portal, y
+// no tiene por qué llevar metadatos del control de acceso.
+// Un borrador sin `user_id` (visor viejo, anterior al release de esta fase, o
+// llave vencida/gastada) mantiene el comportamiento previo — ver la compatibilidad
+// documentada en routes/capture.js.
+const drafts = new Map();        // id → { payload, bytes, expiresAt, user_id, jti }
 let totalBytes = 0;              // suma de `bytes` de los vivos (invariante del Map)
 
 /** Baja del presupuesto y borra. Único punto que toca `totalBytes` al eliminar. */
@@ -92,7 +101,7 @@ if (typeof purgaTimer.unref === 'function') purgaTimer.unref();
  * Si el borrador por sí solo excede MAX_DRAFT_BYTES, lanza `DRAFT_TOO_LARGE`: no se
  * desaloja a nadie ni se retiene nada (el llamador responde `captura=lote_grande`).
  */
-function crearDraft(payload) {
+function crearDraft(payload, meta = {}) {
     const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
     if (bytes > MAX_DRAFT_BYTES) {
         const err = new Error('Borrador de captura demasiado grande');
@@ -109,9 +118,36 @@ function crearDraft(payload) {
     }
 
     const id = crypto.randomBytes(32).toString('hex');
-    drafts.set(id, { payload, bytes, expiresAt: Date.now() + TTL_MS });
+    drafts.set(id, {
+        payload,
+        bytes,
+        expiresAt: Date.now() + TTL_MS,
+        // Normalizados acá para que el resto del sistema no tenga que distinguir
+        // entre "no vino" y "vino vacío": o hay un entero, o es null.
+        user_id: Number.isInteger(meta.user_id) ? meta.user_id : null,
+        jti: typeof meta.jti === 'string' && meta.jti ? meta.jti : null,
+    });
     totalBytes += bytes;
     return id;
+}
+
+/**
+ * B.5 — mira el dueño de un borrador SIN consumirlo.
+ *
+ * Es un `peek` deliberado, no un `reclamar`: el chequeo de pertenencia tiene que
+ * ocurrir ANTES de borrar. Si se resolviera con `reclamarDraft` y después se
+ * comparara el dueño, cualquiera que adivinara (o robara del `Location` de su
+ * propio POST) el id de un borrador ajeno podría DESTRUIRLO con un 403 — un 403
+ * que además destruye el recurso no es un control, es una negación de servicio.
+ *
+ * @returns {{user_id: (number|null), jti: (string|null)}|null} `null` si no existe o venció.
+ */
+function inspeccionarDraft(id) {
+    purgarVencidos();
+    if (typeof id !== 'string' || id.length === 0) return null;
+    const d = drafts.get(id);
+    if (!d) return null;
+    return { user_id: d.user_id, jti: d.jti };
 }
 
 /**
@@ -141,6 +177,6 @@ function _stats() {
 }
 
 module.exports = {
-    crearDraft, reclamarDraft, _stats,
+    crearDraft, reclamarDraft, inspeccionarDraft, _stats,
     TTL_MS, MAX_DRAFTS, MAX_DRAFT_BYTES, MAX_TOTAL_BYTES,
 };

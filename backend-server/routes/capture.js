@@ -32,7 +32,9 @@
  */
 
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const { crearDraft } = require('../utils/captureDrafts');
+const { isBlacklisted } = require('../middleware/tokenBlacklist');
 
 const router = express.Router();
 
@@ -91,6 +93,73 @@ function normalizarCaso(src) {
     };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  B.3-A / B.5 (fase E11) — LLAVE DE CAPTURA: cómo se interpreta acá
+// ═══════════════════════════════════════════════════════════════════════════
+// El visor generado a partir de esta fase manda, además del payload, un campo
+// oculto `capture_token`: un JWT de 30 minutos con `scope: 'capture'` que la app
+// pidió a `POST /client/bitacora/capture-token` al generar el visor. Sirve para
+// UNA cosa: que el borrador nazca ATADO A SU DUEÑO (B.5), y que ese mismo dueño
+// —y nadie más— pueda reclamarlo después.
+//
+// ⚠️ Va en un campo del FORMULARIO, no solo en el fragmento `#sso=`. El fragmento
+// no se transmite en el request HTTP: el servidor nunca lo ve. Sin el campo
+// oculto, este endpoint no tendría forma de saber de quién es la captura y B.5
+// sería imposible.
+//
+// Los tres desenlaces, y por qué son tres y no dos:
+//
+//   1. Llave AUSENTE → borrador anónimo, comportamiento previo.
+//      Obligatorio: los visores generados antes del release de esta fase no la
+//      tienen y tienen que seguir funcionando (transición, § 5 de la spec).
+//
+//   2. Llave FORJADA o AJENA AL PROPÓSITO (firma inválida, no es un JWT, o es un
+//      token de sesión colado en este campo) → 401, sin crear NADA.
+//      Es el control anti-degradación: un atacante no puede manipular la llave
+//      para que el servidor "caiga" al flujo anónimo. Y un JWT de sesión acá
+//      sería justamente lo que esta fase vino a eliminar del visor.
+//
+//   3. Llave AUTÉNTICA pero VENCIDA o YA GASTADA → borrador anónimo (caso 1).
+//      Esto NO es un agujero, y el razonamiento importa porque parece uno:
+//      · No hay nada que ganar. Degradar a anónimo da exactamente lo mismo que
+//        no mandar llave, que es un camino que DEBE quedar abierto por (1). El
+//        atacante que quiere un borrador anónimo simplemente no manda el campo.
+//      · Y hay algo que perder si se rechaza: un 401 acá rompería al usuario
+//        legítimo. Su visor vale por días; la llave, 30 minutos y un solo uso.
+//        Con un 401, la segunda captura del mismo visor dejaría de funcionar
+//        para siempre — una regresión de producto sobre el comportamiento
+//        actual. Los dos criterios de aceptación de la spec lo piden explícito:
+//        "visor de hace 31 minutos → pide login, importa tras el login (vence
+//        sin romper)" y "segundo intento con el mismo visor → pide login".
+//      El usuario termina en el flujo manual: login en el portal + la
+//      confirmación "¿importar N casos?" de B.5 parte 1, que sigue vigente.
+
+/** @returns {{user_id: number, jti: (string|null)}|null|'INVALIDA'} */
+function resolverDueñoDeCaptura(raw) {
+    if (typeof raw !== 'string' || raw.trim() === '') return null;   // caso 1
+    const token = raw.trim();
+
+    // Gastada: se blacklistea al ENTREGAR el borrador (no acá — la llave tiene que
+    // llegar viva desde este POST hasta el reclamo, son dos requests distintos).
+    if (isBlacklisted(token)) return null;                            // caso 3
+
+    let payload;
+    try {
+        payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (e) {
+        if (e && e.name === 'TokenExpiredError') return null;         // caso 3
+        return 'INVALIDA';                                            // caso 2
+    }
+
+    // `scope` distinto de 'capture' = token de sesión (o cualquier otra cosa) en un
+    // campo que no le corresponde. No se acepta ni se degrada: 401.
+    if (!payload || payload.scope !== 'capture') return 'INVALIDA';   // caso 2
+    const userId = Number(payload.id);
+    if (!Number.isInteger(userId) || userId <= 0) return 'INVALIDA';  // caso 2
+
+    return { user_id: userId, jti: typeof payload.jti === 'string' ? payload.jti : null };
+}
+
 /** Redirect siempre construido acá — nunca con datos del cliente (anti open-redirect). */
 function redirigir(res, params) {
     const qs = new URLSearchParams(Object.assign({ goto: 'bitacora' }, params)).toString();
@@ -101,6 +170,16 @@ function redirigir(res, params) {
 router.post('/', (req, res) => {
     try {
         const body = req.body || {};
+
+        // B.3-A: se resuelve ANTES de validar nada más y antes de tocar memoria —
+        // una llave forjada no debe llegar siquiera a crear un borrador anónimo.
+        const dueño = resolverDueñoDeCaptura(body.capture_token);
+        if (dueño === 'INVALIDA') {
+            return res.status(401).json({
+                error: 'La credencial de captura no es válida. Volvé a generar el visor desde la app.',
+                code: 'CAPTURE_TOKEN_INVALIDO'
+            });
+        }
 
         const accion = ACCIONES.includes(body.accion) ? body.accion : null;
         if (!accion) return redirigir(res, { captura: 'error' });
@@ -141,7 +220,13 @@ router.post('/', (req, res) => {
         // que es el mismo mensaje útil para el usuario: "achicá la selección".
         let draftId;
         try {
-            draftId = crearDraft({ accion, tipo, origen, casos, creado: new Date().toISOString() });
+            // El dueño va como METADATO del borrador, fuera del payload: el payload es
+            // lo único que se le devuelve al portal y no tiene por qué llevar el `jti`
+            // ni el id de usuario del control de acceso.
+            draftId = crearDraft(
+                { accion, tipo, origen, casos, creado: new Date().toISOString() },
+                dueño || {}
+            );
         } catch (e) {
             if (e && e.code === 'DRAFT_TOO_LARGE') {
                 console.warn(`⚠️ Captura rechazada por tamaño: ${e.bytes} bytes (máx ${e.max})`);
