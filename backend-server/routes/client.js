@@ -419,9 +419,18 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
             } catch (_) { /* la confirmación es informativa: no cambia la decisión */ }
         } else {
             const { rows } = await db.query(
+                // La ventana se mide contra `last_heartbeat`, NO contra `started_at`.
+                // `started_at` queda fijo al crear el permiso, así que una corrida larga
+                // (un lote de 20 expedientes con reintentos de 180 s pasa los 35 min sin
+                // esfuerzo; el proyecto ya registró una de 1658 s) llegaba acá con la fila
+                // viva pero fuera de la ventana → se descontaba DOS veces, y B.8 prohíbe
+                // reembolsar. `last_heartbeat` lo refresca `execution/heartbeat` cada 30 s
+                // mientras la ejecución dura, así que la ventana pasa a significar lo que
+                // realmente importa: "este permiso estuvo vivo recién". Un permiso cuyo
+                // cliente murió hace más de 35 min no lo protege, que es lo correcto.
                 `SELECT 1 FROM active_executions
                  WHERE user_id = $1 AND script_name = $2 AND quota_counted = true
-                   AND started_at > NOW() - INTERVAL '35 minutes'
+                   AND last_heartbeat > NOW() - INTERVAL '35 minutes'
                  LIMIT 1`,
                 [userId, scriptName]
             );
