@@ -1676,6 +1676,54 @@ cp "$DEST/$(basename "$FOLDER").7z" "$REPOS/"
 >
 > ⚠️ El `.7z` contiene claves privadas y un dump completo de la base de datos — la copia en `source\repos` queda fuera del repo git, pero **no es una ubicación cifrada**; tratarla con el mismo cuidado que el resto de los backups.
 
+### Backup de la carpeta `proyecto` — SOLO si se pide explícitamente
+
+> **Regla (desde 2026-09-04):** el backup de `C:\Users\JONATHAN\source\repos\proyecto` sigue
+> **exactamente la misma lógica** que el de ProcuradorTool (generar en el Desktop → copiar a
+> `z-automatizacion` y a `source\repos` → borrar la copia del Desktop), **con una sola diferencia:
+> hay que pedirlo explícitamente por esa carpeta.**
+>
+> **Cómo se interpreta el pedido:**
+> - *"generemos backup en repos y automatización"* → **solo ProcuradorTool**. Es el default.
+> - *"…y también de la carpeta proyecto"* (o cualquier mención explícita de `proyecto`) → se hacen
+>   **los dos** `.7z`, cada uno con su nombre, con la misma lógica de distribución.
+>
+> **Por qué existe este backup:** `proyecto/` contiene `auditoria-fable/` — el plan de ejecución,
+> las especificaciones y los informes de la auditoría de seguridad. **Esa carpeta NO está bajo
+> control de versiones**, y ya se perdió un archivo ahí (el plan quedó en 0 bytes el 2026-09-04, ver
+> §8 de `ESTADO-POST-AUDITORIA-FABLE-2026-09-04.md`). Hasta que se ponga bajo git, el `.7z` es su
+> única red.
+
+```bash
+SEVENZ="/c/Program Files/7-Zip/7z.exe"
+DEST="/c/Users/JONATHAN/OneDrive/Documentos/z-noc files/z-automatizacion"
+REPOS="/c/Users/JONATHAN/source/repos"
+DESKTOP="/c/Users/JONATHAN/Desktop"
+# el sufijo describe el hito; usar el que corresponda (ej. "post-auditoria-fable")
+NOMBRE="$(date +%Y%m)_$(date +%d%m%Y)_proyecto_post-auditoria-fable"
+
+# 1) comprimir excluyendo todo lo regenerable
+"$SEVENZ" a "$DESKTOP/$NOMBRE.7z" "C:/Users/JONATHAN/source/repos/proyecto/*" \
+  '-xr!node_modules' '-xr!dist' '-xr!.git' '-xr!.claude' '-xr!__pycache__' '-xr!.venv' '-xr!venv' \
+  '-xr!*.7z' -bso0 -bsp0
+
+# 2) distribuir a los dos destinos
+cp "$DESKTOP/$NOMBRE.7z" "$DEST/"
+cp "$DESKTOP/$NOMBRE.7z" "$REPOS/"
+
+# 3) borrar la copia del Desktop (salvo que el operador pida dejarla)
+rm -f "$DESKTOP/$NOMBRE.7z"
+```
+
+> **Exclusiones:** `node_modules`, `dist`, `.git`, `.claude`, `__pycache__`, `.venv`/`venv` y otros
+> `.7z` — todo regenerable o ya respaldado. Sin esto el comprimido se infla sin aportar nada.
+>
+> **Convención de nombre:** igual que el de ProcuradorTool (`YYYYMM_DDMMYYYY_<carpeta>`), más un
+> sufijo que diga **de qué hito es** el backup. Ej: `202609_04092026_proyecto_post-auditoria-fable.7z`.
+>
+> ⚠️ **Cuándo dejar la copia en el Desktop:** por default se borra. Solo se deja si el operador lo
+> pide para esa corrida en particular.
+
 ### Prueba diaria de la app Electron — dos disparadores, dos caminos (desde 2026-08-27, F3)
 
 > 🚨 **La frase que use el operador decide el camino — no asumir, leerla literal:**
