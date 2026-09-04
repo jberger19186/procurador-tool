@@ -95,7 +95,13 @@ app.use(helmet.contentSecurityPolicy({
         baseUri:       ["'self'"],
         frameAncestors: ["'self'"],
         formAction:    ["'self'"],
-        reportUri:     ['/csp-report']
+        reportUri:     ['/csp-report'],
+        // `useDefaults: true` incluye `upgrade-insecure-requests`, y el navegador lo IGNORA
+        // en una política report-only — pero avisa en consola en CADA carga de página, para
+        // todos los usuarios ("directive 'upgrade-insecure-requests' is ignored when
+        // delivered in a report-only policy"). Se anula acá para no dejar ruido permanente.
+        // ⚠️ Solo en la report-only: la CSP ENFORCED de arriba la conserva, donde sí aplica.
+        upgradeInsecureRequests: null
     }
 }));
 
