@@ -1764,8 +1764,17 @@ async function generarPDFExpediente(
             // Texto del título
             page.drawText(sanitize(titulo), { x: marginLeft + 6, y: y + 2, size: 11, font: fontBold, color: C_BLUE });
             y -= lineSpacing;
-            // Línea separadora suave
-            page.drawRectangle({ x: marginLeft, y, width: maxWidth, height: 0.5, color: C_LGRAY });
+            // 2026-09-04: se quitó la línea separadora gris que iba acá.
+            // Se superponía con el texto del primer dato de la sección: la línea
+            // se dibujaba en `y`, y el primer dato con baseline en `y - 6`; como
+            // Helvetica a 10pt sube ~7,3pt sobre la baseline, el tope del texto
+            // quedaba ~1,3pt POR ENCIMA de la línea y esta lo cruzaba (visible
+            // en el informe real, p. ej. sobre "26/11/2025 - INFORMACION: ...").
+            // No se corrigió agrandando el margen porque el título ya está
+            // delimitado por su fondo (C_BLUE_LIGHT) y su barra lateral azul:
+            // la línea era redundante. El espaciado total (20 + 6) se conserva.
+            // Las líneas del pie de página (`pg.drawRectangle` en checkPageBreak)
+            // NO se tocan: esas no se superponen con nada.
             y -= 6;
             datos.forEach((dato) => {
                 agregarTextoAjustado(dato, 10);
