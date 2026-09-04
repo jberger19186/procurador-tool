@@ -1,8 +1,11 @@
 # Propuesta — "Guardar informe" en Bitácora guarda un registro vacío
 
-> **Estado: PROPUESTA, sin aprobar. No se tocó código.**
-> Diagnóstico hecho el 2026-09-04 contra la base de producción y el código real.
-> Para ejecutar con un agente independiente, una vez aprobada.
+> ✅ **ESTADO: EJECUTADA, VERIFICADA Y CERRADA (2026-09-04). Release `electron-v2.7.57`.**
+> Diagnóstico hecho el 2026-09-04 contra la base de producción y el código real. Implementada por un
+> agente independiente (opción **A + D**, la recomendada en §4), verificada por mí en 4 capas
+> (unitaria real · integración contra staging · corrida real contra el PJN con el operador · portal
+> real), y confirmada de punta a punta con datos de producción antes de cerrar. Commits `7c7842b`
+> (fix), `29b3ef5` (esta propuesta), `33aafa7`/`f463086` (release).
 
 ---
 
@@ -194,3 +197,77 @@ la dificultad está en el volumen de la cadena (5 eslabones) y en que la verific
 - **Los 2 snapshots vacíos ya existentes** (ids 17 y 44) no se pueden rellenar retroactivamente —
   el dato de esas corridas ya no está. Se pueden dejar o borrar; es decisión del operador.
 - **El CHECK de `expediente_snapshots.kind`** (`'procuracion'|'informe'`) no se toca.
+
+---
+
+## 8. Resultado real (2026-09-04) — ejecutado, verificado, cerrado
+
+**Implementación (agente independiente, opción A + D, sin tocar B/C):**
+
+- `electron-app/informe/movimientosInforme.js` (nuevo) — lee `listaMovimientos.json` que
+  `informequickscwpjn.js` ya persiste como backup/resume en `<*_temp>/<expediente>_backup/`
+  (**no** raspa el stdout — se descartó la opción A tal como estaba escrita en cuanto se confirmó
+  que el JSON estructurado ya existía y era más confiable). Busca en todos los `*_temp` y toma el
+  más reciente por `mtime` (mismo criterio que `latestFileBy()` de `main.js` desde v2.7.35, para no
+  duplicar la resolución de `identificador` — la causa exacta del bug de v2.7.33). Nunca lanza:
+  ante cualquier error devuelve `[]`. Tope de **15 movimientos** (mismo `maxMovimientos` que la
+  procuración, alineado con el cap de 256 KB de `captureDrafts.js`). Solo los movimientos
+  **actuales**, nunca los históricos (documentado explícito: son otra sección del informe, mezclar
+  daría un listado que no corresponde a ninguna pantalla real).
+- `main.js` — los 2 call sites (individual y por lote) llaman `leerMovimientosInforme()` después de
+  cada corrida exitosa y agregan `movimientos` al resumen.
+- `generador_visor.js` — propaga `movimientos` al armar `DATOS_BATCH` (mismo patrón que el fix de
+  `caratula` en B4).
+- `visor_informes_template.html` — **la causa raíz real**: `campoDeCaso()` mandaba `movs: '[]'`
+  **fijo**, así que todo snapshot de informe nacía vacío sin importar qué tuviera el informe. Ahora
+  manda `movs: JSON.stringify(exp.movimientos || [])` + (**D**) `pdf: nombrePdfDe(exp)` — el nombre
+  del PDF generado (no la ruta ni un link: el visor es `https`, no puede abrir un `file://` del
+  disco del usuario).
+- `routes/capture.js` / `routes/bitacora.js` — nuevo campo `pdf` (saneado con el helper `texto()`
+  existente), agregado al `data` del snapshot **solo** cuando `kind==='informe'` y viene no vacío
+  (no ensucia los snapshots de procuración con una clave `pdf` vacía).
+- `public/usuarios/app.js` (`renderMexpSnapshot`) — nuevo bloque `📄 Informe generado: <pdf>` cuando
+  `s.data?.pdf` existe.
+
+**Verificación que corrí yo mismo, en 4 capas, antes de dar por bueno el fix del agente:**
+
+1. **Suite completa de Electron re-ejecutada archivo por archivo** (no confié en el resumen del
+   agente): `anonimizar` 46/46 · `descargarAdjuntos` 30/30 · `extraerPdfAMarkdown` 32/32 ·
+   `movimientosInforme` (nuevo) 14/14 · `procesarMarkdownPipeline` 11/11 · `tokenizar-fixture` 15/15
+   · `verify-s6-electron-security` 73/73 · `visorInformeCaptura` (nuevo) 7/7 — **228/228, 0 FAIL**.
+2. **Harness contra staging** (`dev-tools/verify-snapshot-informe.js`, guard de `DB_NAME`, usuario
+   efímero creado y borrado): la cadena completa visor→303→draft→capture-lote→fila real en
+   `expediente_snapshots` — **8/8 PASS**.
+3. **Corrida real contra el PJN, con el operador presente, con la app instalada v2.7.57**:
+   informe individual de `FCR 18745/2017` → generó PDF real (4 páginas) + visor →
+   **el operador clickeó "Guardar caso" en el visor** (única acción que computer-use no podía hacer:
+   ese Chrome lo abre el propio proceso de automatización de la app, tier fuera de alcance tanto de
+   computer-use como de la extensión — ni siquiera con `file://` directo, sin permiso de acceso a
+   archivos locales). Confirmado por SQL en prod: snapshot **id 45**, `kind='informe'`,
+   **15 movimientos reales** (tope aplicado — el expediente tiene más de 15 actuales) + `pdf:
+   "informe_FCR 018745_2017_2026-09-04T17-27-53.pdf"`. El primer movimiento
+   (`26/11/2025 · INFORMACION · Agregado al Paquete Nro. 2647202526`) es el mismo dato exacto que ya
+   había citado el operador en el reporte original de las líneas del PDF — mismo expediente, misma
+   corrida real, dos bugs distintos verificados sobre el mismo dato de producción.
+4. **Confirmación visual en el portal real** (`https://api.procuradortool.com/usuarios/`, sesión
+   real): Mis Expedientes → ficha `FCR 18745/2017` → Historial → "Última — 04/09/2026" → el modal
+   muestra los 15 movimientos completos (fecha/tipo/detalle) **y** la línea
+   `📄 Informe generado: informe_FCR 018745_2017_...pdf`.
+
+**Pregunta del operador, respondida contra el código (no de memoria):** ¿si al generar el informe
+se tildan "Movimientos históricos", "Intervinientes", "Vinculados", "Recursos" o "Notas", eso
+también se guarda en Bitácora? **No.** `campoDeCaso()` solo arma 4 campos:
+`exp` / `car` / `movs` / `pdf` — ninguna de esas 5 secciones adicionales viaja al snapshot, aunque
+se hayan tildado y estén en el PDF. Es la misma decisión de diseño documentada en
+`movimientosInforme.js` (solo los movimientos ACTUALES, nunca los históricos) extendida al resto de
+las secciones opcionales — quedó **fuera de alcance a propósito** de esta propuesta (§7 ya lo
+excluía implícitamente al hablar solo de movimientos). Si se quiere sumar, es una extensión nueva:
+agregar los datos a lo que ya junta `informequickscwpjn.js` para el PDF, propagarlos por la misma
+cadena de 5 eslabones, y agregar secciones nuevas al modal (`renderMexpSnapshot`) — no está hecho.
+
+**Cierre de fase (regla nueva del 2026-09-04):** 0 procesos Chrome de automatización huérfanos en la
+máquina, 0 archivos `_tmp-*` en el servidor, 0 conexiones `idle in transaction` en
+`procurador_db` — verificado antes de cerrar.
+
+**Los 2 snapshots vacíos preexistentes (ids 17 y 44) se dejaron sin tocar**, tal como decía §7 — el
+dato de esas corridas ya no está, no hay forma de rellenarlos.
