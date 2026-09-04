@@ -442,9 +442,26 @@
   //     acá iban fijos en '[]' y dejaban todo snapshot de informe vacío.
   // Lo que genuinamente NO trae este flujo es jurisdicción/dependencia/situación:
   // esas quedan vacías y el usuario las completa desde Mis Expedientes si quiere.
+  //
+  // 2026-09-04 — secciones completas del informe (históricos/intervinientes/
+  // vinculados/recursos/notas), además de los movimientos actuales de arriba.
+  // Cada `exp.<sección>` ya viene LIMPIA desde `movimientosInforme.js` (Node, del
+  // lado de Electron) — acá solo se serializa, no se procesa nada.
+  //
+  // 🚨 Umbral de tamaño (decisión del operador, ver la propuesta de secciones
+  // completas): las 5 secciones extra viajan en el POST SOLO cuando la acción es
+  // 'snapshot-lote' (la única que las persiste — 'ficha-lote'/'entrada-lote' las
+  // ignorarían igual del lado del servidor) Y la selección es de hasta
+  // `UMBRAL_SECCIONES_LOTE` casos. `captureDrafts.js` rechaza ENTERO cualquier
+  // borrador de más de 256 KB; medido con datos reales, agregar las 5 secciones
+  // multiplica por ~2,1 el peso de cada caso — sin este umbral, un lote grande
+  // que hoy entra pasaría a rechazarse completo. Con la selección chica (el caso
+  // de uso real: "quiero el detalle completo de ESTE expediente") no hay ningún
+  // riesgo de tamaño.
   // ═══════════════════════════════════════════════════════════════════════
   var seleccionados = new Set();
   var seguidosSet = new Set();
+  var UMBRAL_SECCIONES_LOTE = 50;
 
   function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   // F3 (2026-08-31, code-review): esc() no escapa comillas — una carátula legítima
@@ -574,23 +591,45 @@
     catch (_) { return String(exp.rutaPDF).replace(/^\.\//, ''); }
   }
 
-  function campoDeCaso(exp) {
+  // `incluirSecciones` — ver el comentario grande de arriba (Umbral de tamaño).
+  // Default `true`: el único llamador que NO lo pasa explícito es el botón
+  // individual de fila ("💾 Guardar caso", accion:'ficha', un solo caso) — ahí
+  // el tamaño nunca es un problema, así que no hace falta que decida.
+  function campoDeCaso(exp, incluirSecciones) {
+    if (incluirSecciones === undefined) incluirSecciones = true;
     // Punto 20: `car` salía siempre vacío — el dato existía (el script lo scrapea para
     // el PDF) pero se perdía en el camino antes de B4. Ver generador_visor.js/prepararDatos.
     // `movs` tenía el mismo defecto y era peor: iba fijo en '[]', así que TODO snapshot
     // de informe quedaba vacío y el portal mostraba "Sin movimientos registrados" sobre
     // un informe que sí los tenía (2 de 2 en producción). Ver movimientosInforme.js.
-    return {
+    const campo = {
       exp: exp.expediente || '', jur: '', dep: '', car: exp.caratula || '', sit: '',
       fproc: DATOS_BATCH.fechaEjecucion || '',
       movs: JSON.stringify(exp.movimientos || []),
       pdf: nombrePdfDe(exp)
     };
+    if (!incluirSecciones) return campo;
+    // Las 5 secciones extra (2026-09-04): mismo patrón que `movs`, un campo por
+    // sección, cada uno un JSON serializado — así `capture.js` puede seguir
+    // tratando cada uno como texto de formulario, sin cambiar el transporte.
+    campo.hist = JSON.stringify(exp.historicos || []);
+    campo.interv = JSON.stringify(exp.intervinientes || []);
+    campo.vinc = JSON.stringify(exp.vinculados || []);
+    campo.rec = JSON.stringify(exp.recursos || []);
+    campo.notas = JSON.stringify(exp.notas || []);
+    return campo;
   }
   function accionLote(accion, tipo) {
     if (seleccionados.size === 0) return;
     const exps = Array.from(seleccionados).map(function (i) { return DATOS_BATCH.expedientes[i]; });
-    enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(exps.map(campoDeCaso)) });
+    // Solo 'snapshot-lote' persiste las secciones extra ('ficha-lote'/'entrada-lote'
+    // las ignorarían del lado del servidor) — y solo si el lote entra en el umbral
+    // de tamaño. NUNCA `exps.map(campoDeCaso)` a secas: `Array.prototype.map` pasa
+    // el índice como 2º argumento, y `campoDeCaso` ahora lo interpretaría como
+    // `incluirSecciones` (un índice > 0 es truthy).
+    const incluirSecciones = accion === 'snapshot-lote' && exps.length <= UMBRAL_SECCIONES_LOTE;
+    const lote = exps.map(function (exp) { return campoDeCaso(exp, incluirSecciones); });
+    enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(lote) });
     marcarLoteComoGuardado(exps);
   }
 

@@ -1,24 +1,30 @@
 /**
- * Verifica el extractor de movimientos del informe (Bitácora: el snapshot quedaba vacío).
+ * Verifica el extractor de movimientos + secciones del informe (Bitácora: el
+ * snapshot quedaba vacío, y luego se extendió a guardar históricos/
+ * intervinientes/vinculados/recursos/notas — 2026-09-04).
  *
  *   node electron-app/test/movimientosInforme.test.js
  *
  * DATOS REALES, NO FABRICADOS
  * ---------------------------
- * El grupo A corre contra el `listaMovimientos.json` REAL que dejó una corrida de
- * informe en esta máquina. Ese archivo NO se versiona: trae la carátula y el nombre
- * de una parte real (mismo criterio que ya se aplicó a las capturas de la demo). Si
- * no está, el grupo A se SALTEA con aviso — y el resumen lo dice, para que "todo
- * verde" no se confunda con "se probó contra datos reales".
+ * Los grupos A y C corren contra los backups REALES que dejaron corridas de
+ * informe en esta máquina. Esos archivos NO se versionan: traen carátulas y
+ * nombres de partes reales (mismo criterio que ya se aplicó a las capturas de
+ * la demo). Si no están, esos grupos se SALTEAN con aviso — y el resumen lo
+ * dice, para que "todo verde" no se confunda con "se probó contra datos reales".
  *
  * El grupo B arma árboles de directorios temporales para los caminos que no se
- * pueden provocar con el archivo real (mtime viejo, JSON corrupto, varios `_temp`).
+ * pueden provocar con el archivo real (mtime viejo, JSON corrupto, varios
+ * `_temp`). El grupo D hace lo mismo para las 5 secciones extra (centinelas de
+ * "sección vacía", el recorte a 15, y el aislamiento entre secciones).
  *
  * CONTROLES NEGATIVOS
  * -------------------
- * B4/B5/B6/B7/B8 existen para que el test pueda FALLAR: comprueban que el extractor
- * devuelve `[]` cuando debe (backup viejo, expediente ajeno, JSON roto, sin backup).
- * Sin ellos, un extractor que devolviera siempre el primer archivo que encuentra
+ * B4/B5/B6/B7/B8 (movimientos) y D2/D3/D5/D6/D7 (secciones extra) existen para
+ * que el test pueda FALLAR: comprueban que el extractor devuelve `[]` cuando
+ * debe (backup viejo, expediente ajeno, JSON roto, centinela de vacío, sección
+ * ajena corrupta). Sin ellos, un extractor que devolviera siempre el primer
+ * archivo que encuentra (o que tratara cualquier cosa como "hay contenido")
  * pasaría igual, y el test no probaría nada.
  */
 
@@ -27,7 +33,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { leerMovimientosInforme, MAX_MOVS_DEFAULT } = require('../informe/movimientosInforme');
+const { leerMovimientosInforme, leerSeccionesInforme, MAX_MOVS_DEFAULT } = require('../informe/movimientosInforme');
 
 // Corrida real en esta máquina (D6: descargas por CUIT).
 const REAL = path.join(
@@ -93,9 +99,11 @@ if (fs.existsSync(backupReal)) {
         assert.deepStrictEqual(movs.map(m => m.detalle), crudo.slice(0, 3).map(m => m.detalle));
     });
 
-    check('A5 . el lote real entra en el presupuesto de 256 KB del borrador', () => {
+    check('A5 . el lote real (solo movimientos+pdf) entra en el presupuesto de 256 KB del borrador', () => {
         // captureDrafts.js rechaza ENTERO un borrador > 256 KB. Con el tope de 15,
-        // 200 casos (MAX_CASOS_CAPTURE_LOTE) tienen que seguir entrando.
+        // MAX_CASOS_LOTE (120, corregido 2026-09-04 -- ver capture.js) tiene que
+        // seguir entrando. Se mide igual con 200 (más estricto que el tope real
+        // de 120) para dejar margen de sobra.
         const uno = leerMovimientosInforme(REAL, REAL_EXP);
         const bytes = Buffer.byteLength(JSON.stringify(uno), 'utf8') * 200;
         assert.ok(bytes < 256 * 1024, '200 casos medirian ' + Math.round(bytes / 1024) + ' KB (tope 256 KB)');
@@ -103,6 +111,76 @@ if (fs.existsSync(backupReal)) {
 } else {
     omitir('A1-A5 . datos reales', 'no existe ' + backupReal);
 }
+
+// ---------------------------------------------------------------------------
+console.log('\nC. leerSeccionesInforme() -- las 6 secciones, contra fixtures REALES (2026-09-04)');
+// ---------------------------------------------------------------------------
+// FCR 751/2025: tiene las 7 secciones de backup (datosGenerales incluido) --
+// intervinientes con contenido real (26 filas crudas, 5 reales tras limpiar),
+// historicos/vinculados/recursos/notas todas "vacías" (traen el centinela).
+const backup751 = path.join(REAL, '27320694359_temp', 'FCR_751_2025_backup');
+// FCR 9391/2018: historicos con contenido REAL (32 filas -> recorta a 15).
+const backup9391 = path.join(REAL, '27320694359_temp', 'FCR_9391_2018_backup');
+
+if (fs.existsSync(path.join(backup751, 'intervinientes.json'))) {
+    const intervCrudo = JSON.parse(fs.readFileSync(path.join(backup751, 'intervinientes.json'), 'utf8'));
+
+    check('C1 . intervinientes: ' + intervCrudo.length + ' filas crudas se limpian a 5 reales (encabezado+vacíos+duplicado descartados)', () => {
+        const secs = leerSeccionesInforme(REAL, 'FCR 751/2025');
+        assert.strictEqual(secs.intervinientes.length, 5, 'medido contra el fixture real: 26 crudas -> 5 reales');
+        assert.ok(secs.intervinientes.some(s => s.includes('DAMIAN HORACIO ISLA MATA')));
+        assert.ok(!secs.intervinientes.some(s => s.startsWith('TIPO|NOMBRE')), 'la fila de encabezado no debe sobrevivir');
+        assert.ok(!secs.intervinientes.some(s => s.trim() === ''), 'ninguna fila vacía debe sobrevivir');
+    });
+
+    check('C2 . historicos/vinculados/recursos/notas VACÍOS (centinela del PJN) -> [], no el mensaje', () => {
+        const secs = leerSeccionesInforme(REAL, 'FCR 751/2025');
+        assert.deepStrictEqual(secs.historicos, [], 'el centinela {tipo:"info"} debe dar []');
+        assert.deepStrictEqual(secs.vinculados, [], 'el mensaje "no posee vinculados..." debe dar []');
+        assert.deepStrictEqual(secs.recursos, [], 'el mensaje "no posee recursos" debe dar []');
+        assert.deepStrictEqual(secs.notas, [], 'el mensaje "no posee notas" debe dar []');
+    });
+
+    check('C3 . movimientos actuales sigue funcionando igual dentro de leerSeccionesInforme (no-regresión de A1-A4)', () => {
+        const movsIndependiente = leerMovimientosInforme(REAL, 'FCR 751/2025');
+        const secs = leerSeccionesInforme(REAL, 'FCR 751/2025');
+        assert.deepStrictEqual(secs.movimientos, movsIndependiente);
+        assert.ok(secs.movimientos.length > 0);
+    });
+} else {
+    omitir('C1-C3 . intervinientes reales (FCR 751/2025)', 'no existe ' + backup751);
+}
+
+if (fs.existsSync(path.join(backup9391, 'listaMovimientosHistoricos.json'))) {
+    const histCrudo = JSON.parse(fs.readFileSync(path.join(backup9391, 'listaMovimientosHistoricos.json'), 'utf8'));
+
+    check('C4 . historicos CON contenido real (' + histCrudo.length + ' filas) se recorta a ' + MAX_MOVS_DEFAULT, () => {
+        const secs = leerSeccionesInforme(REAL, 'FCR 9391/2018');
+        assert.strictEqual(secs.historicos.length, Math.min(histCrudo.length, MAX_MOVS_DEFAULT));
+        assert.strictEqual(secs.historicos[0].detalle, histCrudo[0].detalle);
+        assert.deepStrictEqual(Object.keys(secs.historicos[0]).sort(), ['detalle', 'fecha', 'tipo']);
+    });
+
+    check('C5 . ese mismo expediente no tiene intervinientes/vinculados/recursos/notas -> las 4 en []', () => {
+        const secs = leerSeccionesInforme(REAL, 'FCR 9391/2018');
+        assert.deepStrictEqual(secs.intervinientes, []);
+        assert.deepStrictEqual(secs.vinculados, []);
+        assert.deepStrictEqual(secs.recursos, []);
+        assert.deepStrictEqual(secs.notas, []);
+    });
+} else {
+    omitir('C4-C5 . historicos reales (FCR 9391/2018)', 'no existe ' + backup9391);
+}
+
+check('C6 . expediente SIN ninguna sección extra (solo datosGenerales+listaMovimientos, ej. FCR 18745/2017 de ayer) -> las 5 extra en []', () => {
+    const secs = leerSeccionesInforme(REAL, REAL_EXP);
+    assert.deepStrictEqual(secs.historicos, []);
+    assert.deepStrictEqual(secs.intervinientes, []);
+    assert.deepStrictEqual(secs.vinculados, []);
+    assert.deepStrictEqual(secs.recursos, []);
+    assert.deepStrictEqual(secs.notas, []);
+    assert.ok(secs.movimientos.length > 0, 'movimientos SÍ debe tener datos -- este expediente lo tiene');
+});
 
 // ---------------------------------------------------------------------------
 console.log('\nB. Estructura y controles negativos (arboles temporales)');
@@ -171,6 +249,113 @@ try {
     });
 } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+console.log('\nD. leerSeccionesInforme() -- estructura y controles negativos (sintético)');
+// ---------------------------------------------------------------------------
+/** Escribe UN archivo cualquiera dentro de `<raiz>/<temp>/<expCarpeta>_backup/`. */
+function sembrarArchivo(raiz, temp, expCarpeta, nombreArchivo, contenido, mtime) {
+    const dir = path.join(raiz, temp, expCarpeta + '_backup');
+    fs.mkdirSync(dir, { recursive: true });
+    const f = path.join(dir, nombreArchivo);
+    fs.writeFileSync(f, contenido, 'utf8');
+    if (mtime) fs.utimesSync(f, mtime / 1000, mtime / 1000);
+    return f;
+}
+
+const tmpD = fs.mkdtempSync(path.join(os.tmpdir(), 'movinf-d-'));
+try {
+    check('D1 . intervinientes: 20 filas reales (sin encabezado, sin vacías, sin duplicar) se recortan a 15', () => {
+        const raiz = path.join(tmpD, 'd1');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);   // ancla (listaMovimientos.json)
+        const filas = Array.from({ length: 20 }, (_, i) => `LETRADO APODERADO|PERSONA NUMERO ${i}|Tomo: 1 Folio: ${i}|2022367078${i % 10}`);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'intervinientes.json', JSON.stringify(filas), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        assert.strictEqual(secs.intervinientes.length, 15, '20 filas reales -> recorta a MAX_MOVS_DEFAULT (15)');
+    });
+
+    check('D2 . intervinientes: descarta la fila de encabezado y las filas vacías, y deduplica', () => {
+        const raiz = path.join(tmpD, 'd2');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        const filas = [
+            'TIPO|NOMBRE|TOMO/FOLIO :\nTOMO/FOLIO|I.E.J. :\nI.E.J.',   // encabezado -> fuera
+            '', '',                                                      // vacías -> fuera
+            'TIPO :\nACTOR|NOMBRE :\nJUAN PEREZ||',                      // "TIPO :" se saca, el resto queda
+            'TIPO :\nACTOR|NOMBRE :\nJUAN PEREZ||',                      // duplicado -> se deduplica
+        ];
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'intervinientes.json', JSON.stringify(filas), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        assert.deepStrictEqual(secs.intervinientes, ['ACTOR|NOMBRE :\nJUAN PEREZ||']);
+    });
+
+    check('D3 . historicos: el centinela se detecta por FORMA (length=1, tipo="info"), no por el texto exacto', () => {
+        const raiz = path.join(tmpD, 'd3');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        // Texto DISTINTO al real ("El expediente no posee actuaciones históricas.")
+        // -- si el PJN cambia la redacción, este criterio (forma, no texto) sigue andando.
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'listaMovimientosHistoricos.json',
+            JSON.stringify([{ tipo: 'info', detalle: 'Otro texto cualquiera del PJN' }]), ahora);
+        assert.deepStrictEqual(leerSeccionesInforme(raiz, 'FCR 1/2020').historicos, []);
+    });
+
+    check('D4 . [negativo] vinculados/recursos/notas: el centinela "El expediente no posee..." -> []', () => {
+        const raiz = path.join(tmpD, 'd4');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'vinculados.json', JSON.stringify(['El expediente no posee vinculados posibles de ser visualizados.']), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'recursos.json', JSON.stringify(['El expediente no posee recursos']), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'notas.json', JSON.stringify(['El expediente no posee notas']), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        assert.deepStrictEqual(secs.vinculados, []);
+        assert.deepStrictEqual(secs.recursos, []);
+        assert.deepStrictEqual(secs.notas, []);
+    });
+
+    check('D5 . [negativo, control de que el centinela NO es sobre-agresivo] un solo dato real que no arranca con el mensaje de vacío SOBREVIVE', () => {
+        const raiz = path.join(tmpD, 'd5');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'notas.json', JSON.stringify(['Verificar domicilio del demandado antes de la audiencia']), ahora);
+        assert.deepStrictEqual(
+            leerSeccionesInforme(raiz, 'FCR 1/2020').notas,
+            ['Verificar domicilio del demandado antes de la audiencia'],
+            'un dato real de 1 sola entrada NO debe confundirse con el centinela de vacío'
+        );
+    });
+
+    check('D6 . [negativo] aislamiento entre secciones: "vinculados.json" corrupto NO vacía las demás', () => {
+        const raiz = path.join(tmpD, 'd6');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(3), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'vinculados.json', '{esto no es JSON ni array', ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'recursos.json', JSON.stringify(['Recurso real']), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        assert.deepStrictEqual(secs.vinculados, [], 'la seccion corrupta sola debe dar []');
+        assert.strictEqual(secs.movimientos.length, 3, 'movimientos no debe verse afectado');
+        assert.deepStrictEqual(secs.recursos, ['Recurso real'], 'recursos (sano) no debe verse afectado por vinculados (roto)');
+    });
+
+    check('D7 . [negativo] historicos con forma no-array (objeto suelto) -> []', () => {
+        const raiz = path.join(tmpD, 'd7');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'listaMovimientosHistoricos.json', '{"no":"es un array"}', ahora);
+        assert.deepStrictEqual(leerSeccionesInforme(raiz, 'FCR 1/2020').historicos, []);
+    });
+
+    check('D8 . expediente sin NINGÚN backup -> las 6 claves en [] (nunca undefined, nunca lanza)', () => {
+        const secs = leerSeccionesInforme(path.join(tmpD, 'no-existe'), 'FCR 1/2020');
+        assert.deepStrictEqual(secs, {
+            movimientos: [], historicos: [], intervinientes: [],
+            vinculados: [], recursos: [], notas: [],
+        });
+    });
+} finally {
+    fs.rmSync(tmpD, { recursive: true, force: true });
 }
 
 console.log('\n' + ok + ' PASS, ' + fail + ' FAIL' + (skip ? ', ' + skip + ' OMITIDO' : ''));

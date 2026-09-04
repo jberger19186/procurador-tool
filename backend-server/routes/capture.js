@@ -49,13 +49,39 @@ const ORIGENES = ['procuracion', 'informe', 'monitor'];
 // el draft) fallaría al confirmarse en POST /expedientes/capture-lote — el
 // usuario ve el draft creado pero no puede confirmarlo. Subir este valor exige
 // subir el de bitacora.js primero o a la vez.
-const MAX_CASOS_LOTE = 200;
+//
+// 🔧 CORREGIDO 2026-09-04 (hallazgo preexistente, no causado por las secciones
+// extra de abajo): esta constante decía 200 pero el comentario que la
+// justificaba ("un lote real de 200 casos × 15 movimientos mide menos de
+// 200 KB") estaba mal medido — con datos reales (`normalizarCaso()` sobre 15
+// movimientos reales de un informe: expediente/caratula/fecha/movimientos/pdf,
+// sin las secciones extra, que un lote de más de 50 nunca lleva) un caso pesa
+// **2.093 B**, así que 200 casos pesan 381 KB — MÁS que el tope de 256 KB de
+// `captureDrafts.js` — y una captura de más de 125 casos YA se rechazaba hoy,
+// pese a que este número decía aceptar 200. Corregido a un valor que sí entra:
+// floor(256 KB / 2.093 B) = 125; se deja **120**, con margen, no el techo
+// exacto — un caso con caratula o movimientos más largos que el fixture medido
+// no debe quedar al borde del límite.
+const MAX_CASOS_LOTE = 120;
 const MAX_MOVS_CASO  = 500;   // cota defensiva (el tope real de la app es maxMovimientos=15)
+// Igual cota que MAX_MOVS_CASO, para las 5 secciones extra del informe (2026-09-04):
+// el tope real de la app también es 15 por sección (movimientosInforme.js), esto es
+// solo la defensa contra un payload manipulado a mano.
+// (Nombres distintos a propósito, MAX_FILAS_SECCION / MAX_LARGO_ITEM_SECCION en
+// vez de un plural/singular casi idéntico: dos constantes con nombres parecidos
+// que solo se distinguen por una 's' es la clase de error que un cambio rápido
+// intercambia sin darse cuenta.)
+const MAX_FILAS_SECCION = 500;
 
 // Longitudes alineadas con las columnas reales de expedientes_seguidos
 const MAX_EXPEDIENTE  = 60;
 const MAX_TEXTO_CORTO = 200;
 const MAX_CARATULA    = 300;
+// Cada entrada de intervinientes/vinculados/recursos/notas es una fila completa
+// de la tabla del PJN (nombre + tomo/folio + CUIT, o un párrafo de nota) — más
+// larga que jurisdicción/dependencia pero no un texto libre sin cota como
+// `detalle` de movimiento (2000).
+const MAX_LARGO_ITEM_SECCION = 600;
 
 const PORTAL = '/usuarios/';
 
@@ -77,6 +103,27 @@ function parseMovs(raw) {
     }));
 }
 
+/**
+ * Secciones extra (2026-09-04): históricos/intervinientes/vinculados/recursos/
+ * notas, cada una un campo de form con un JSON serializado — mismo transporte
+ * que `movs`. Dos formas posibles:
+ *   · históricos: objetos {fecha,tipo,detalle}, igual que un movimiento → se
+ *     reusa `parseMovs` tal cual, es la misma forma.
+ *   · las otras 4: `string[]` — cada elemento es una fila de texto ya limpia
+ *     del lado de Electron (`movimientosInforme.js`), acá solo se sanea largo
+ *     y tipo, no se reprocesa el contenido (esa limpieza es responsabilidad
+ *     del cliente, que es quien conoce el formato real de la tabla del PJN).
+ */
+function parseSeccionTexto(raw) {
+    if (typeof raw !== 'string' || raw.trim() === '') return [];
+    let arr;
+    try { arr = JSON.parse(raw); } catch (_) { return []; }
+    if (!Array.isArray(arr)) return [];
+    return arr.slice(0, MAX_FILAS_SECCION)
+        .map(item => texto(item, MAX_LARGO_ITEM_SECCION))
+        .filter(item => item.length > 0);
+}
+
 function normalizarCaso(src) {
     return {
         expediente:       texto(src?.exp, MAX_EXPEDIENTE),
@@ -90,6 +137,16 @@ function normalizarCaso(src) {
         // Es un nombre de archivo, nunca una ruta ni una URL — el portal lo muestra
         // como texto para que el usuario sepa qué archivo mirar en su carpeta.
         pdf:              texto(src?.pdf, MAX_TEXTO_CORTO),
+        // Secciones extra del informe (2026-09-04) — mismo criterio que `pdf`:
+        // solo el visor de informe las manda (`hist`/`interv`/`vinc`/`rec`/`notas`,
+        // ver campoDeCaso() en visor_informes_template.html), y solo cuando el
+        // lote entra en el umbral de tamaño. Ausentes → `[]`, no `undefined`, así
+        // bitacora.js no tiene que distinguir "no vino" de "vino vacío".
+        historicos:       parseMovs(src?.hist),
+        intervinientes:   parseSeccionTexto(src?.interv),
+        vinculados:       parseSeccionTexto(src?.vinc),
+        recursos:         parseSeccionTexto(src?.rec),
+        notas:            parseSeccionTexto(src?.notas),
     };
 }
 

@@ -171,7 +171,17 @@ function prepararDatos(expedientes, config, rutaExcel, bitacoraInfo) {
             // (el script los deja en listaMovimientos.json y arma el PDF con ellos), pero
             // se perdían acá y el visor terminaba mandando `movs: '[]'` a Bitácora. Ver
             // electron-app/informe/movimientosInforme.js.
-            movimientos: Array.isArray(exp.movimientos) ? exp.movimientos : []
+            movimientos: Array.isArray(exp.movimientos) ? exp.movimientos : [],
+            // 2026-09-04: las 5 secciones extra del informe (misma fuente que
+            // `movimientos` — `movimientosInforme.js::leerSeccionesInforme`). Cada una
+            // llega vacía si esa sección no se tildó al generar el informe; el guard es
+            // el mismo `Array.isArray(...) ? ... : []` que ya usa `movimientos`, por si
+            // algún llamador (ej. un test que arma su propio `resumen`) no las manda.
+            historicos: Array.isArray(exp.historicos) ? exp.historicos : [],
+            intervinientes: Array.isArray(exp.intervinientes) ? exp.intervinientes : [],
+            vinculados: Array.isArray(exp.vinculados) ? exp.vinculados : [],
+            recursos: Array.isArray(exp.recursos) ? exp.recursos : [],
+            notas: Array.isArray(exp.notas) ? exp.notas : []
         };
     });
 

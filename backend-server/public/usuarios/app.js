@@ -4675,6 +4675,68 @@ async function verMexpSnapshot(snapshotId) {
     }
 }
 
+/** Un movimiento (fecha/tipo/detalle) — misma tarjeta que ya usaba el modal
+ *  antes de esta extensión (2026-09-04). Reusada por la sección principal
+ *  ("Movimientos") y por la única sección extra con esta misma forma
+ *  ("Movimientos históricos"). */
+function mexpSnapshotMovHtml(m) {
+    return `
+        <div class="mexp-snapshot-mov">
+            <strong>${escapeHtml(m?.fecha || '')}</strong> ${escapeHtml(m?.tipo || '')}<br>
+            <span style="color:var(--text-muted)">${escapeHtml(m?.detalle || '')}</span>
+        </div>
+    `;
+}
+
+/** Sección principal de movimientos ACTUALES — SIN encabezado propio (así
+ *  estaba antes de esta extensión) y con el mismo "Sin movimientos
+ *  registrados" de siempre si viene vacía. No-regresión a propósito: ni
+ *  procuración ni un snapshot viejo (solo `movimientos`+`pdf`) deben verse
+ *  distintos a como se veían antes de agregar las 5 secciones extra. */
+function mexpSnapshotMovimientosHtml(movimientos) {
+    if (movimientos.length === 0) {
+        return '<div class="empty-state"><p>Sin movimientos registrados en esta corrida</p></div>';
+    }
+    return movimientos.map(mexpSnapshotMovHtml).join('');
+}
+
+/**
+ * Sección extra opcional (2026-09-04) con la MISMA forma que los movimientos
+ * (fecha/tipo/detalle) — hoy solo "Movimientos históricos". Se omite POR
+ * COMPLETO (título incluido) si no hay datos: "Movimientos históricos (0)"
+ * parece contenido real y no lo es — mismo criterio que ya aplicó el
+ * extractor del lado de Electron al descartar el mensaje del PJN "El
+ * expediente no posee actuaciones históricas" en vez de guardarlo como si
+ * fuera una entrada real (ver `electron-app/informe/movimientosInforme.js`).
+ */
+function mexpSnapshotSeccionMovsHtml(titulo, lista) {
+    if (!Array.isArray(lista) || lista.length === 0) return '';
+    return `
+        <div class="mexp-historial-kind-titulo" style="margin-top:16px">${escapeHtml(titulo)} (${lista.length})</div>
+        ${lista.map(mexpSnapshotMovHtml).join('')}
+    `;
+}
+
+/**
+ * Sección extra de texto libre (intervinientes/vinculados/recursos/notas,
+ * 2026-09-04) — `string[]` ya limpio del lado de Electron (sin fila de
+ * encabezado, sin duplicados, sin el mensaje "El expediente no posee..." de
+ * una sección vacía). Cada entrada puede traer saltos de línea internos (ej.
+ * "LETRADO APODERADO\nNOMBRE APELLIDO"), por eso `white-space:pre-wrap` en vez
+ * de reemplazar `\n` a mano. Se omite POR COMPLETO si no hay datos, mismo
+ * criterio que `mexpSnapshotSeccionMovsHtml`.
+ */
+function mexpSnapshotSeccionTextoHtml(titulo, lista) {
+    if (!Array.isArray(lista) || lista.length === 0) return '';
+    const items = lista.map(item => `
+        <div class="mexp-snapshot-mov" style="white-space:pre-wrap">${escapeHtml(item)}</div>
+    `).join('');
+    return `
+        <div class="mexp-historial-kind-titulo" style="margin-top:16px">${escapeHtml(titulo)} (${lista.length})</div>
+        ${items}
+    `;
+}
+
 function renderMexpSnapshot(s, titleEl, body) {
     titleEl.textContent = (s.kind === 'procuracion' ? 'Procuración' : 'Informe') + ' — ' + bitFormatUtcDate(s.run_date);
 
@@ -4694,16 +4756,16 @@ function renderMexpSnapshot(s, titleEl, body) {
         </p>`;
     }
 
-    if (movimientos.length === 0) {
-        html += '<div class="empty-state"><p>Sin movimientos registrados en esta corrida</p></div>';
-    } else {
-        html += movimientos.map(m => `
-            <div class="mexp-snapshot-mov">
-                <strong>${escapeHtml(m.fecha || '')}</strong> ${escapeHtml(m.tipo || '')}<br>
-                <span style="color:var(--text-muted)">${escapeHtml(m.detalle || '')}</span>
-            </div>
-        `).join('');
-    }
+    html += mexpSnapshotMovimientosHtml(movimientos);
+    // Las 5 secciones extra del informe (2026-09-04): agrupadas con su propio
+    // título, cada una oculta por completo si el usuario no la tildó al generar
+    // el informe (o si el snapshot es de una corrida anterior a esta extensión).
+    html += mexpSnapshotSeccionMovsHtml('Movimientos históricos', s.data?.historicos);
+    html += mexpSnapshotSeccionTextoHtml('Intervinientes', s.data?.intervinientes);
+    html += mexpSnapshotSeccionTextoHtml('Vinculados', s.data?.vinculados);
+    html += mexpSnapshotSeccionTextoHtml('Recursos', s.data?.recursos);
+    html += mexpSnapshotSeccionTextoHtml('Notas', s.data?.notas);
+
     body.innerHTML = html;
 }
 

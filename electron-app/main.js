@@ -17,10 +17,14 @@ const fs = require('fs');
 const AuthManager = require('./src/auth/authManager');
 const dailyVerification = require('./src/verification/dailyVerification');
 const { motivoInformeSinPDF, caratulaInformeExitoso } = require('./informe/motivoInformeSinPDF');
-// Movimientos del informe para el snapshot de Bitácora: el visor los mandaba
-// vacíos ("Sin movimientos registrados" sobre un informe que sí los tenía).
-// Se leen del JSON que el propio script deja en disco — ver el módulo.
-const { leerMovimientosInforme } = require('./informe/movimientosInforme');
+// Movimientos + secciones del informe para el snapshot de Bitácora: el visor
+// los mandaba vacíos ("Sin movimientos registrados" sobre un informe que sí los
+// tenía). Se leen del JSON que el propio script deja en disco — ver el módulo.
+// `leerSeccionesInforme` es la que usan los 2 call sites de abajo (movimientos
+// actuales + históricos/intervinientes/vinculados/recursos/notas, todo junto,
+// una sola resolución de carpeta de backup); `leerMovimientosInforme` queda
+// exportada igual por los tests que la usan directo.
+const { leerSeccionesInforme } = require('./informe/movimientosInforme');
 
 /**
  * Tope de movimientos por caso, leído de la config con `cargarConfiguracion()`
@@ -2506,9 +2510,9 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
             }
             mainWindow.webContents.send('batch-progress', { indeterminate: true, label: `Generando informe: ${expediente}` });
             await closeChromeProfile();
-            // Marca de tiempo previa al fork: `leerMovimientosInforme` descarta cualquier
-            // listaMovimientos.json anterior a esto, para no tomar el de una corrida vieja
-            // si ésta murió antes de escribir el suyo.
+            // Marca de tiempo previa al fork: `leerSeccionesInforme` descarta cualquier
+            // backup anterior a esto (ancla por `listaMovimientos.json`), para no tomar el
+            // de una corrida vieja si ésta murió antes de escribir el suyo.
             const informeStartMs = Date.now();
             let result = await authManager.executeRemoteScriptAsLocal(
                 'informequickscwpjn.js',
@@ -2567,13 +2571,16 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
                         // B4: carátula ya scrapeada por el script, presente en el mismo RESULT
                         // que motivoInformeSinPDF ya parsea — ver el comentario en ese módulo.
                         const caratula = caratulaInformeExitoso(result.output);
-                        // Los movimientos que el script ya dejó en disco: sin esto el visor
-                        // manda `movs: '[]'` y el snapshot queda vacío (ver movimientosInforme.js).
-                        const movimientos = leerMovimientosInforme(descargasPath, expediente, {
+                        // Movimientos + las 5 secciones extra (históricos/intervinientes/
+                        // vinculados/recursos/notas) que el script ya dejó en disco, cada una
+                        // presente solo si el usuario la tildó al generar el informe — sin
+                        // esto el visor manda `movs: '[]'` y el snapshot queda vacío (ver
+                        // movimientosInforme.js).
+                        const secciones = leerSeccionesInforme(descargasPath, expediente, {
                             max: maxMovimientosDeConfig(),
                             desdeMs: informeStartMs
                         });
-                        fs.writeFileSync(resumenPath, JSON.stringify([{ expediente, ok: true, exitCode: 0, caratula, movimientos }], null, 2), 'utf8');
+                        fs.writeFileSync(resumenPath, JSON.stringify([{ expediente, ok: true, exitCode: 0, caratula, ...secciones }], null, 2), 'utf8');
                         const { generarVisorHTML } = require(path.join(informeDir, 'generador_visor.js'));
                         const configProceso = { rutas: { descargas: descargasPath } };
                         const rutaHTML = await generarVisorHTML(resumenPath, configProceso, null, bitacoraInfo, 'informe-individual');
@@ -2644,7 +2651,7 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
             let expSuccess = false;
             let motivoFallo = null;
             let caratulaExp = null;
-            let movimientosExp = [];
+            let seccionesExp = { movimientos: [], historicos: [], intervinientes: [], vinculados: [], recursos: [], notas: [] };
             // Ver la nota del mismo `informeStartMs` en el modo individual: acota la
             // lectura del backup a la corrida de ESTE expediente.
             const expStartMs = Date.now();
@@ -2663,13 +2670,14 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
                 // sea éxito real (no hay carátula que ofrecer de un expediente inexistente).
                 caratulaExp = expSuccess ? caratulaInformeExitoso(expResult.output) : null;
                 // Ídem carátula: el dato existe en disco, faltaba traerlo. Un expediente
-                // fallido no tiene movimientos que ofrecer, igual criterio que arriba.
-                movimientosExp = expSuccess
-                    ? leerMovimientosInforme(path.join(getUserDataDir(cuit), 'descargas'), expStr, {
+                // fallido no tiene secciones que ofrecer, igual criterio que arriba —
+                // `seccionesExp` ya arrancó en su default vacío.
+                if (expSuccess) {
+                    seccionesExp = leerSeccionesInforme(path.join(getUserDataDir(cuit), 'descargas'), expStr, {
                         max: maxMovimientosDeConfig(),
                         desdeMs: expStartMs
-                    })
-                    : [];
+                    });
+                }
                 mainWindow.webContents.send('process-log', {
                     type: expSuccess ? 'success' : 'error',
                     text: `  ${expSuccess ? '✅' : '❌'} [${i + 1}/${validLines.length}] ${expStr}: ${expSuccess ? 'OK' : (motivoFallo || 'falló (exit code ≠ 0)')}`
@@ -2704,7 +2712,7 @@ async function runInformeLogic({ expediente, batchLines, configInforme }) {
             }
 
             if (!abortado) {
-                batchResults.push({ expediente: expStr, ok: expSuccess, exitCode: expSuccess ? 0 : 1, motivo: motivoFallo || undefined, caratula: caratulaExp || undefined, movimientos: movimientosExp });
+                batchResults.push({ expediente: expStr, ok: expSuccess, exitCode: expSuccess ? 0 : 1, motivo: motivoFallo || undefined, caratula: caratulaExp || undefined, ...seccionesExp });
                 // Pausa entre expedientes (excepto el último) para que Chrome libere el perfil
                 if (i < validLines.length - 1) {
                     mainWindow.webContents.send('process-log', {

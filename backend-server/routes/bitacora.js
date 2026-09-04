@@ -62,7 +62,23 @@ const MAX_SNAPSHOTS_POR_KIND = 2;   // tope estructural 2+2 por caso (§7 del pl
 // ⚠️ F1 (2026-08-31, code-review): tiene que ser >= MAX_CASOS_LOTE de
 // routes/capture.js (mismo valor hoy, sin ningún mecanismo que los sincronice)
 // — ver el comentario de ese archivo para el porqué.
-const MAX_CASOS_CAPTURE_LOTE = 200;
+//
+// 🔧 CORREGIDO 2026-09-04, EN SINCRO con routes/capture.js: 200 nunca era
+// alcanzable — medido con datos reales, un lote de 200 casos pesa 381 KB, más
+// que el tope de 256 KB de `captureDrafts.js`. Corregido a 120 (con margen
+// sobre el techo medido de 125) — ver el comentario completo, con la medición,
+// en `MAX_CASOS_LOTE` de routes/capture.js.
+const MAX_CASOS_CAPTURE_LOTE = 120;
+// La exportación (`GET /bitacora/export?alcance=expediente`, más abajo) reusaba
+// esta MISMA constante ("mismo número, mismo criterio, sin inventar una
+// constante nueva" — sesión 2026-08-26) por conveniencia, no por compartir la
+// razón de fondo: exportar no escribe en el buffer en memoria de
+// `captureDrafts.js`, así que NO tiene el límite de 256 KB que motiva el ajuste
+// de arriba. Bajar `MAX_CASOS_CAPTURE_LOTE` a 120 sin separar los dos usos
+// habría encogido el máximo exportable de 200 a 120 como efecto colateral, sin
+// relación con lo que se está corrigiendo acá — por eso la exportación queda
+// con su propio tope, sin tocar.
+const MAX_EXPEDIENTES_EXPORT = 200;
 
 const MAX_TITLE       = 300;    // = VARCHAR(300) de la columna
 const MAX_DESCRIPTION = 5000;   // mismo criterio que el cap de tickets (hallazgo C5)
@@ -92,6 +108,35 @@ function fecha(valor) {
     if (valor === null || valor === '') return null;
     const d = new Date(valor);
     return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+/**
+ * JSONB de un snapshot de `capture-lote`: movimientos actuales + las 5
+ * secciones extra del informe (2026-09-04). `c` ya llegó normalizado por
+ * `normalizarCaso()` de routes/capture.js (arrays, no JSON serializado) — acá
+ * solo se decide qué clave entra en el JSONB, no se reprocesa contenido.
+ *
+ * Cada clave OPCIONAL se omite (no `"clave": []`) cuando no hay dato, mismo
+ * criterio que ya usaba `pdf` — un snapshot de procuración, o uno de informe
+ * donde el usuario no tildó "Intervinientes", no debe llevar la clave vacía.
+ * `movimientos` es la única obligatoria: es la que define "qué vio esta
+ * corrida", y `renderMexpSnapshot()` del portal la lee sin chequear que exista.
+ */
+function datosSnapshot(c, kind) {
+    const conValor = (clave, valor) =>
+        (Array.isArray(valor) && valor.length > 0) ? { [clave]: valor } : {};
+    // Las 5 secciones extra son exclusivas del informe — la procuración y el
+    // monitor no las traen (misma razón por la que `pdf` también va acá).
+    const soloInforme = kind === 'informe';
+    return Object.assign(
+        { movimientos: Array.isArray(c?.movimientos) ? c.movimientos : [] },
+        (soloInforme && typeof c?.pdf === 'string' && c.pdf) ? { pdf: c.pdf } : {},
+        soloInforme ? conValor('historicos', c?.historicos) : {},
+        soloInforme ? conValor('intervinientes', c?.intervinientes) : {},
+        soloInforme ? conValor('vinculados', c?.vinculados) : {},
+        soloInforme ? conValor('recursos', c?.recursos) : {},
+        soloInforme ? conValor('notas', c?.notas) : {}
+    );
 }
 
 /** Entero dentro de un rango, con default. Usar SOLO para valores que tiene
@@ -510,8 +555,8 @@ router.get('/bitacora/export', authenticateToken, checkBitacoraPlan({ conGracia:
     let expedienteId = null; // array de ids validados, o null si alcance !== 'expediente'
     if (alcance === 'expediente') {
         const crudos = String(req.query.expediente_id || '').split(',').map(s => s.trim()).filter(Boolean);
-        if (crudos.length > MAX_CASOS_CAPTURE_LOTE) {
-            return res.status(400).json({ error: `Máximo ${MAX_CASOS_CAPTURE_LOTE} expedientes por exportación.` });
+        if (crudos.length > MAX_EXPEDIENTES_EXPORT) {
+            return res.status(400).json({ error: `Máximo ${MAX_EXPEDIENTES_EXPORT} expedientes por exportación.` });
         }
         // F1 (2026-08-31, code-review): antes validaba cada id con una consulta
         // SEPARADA (fichaDelUsuario, patrón N+1 — hasta 200 round-trips
@@ -1482,13 +1527,9 @@ expedientes.post('/capture-lote', async (req, res) => {
                     [
                         fichaId, kind,
                         texto(c?.situacion_actual, MAX_TEXTO_CORTO),
-                        // `pdf` solo viene del visor de informe (nombre del archivo que
-                        // generó esa corrida). Se omite la clave cuando no hay dato, para
-                        // no ensuciar con `"pdf":""` los snapshots de procuración.
-                        JSON.stringify(Object.assign(
-                            { movimientos: Array.isArray(c?.movimientos) ? c.movimientos : [] },
-                            (kind === 'informe' && typeof c?.pdf === 'string' && c.pdf) ? { pdf: c.pdf } : {}
-                        ))
+                        // movimientos + pdf + las 5 secciones extra del informe, cada
+                        // clave opcional presente solo si hay dato — ver datosSnapshot().
+                        JSON.stringify(datosSnapshot(c, kind))
                     ]
                 );
                 // Hallazgo H4: el recorte 2+2 va en la MISMA transacción que el insert.

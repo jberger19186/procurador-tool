@@ -164,9 +164,12 @@ async function main() {
             r.status === 303 && capturaParamFromLocation(r.headers.location) === 'error',
             `status=${r.status} loc=${r.headers.location}`);
 
-        const loteGrande = JSON.stringify(Array.from({ length: 201 }, (_, i) => ({ exp: `FCR ${i}/2026` })));
+        // 2026-09-04: MAX_CASOS_LOTE bajó de 200 (nunca alcanzable, medido en 381 KB
+        // para 200 casos) a 120 — ver el comentario en routes/capture.js. 121 sigue
+        // siendo "un caso más que el tope", cualquiera que sea el tope.
+        const loteGrande = JSON.stringify(Array.from({ length: 121 }, (_, i) => ({ exp: `FCR ${i}/2026` })));
         r = await postCapture({ accion: 'entrada-lote', lote: loteGrande });
-        check('3. Lote de 201 casos (> MAX_CASOS_LOTE=200) → captura=lote_grande, rechazado antes de crear draft',
+        check('3. Lote de 121 casos (> MAX_CASOS_LOTE=120) → captura=lote_grande, rechazado antes de crear draft',
             r.status === 303 && capturaParamFromLocation(r.headers.location) === 'lote_grande',
             `loc=${r.headers.location}`);
 
