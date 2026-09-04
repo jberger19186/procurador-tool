@@ -208,7 +208,7 @@ async function main() {
     // ═════════════════════════════════════════════════════════════════════════
     console.log('── PUNTO 4 — Drift entre lo desplegado (DB) y el fuente en el servidor');
     // ═════════════════════════════════════════════════════════════════════════
-    const scriptsDir = path.join(__dirname, 'scripts');
+    const scriptsDir = path.join(__dirname, '..', 'scripts');   // el harness vive en dev-tools/, los scripts cuelgan de backend-server/
     for (const name of WHITELIST) {
         const fp = path.join(scriptsDir, name);
         if (!fs.existsSync(fp)) { check(false, `${name}: existe en scripts/ del servidor`); continue; }
