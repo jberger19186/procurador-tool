@@ -3,7 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 const logger  = require('../utils/logger');
-const { sendEmail } = require('../utils/mailer');
+const { sendEmail, escapeHtml } = require('../utils/mailer');
 // D3 (revisión 2026-07-25): este router definía sus propias copias de authenticateAdmin/
 // authenticateUser SIN el chequeo de blacklist (M-1) — un admin deslogueado seguía
 // pudiendo crear/editar/borrar/publicar los Términos y Condiciones y la Política de
@@ -115,7 +115,15 @@ router.post('/accept', authenticateUser, async (req, res) => {
     try {
         const db  = req.app.get('db');
         const userId = req.user.id;
-        const rawIp  = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '';
+        // H-BE-17 (E6): el `ip_hash` salía del PRIMER valor de `X-Forwarded-For`, que es
+        // un header que manda el cliente y que Nginx APENDEA (no reemplaza): quien pega
+        // su propio `X-Forwarded-For: 1.2.3.4` decide qué se guarda como su huella. El
+        // dato pierde todo valor forense justo en las dos tablas donde existe para eso
+        // (aceptación de términos y analítica de la landing). Express ya resuelve esto
+        // bien: con `app.set('trust proxy', 1)` (server.js), `req.ip` toma el último hop
+        // no confiable de la cadena — el que puso NUESTRO Nginx — y no el que eligió el
+        // cliente.
+        const rawIp  = req.ip || '';
         const ip_hash = crypto.createHash('sha256').update(rawIp).digest('hex').slice(0, 16);
 
         const pending = await db.query(`
@@ -357,13 +365,19 @@ router.put('/admin/documents/:id/publish', authenticateAdmin, async (req, res) =
                 WHERE id = $1
             `, [user.id]);
             // Email (fire-and-forget)
+            // H-BE-12 (E6): este es el único email del backend que arma su HTML a mano en
+            // vez de pasar por los helpers de `utils/mailer.js` (que escapan desde el fix
+            // de la auditoría). `user.nombre` viene del registro público, sin filtro de
+            // contenido, y `doc.version` lo escribe un admin: los dos se escapan con el
+            // MISMO helper que usa el resto, ahora exportado. `typeLabel` y `acceptUrl`
+            // son constantes del propio código, no hace falta.
             sendEmail(
                 user.email,
                 `Actualizamos nuestros ${typeLabel} — Procurador SCW`,
                 `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px">
                   <h2 style="color:#d97706;margin-bottom:8px">⚖ Procurador SCW</h2>
-                  <p>Hola <strong>${user.nombre}</strong>,</p>
-                  <p>Actualizamos nuestros <strong>${typeLabel}</strong> (versión ${doc.version}).</p>
+                  <p>Hola <strong>${escapeHtml(user.nombre)}</strong>,</p>
+                  <p>Actualizamos nuestros <strong>${typeLabel}</strong> (versión ${escapeHtml(doc.version)}).</p>
                   <p>Tenés <strong>15 días</strong> para revisarlos y aceptarlos.<br>
                      Fecha límite: <strong>${deadlineStr}</strong>.</p>
                   <div style="text-align:center;margin:32px 0">

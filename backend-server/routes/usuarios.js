@@ -31,6 +31,16 @@ router.put('/profile', authenticateToken, async (req, res) => {
         // usaban !== undefined → un body como {nombre: null, apellido: "X"} pasaba el guard
         // y ejecutaba null.trim() → TypeError (500). Con typeof, un campo null/no-string se
         // ignora en vez de crashear.
+        // H-BE-12 ampl. (E6): `users.nombre`/`apellido` son varchar(100); un valor más
+        // largo no se rechazaba acá y salía como 500 desde PostgreSQL. Es el tercer
+        // escritor de estos campos (los otros dos están en routes/admin.js) y el único
+        // al que llega texto del propio usuario sin pasar por un admin.
+        if (typeof nombre === 'string' && nombre.trim().length > 100) {
+            return res.status(400).json({ error: 'nombre: máximo 100 caracteres' });
+        }
+        if (typeof apellido === 'string' && apellido.trim().length > 100) {
+            return res.status(400).json({ error: 'apellido: máximo 100 caracteres' });
+        }
         if (typeof nombre === 'string') { fields.push(`nombre = $${idx++}`); values.push(nombre.trim()); }
         if (typeof apellido === 'string') { fields.push(`apellido = $${idx++}`); values.push(apellido.trim()); }
         if (typeof telefono === 'string') { fields.push(`telefono = $${idx++}`); values.push(telefono.trim()); }

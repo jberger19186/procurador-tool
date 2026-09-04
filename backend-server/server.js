@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const { Pool } = require('pg');
-const { processScripts, getCacheStats, clearCache } = require('./utils/scriptEncryption');
+const { processScripts, clearCache } = require('./utils/scriptEncryption');
 const { apiLimiter, generalAuthLimiter, captureLimiter } = require('./middleware/rateLimiter');
 const tokenBlacklist = require('./middleware/tokenBlacklist');
 
@@ -19,6 +19,22 @@ const app = express();
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
     console.error('❌ FATAL: JWT_SECRET no configurado o demasiado corto (mínimo 32 caracteres).');
     console.error('   Definí un JWT_SECRET robusto en el archivo .env antes de iniciar el servidor.');
+    process.exit(1);
+}
+
+// H-BE-11 (E6): el guard de arranque cubría JWT_SECRET y nada más. `ENCRYPTION_KEY`
+// es la clave AES-256-CBC con la que se cifran y descifran TODOS los scripts de
+// automatización (utils/scriptEncryption.js). Sin ella —o con un valor que no
+// resuelva a 32 bytes— el servidor arrancaba igual y fallaba recién en la primera
+// descarga de script, script por script, con un 500 genérico: el peor momento y el
+// peor lugar para enterarse. Se valida por LONGITUD EN BYTES (`Buffer.from(k,'hex')`),
+// no por expresión regular sobre el string, porque eso es exactamente lo que exige
+// `crypto.createDecipheriv`; un regex más estricto correría el riesgo de rechazar en
+// el arranque una clave que hoy funciona en producción.
+const _encKeyBytes = Buffer.from(String(process.env.ENCRYPTION_KEY || ''), 'hex').length;
+if (_encKeyBytes !== 32) {
+    console.error('❌ FATAL: ENCRYPTION_KEY no configurada o inválida (se esperan 32 bytes en hexadecimal, o sea 64 caracteres 0-9a-f).');
+    console.error(`   Valor actual: ${process.env.ENCRYPTION_KEY ? `${_encKeyBytes} byte(s) válidos` : 'ausente'}. Sin esta clave no se puede descifrar ningún script.`);
     process.exit(1);
 }
 
@@ -487,8 +503,14 @@ app.use('/usuarios', express.static(path.join(__dirname, 'public', 'usuarios')))
 app.get('/usuarios', (req, res) => res.sendFile(path.join(__dirname, 'public', 'usuarios', 'index.html')));
 
 // Health check sin rate limiting — valida DB y retorna 503 si cae
+// H-BE-06 (E6): este endpoint es PÚBLICO (lo consulta el monitoreo externo y el
+// smoke del dashboard) y devolvía `cache: getCacheStats()`, que incluye el array
+// `scripts` con la clave de cada entrada del caché — `<nombre>.js:<sha256>`. O sea:
+// el inventario completo de los scripts de automatización cacheados y el hash exacto
+// de cada uno, a cualquiera que hiciera un GET sin credenciales. Las estadísticas
+// completas ya vivían detrás de auth en `GET /admin/cache/stats` (routes/admin.js);
+// acá simplemente se retiran.
 app.get('/health', async (req, res) => {
-    const cacheStats = getCacheStats();
     const mem = process.memoryUsage();
 
     let dbStatus = { status: 'ok', latency_ms: null };
@@ -511,8 +533,7 @@ app.get('/health', async (req, res) => {
         memory: {
             used_mb: Math.round(mem.heapUsed / 1024 / 1024),
             total_mb: Math.round(mem.heapTotal / 1024 / 1024)
-        },
-        cache: cacheStats
+        }
     });
 });
 

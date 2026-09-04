@@ -130,7 +130,27 @@ async function getDecryptedScript(db, scriptName) {
     }
 
     const { encrypted_content, iv, hash } = result.rows[0];
-    return decryptCode(encrypted_content, key, iv, scriptName, hash);
+    const plain = decryptCode(encrypted_content, key, iv, scriptName, hash);
+
+    // H-BE-20 (E6): la columna `hash` viaja con el script hasta el cliente y es lo que
+    // el verificador de Electron coteja — pero hasta acá el servidor NUNCA la
+    // comprobaba contra lo que él mismo acababa de descifrar: la usaba solo como parte
+    // de la clave de caché. Consecuencia: si `encrypted_content` quedaba desalineado de
+    // `hash` (una fila editada a mano, una escritura a medias, un reencrypt cortado), el
+    // servidor firmaba con RSA un contenido distinto del que dice ser — y esa firma es
+    // válida, así que el cliente la acepta. La firma solo garantiza "esto lo emitió el
+    // servidor", no "esto es el script correcto"; el cotejo del hash es lo que cierra
+    // esa distancia, y tiene que hacerse ANTES de firmar.
+    // Ante desajuste: se invalida la entrada de caché (para que un valor sucio no quede
+    // servido durante la hora de TTL) y se lanza — fail-closed, sin devolver el script.
+    const realHash = calculateHash(plain);
+    if (realHash !== hash) {
+        scriptCache.invalidate(scriptName);
+        console.error(`[SEGURIDAD] Hash desalineado para ${scriptName}: la base dice ${hash}, el contenido descifrado da ${realHash}. No se firma ni se entrega.`);
+        throw new Error(`Integridad del script ${scriptName} comprometida: el hash almacenado no coincide con el contenido descifrado.`);
+    }
+
+    return plain;
 }
 
 /**

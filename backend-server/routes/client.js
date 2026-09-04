@@ -227,17 +227,10 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
 
         const script = scriptResult.rows[0];
 
-        // Generar clave de sesión temporal (válida por 1 hora)
-        const sessionKey = jwt.sign(
-            {
-                userId: userId,
-                scriptName: normalizedName,
-                hash: script.hash
-            },
-            process.env.SESSION_KEY_SECRET,
-            { expiresIn: '1h' }
-        );
-
+        // H-BE-11 (E6): acá se firmaba un `sessionKey` por descarga de script que el
+        // cliente nunca lee (`authManager.loadScript` desestructura solo `script` y
+        // `security`) y que ningún endpoint verifica. Retirado junto con su gemelo del
+        // login: con estos dos, `SESSION_KEY_SECRET` queda sin uso en todo el backend.
         // Desencriptar script en el servidor (nunca enviar la clave al cliente)
         const decryptedCode = await getDecryptedScript(db, normalizedName);
 
@@ -272,7 +265,6 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
                 hash: script.hash,
                 version: script.version
             },
-            sessionKey: sessionKey,
             security: securityData
         });
 

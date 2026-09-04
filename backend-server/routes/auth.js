@@ -486,6 +486,14 @@ function buildPromoStatus(subscription) {
     };
 }
 
+// H-BE-12 (E6): `message` se interpolaba crudo en el HTML de esta página, y varios de
+// los mensajes llevan `user.nombre` — un campo que el registro PÚBLICO acepta sin
+// filtrar contenido. Cualquiera podía registrarse con un nombre que contuviera HTML y
+// hacerlo renderizar en la página de verificación. Es la misma clase de defecto que
+// XSS-1 (dashboard) y que el que se corrigió en los emails, por un tercer canal.
+// El escape va acá adentro, en el único punto por el que pasan los 6 call sites, en vez
+// de en cada mensaje: así un mensaje nuevo nace escapado. Ninguno de los mensajes
+// actuales lleva HTML a propósito, así que no se pierde nada.
 function renderVerifyPage(type, message) {
     const color = type === 'success' ? '#16a34a' : '#dc2626';
     const icon = type === 'success' ? '✅' : '❌';
@@ -499,7 +507,7 @@ a{color:#1e40af;text-decoration:none}</style></head>
 <body><div class="card">
 <div class="icon">${icon}</div>
 <h2>Procurador SCW</h2>
-<p>${message}</p>
+<p>${mailer.escapeHtml(message)}</p>
 <p style="margin-top:24px"><a href="https://api.procuradortool.com/usuarios/">Ir al portal →</a></p>
 </div></body></html>`;
 }
@@ -514,7 +522,14 @@ router.post('/admin-login', loginLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Email y contraseña son requeridos' });
         }
 
-        const userResult = await db.query(`SELECT * FROM users WHERE email = $1`, [email]);
+        // H-BE-18 (E6): el email se buscaba TAL CUAL vino del cliente. El registro lo
+        // normaliza (`email.trim().toLowerCase()`), así que la fila siempre está
+        // guardada en minúsculas: quien se registró como "Juan@Estudio.com" y después
+        // tipeó el email con mayúsculas al entrar recibía "Credenciales inválidas" — el
+        // usuario existe, la contraseña es correcta, y el sistema le dice que no. Un
+        // espacio pegado al copiar y pegar produce lo mismo. `/portal-login` ya
+        // normalizaba; estos tres (app Electron, extensión y panel admin) no.
+        const userResult = await db.query(`SELECT * FROM users WHERE email = $1`, [String(email).trim().toLowerCase()]);
         if (userResult.rows.length === 0) {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }
@@ -572,9 +587,10 @@ router.post('/login', loginLimiter, async (req, res) => {
         }
 
         // Buscar usuario
+        // H-BE-18 (E6): ver la nota de /admin-login — mismo motivo.
         const userResult = await db.query(`
             SELECT * FROM users WHERE email = $1
-        `, [email]);
+        `, [String(email).trim().toLowerCase()]);
 
         if (userResult.rows.length === 0) {
             return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -651,17 +667,12 @@ router.post('/login', loginLimiter, async (req, res) => {
             { expiresIn: '1h' }
         );
 
-        // Generar session key temporal (válido por 24h)
-        const sessionKey = jwt.sign(
-            {
-                userId: user.id,
-                machineId: machineId,
-                loginTime: Date.now()
-            },
-            process.env.SESSION_KEY_SECRET,
-            { expiresIn: '24h' }
-        );
-
+        // H-BE-11 (E6): acá se firmaba un segundo JWT de 24 h (`sessionKey`, con
+        // `SESSION_KEY_SECRET`) que se devolvía al cliente en cada login. El cliente lo
+        // guardaba en `backendClient.sessionKey` y NUNCA lo usaba para nada: no viaja en
+        // ninguna request, ningún endpoint lo verifica (grep en todo el repo = 0 usos
+        // fuera de la asignación y el `null` del logout). Era una credencial de mayor
+        // duración que el token real (24 h contra 1 h) emitida sin propósito. Se retira.
         console.log(`✅ Login exitoso: ${email} (${user.role})`);
 
         // Calcular estado de promo para notificar al cliente Electron
@@ -670,7 +681,6 @@ router.post('/login', loginLimiter, async (req, res) => {
         res.json({
             success: true,
             token,
-            sessionKey,
             user: {
                 id: user.id,
                 role: user.role,
@@ -715,7 +725,8 @@ router.post('/extension-login', loginLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Email y contraseña son requeridos' });
         }
 
-        const userResult = await db.query(`SELECT * FROM users WHERE email = $1`, [email]);
+        // H-BE-18 (E6): ver la nota de /admin-login — mismo motivo.
+        const userResult = await db.query(`SELECT * FROM users WHERE email = $1`, [String(email).trim().toLowerCase()]);
         if (userResult.rows.length === 0) {
             return res.status(401).json({ error: 'Credenciales inválidas' });
         }

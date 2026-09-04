@@ -415,81 +415,88 @@ function chapterIndexFromHash() {
   return idx >= 0 ? idx : 0;
 }
 
-// ─── Gate de sesión (D6) ─────────────────────────────────────────
-// El resto de la demo (más allá de "El problema" y "Procuración") es una
-// guía para clientes ya registrados, no un gancho de venta — así que el
-// gate es de UX, no de seguridad: mismo token que usa el portal
-// (usuarios/app.js, TOKEN_KEY='psc_user_token'). Si no hay token, o está
-// vencido, lo peor que pasa es que alguien vea 2 capítulos más de
-// screenshots ya públicos — no hay nada sensible detrás del gate.
+// ─── Gate de sesión (D6 → B.4) ────────────────────────
+// El resto de la demo (más allá de "El problema" y "Procuración") es una guía para
+// clientes ya registrados, no un gancho de venta — así que el gate es de UX, no de
+// seguridad: lo peor que pasa si alguien lo cruza es que vea dos capítulos más de
+// capturas ya públicas. No hay nada sensible detrás.
 //
-// ⚠️ /demo/ vive en `procuradortool.com`; el portal vive en
-// `api.procuradortool.com` — son ORÍGENES DISTINTOS, así que el localStorage
-// del portal no es legible acá directo (bug real reportado por el operador:
-// "Ver demo" desde el portal logueado seguía mostrando el gate bloqueado,
-// igual que un visitante anónimo desde la landing). Fix: el portal pasa el
-// token por el hash de la URL (`#sso=<token>`, mismo patrón ya usado para
-// que Electron entre logueado al portal — ver `usuarios/app.js`,
-// `wireVerDemoLinks()`) y esta página lo consume una sola vez al cargar,
-// guardándolo en SU PROPIO localStorage bajo la misma key.
-const TOKEN_KEY = 'psc_user_token';
+// B.4 (E6, decisión del operador del 2026-09-02, opción (C)): hasta acá, el portal
+// pasaba por `#sso=` el JWT DE SESIÓN completo y esta página lo guardaba en el
+// localStorage de `procuradortool.com`. Consecuencias reales, las tres medidas
+// (H-FE-06 / S11): (1) el token quedaba pegado en dos `href` permanentes del portal;
+// (2) este origen no tiene ningún header de seguridad, así que un XSS acá pasaba de
+// defacement a robo de sesión de 8 h con acceso completo a `/usuarios/api/*`; (3) nada
+// lo borraba nunca — el "cerrar sesión" del portal vive en otro origen y no lo alcanza.
+//
+// Ahora el portal manda una MARCA sin credencial: `#demo=1&exp=<epoch en segundos>`.
+// Se guarda en `sessionStorage` (muere al cerrar la pestaña, a diferencia del
+// localStorage) y se descarta al vencer. Que la marca sea falsificable no cambia el
+// modelo de amenaza: la puerta ya era de UX, y el JWT tampoco se verificaba acá (no hay
+// clave pública en el cliente — solo se le leía el `exp`).
+const PASE_KEY = 'psc_demo_pase';
+const TOKEN_KEY_LEGADO = 'psc_user_token';
 const CAPITULOS_LIBRES = ['problema', 'procuracion'];
 const PORTAL_URL = 'https://api.procuradortool.com/usuarios/';
 
-function consumirTokenDesdeHash() {
-  if (!location.hash.startsWith('#sso=')) return;
-  const token = decodeURIComponent(location.hash.slice(5));
-  try { if (token) localStorage.setItem(TOKEN_KEY, token); } catch (_) {}
-  // Limpia el hash para no dejar el token crudo en la barra de direcciones
-  // ni confundir al router de capítulos (chapterIndexFromHash).
-  history.replaceState(null, '', location.pathname + location.search);
-}
-consumirTokenDesdeHash();
+// B.4: barrido del JWT que las versiones anteriores de esta página dejaron guardado en
+// este origen. Es el único código que puede borrarlo (el portal no llega hasta acá), y
+// sin esto los tokens ya persistidos seguirían ahí hasta que el usuario limpie el
+// navegador a mano. Corre en cada carga; a partir de la segunda no encuentra nada.
+try { localStorage.removeItem(TOKEN_KEY_LEGADO); } catch (_) {}
 
-// S11 (2026-09-01, revision-S11-2026-09-01.md): antes, haySesion() solo miraba si el
-// token EXISTÍA — nunca si seguía vigente. El JWT del portal dura 8h (routes/auth.js,
-// /auth/portal-login) y este origen NO lo borra nunca por sí solo (no hay logout acá,
-// y el logout del portal tampoco lo alcanza — son orígenes distintos, ver el comentario
-// de arriba). Sin este chequeo, un token robado o simplemente vencido seguía
-// "desbloqueando" la demo indefinidamente.
-//
-// Esto NO verifica la firma (no hay clave pública en el cliente ni hace falta — el
-// backend sigue siendo quien valida cualquier request real). Solo lee el claim `exp`
-// para decidir si conviene seguir mostrando la sesión como activa en ESTE origen, y
-// si venció, la borra — mismo criterio que cualquier cliente que decodifica su propio
-// JWT para UI (no para autorización).
 function base64UrlDecode(str) {
   str = str.replace(/-/g, '+').replace(/_/g, '/');
   while (str.length % 4) str += '=';
   return atob(str);
 }
 
-function tokenVencido(token) {
-  try {
-    const partes = token.split('.');
-    if (partes.length !== 3) return true; // no tiene forma de JWT → tratar como inválido
-    const payload = JSON.parse(base64UrlDecode(partes[1]));
-    // F7 cadena AG (2026-09-01, hallazgo H-A1-04, confirmado real): un JWT con
-    // forma válida pero sin claim `exp` (o `exp` no numérico) devolvía `false`
-    // ("no vencido") — un token sintético armado a mano, sin firmar por el
-    // backend real, desbloqueaba la demo para siempre. `/auth/portal-login`
-    // SIEMPRE firma con `expiresIn`, así que todo JWT legítimo trae `exp`
-    // numérico — la ausencia del claim es en sí misma la señal de un token
-    // no genuino. Fail-closed: sin `exp` → tratarlo como vencido, igual que
-    // el caso ya corrupto de abajo.
-    if (!payload || typeof payload.exp !== 'number') return true;
-    return (Date.now() / 1000) >= payload.exp;
-  } catch (_) {
-    return true; // corrupto/no decodificable → fail-closed, tratarlo como vencido
-  }
+function guardarPase(expSegundos) {
+  try { sessionStorage.setItem(PASE_KEY, JSON.stringify({ exp: expSegundos })); } catch (_) {}
 }
+
+// Compatibilidad de transición: un portal con el `app.js` viejo todavía en caché sigue
+// mandando `#sso=<jwt>`. Se le lee ÚNICAMENTE el claim `exp` para armar la marca — el
+// token NO se guarda en ningún lado. Se puede retirar cuando el `app.js` nuevo lleve
+// desplegado más que la vida de caché de ese archivo.
+function expDesdeJwt(token) {
+  try {
+    const partes = String(token).split('.');
+    if (partes.length !== 3) return null;
+    const payload = JSON.parse(base64UrlDecode(partes[1]));
+    // H-A1-04 (cadena AG, 2026-09-01): un JWT sin `exp` numérico no es genuino —
+    // `/auth/portal-login` firma SIEMPRE con `expiresIn`. Fail-closed.
+    return (payload && typeof payload.exp === 'number' && payload.exp > 0) ? payload.exp : null;
+  } catch (_) { return null; }
+}
+
+function consumirPaseDesdeHash() {
+  const hash = location.hash || '';
+  let exp = null;
+
+  if (hash.startsWith('#demo=1')) {
+    const params = new URLSearchParams(hash.slice(1));
+    const n = Number(params.get('exp'));
+    if (Number.isFinite(n) && n > 0) exp = n;
+  } else if (hash.startsWith('#sso=')) {
+    exp = expDesdeJwt(decodeURIComponent(hash.slice(5)));
+  } else {
+    return;
+  }
+
+  if (exp) guardarPase(exp);
+  // Limpia el hash para no confundir al router de capítulos (chapterIndexFromHash).
+  history.replaceState(null, '', location.pathname + location.search);
+}
+consumirPaseDesdeHash();
 
 function haySesion() {
   try {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) return false;
-    if (tokenVencido(token)) {
-      localStorage.removeItem(TOKEN_KEY);
+    const crudo = sessionStorage.getItem(PASE_KEY);
+    if (!crudo) return false;
+    const pase = JSON.parse(crudo);
+    if (!pase || typeof pase.exp !== 'number' || (Date.now() / 1000) >= pase.exp) {
+      sessionStorage.removeItem(PASE_KEY);
       return false;
     }
     return true;

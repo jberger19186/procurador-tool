@@ -112,6 +112,18 @@ window.addEventListener('load', () => {
     }
 });
 
+// H-FE-10 (E6): el payload de un JWT viene en base64URL (`-` y `_` en lugar de `+` y
+// `/`, y sin relleno `=`), que NO es lo que `atob()` acepta. Con un payload que contenga
+// alguno de esos caracteres —depende de los bytes exactos, así que aparece de forma
+// intermitente— `atob()` lanza `InvalidCharacterError` y el `catch` de abajo borra el
+// token: el admin ve una sesión cerrada sola, sin motivo aparente, y vuelve a loguearse.
+// Misma conversión que ya usa la demo (`landing/demo/index.html`, `base64UrlDecode`).
+function base64UrlDecode(str) {
+    let s = String(str).replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    return atob(s);
+}
+
 // Auto-restore session — validación en dos pasos sin pasar por apiFetch/doLogout
 window.addEventListener('load', async () => {
     const savedToken = localStorage.getItem('admin_token');
@@ -119,7 +131,7 @@ window.addEventListener('load', async () => {
 
     // Paso 1: verificar expiración y role localmente
     try {
-        const payload = JSON.parse(atob(savedToken.split('.')[1]));
+        const payload = JSON.parse(base64UrlDecode(savedToken.split('.')[1]));
         if (!payload.exp || Date.now() >= payload.exp * 1000 || payload.role !== 'admin') {
             localStorage.removeItem('admin_token');
             return;
@@ -388,7 +400,7 @@ async function renderOverview() {
             </div>
         </div>`;
     } catch (e) {
-        document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -440,7 +452,7 @@ async function renderUsers() {
                     <tr class="clickable-row" data-id="${u.id}">
                         <td>${escHtml(u.email)}</td>
                         <td>${roleBadge(u.role)}</td>
-                        <td>${u.plan ? `<span class="badge badge-blue">${u.plan}</span>` : '—'}</td>
+                        <td>${u.plan ? `<span class="badge badge-blue">${escHtml(u.plan)}</span>` : '—'}</td>
                         <td>${statusBadge(u.status)}</td>
                         <td>${u.usage_count ?? 0} / ${u.usage_limit ?? 0}</td>
                         <td>${u.expires_at ? fmtDate(u.expires_at) : '—'}</td>
@@ -459,7 +471,7 @@ async function renderUsers() {
             });
         });
     } catch (e) {
-        document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -936,7 +948,7 @@ async function renderUserDetail(userId) {
         loadPaymentHistory(userId);
         loadInvoiceHistory(userId);
     } catch (e) {
-        document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -1049,7 +1061,7 @@ window.loadRefundPreview = async function(userId) {
         if (!data.hasPayment) {
             area.innerHTML = '💡 Sin pagos aprobados. No corresponde reembolso.';
         } else {
-            area.innerHTML = `💰 Reembolso proporcional estimado: <strong>${data.currency} ${data.refundAmount.toLocaleString('es-AR', {minimumFractionDigits:2})}</strong> (${data.daysRemaining} días restantes de ${data.totalDays}). Procesarlo manualmente en MercadoPago si corresponde.`;
+            area.innerHTML = `💰 Reembolso proporcional estimado: <strong>${escHtml(data.currency || 'ARS')} ${data.refundAmount.toLocaleString('es-AR', {minimumFractionDigits:2})}</strong> (${data.daysRemaining} días restantes de ${data.totalDays}). Procesarlo manualmente en MercadoPago si corresponde.`;
         }
     } catch (e) {
         area.innerHTML = 'No se pudo calcular el reembolso.';
@@ -1334,7 +1346,7 @@ async function loadPaymentHistory(userId) {
 
         const rows = payments.map(p => `<tr>
             <td style="font-size:12px">${fmtDate(p.created_at)}</td>
-            <td><strong>${p.currency || 'ARS'} ${parseFloat(p.amount || 0).toLocaleString('es-AR', {minimumFractionDigits:2})}</strong></td>
+            <td><strong>${escHtml(p.currency || 'ARS')} ${parseFloat(p.amount || 0).toLocaleString('es-AR', {minimumFractionDigits:2})}</strong></td>
             <td>${statusBadgePayment(p.status)}</td>
             <td style="font-size:11px;color:var(--text-muted)">${escHtml(p.plan || '—')}</td>
             <td style="font-size:11px;color:var(--text-muted)">${escHtml(p.payment_method || '—')}</td>
@@ -1453,7 +1465,7 @@ async function renderTickets() {
                     <tbody>${tickets.length === 0 ? '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:32px">Sin tickets</td></tr>' :
                     tickets.map(t => `<tr class="ticket-row" style="cursor:pointer"
                         onclick="navigate('ticket-detail','${t.id}')"
-                        data-status="${t.status}" data-cat="${t.category}" data-pri="${t.priority}"
+                        data-status="${escAttr(t.status)}" data-cat="${escAttr(t.category)}" data-pri="${escAttr(t.priority)}"
                         data-text="${escAttr((t.title + t.user_email).toLowerCase())}">
                         <td>#${t.id}</td>
                         <td style="font-size:12px"><a href="#user-detail/${t.user_id}" onclick="event.stopPropagation();navigate('user-detail','${t.user_id}');return false" style="color:var(--primary);text-decoration:underline">${escHtml(t.user_email)}</a></td>
@@ -1470,7 +1482,7 @@ async function renderTickets() {
             </div>
         </div>`;
     } catch (e) {
-        document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -1715,7 +1727,7 @@ async function renderTicketDetail(ticketId) {
             setTimeout(() => loadTicketBenefitHistory(t.user_id), 100);
         }
     } catch (e) {
-        document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -2016,7 +2028,7 @@ async function renderScripts() {
             </div>
         </div>`;
     } catch (e) {
-        document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -2236,11 +2248,11 @@ function eventDetail(e) {
     }
     if (p.from && p.to) {
         const fecha = p.apply_at ? ` (aplica ${fmtDate(p.apply_at)})` : '';
-        return `${p.from} → ${p.to}${fecha}`;
+        return `${escHtml(p.from)} → ${escHtml(p.to)}${fecha}`;
     }
-    if (p.new_plan) return `Plan: ${p.new_plan}`;
+    if (p.new_plan) return `Plan: ${escHtml(p.new_plan)}`;
     if (p.reason) return escHtml(p.reason);
-    if (p.plan) return `Plan: ${p.plan}`;
+    if (p.plan) return `Plan: ${escHtml(p.plan)}`;
     return '';
 }
 function roleBadge(r) {
@@ -2428,7 +2440,7 @@ async function renderPendingUsers() {
             </div>
         </div>`;
     } catch (e) {
-        document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -2696,7 +2708,7 @@ async function renderPlans() {
             </div>
         </div>`;
     } catch (e) {
-        document.getElementById('content').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        document.getElementById('content').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -2725,11 +2737,11 @@ window.showPlanForm = async function(planId) {
                 </div>` : `<div><label style="font-size:12px;display:block;margin-bottom:4px">Nombre</label><span style="font-size:14px;font-weight:600">${plan.name}</span></div>`}
                 <div>
                     <label style="font-size:12px;display:block;margin-bottom:4px">Nombre a mostrar</label>
-                    <input type="text" id="pf-display-name" placeholder="Plan Básico" value="${plan ? escHtml(plan.display_name) : ''}" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+                    <input type="text" id="pf-display-name" placeholder="Plan Básico" value="${plan ? escAttr(plan.display_name) : ''}" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
                 </div>
                 <div style="grid-column:1/-1">
                     <label style="font-size:12px;display:block;margin-bottom:4px">Descripción</label>
-                    <input type="text" id="pf-description" placeholder="Descripción del plan..." value="${plan ? escHtml(plan.description || '') : ''}" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+                    <input type="text" id="pf-description" placeholder="Descripción del plan..." value="${plan ? escAttr(plan.description || '') : ''}" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
                 </div>
                 <div>
                     <label style="font-size:12px;display:block;margin-bottom:4px">Procuración — ejecuciones (-1=ilim.)</label>
@@ -3174,7 +3186,7 @@ async function loadAdjustmentHistory(userId) {
             </table>
         </div>`;
     } catch (e) {
-        if (histEl) histEl.innerHTML = `<div style="font-size:12px;color:#ef4444">${e.message}</div>`;
+        if (histEl) histEl.innerHTML = `<div style="font-size:12px;color:#ef4444">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -3285,7 +3297,7 @@ async function renderMetrics() {
         loadLandingAnalytics();
 
     } catch (e) {
-        content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        content.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -3506,7 +3518,7 @@ async function renderLegal() {
         <div id="legal-detail-panel"></div>`;
 
     } catch (e) {
-        content.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        content.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -3554,7 +3566,7 @@ async function legalCreate(type) {
 
         panel.innerHTML = legalEditorHTML(prefill, type, TYPE_LABEL[type], 'create');
     } catch (e) {
-        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        panel.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -3581,7 +3593,7 @@ async function legalEdit(id) {
         };
         panel.innerHTML = legalEditorHTML(prefill, doc.type, TYPE_LABEL[doc.type], 'edit');
     } catch (e) {
-        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        panel.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -3763,7 +3775,7 @@ async function legalViewStats(id, label) {
                 : '<div class="empty-state" style="padding:24px"><div class="empty-icon">📋</div><p>Sin aceptaciones todavía.</p></div>'}
         </div>`;
     } catch (e) {
-        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        panel.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -3821,7 +3833,7 @@ async function legalPreview(id) {
         frame.srcdoc = docHtml;
         legalWireFrameAutoHeight(frame, 500);
     } catch (e) {
-        panel.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+        panel.innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
     }
 }
 

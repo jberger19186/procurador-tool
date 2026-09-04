@@ -24,6 +24,40 @@ function validarCuitAdmin(cuit) {
     return check === parseInt(clean[10]);
 }
 
+// H-BE-12 ampl. (E6): `users.nombre`/`apellido` son varchar(100). Sin tope aplicativo,
+// un valor más largo no se rechaza: revienta en PostgreSQL y sale como 500 genérico.
+// Los tres escritores (POST /admin/users, PUT /admin/users/:id/registro y el perfil del
+// propio usuario en routes/usuarios.js) validaban a lo sumo presencia. Devuelve un 400
+// claro en vez del 500. `undefined`/`null` pasan: significan "no tocar el campo".
+function nombreLargoOk(v) {
+    return v === undefined || v === null || (typeof v === 'string' && v.trim().length <= 100);
+}
+
+// H-COV-Z1-01 (E6): `plans.name`, `display_name` y `description` no tenían NINGUNA
+// validación de contenido — solo se chequeaba que los dos primeros estuvieran
+// presentes. Los tres se releen después en atributos del dashboard admin y, en el caso
+// de `name`, también en el toast de la app Electron y en la tarjeta de planes del
+// registro público. El escape en cada sink es la mitad del arreglo; esta es la otra:
+// que el dato sucio no entre. `name` se restringe al patrón que ya cumplen todos los
+// planes reales (EXTENSION_PROMO, COMBO_PROMO, BASIC, PRO, ENTERPRISE, CORTESIA) y que
+// además es coherente con el `plan.toUpperCase()` que usan las búsquedas por nombre.
+// Solo aplica al ALTA: el PUT no acepta `name`, así que ningún plan existente se
+// revalida ni puede quedar inaccesible por este cambio.
+function validarCamposPlan({ name, display_name, description }, { exigeName }) {
+    if (exigeName && !/^[A-Z0-9_-]{1,50}$/.test(String(name ?? ''))) {
+        return 'name: solo A-Z, 0-9, guion bajo o guion medio (máximo 50 caracteres)';
+    }
+    if (display_name !== undefined && display_name !== null) {
+        const dn = String(display_name);
+        if (dn.length > 100 || /[<>"]/.test(dn)) return 'display_name: máximo 100 caracteres, sin < > ni comillas dobles';
+    }
+    if (description !== undefined && description !== null) {
+        const d = String(description);
+        if (d.length > 500 || /[<>"]/.test(d)) return 'description: máximo 500 caracteres, sin < > ni comillas dobles';
+    }
+    return null;
+}
+
 // ─── Validación de formato de email (H-FE-02 / H-FE-14, auditoría 2026-09) ───
 // El registro validaba contraseña, CUIT, plan y TyC — el email, no. Un email con
 // HTML adentro se guardaba tal cual y salía sin escapar en el detalle de ticket
@@ -272,6 +306,9 @@ router.post('/users', authenticateAdmin, async (req, res) => {
         if (!v || String(v).trim() === '') return res.status(400).json({ error: `El campo '${k}' es requerido` });
     }
     if (!validarEmail(email)) return res.status(400).json({ error: 'El email no tiene un formato válido' });
+    if (!nombreLargoOk(nombre) || !nombreLargoOk(apellido)) {
+        return res.status(400).json({ error: 'nombre/apellido: máximo 100 caracteres' });
+    }
     const pwdCheck = validatePassword(password, email);
     if (!pwdCheck.valid) return res.status(400).json({ error: pwdCheck.error });
     if (!validarCuitAdmin(cuit)) return res.status(400).json({ error: 'CUIT/CUIL inválido. Verificá el formato y dígito verificador.' });
@@ -1036,6 +1073,9 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
     if (registration_status && !validStatuses.includes(registration_status)) {
         return res.status(400).json({ error: 'Estado de registro inválido' });
     }
+    if (!nombreLargoOk(nombre) || !nombreLargoOk(apellido)) {
+        return res.status(400).json({ error: 'nombre/apellido: máximo 100 caracteres' });
+    }
 
     const client = await db.connect();
     try {
@@ -1071,6 +1111,30 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
             return res.status(400).json({ error: 'Ese estado tiene efectos que este formulario no aplica (cobro, email, auditoría). Usá el botón dedicado (Suspender / Rechazar / Cancelar) en vez del selector de estado.' });
         }
 
+        // H-BE-14 ampl. (E6): este era el TERCER camino de escritura de CUIT y el único
+        // sin ninguna validación: `cuit || null` iba directo al COALESCE, sin dígito
+        // verificador, sin normalizar los guiones y sin mirar duplicados. Los otros dos
+        // (`POST /admin/users` y el registro público) sí normalizan con
+        // `replace(/[-\s]/g,'')`. Importó de verdad porque el CUIT es la clave de
+        // igualdad EXACTA de varios lookups (la autorización de
+        // `POST /client/verification-report`, entre otros): un CUIT guardado con guiones
+        // por acá rompía esas búsquedas en silencio, con un "no existe una cuenta con
+        // CUIT ..." imposible de explicar mirando la ficha. El duplicado además chocaba
+        // contra el índice único `users_cuit_unique` y salía como 500 en vez de 400.
+        let cleanCuit = null;
+        if (cuit !== undefined && cuit !== null && String(cuit).trim() !== '') {
+            if (!validarCuitAdmin(cuit)) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'CUIT/CUIL inválido. Verificá el formato y dígito verificador.' });
+            }
+            cleanCuit = String(cuit).replace(/[-\s]/g, '');
+            const dup = await client.query('SELECT id FROM users WHERE cuit = $1 AND id <> $2', [cleanCuit, userId]);
+            if (dup.rows.length) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'El CUIT ya está registrado en el sistema' });
+            }
+        }
+
         // Datos de perfil (siempre). El registration_status se aplica acá salvo que sea
         // 'active' viniendo de otro estado: en ese caso lo maneja performActivation abajo
         // (activación real, no flip crudo).
@@ -1087,7 +1151,7 @@ router.put('/users/:userId/registro', authenticateAdmin, async (req, res) => {
         `, [
             nombre   || null,
             apellido || null,
-            cuit     || null,
+            cleanCuit,
             telefono || null,
             domicilio ? JSON.stringify(domicilio) : null,
             registration_status || null,
@@ -1248,17 +1312,57 @@ router.put('/users/:userId/role', authenticateAdmin, async (req, res) => {
         return res.status(400).json({ error: 'Rol inválido' });
     }
 
+    const targetId = parseInt(userId, 10);
+    if (!Number.isInteger(targetId)) {
+        return res.status(400).json({ error: 'Id de usuario inválido' });
+    }
+
+    // H-BE-07 (E6): este endpoint no tenía NINGÚN guard más allá del enum del rol.
+    // Dos formas de dejar el sistema sin administradores, las dos con un solo click:
+    // un admin bajándose a sí mismo, y el último admin siendo degradado por otro (o por
+    // sí mismo). No hay ningún camino de recuperación desde la aplicación: sin admin,
+    // el panel entero queda inalcanzable y hay que reponer el rol con SQL en el servidor.
+    // Se rechazan los dos casos con 400 y se deja rastro en `admin_events` (antes el
+    // cambio de rol — la operación de mayor privilegio del panel — no auditaba nada,
+    // solo un console.log).
     try {
+        const { rows: [target] } = await db.query('SELECT id, email, role FROM users WHERE id = $1', [targetId]);
+        if (!target) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+
+        if (role !== 'admin') {
+            if (targetId === req.user.id) {
+                return res.status(400).json({ error: 'No podés quitarte a vos mismo el rol de administrador. Pedíselo a otro administrador.' });
+            }
+            if (target.role === 'admin') {
+                const { rows: [{ n }] } = await db.query(`SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin'`);
+                if (n <= 1) {
+                    return res.status(400).json({ error: 'Es el único administrador del sistema: quitarle el rol dejaría el panel sin acceso.' });
+                }
+            }
+        }
+
+        if (target.role === role) {
+            return res.json({ success: true, message: `El usuario ${targetId} ya tenía el rol ${role}`, changed: false });
+        }
+
         await db.query(
             'UPDATE users SET role = $1 WHERE id = $2',
-            [role, userId]
+            [role, targetId]
         );
 
-        console.log(`👤 Usuario ${userId} actualizado a rol ${role} por admin: ${req.user.id}`);
+        await db.query(
+            `INSERT INTO admin_events (admin_id, user_id, action, payload) VALUES ($1, $2, 'role_changed', $3)`,
+            [req.user.id, targetId, JSON.stringify({ from: target.role, to: role, email: target.email })]
+        ).catch(err => console.error('[admin role] No se pudo auditar el cambio de rol:', err.message));
+
+        console.log(`👤 Usuario ${targetId} actualizado a rol ${role} por admin: ${req.user.id}`);
 
         res.json({
             success: true,
-            message: `Usuario ${userId} actualizado a rol ${role}`
+            message: `Usuario ${targetId} actualizado a rol ${role}`,
+            changed: true
         });
     } catch (error) {
         console.error('Error actualizando rol:', error);
@@ -1295,14 +1399,24 @@ router.put('/users/:userId/cuit', authenticateAdmin, async (req, res) => {
     const { cuit } = req.body;
     const db = req.app.get('db');
 
-    if (!cuit || !/^\d{11}$/.test(cuit)) {
-        return res.status(400).json({ error: 'CUIT inválido. Debe tener 11 dígitos numéricos.' });
+    // H-BE-14 (E6): este endpoint validaba `^\d{11}$` — 11 dígitos y nada más — sin
+    // dígito verificador, sin aceptar el formato con guiones que el admin tipea (lo
+    // rechazaba de plano) y sin mirar duplicados: un CUIT ya usado por otra cuenta
+    // chocaba contra el índice único `users_cuit_unique` y salía como 500. Ahora usa el
+    // mismo `validarCuitAdmin` + normalización que el resto de los caminos de escritura.
+    if (!cuit || !validarCuitAdmin(cuit)) {
+        return res.status(400).json({ error: 'CUIT/CUIL inválido. Verificá el formato y dígito verificador.' });
     }
+    const cleanCuit = String(cuit).replace(/[-\s]/g, '');
 
     try {
-        await db.query('UPDATE users SET cuit = $1 WHERE id = $2', [cuit, userId]);
-        console.log(`🆔 CUIT ${cuit} asignado al usuario ${userId} por admin: ${req.user.id}`);
-        res.json({ success: true, message: `CUIT ${cuit} asignado correctamente` });
+        const dup = await db.query('SELECT id FROM users WHERE cuit = $1 AND id <> $2', [cleanCuit, userId]);
+        if (dup.rows.length) {
+            return res.status(400).json({ error: 'El CUIT ya está registrado en el sistema' });
+        }
+        await db.query('UPDATE users SET cuit = $1 WHERE id = $2', [cleanCuit, userId]);
+        console.log(`🆔 CUIT ${cleanCuit} asignado al usuario ${userId} por admin: ${req.user.id}`);
+        res.json({ success: true, message: `CUIT ${cleanCuit} asignado correctamente` });
     } catch (error) {
         console.error('Error asignando CUIT:', error);
         res.status(500).json({ error: 'Error del servidor' });
@@ -1580,52 +1694,20 @@ router.post('/subscriptions', authenticateAdmin, async (req, res) => {
     }
 });
 
-// Suspender suscripción
-router.post('/subscriptions/:userId/suspend', authenticateAdmin, async (req, res) => {
-    const { userId } = req.params;
-    const db = req.app.get('db');
-
-    try {
-        await db.query(
-            // A.3 (E3-2): la suspensión cancela el downgrade programado (ver nota en /users/:id/suspend).
-            `UPDATE subscriptions SET status = 'suspended', scheduled_plan = NULL WHERE user_id = $1`,
-            [userId]
-        );
-
-        console.log(`⏸️ Suscripción suspendida para usuario ${userId} por admin: ${req.user.id}`);
-
-        res.json({
-            success: true,
-            message: 'Suscripción suspendida'
-        });
-    } catch (error) {
-        console.error('Error suspendiendo suscripción:', error);
-        res.status(500).json({ error: 'Error suspendiendo suscripción' });
-    }
-});
-
-// Reactivar suscripción
-router.post('/subscriptions/:userId/reactivate', authenticateAdmin, async (req, res) => {
-    const { userId } = req.params;
-    const db = req.app.get('db');
-
-    try {
-        await db.query(
-            `UPDATE subscriptions SET status = 'active' WHERE user_id = $1`,
-            [userId]
-        );
-
-        console.log(`▶️ Suscripción reactivada para usuario ${userId} por admin: ${req.user.id}`);
-
-        res.json({
-            success: true,
-            message: 'Suscripción reactivada'
-        });
-    } catch (error) {
-        console.error('Error reactivando suscripción:', error);
-        res.status(500).json({ error: 'Error reactivando suscripción' });
-    }
-});
+// H-BE-14 (E6): acá vivían `POST /subscriptions/:userId/suspend` y
+// `POST /subscriptions/:userId/reactivate`, dos endpoints LEGADOS que hacían un
+// `UPDATE subscriptions SET status = ...` crudo y nada más: no tocaban
+// `users.registration_status`, no pausaban ni reanudaban el cobro en MercadoPago, no
+// mandaban email ni notificación y no dejaban rastro en `user_events`/`admin_events`.
+// O sea, exactamente los efectos secundarios que F10 (2026-08-31) había cerrado del
+// lado del selector de estado de `/users/:id/registro` — pero por otra puerta, todavía
+// abierta. Además dejaban estados incoherentes entre `subscriptions.status` y
+// `users.registration_status`, que es justo el invariante del que dependen
+// `/client/extension-auth` y `/auth/refresh`.
+// Verificado antes de borrarlos: el dashboard NO los llama (usa
+// `/admin/users/:id/suspend` para suspender y `/admin/subscriptions/:id/cancel` +
+// `/reactivate-cancel` para el ciclo de cobro), y tampoco los llama ningún harness.
+// Los caminos vigentes son esos tres, que sí aplican los efectos completos.
 
 // Cancelar la suscripción al FIN DEL CICLO (pausa el cobro en MP, acceso hasta cancel_at).
 // Reutiliza el mismo mecanismo que la cancelación del portal del usuario:
@@ -2190,6 +2272,29 @@ async function applyBenefitToUser(db, { userId, benefitType, benefitValue, ticke
             );
             console.log(`🎁 Descuento: suscripción de usuario ${userId} extendida ${days} días por admin ${adminId}`);
         } else if (benefitType === 'plan_upgrade') {
+            // H-BE-14 (E6): este beneficio pone `usage_limit = 999999`, que es el valor
+            // que el proyecto usa para decir "el tope global ya no rige, rige el límite
+            // por submódulo del plan". Sobre una cuenta SIN método de pago
+            // (`payment_provider IS NULL`) eso convierte el trial de 20 usos en un cupo
+            // prácticamente infinito, y deja la cuenta en un estado que ninguna pantalla
+            // sabe describir: el portal muestra "X/999999 usos de prueba". Ya estaba
+            // documentado como defecto (por eso el botón se sacó del menú del dashboard
+            // en junio de 2026) pero el endpoint seguía aceptándolo. Se rechaza acá: el
+            // cambio de plan de una cuenta sin pago se hace con la herramienta propia de
+            // la ficha (`POST /admin/subscriptions`), que conserva el cupo del trial.
+            const { rows: [subActual] } = await client.query(
+                'SELECT payment_provider FROM subscriptions WHERE user_id = $1', [userId]
+            );
+            if (!subActual) {
+                const err = new Error('El usuario no tiene una suscripción para cambiar de plan');
+                err.statusCode = 400;
+                throw err;
+            }
+            if (!subActual.payment_provider) {
+                const err = new Error('Esta cuenta todavía no configuró un método de pago: un upgrade de plan le daría un cupo ilimitado de prueba. Usá "Cambiar plan" en la ficha del usuario, que conserva los usos del trial.');
+                err.statusCode = 400;
+                throw err;
+            }
             // El plan debe ser uno VIGENTE (active=true) de la tabla plans.
             const newPlan = String(benefitValue || '').toUpperCase();
             const planRes = await client.query(`SELECT id, name FROM plans WHERE name = $1 AND active = true`, [newPlan]);
@@ -2350,6 +2455,8 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
     if (!name || !display_name) {
         return res.status(400).json({ error: 'name y display_name son obligatorios' });
     }
+    const errPlan = validarCamposPlan({ name, display_name, description }, { exigeName: true });
+    if (errPlan) return res.status(400).json({ error: errPlan });
     const vis = visibility === 'private' ? 'private' : 'public';
 
     try {
@@ -2412,6 +2519,11 @@ router.put('/plans/:planId', authenticateAdmin, async (req, res) => {
     // flag de presencia real de la clave en el body (no de su valor).
     const promoTypeProvided = Object.prototype.hasOwnProperty.call(req.body, 'promo_type');
     const promoEndDateProvided = Object.prototype.hasOwnProperty.call(req.body, 'promo_end_date');
+
+    // H-COV-Z1-01 (E6): el PUT no acepta `name` (no se puede renombrar un plan), así que
+    // solo se validan los dos campos de texto libre que sí edita el admin.
+    const errPlanPut = validarCamposPlan({ display_name, description }, { exigeName: false });
+    if (errPlanPut) return res.status(400).json({ error: errPlanPut });
 
     try {
         const result = await db.query(`
@@ -4418,19 +4530,33 @@ router.put('/payments/:id', authenticateAdmin, async (req, res) => {
         if (status && !PAYMENT_STATUSES.includes(status)) {
             return res.status(400).json({ error: `status inválido. Válidos: ${PAYMENT_STATUSES.join(', ')}` });
         }
+        // H-BE-21 (E6): `plan` y `external_payment_id` eran los 2 únicos campos sin
+        // COALESCE, y no por descuido: son los únicos que el admin puede querer BORRAR,
+        // y COALESCE no distingue "no vino la clave" de "vino null" — las dos colapsan
+        // al mismo SQL NULL. El efecto era que cualquier PUT parcial (una integración,
+        // un `curl` de corrección puntual del monto) borraba en silencio el plan y el id
+        // externo del pago. Se resuelve con flag de PRESENCIA de la clave en el body,
+        // igual que ya se hizo con `promo_type`/`promo_end_date` en PUT /plans: si la
+        // clave viene, se escribe lo que traiga (incluido null = borrar); si no viene, no
+        // se toca. El dashboard manda siempre las dos, así que su comportamiento actual
+        // —incluido poder vaciar el campo— no cambia.
+        const planProvided = Object.prototype.hasOwnProperty.call(req.body, 'plan');
+        const extIdProvided = Object.prototype.hasOwnProperty.call(req.body, 'external_payment_id');
         await db.query(
             `UPDATE payments SET
                 amount              = COALESCE($1, amount),
                 currency            = COALESCE($2, currency),
                 status              = COALESCE($3, status),
                 payment_method      = COALESCE($4, payment_method),
-                plan                = $5,
-                external_payment_id = $6,
-                created_at          = COALESCE($7, created_at)
-             WHERE id = $8`,
+                plan                = CASE WHEN $5::boolean THEN $6::text ELSE plan END,
+                external_payment_id = CASE WHEN $7::boolean THEN $8::text ELSE external_payment_id END,
+                created_at          = COALESCE($9, created_at)
+             WHERE id = $10`,
             [
                 amount ?? null, currency || null, status || null, payment_method || null,
-                plan || null, external_payment_id || null, created_at || null, id
+                planProvided, plan || null,
+                extIdProvided, external_payment_id || null,
+                created_at || null, id
             ]
         );
         res.json({ ok: true });
@@ -4453,18 +4579,28 @@ router.put('/invoices/:id/meta', authenticateAdmin, async (req, res) => {
         if (amount != null && amount !== '' && (isNaN(Number(amount)) || Number(amount) < 0)) {
             return res.status(400).json({ error: 'Monto inválido' });
         }
+        // H-BE-21 (E6): mismo caso que en PUT /payments/:id — `numero` y `cae` son los
+        // campos borrables y por eso no tenían COALESCE, con el efecto de que un PUT
+        // parcial (por ejemplo, corregir solo el monto) borraba el número de comprobante
+        // y el CAE de una factura ya emitida: datos fiscales que el admin cargó a mano
+        // desde ARCA y no se regeneran solos. Flag de presencia, mismo patrón.
+        const numeroProvided = Object.prototype.hasOwnProperty.call(req.body, 'numero');
+        const caeProvided = Object.prototype.hasOwnProperty.call(req.body, 'cae');
         await db.query(
             `UPDATE invoices SET
                 amount       = COALESCE($1, amount),
-                numero       = $2,
-                invoice_type = COALESCE($3, invoice_type),
-                cae          = $4,
-                issued_at    = COALESCE($5, issued_at),
+                numero       = CASE WHEN $2::boolean THEN $3::text ELSE numero END,
+                invoice_type = COALESCE($4, invoice_type),
+                cae          = CASE WHEN $5::boolean THEN $6::text ELSE cae END,
+                issued_at    = COALESCE($7, issued_at),
                 updated_at   = NOW()
-             WHERE id = $6`,
+             WHERE id = $8`,
             [
                 (amount === '' || amount == null) ? null : amount,
-                numero || null, invoice_type || null, cae || null, issued_at || null, id
+                numeroProvided, numero || null,
+                invoice_type || null,
+                caeProvided, cae || null,
+                issued_at || null, id
             ]
         );
         res.json({ ok: true });

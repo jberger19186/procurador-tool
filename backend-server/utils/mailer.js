@@ -639,6 +639,10 @@ async function sendMail({ to, subject, text, html }) {
 }
 
 module.exports = {
+    // H-BE-12 (E6): se exporta para que los otros dos lugares del backend que arman HTML
+    // con datos del usuario — `renderVerifyPage` (routes/auth.js) y el email de
+    // publicación legal (routes/legal.js) — usen ESTE helper y no una copia propia.
+    escapeHtml,
     sendEmail,
     sendMail,
     sendEmailVerification,

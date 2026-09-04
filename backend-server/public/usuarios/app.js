@@ -316,7 +316,7 @@ function renderRememberedUsers() {
     // click nativo, que es lo que ejecuta removeRememberedUser().
     list.innerHTML = users.map(u => `
         <div class="remembered-user-btn" role="button" tabindex="0"
-             onclick="selectRememberedUser('${escJsAttr(u.email)}', '${u.pw}')"
+             onclick="selectRememberedUser('${escJsAttr(u.email)}')"
              onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();this.click();}">
             <div class="remembered-user-avatar">${escapeHtml(u.email[0].toUpperCase())}</div>
             <div class="remembered-user-info">
@@ -328,8 +328,24 @@ function renderRememberedUsers() {
     `).join('');
 }
 
-function selectRememberedUser(email, pw) {
-    fillLoginForm(email, pw);
+// B.2 (E6, decisión del operador del 2026-09-02): la función recibía la contraseña
+// codificada como SEGUNDO ARGUMENTO del `onclick`, o sea escrita dentro del HTML de la
+// página de login — visible en el inspector del navegador y al alcance de cualquier
+// texto que llegue a inyectarse en ese documento. La decisión fue MANTENER la
+// funcionalidad "recordar contraseña" (el riesgo del `localStorage` codificado en
+// base64 queda aceptado y documentado, H-FE-04), y sacar solo esta exposición extra:
+// el botón pasa únicamente el email y la contraseña se lee del storage recién en el
+// momento del clic. Para el usuario no cambia nada.
+//
+// El markup de la tarjeta NO se tocó: la estructura `<div role="button">` + `<button>`
+// interior de la ✕ es la que resolvió el bug de anidamiento de `651e58c` (un `<button>`
+// dentro de otro `<button>` es inválido y el navegador lo "reparaba" sacando la ✕ de la
+// tarjeta), y el `event.target === this` del `onkeydown` es lo que impide que el Enter
+// sobre "Olvidar cuenta" loguee en la cuenta que se quiere olvidar. Cambia un argumento
+// del `onclick`, nada más.
+function selectRememberedUser(email) {
+    const guardado = getRememberedUsers().find(u => u.email === email);
+    fillLoginForm(email, guardado ? guardado.pw : '');
     // Scroll al formulario y hacer submit automático
     document.getElementById('login-form').dispatchEvent(new Event('submit'));
 }
@@ -403,14 +419,54 @@ function doLogout() {
 }
 
 // ─── INIT DASHBOARD ───────────────────────────────────────────────────────────
-function wireVerDemoLinks() {
+// B.4 (E6, decisión del operador del 2026-09-02, opción (C)): esto ponía el JWT DE
+// SESIÓN del usuario — el mismo del portal, 8 h de vida, acceso completo a
+// `/usuarios/api/*` — dentro del `href` de dos enlaces permanentes, y la demo lo
+// guardaba en el `localStorage` de `procuradortool.com`, un origen sin ningún header de
+// seguridad, del que nunca se borraba (el "cerrar sesión" del portal no lo alcanza: son
+// orígenes distintos). Eso es el hallazgo H-FE-06 y la mitad de S11.
+//
+// La puerta de la demo es de EXPERIENCIA, no de seguridad: detrás no hay nada sensible,
+// solo capturas ya públicas. Una puerta así no necesita una llave real. Ahora se pasa
+// una MARCA con vencimiento (`#demo=1&exp=<epoch>`), sin ninguna credencial: lo peor que
+// puede hacer alguien que la copie es ver dos capítulos más de capturas.
+//
+// El vencimiento se toma del `exp` del propio token del portal, así que la marca no
+// sobrevive a la sesión que la originó. Si el token no se puede leer, 8 h (la duración
+// que emite `/auth/portal-login`).
+//
+// Y se arma EN EL CLIC, no al cargar el dashboard: el `href` deja de tener un valor
+// vencido pegado durante toda la sesión, y cada apertura lleva su propio vencimiento.
+function demoUrlActual() {
+    let exp = Math.floor(Date.now() / 1000) + 8 * 60 * 60;
     const token = getToken();
-    if (!token) return;
-    const url = 'https://procuradortool.com/demo/#sso=' + encodeURIComponent(token);
-    const nav = document.getElementById('nav-ver-demo');
-    const topbar = document.getElementById('topbar-ver-demo');
-    if (nav) nav.href = url;
-    if (topbar) topbar.href = url;
+    if (token) {
+        try {
+            const partes = String(token).split('.');
+            if (partes.length === 3) {
+                let b64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4) b64 += '=';
+                const claims = JSON.parse(atob(b64));
+                if (typeof claims.exp === 'number' && claims.exp > 0) exp = claims.exp;
+            }
+        } catch (_) { /* token ilegible: queda el default de 8 h */ }
+    }
+    return 'https://procuradortool.com/demo/#demo=1&exp=' + exp;
+}
+
+function wireVerDemoLinks() {
+    for (const id of ['nav-ver-demo', 'topbar-ver-demo']) {
+        const el = document.getElementById(id);
+        if (!el || el.dataset.demoWired === '1') continue;
+        el.dataset.demoWired = '1';
+        el.addEventListener('click', (e) => {
+            // Sin sesión no se agrega marca: la demo muestra su gate, como a cualquier
+            // visitante. El enlace sigue funcionando (lleva a /demo/ igual).
+            if (!getToken()) return;
+            e.preventDefault();
+            window.open(demoUrlActual(), '_blank', 'noopener');
+        });
+    }
 }
 
 async function initDashboard() {
@@ -431,9 +487,9 @@ async function initDashboard() {
 
     // "Ver demo" — /demo/ vive en un origen distinto (procuradortool.com, no
     // api.procuradortool.com), así que su gate de sesión no puede leer el
-    // localStorage del portal directo. Se pasa el token por el hash (mismo
-    // patrón #sso= que ya usa Electron para entrar logueado al portal) para
-    // que la demo lo tome y quede desbloqueada para un usuario ya logueado.
+    // localStorage del portal directo. Se le pasa por el hash una MARCA con
+    // vencimiento (`#demo=1&exp=`), NO el token de sesión — ver `wireVerDemoLinks`
+    // y `demoUrlActual` (B.4 / H-FE-06).
     wireVerDemoLinks();
 
     // Cargar contador de notificaciones no leídas (badge sidebar)

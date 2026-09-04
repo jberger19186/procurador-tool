@@ -17,7 +17,15 @@ router.post('/event', analyticsEventLimiter, async (req, res) => {
         }
 
         const db      = req.app.get('db');
-        const rawIp   = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '';
+        // H-BE-17 (E6): el `ip_hash` salía del PRIMER valor de `X-Forwarded-For`, que es
+        // un header que manda el cliente y que Nginx APENDEA (no reemplaza): quien pega
+        // su propio `X-Forwarded-For: 1.2.3.4` decide qué se guarda como su huella. El
+        // dato pierde todo valor forense justo en las dos tablas donde existe para eso
+        // (aceptación de términos y analítica de la landing). Express ya resuelve esto
+        // bien: con `app.set('trust proxy', 1)` (server.js), `req.ip` toma el último hop
+        // no confiable de la cadena — el que puso NUESTRO Nginx — y no el que eligió el
+        // cliente.
+        const rawIp   = req.ip || '';
         const ip_hash = crypto.createHash('sha256').update(rawIp).digest('hex').slice(0, 16);
 
         await db.query(

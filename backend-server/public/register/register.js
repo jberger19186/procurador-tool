@@ -104,6 +104,17 @@ async function loadPlans() {
     }
 }
 
+// H-FE-11 (E6): `plan.display_name` sale de `plans.display_name`, un campo que escribe
+// un admin y que hasta esta fase no tenía ninguna validación de contenido (ver
+// H-COV-Z1-01 en routes/admin.js, corregido en el mismo paso). Acá se interpolaba crudo
+// dentro de un `innerHTML`, en la página de registro **pública** — el sink de esta
+// familia con la audiencia más amplia. Este archivo no tenía ningún helper de escape.
+function escHtml(s) {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function renderPlanCards(plans) {
     const container = document.getElementById('planCards');
     container.innerHTML = '';
@@ -126,7 +137,7 @@ function renderPlanCards(plans) {
             : '';
         card.innerHTML = `
             <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:2px">${extraBadge}<span class="plan-badge ${badge.cls}">${badge.label}</span></div>
-            <div class="plan-name">${plan.display_name}</div>
+            <div class="plan-name">${escHtml(plan.display_name)}</div>
             ${priceText}
             <div class="plan-desc">${getPlanDesc(plan)}</div>
             ${!isSelectable && plan.reason === 'quota_full' ? '<div style="font-size:11px;color:#ef4444;margin-top:4px">Cupos agotados</div>' : ''}

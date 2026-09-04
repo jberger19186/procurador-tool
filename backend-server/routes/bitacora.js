@@ -1016,6 +1016,30 @@ entradas.post('/import', uploadBackupOr400, async (req, res) => {
     const backup = validado.data;
 
     try {
+        // H-BE-10 (E6): `aplicarImport` preserva el `id` de cada entrada del backup
+        // (INSERT con id explícito) y a propósito NO toca la secuencia. El razonamiento
+        // documentado ahí —"todo id de un backup fue emitido por esta misma secuencia,
+        // así que es ≤ su valor actual"— vale para un backup GENUINO, y falla para uno
+        // editado a mano: un `"id": 999999999` se inserta sin problema y deja sembrada
+        // una colisión futura de clave primaria. `bitacora_entries_id_seq` es GLOBAL, no
+        // por usuario, así que la colisión no la sufre quien importó el archivo sino el
+        // usuario cualquiera al que la secuencia le toque ese número — y el síntoma es
+        // un 500 al crear una entrada, sin ninguna pista de la causa.
+        // La secuencia no se puede corregir después: `procurador_user` tiene USAGE+SELECT
+        // sobre las secuencias pero no UPDATE, así que `setval` falla (verificado en
+        // staging durante F1.7). Por eso se rechaza en la puerta, y también en dry-run:
+        // la vista previa tiene que anticipar lo que va a pasar al aplicar.
+        const { rows: [seq] } = await db.query(`SELECT last_value FROM bitacora_entries_id_seq`);
+        const topeIds = Number(seq?.last_value);
+        if (Number.isFinite(topeIds)) {
+            const adelantado = backup.entradas.find(e => Number(e.id) > topeIds);
+            if (adelantado) {
+                return res.status(400).json({
+                    error: `El backup tiene un identificador de entrada fuera de rango (${Number(adelantado.id)}). Solo se pueden restaurar backups generados por "Exportar".`
+                });
+            }
+        }
+
         if (dryRun) {
             const preview = await calcularPreviewImport(db, userId, backup, modo);
             return res.json({
