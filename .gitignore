@@ -96,7 +96,11 @@ ext-header-preview.png
 extension-app/imagenes/old/
 
 # ─── Logs de auditoría de seguridad del cliente Electron (runtime, por máquina) ──
-electron-app/security-logs/
+# El patrón sin prefijo cubre CUALQUIER ubicación: el módulo de auditoría escribe
+# relativo al cwd, así que un `npm start` desde la raíz o un test corrido desde
+# `electron-app/test/` los dejan fuera de `electron-app/`. Con la ruta fija se
+# colaban como archivos sin trackear en cada corrida (pasó en E11 y de nuevo acá).
+security-logs/
 
 # Artefactos de verificación con Playwright MCP (snapshots/console logs por sesión)
 .playwright-mcp/

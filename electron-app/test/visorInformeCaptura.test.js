@@ -69,7 +69,8 @@ function extraerBloque(html, nombre, tipo) {
  * ningún global del navegador — ninguna de las dos funciones lo toca).
  */
 function sandboxDelVisor(html, DATOS_BATCH) {
-    const umbral = extraerBloque(html, 'UMBRAL_SECCIONES_LOTE', 'var');
+    const presupuesto = extraerBloque(html, 'PRESUPUESTO_SECCIONES_BYTES', 'var');
+    const pesoEnBytesSrc = extraerBloque(html, 'pesoEnBytes', 'function');
     const nombrePdfDeSrc = extraerBloque(html, 'nombrePdfDe', 'function');
     const campoDeCasoSrc = extraerBloque(html, 'campoDeCaso', 'function');
     const accionLoteSrc = extraerBloque(html, 'accionLote', 'function');
@@ -78,8 +79,10 @@ function sandboxDelVisor(html, DATOS_BATCH) {
     // eslint-disable-next-line no-new-func
     const factory = new Function(
         'DATOS_BATCH', 'seleccionados', 'enviarCaptura', 'marcarLoteComoGuardado',
-        umbral + '\n' + nombrePdfDeSrc + '\n' + campoDeCasoSrc + '\n' + accionLoteSrc +
-        '\nreturn { campoDeCaso: campoDeCaso, accionLote: accionLote };'
+        presupuesto + '\n' + pesoEnBytesSrc + '\n' + nombrePdfDeSrc + '\n' +
+        campoDeCasoSrc + '\n' + accionLoteSrc +
+        '\nreturn { campoDeCaso: campoDeCaso, accionLote: accionLote,' +
+        '\n         PRESUPUESTO: PRESUPUESTO_SECCIONES_BYTES, pesoEnBytes: pesoEnBytes };'
     );
     const seleccionados = new Set();
     const api = factory(
@@ -235,34 +238,45 @@ async function main() {
             assert.notStrictEqual(lote[0].movs, undefined, 'movs SI sigue viajando -- eso lo usa la ficha');
         });
 
-        check('C3 . lote GRANDE (51 casos, > UMBRAL_SECCIONES_LOTE=50) + snapshot-lote -> NO incluye las secciones extra', () => {
-            // 51 copias del mismo expediente -- alcanza para probar el umbral, no la
-            // deduplicacion (que no es responsabilidad de esta funcion).
-            DB.expedientes = Array.from({ length: 51 }, () => DB.expedientes[0]);
+        check('C3 . [lo que un umbral por CANTIDAD hacía mal] 51 casos livianos SI llevan las secciones -- caben, no hay razón para negarlas', () => {
+            // Con el umbral viejo (<=50 casos) este lote perdía las secciones aunque
+            // entrara de sobra. El criterio por bytes lo permite, que es lo correcto.
+            const uno = DB.expedientes[0];
+            DB.expedientes = Array.from({ length: 51 }, () => uno);
             capturas.length = 0;
             seleccionados.clear();
             for (let i = 0; i < 51; i++) seleccionados.add(i);
             accionLote('snapshot-lote', null);
             const lote = JSON.parse(capturas[0].lote);
             assert.strictEqual(lote.length, 51);
-            assert.ok(!('interv' in lote[0]), 'con 51 casos (> 50) el umbral NO debe incluir las secciones');
-            assert.notStrictEqual(lote[0].movs, undefined, 'movs SI sigue viajando -- el umbral solo afecta a las 5 secciones nuevas');
+            const bytes = api.pesoEnBytes(capturas[0].lote);
+            console.log('       (51 casos livianos = ' + Math.round(bytes / 1024) + ' KB, presupuesto ' +
+                Math.round(api.PRESUPUESTO / 1024) + ' KB)');
+            assert.ok(bytes <= api.PRESUPUESTO, 'el fixture dejo de ser liviano; el caso ya no prueba lo que dice');
+            assert.ok('interv' in lote[0], 'entran en el presupuesto: no hay motivo para degradarlos');
         });
 
-        check('C4 . [control negativo, EXACTO en el borde] 50 casos SI entra, 51 NO -- confirma "<=" y no "<"', () => {
-            DB.expedientes = Array.from({ length: 51 }, () => DB.expedientes[0]);
-            capturas.length = 0;
-            seleccionados.clear();
-            for (let i = 0; i < 50; i++) seleccionados.add(i);   // exactamente 50
-            accionLote('snapshot-lote', null);
-            const lote50 = JSON.parse(capturas[0].lote);
-            assert.ok('interv' in lote50[0], '50 casos (== umbral) tiene que incluir las secciones');
+        check('C4 . [control negativo del BORDE, en bytes] agregando casos de a uno, existe un N exacto donde deja de incluirlas -- y N-1 todavia las lleva', () => {
+            // Sin este control, el fallback podria estar siempre apagado (o siempre
+            // encendido) y los otros checks pasarian igual. Busca el punto de corte
+            // real en vez de asumir un numero.
+            const uno = DB.expedientes[0];
+            const llevaSecciones = (n) => {
+                DB.expedientes = Array.from({ length: n }, () => uno);
+                capturas.length = 0;
+                seleccionados.clear();
+                for (let i = 0; i < n; i++) seleccionados.add(i);
+                accionLote('snapshot-lote', null);
+                return 'interv' in JSON.parse(capturas[0].lote)[0];
+            };
 
-            capturas.length = 0;
-            seleccionados.add(50);   // ahora 51
-            accionLote('snapshot-lote', null);
-            const lote51 = JSON.parse(capturas[0].lote);
-            assert.ok(!('interv' in lote51[0]), '51 casos (> umbral) NO tiene que incluirlas');
+            let corte = 0;
+            for (let n = 10; n <= 400; n += 10) {
+                if (!llevaSecciones(n)) { corte = n; break; }
+            }
+            assert.ok(corte > 0, 'nunca dejo de incluir las secciones hasta 400 casos: el fallback podria estar muerto');
+            assert.ok(llevaSecciones(corte - 10), 'en el escalon anterior al corte deberia seguir incluyendolas');
+            console.log('       (punto de corte entre ' + (corte - 10) + ' y ' + corte + ' casos del fixture real)');
         });
 
         // ---------------------------------------------------------------------
@@ -330,7 +344,7 @@ async function main() {
             assert.ok(bytes50 < 256 * 1024, '50 casos así de pesados medirían ' + Math.round(bytes50 / 1024) + ' KB (tope 256 KB)');
         });
 
-        check('D4 . [documentado, no un bug] un caso PATOLÓGICO (las 6 secciones al tope de 15, ~90 chars/item) puede superar 256 KB en 50 casos -- y el sistema lo rechaza con aviso, no en silencio', () => {
+        check('D4 . [EL CASO QUE ROMPE UN UMBRAL POR CANTIDAD] 50 casos PATOLÓGICOS (6 secciones al tope de 15) NO se rechazan: el presupuesto por bytes detecta que no entran y manda el lote sin secciones', () => {
             // Ningún fixture real de esta máquina tiene las 4 secciones de texto
             // (intervinientes/vinculados/recursos/notas) pobladas A LA VEZ con 15
             // filas cada una -- es el peor caso permitido por el propio tope de 15,
@@ -347,23 +361,61 @@ async function main() {
                 intervinientes: seccionPesada, vinculados: seccionPesada,
                 recursos: seccionPesada, notas: seccionPesada,
             });
-            const c = campoDeCaso(expPatologico);
-            const norm = {
-                expediente: c.exp, jurisdiccion: c.jur, dependencia: c.dep, caratula: c.car,
-                situacion_actual: c.sit, fecha_corrida: c.fproc, pdf: c.pdf,
-                movimientos: JSON.parse(c.movs).map(m => ({ fecha: m.fecha, tipo: m.tipo, detalle: m.detalle })),
-                historicos: JSON.parse(c.hist), intervinientes: JSON.parse(c.interv),
-                vinculados: JSON.parse(c.vinc), recursos: JSON.parse(c.rec), notas: JSON.parse(c.notas),
-            };
-            const bytesUnCaso = Buffer.byteLength(JSON.stringify(norm), 'utf8');
-            const bytes50 = bytesUnCaso * 50;
-            console.log('       (medido: ' + bytesUnCaso + ' B/caso patologico, ' + Math.round(bytes50 / 1024) + ' KB para 50 iguales -- tope 256 KB)');
-            if (bytes50 >= 256 * 1024) {
-                console.log('       CONFIRMADO: este caso extremo SI puede superar el tope -- captureDrafts.js lo rechaza con aviso (ver capture-secciones.test.js), no lo pierde en silencio.');
-            }
-            // No se afirma que 50 casos así SIEMPRE entren -- se documenta el número
-            // real y se deja constancia de que el rechazo, si ocurre, es explícito.
-            assert.ok(bytesUnCaso > 0);
+            // 1) Confirmar que el caso patológico ES pesado: con secciones, 50 de
+            //    estos NO entran en el presupuesto. Si esto dejara de cumplirse, el
+            //    test ya no probaría nada y hay que hacerlo más pesado.
+            const conSecciones = JSON.stringify(
+                Array.from({ length: 50 }, () => campoDeCaso(expPatologico, true))
+            );
+            const bytesCon = api.pesoEnBytes(conSecciones);
+            assert.ok(bytesCon > api.PRESUPUESTO,
+                'el caso patologico dejo de ser pesado (' + bytesCon + ' B <= ' + api.PRESUPUESTO + ' B): el test ya no prueba el fallback');
+
+            // 2) El camino REAL: 50 seleccionados -> accionLote('snapshot-lote').
+            //    `DB` es el mismo objeto que el sandbox recibió como DATOS_BATCH, así
+            //    que mutarlo alcanza; se restaura después para no contaminar D5.
+            const expsOriginales = DB.expedientes;
+            DB.expedientes = Array.from({ length: 50 }, () => expPatologico);
+            seleccionados.clear();
+            for (let i = 0; i < 50; i++) seleccionados.add(i);
+            capturas.length = 0;
+            accionLote('snapshot-lote', null);
+
+            assert.strictEqual(capturas.length, 1, 'no se envio la captura');
+            const enviado = capturas[0].lote;
+            const bytesEnviado = api.pesoEnBytes(enviado);
+            const filas = JSON.parse(enviado);
+
+            console.log('       (con secciones ' + Math.round(bytesCon / 1024) + ' KB > presupuesto ' +
+                Math.round(api.PRESUPUESTO / 1024) + ' KB -> enviado ' + Math.round(bytesEnviado / 1024) + ' KB)');
+
+            // 3) Lo que importa: entra en el presupuesto Y no perdió los casos.
+            assert.ok(bytesEnviado <= api.PRESUPUESTO,
+                'el lote enviado sigue excediendo el presupuesto: ' + bytesEnviado + ' B');
+            assert.strictEqual(filas.length, 50, 'se perdieron casos en el recorte');
+
+            // 4) Degradó las secciones extra, NO los movimientos actuales: el snapshot
+            //    conserva lo que ya guardaba antes de esta función.
+            assert.strictEqual(filas[0].hist, undefined, 'deberia haber degradado las secciones extra');
+            assert.strictEqual(filas[0].interv, undefined);
+            assert.ok(JSON.parse(filas[0].movs).length > 0, 'perdio los movimientos actuales, que si debian viajar');
+            assert.ok(filas[0].exp, 'perdio el numero de expediente');
+
+            DB.expedientes = expsOriginales;   // restaurar para los checks siguientes
+        });
+
+        check('D5 . un lote NORMAL (fixtures reales) sigue llevando las secciones -- el fallback no se dispara de más', () => {
+            const uno = DB.expedientes[0];
+            DB.expedientes = [uno, uno, uno];
+            seleccionados.clear();
+            seleccionados.add(0); seleccionados.add(1); seleccionados.add(2);
+            capturas.length = 0;
+            accionLote('snapshot-lote', null);
+
+            const filas = JSON.parse(capturas[0].lote);
+            assert.strictEqual(filas.length, 3);
+            assert.notStrictEqual(filas[0].hist, undefined, 'un lote chico NO deberia degradar');
+            assert.notStrictEqual(filas[0].interv, undefined);
         });
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });

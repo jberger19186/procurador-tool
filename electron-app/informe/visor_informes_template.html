@@ -448,20 +448,40 @@
   // Cada `exp.<sección>` ya viene LIMPIA desde `movimientosInforme.js` (Node, del
   // lado de Electron) — acá solo se serializa, no se procesa nada.
   //
-  // 🚨 Umbral de tamaño (decisión del operador, ver la propuesta de secciones
-  // completas): las 5 secciones extra viajan en el POST SOLO cuando la acción es
-  // 'snapshot-lote' (la única que las persiste — 'ficha-lote'/'entrada-lote' las
-  // ignorarían igual del lado del servidor) Y la selección es de hasta
-  // `UMBRAL_SECCIONES_LOTE` casos. `captureDrafts.js` rechaza ENTERO cualquier
-  // borrador de más de 256 KB; medido con datos reales, agregar las 5 secciones
-  // multiplica por ~2,1 el peso de cada caso — sin este umbral, un lote grande
-  // que hoy entra pasaría a rechazarse completo. Con la selección chica (el caso
-  // de uso real: "quiero el detalle completo de ESTE expediente") no hay ningún
-  // riesgo de tamaño.
+  // 🚨 Presupuesto de tamaño: las 5 secciones extra viajan en el POST SOLO cuando
+  // la acción es 'snapshot-lote' (la única que las persiste — 'ficha-lote' y
+  // 'entrada-lote' las ignorarían igual del lado del servidor) Y el lote entra en
+  // el presupuesto. `captureDrafts.js` rechaza ENTERO cualquier borrador de más de
+  // 256 KB, y el usuario ve `captura=lote_grande` sin que se guarde nada.
+  //
+  // Se mide el lote REAL en bytes en vez de contar casos. Un umbral por cantidad
+  // obliga a elegir un "peso típico" por caso, y ese número no existe: medido con
+  // fixtures reales un caso pesa ~3,3 KB, pero uno con las 6 secciones al tope de
+  // 15 llega a ~9,3 KB — casi 3× — así que cualquier corte por cantidad o deja
+  // capacidad sin usar en el caso normal, o se pasa del cap en el caso pesado.
+  // Medir es exacto y no exige adivinar.
+  //
+  // Dos razones por las que medir acá es conservador por diseño, y conviene que
+  // siga siéndolo:
+  //   · `TextEncoder` cuenta BYTES UTF-8, no caracteres. Los datos del PJN están
+  //     llenos de acentos ("EJECUCIÓN", "SITUACIÓN") y cada uno pesa 2 bytes: con
+  //     `.length` se subestimaría justo el contenido más frecuente.
+  //   · El payload que el servidor mide NO es este: `normalizarCaso` re-expande
+  //     estos JSON serializados a objetos reales, lo que ELIMINA los escapes
+  //     (`\"` → `"`). El del servidor siempre pesa menos que el que medimos acá,
+  //     así que sobreestimar juega a favor.
   // ═══════════════════════════════════════════════════════════════════════
   var seleccionados = new Set();
   var seguidosSet = new Set();
-  var UMBRAL_SECCIONES_LOTE = 50;
+  // 200 KB de los 256 KB del cap: el margen cubre las otras claves del borrador
+  // (`accion`, `tipo`, `origen`, `creado`) y cualquier diferencia de codificación.
+  var PRESUPUESTO_SECCIONES_BYTES = 200 * 1024;
+
+  /** Bytes UTF-8 reales de un string. `.length` daría caracteres UTF-16. */
+  function pesoEnBytes(s) {
+    try { return new TextEncoder().encode(s).length; }
+    catch (_) { return s.length * 2; }   // sin TextEncoder, asumir el peor caso
+  }
 
   function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   // F3 (2026-08-31, code-review): esc() no escapa comillas — una carátula legítima
@@ -623,13 +643,26 @@
     if (seleccionados.size === 0) return;
     const exps = Array.from(seleccionados).map(function (i) { return DATOS_BATCH.expedientes[i]; });
     // Solo 'snapshot-lote' persiste las secciones extra ('ficha-lote'/'entrada-lote'
-    // las ignorarían del lado del servidor) — y solo si el lote entra en el umbral
-    // de tamaño. NUNCA `exps.map(campoDeCaso)` a secas: `Array.prototype.map` pasa
-    // el índice como 2º argumento, y `campoDeCaso` ahora lo interpretaría como
-    // `incluirSecciones` (un índice > 0 es truthy).
-    const incluirSecciones = accion === 'snapshot-lote' && exps.length <= UMBRAL_SECCIONES_LOTE;
-    const lote = exps.map(function (exp) { return campoDeCaso(exp, incluirSecciones); });
-    enviarCaptura({ accion: accion, tipo: tipo, lote: JSON.stringify(lote) });
+    // las ignorarían del lado del servidor). NUNCA `exps.map(campoDeCaso)` a secas:
+    // `Array.prototype.map` pasa el índice como 2º argumento, y `campoDeCaso` lo
+    // interpretaría como `incluirSecciones` (un índice > 0 es truthy) — el primer
+    // caso quedaría sin secciones y el resto con ellas, en silencio.
+    const armar = function (con) {
+      return exps.map(function (exp) { return campoDeCaso(exp, con); });
+    };
+
+    let lote = armar(accion === 'snapshot-lote');
+    let serializado = JSON.stringify(lote);
+
+    // Si con las secciones no entra, se manda sin ellas: es preferible un snapshot
+    // con los movimientos actuales (lo que ya guardaba antes de esta función) a que
+    // `captureDrafts.js` rechace el lote entero y el usuario no guarde NADA.
+    if (accion === 'snapshot-lote' && pesoEnBytes(serializado) > PRESUPUESTO_SECCIONES_BYTES) {
+      lote = armar(false);
+      serializado = JSON.stringify(lote);
+    }
+
+    enviarCaptura({ accion: accion, tipo: tipo, lote: serializado });
     marcarLoteComoGuardado(exps);
   }
 
