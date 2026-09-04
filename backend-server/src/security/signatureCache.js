@@ -16,11 +16,19 @@ class SignatureCache {
     /**
      * @param {Object} options
      * @param {number} options.ttl - Tiempo de vida en ms (default: 1 hora)
-     * @param {number} options.maxSize - Máximo de entradas (default: 100)
+     * @param {number} options.maxSize - Máximo de entradas (default: 500)
      */
     constructor(options = {}) {
         this.ttl = options.ttl || 3600000; // 1 hora
-        this.maxSize = options.maxSize || 100;
+        // C.1 capa 2 (fase E9): la clave del caché pasó de `scriptName` a
+        // `scriptName:userId` porque el contenido entregado lleva marca de agua por
+        // cuenta. Eso multiplica el espacio de claves por la cantidad de usuarios
+        // activos: con 13 scripts distribuibles, 100 entradas se llenaban con 7
+        // usuarios y a partir de ahí la evicción FIFO hacía que todos fallaran el
+        // caché y se firmara con RSA en cada descarga. 500 cubre ~38 usuarios
+        // concurrentes; cada entrada son ~400 bytes (checksum + firma base64), o sea
+        // ~200 KB en el peor caso.
+        this.maxSize = options.maxSize || 500;
         this.cache = new Map();
         this.stats = {
             hits: 0,
@@ -39,22 +47,41 @@ class SignatureCache {
 
     /**
      * Obtener firma del caché o calcular una nueva
-     * @param {string} scriptName - Nombre del script
-     * @param {string} scriptContent - Contenido del script en texto plano
+     *
+     * C.1 capa 2 (fase E9): `userId` compone la clave del caché. El contenido que se
+     * firma lleva una marca de agua por cuenta, así que dos usuarios que piden el mismo
+     * script reciben contenidos DISTINTOS y necesitan firmas distintas. Cachear solo por
+     * `scriptName` mezclaba las dos entregas en una entrada.
+     *
+     * Sobre el modo de falla real, para que no se sobreestime lo que arregla este cambio:
+     * el guard `cached.checksum === currentChecksum` de abajo ya impedía devolver la
+     * firma de otro usuario — ante contenido distinto el caché invalidaba y volvía a
+     * firmar. O sea que la clave por nombre NO entregaba firmas equivocadas; lo que hacía
+     * era garantizar 0 % de aciertos y una firma RSA por descarga, más una invalidación
+     * espuria por cada usuario que pasara. La clave compuesta restaura el caché y deja de
+     * depender de ese guard como única defensa (defensa en profundidad).
+     *
+     * @param {string} scriptName - Nombre del script (ya normalizado, con .js)
+     * @param {string} scriptContent - Contenido exacto que se va a entregar (CON marca)
+     * @param {number|string} [userId] - Dueño de la entrega; compone la clave del caché
      * @returns {Object} - { checksum, signature, signedAt, fromCache }
      */
-    getOrCalculate(scriptName, scriptContent) {
+    getOrCalculate(scriptName, scriptContent, userId) {
         const signer = getScriptSigner();
 
         if (!signer.isReady()) {
             throw new Error('[SignatureCache] ScriptSigner no está listo');
         }
 
+        const cacheKey = (userId === undefined || userId === null)
+            ? scriptName
+            : `${scriptName}:${userId}`;
+
         // Calcular checksum actual para comparar
         const currentChecksum = signer.calculateChecksum(scriptContent);
 
         // Buscar en caché
-        const cached = this.cache.get(scriptName);
+        const cached = this.cache.get(cacheKey);
 
         if (cached) {
             // Verificar que el contenido no cambió Y que no expiró
@@ -63,7 +90,7 @@ class SignatureCache {
 
             if (checksumMatch && !isExpired) {
                 this.stats.hits++;
-                console.log(`📦 [SignatureCache] HIT: ${scriptName} (checksum: ${currentChecksum.substring(0, 12)}...)`);
+                console.log(`📦 [SignatureCache] HIT: ${cacheKey} (checksum: ${currentChecksum.substring(0, 12)}...)`);
                 
                 return {
                     checksum: cached.checksum,
@@ -76,12 +103,12 @@ class SignatureCache {
             // Si cambió el checksum, invalidar
             if (!checksumMatch) {
                 this.stats.invalidations++;
-                console.log(`🔄 [SignatureCache] INVALIDADO: ${scriptName} (checksum cambió)`);
+                console.log(`🔄 [SignatureCache] INVALIDADO: ${cacheKey} (checksum cambió)`);
             }
 
             // Si expiró
             if (isExpired) {
-                console.log(`⏰ [SignatureCache] EXPIRADO: ${scriptName}`);
+                console.log(`⏰ [SignatureCache] EXPIRADO: ${cacheKey}`);
             }
         }
 
@@ -89,12 +116,13 @@ class SignatureCache {
         this.stats.misses++;
         this.stats.totalSignings++;
 
-        console.log(`🔏 [SignatureCache] MISS: ${scriptName} - firmando...`);
+        console.log(`🔏 [SignatureCache] MISS: ${cacheKey} - firmando...`);
 
         const signResult = signer.signScript(scriptContent);
 
-        // Guardar en caché
-        this._set(scriptName, {
+        // Guardar en caché — OJO: con `scriptName` acá y `cacheKey` en el get, el caché
+        // escribiría en una clave y leería de otra: 0 % de aciertos para siempre.
+        this._set(cacheKey, {
             checksum: signResult.checksum,
             signature: signResult.signature,
             signedAt: signResult.signedAt,
@@ -110,7 +138,7 @@ class SignatureCache {
     /**
      * Guardar entrada en caché con control de tamaño
      */
-    _set(scriptName, data) {
+    _set(cacheKey, data) {
         // Si se alcanzó el límite, eliminar la entrada más antigua
         if (this.cache.size >= this.maxSize) {
             const oldestKey = this.cache.keys().next().value;
@@ -118,18 +146,33 @@ class SignatureCache {
             console.log(`🗑️ [SignatureCache] Eliminada entrada antigua: ${oldestKey}`);
         }
 
-        this.cache.set(scriptName, data);
+        this.cache.set(cacheKey, data);
     }
 
     /**
-     * Invalidar firma de un script específico
+     * Invalidar las firmas de un script, para TODOS los usuarios.
+     *
+     * C.1 capa 2 (fase E9): las claves ahora son `scriptName:userId`, así que un
+     * `cache.delete(scriptName)` a secas ya no encuentra nada. Sin este barrido por
+     * prefijo el método quedaba convertido en un no-op silencioso — hoy no tiene
+     * consumidores (verificado por grep: solo `destroy()` se llama, desde server.js),
+     * pero un no-op silencioso en una función de invalidación de firmas es la clase de
+     * cosa que se descubre tarde y mal.
+     *
      * @param {string} scriptName
      */
     invalidate(scriptName) {
-        if (this.cache.has(scriptName)) {
-            this.cache.delete(scriptName);
-            this.stats.invalidations++;
-            console.log(`🗑️ [SignatureCache] Invalidado: ${scriptName}`);
+        const prefijo = `${scriptName}:`;
+        let borradas = 0;
+        for (const key of [...this.cache.keys()]) {
+            if (key === scriptName || key.startsWith(prefijo)) {
+                this.cache.delete(key);
+                borradas++;
+            }
+        }
+        if (borradas > 0) {
+            this.stats.invalidations += borradas;
+            console.log(`🗑️ [SignatureCache] Invalidado: ${scriptName} (${borradas} entrada(s))`);
         }
     }
 

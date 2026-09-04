@@ -2,6 +2,11 @@
 const fs = require('fs');
 const path = require('path');
 const CacheManager = require('./cacheManager');
+// C.1 capa 1 (fase E9): ofuscación en el SERVIDOR, antes de cifrar y guardar.
+// Ofuscar en el cliente es inútil (el usuario ya tiene el código); por eso
+// electron-app/src/security/codeObfuscator.js está desactivado a propósito.
+const { ofuscarScript } = require('./obfuscation');
+const { SCRIPTS_DISTRIBUIBLES } = require('./scriptsDistribuibles');
 
 // Inicializar caché global
 const scriptCache = new CacheManager({
@@ -80,7 +85,44 @@ async function processScripts(db) {
 
     for (const file of files) {
         const filePath = path.join(scriptsDir, file);
-        const code = fs.readFileSync(filePath, 'utf8');
+        const fuente = fs.readFileSync(filePath, 'utf8');
+
+        // C.1 capa 1: ofuscar ENTRE leer y cifrar. Todo lo que sigue —hash, cifrado,
+        // firma RSA en la entrega, verificación del cliente— opera sobre el ofuscado.
+        //
+        // SOLO los scripts que se ENTREGAN al cliente. Los de operación del servidor
+        // (backup-db, health-check, data-retention, canary-test, test_registro,
+        // validarCampoParteScwpjn y reset-admin-password) nunca salen de acá —E1 los
+        // devuelve 404— así que ofuscarlos no protege nada y sí agrega superficie de
+        // falla. Y no es hipotético: `scripts/reset-admin-password.js` existe en staging
+        // y en producción (no está en el repo), empieza con `#!/usr/bin/env node`, y
+        // acorn no parsea un shebang → `Unexpected character '!' (1:1)`. Con la
+        // ofuscación aplicada a todo el directorio, el primer `pm2 restart` habría
+        // abortado el arranque y dejado el servidor caído. Medido en staging antes de
+        // reiniciar, no deducido.
+        //
+        // `ofuscarScript` LANZA si el resultado rompería dentro del navegador (una
+        // función que viaja por page.evaluate a la que el ofuscador le dejó una
+        // referencia externa al string array). Esa excepción sube hasta init() en
+        // server.js:583, que hace process.exit(1): el servidor NO arranca y la fila de
+        // encrypted_scripts queda con el contenido anterior, sano. Es deliberado —
+        // fail-closed. La alternativa (loguear y guardar igual) publicaría un script que
+        // falla con "ReferenceError: _0x… is not defined" en medio de una ejecución
+        // real contra el PJN, que es exactamente el incidente que dejó la ofuscación
+        // desactivada la primera vez.
+        //
+        // El seed de CONFIG es fijo, así que el mismo fuente da el mismo ofuscado byte
+        // a byte: el `hash` no cambia entre reinicios y la caché de los clientes no se
+        // invalida sola en cada restart (medido: 2 pasadas, 0 archivos distintos).
+        // Fail-closed donde importa: si un script DISTRIBUIBLE no se puede ofuscar sin
+        // romperlo, `ofuscarScript` lanza, la excepción sube a init() (server.js:583) y
+        // el servidor no arranca, dejando la fila anterior intacta en encrypted_scripts.
+        // Preferimos eso a publicar un script que falle con "ReferenceError: _0x… is not
+        // defined" en medio de una ejecución real contra el PJN.
+        const code = SCRIPTS_DISTRIBUIBLES.has(file)
+            ? ofuscarScript(fuente, file).codigo
+            : fuente;
+
         const hash = calculateHash(code);
         const { encrypted, iv } = encryptCode(code, key);
 

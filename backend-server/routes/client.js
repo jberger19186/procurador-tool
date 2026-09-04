@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');   // C.1 capa 2 (E9): HMAC de la marca de agua
 const { scriptDownloadLimiter } = require('../middleware/rateLimiter');
 const { getSignatureCache } = require('../src/security/signatureCache');
 const { getDecryptedScript } = require('../utils/scriptEncryption');
@@ -25,14 +26,9 @@ const { isKnownScript, subsystemForScript, usageColumnFor, subsystemLabel, VALID
 // Esta lista espeja exactamente el mapa `dependencies` de electron-app/src/auth/authManager.js
 // (los scripts principales + sus dependencias) — no es una lista nueva, es la que ya existe
 // del lado del cliente.
-const SCRIPTS_DISTRIBUIBLES = new Set([
-    'testM1.js', 'testM2.js',
-    'consultarscwpjn.js', 'listarSCWPJN.js',
-    'procesarNovedadesCompleto.js', 'procesarCustomExpedientes.js',
-    'informequickscwpjn.js', 'procesarMonitoreo.js',
-    'sessionManager.js', 'errorHandler.js', 'cerrarNavegador.js', 'monitoreo.js',
-    'buscarPorParteScwpjn.js',
-]);
+// E9: se mudó a utils/scriptsDistribuibles.js porque `processScripts` también la necesita
+// (decide qué ofuscar). Una copia en cada lado se desincroniza; el módulo es la fuente única.
+const { SCRIPTS_DISTRIBUIBLES } = require('../utils/scriptsDistribuibles');
 
 function buildExtPromoStatus(sub) {
     const { plan_type, promo_type, promo_end_date, promo_max_users, promo_used_count, promo_alert_days } = sub;
@@ -238,6 +234,37 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
         // Desencriptar script en el servidor (nunca enviar la clave al cliente)
         const decryptedCode = await getDecryptedScript(db, normalizedName);
 
+        // ── C.1 capa 2 (fase E9): marca de agua por cuenta ────────────────────────
+        // Un comentario de una línea al final del archivo, con el HMAC de
+        // (userId | script | hash). Va DESPUÉS de descifrar y ANTES de firmar, para que
+        // `security.checksum` y `security.signature` correspondan exactamente al
+        // contenido que se entrega.
+        //
+        // Por qué un comentario y no una variable: no altera la ejecución, no lo toca el
+        // ofuscador (ya corrió en processScripts, esto es la entrega) y sobrevive al
+        // vm.runInNewContext del wrapper del cliente sin cambiar una sola semántica.
+        //
+        // No se persiste nada: el HMAC es determinista, así que ante una copia filtrada
+        // se recalcula para cada usuario y se compara. No hace falta tabla de trazas.
+        //
+        // Fail-CLOSED si falta WM_SECRET. La alternativa —entregar el script sin marca y
+        // seguir— es un fail-open silencioso: la trazabilidad quedaría rota justo cuando
+        // hace falta y nadie se enteraría hasta que apareciera una copia sin identificar.
+        // Preferimos un 500 ruidoso, que se ve en el primer arranque de staging.
+        const wmSecret = process.env.WM_SECRET;
+        if (!wmSecret || wmSecret.length < 32) {
+            console.error('[SEGURIDAD] WM_SECRET no configurado (o menor a 32 caracteres): no se entrega el script sin marca de agua.');
+            return res.status(500).json({
+                success: false,
+                error: 'No se pudo preparar el script. Intentá de nuevo en unos minutos.'
+            });
+        }
+        const wm = crypto.createHmac('sha256', wmSecret)
+            .update(`${userId}|${normalizedName}|${script.hash}`)
+            .digest('hex')
+            .slice(0, 32);
+        const codigoEntregado = `${decryptedCode}\n// wm:${wm}\n`;
+
         // Firmar script con RSA (usa caché para evitar re-firmar)
         let securityData = null;
         try {
@@ -246,7 +273,12 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
             // nombre crudo, `testM2` y `testM2.js` (el cliente puede pedir cualquiera
             // de los dos) creaban 2 entradas para el mismo script, cada una con su
             // firma RSA propia, en un caché de maxSize 100 con evicción FIFO.
-            const signResult = signatureCache.getOrCalculate(normalizedName, decryptedCode);
+            //
+            // E9: la clave suma el `userId`. Con la marca de agua, dos usuarios reciben
+            // contenidos distintos del mismo script: una entrada por nombre servía para
+            // uno solo y obligaba a firmar de nuevo en cada descarga del resto.
+            // Se firma `codigoEntregado` (CON marca), no `decryptedCode`.
+            const signResult = signatureCache.getOrCalculate(normalizedName, codigoEntregado, userId);
             securityData = {
                 checksum: signResult.checksum,
                 signature: signResult.signature,
@@ -265,7 +297,16 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
             success: true,
             script: {
                 name: script.script_name,
-                content: decryptedCode,
+                // Con marca de agua: es lo que se firmó y lo que el cliente va a
+                // cotejar contra `security.checksum`.
+                content: codigoEntregado,
+                // SIN marca, a propósito: `hash` es la identidad de VERSIÓN, no la
+                // integridad del contenido. `authManager.js:365` lo compara contra el
+                // hash cacheado para decidir si re-descargar; si acá viajara el checksum
+                // con marca, cambiaría en cada entrega y el cliente re-descargaría los 13
+                // scripts en cada arranque. Los dos hashes tienen roles distintos:
+                //   script.hash        → ¿cambió la versión del script?   (base, sin marca)
+                //   security.checksum  → ¿llegó íntegro lo que se firmó?  (con marca)
                 hash: script.hash,
                 version: script.version
             },

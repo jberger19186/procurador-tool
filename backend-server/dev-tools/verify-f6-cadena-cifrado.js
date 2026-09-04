@@ -16,6 +16,8 @@ const path = require('path');
 const https = require('https');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
+// E9: mismo pipeline determinista que corre processScripts, para el punto 4 (drift)
+const { ofuscarScript } = require('../utils/obfuscation');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GUARD DURO: nunca contra producción.
@@ -194,7 +196,16 @@ async function main() {
             check(false, `${name}: descifrado AES-256-CBC desde la DB`, e.message);
             continue;
         }
-        check(claro === d.script.content, `${name}: descifrado de la DB == contenido servido`);
+        // E9 (C.1 capa 2): lo servido ya NO es byte a byte lo que hay en la base. Se le
+        // agrega una marca de agua por cuenta —una línea `// wm:<hmac de 32 hex>` al
+        // final— antes de firmar. La comprobación se vuelve más fuerte, no más laxa: se
+        // exige que la ÚNICA diferencia sea esa línea, con el formato exacto.
+        const MARCA = /\n\/\/ wm:[0-9a-f]{32}\n$/;
+        const servidoSinMarca = d.script.content.replace(MARCA, '');
+        check(MARCA.test(d.script.content),
+            `${name}: lo servido termina en la marca de agua por cuenta (E9)`);
+        check(claro === servidoSinMarca,
+            `${name}: descifrado de la DB == contenido servido (sin la marca)`);
 
         // (b) el hash guardado en DB es el del texto plano
         check(sha256(claro) === fila.hash, `  └ ${name}: SHA-256(descifrado) == encrypted_scripts.hash`,
@@ -213,11 +224,23 @@ async function main() {
         const fp = path.join(scriptsDir, name);
         if (!fs.existsSync(fp)) { check(false, `${name}: existe en scripts/ del servidor`); continue; }
         const fuente = fs.readFileSync(fp, 'utf8');
-        const hFuente = sha256(fuente);
+        // E9 (C.1 capa 1): la base guarda el script OFUSCADO, no el fuente. Comparar el
+        // SHA-256 del archivo de disco contra `hash` daría distinto siempre. El drift se
+        // sigue detectando igual —que es para lo que existe este punto— aplicando el
+        // mismo pipeline determinista que corre `processScripts`: si el .js del servidor
+        // no es el que se desplegó, el hash del ofuscado tampoco va a coincidir.
+        // El seed fijo de CONFIG es lo que hace que esta comparación sea estable.
+        let hEsperado, errOfu = null;
+        try { hEsperado = sha256(ofuscarScript(fuente, name).codigo); }
+        catch (e) { errOfu = e.message; }
         const fila = porNombre[name];
-        check(fila && hFuente === fila.hash,
-            `${name}: DB coincide con scripts/${name} del servidor`,
-            fila ? `disco=${hFuente.slice(0,12)} db=${String(fila.hash).slice(0,12)}` : 'sin fila');
+        if (errOfu) {
+            check(false, `${name}: el fuente del servidor se puede ofuscar`, errOfu.slice(0, 120));
+        } else {
+            check(fila && hEsperado === fila.hash,
+                `${name}: DB coincide con scripts/${name} del servidor (vía el pipeline de ofuscación)`,
+                fila ? `ofuscado(disco)=${hEsperado.slice(0,12)} db=${String(fila.hash).slice(0,12)}` : 'sin fila');
+        }
     }
     console.log('');
 
