@@ -1,8 +1,10 @@
 # Propuesta — el snapshot de informe guarda solo movimientos actuales
 
-> **Estado: PROPUESTA, sin aprobar. No se tocó código.**
+> ✅ **ESTADO: F1+F2 EJECUTADAS Y DESPLEGADAS. Release `electron-v2.7.58` publicado.**
+> ⏳ **Falta F3** (corrida real tildando las secciones) — y falta el **deploy de backend a producción**:
+> hoy solo está en staging, así que la feature todavía NO funciona para nadie.
 > Diagnóstico hecho el 2026-09-04 contra los backups reales de corridas del operador y el código real.
-> Para ejecutar con un agente independiente, una vez aprobada.
+> Implementada por un agente independiente; el corte por tamaño lo corregí yo después (§9).
 > Continuación de [`propuesta-fix-snapshot-informe-bitacora-2026-09-04.md`](propuesta-fix-snapshot-informe-bitacora-2026-09-04.md),
 > que arregló el bug de fondo (el snapshot nacía vacío). Esto **extiende** esa función.
 
@@ -222,3 +224,83 @@ donde un agente apurado inventa un normalizador genérico y rompe los intervinie
   ya está decidido desde el módulo Markdown que no se incluyen en material compartible.
 - **Los snapshots ya existentes** no se rellenan retroactivamente.
 - **El snapshot de procuración** no cambia: el Monitor y la procuración no tienen estas secciones.
+
+---
+
+## 9. Resultado real (2026-09-04)
+
+**Implementado por un agente independiente** (los 7 eslabones + 3 harnesses nuevos), commit `0d13e3f`.
+
+### 🚨 La decisión que estaba mal en esta propuesta, y cómo se corrigió
+
+§4 recomendaba **mandar las secciones extra solo con lotes de ≤ 50 casos**. El agente lo implementó
+tal cual, lo midió, y **encontró que no cubría el peor caso**: un expediente con las 6 secciones al
+tope de 15 pesa **~9,3 KB**, así que 50 iguales dan **452 KB** — por encima del cap de 256 KB. El
+lote se habría rechazado entero (`captura=lote_grande`, sin guardar nada), que es exactamente lo que
+el umbral existía para evitar. Lo reportó en vez de taparlo.
+
+**El error de fondo era el criterio, no el número:** un corte por cantidad obliga a elegir un "peso
+típico" por caso que no existe — medido, un caso real pesa **3,3 KB** y uno pesado **9,3 KB**, casi
+3×. Cualquier constante o desperdicia capacidad en el caso normal, o se pasa del cap en el pesado.
+
+**Corregido (commit `3df4e09`): el corte se mide en bytes.** `accionLote()` arma el lote con las
+secciones, lo mide con `TextEncoder` (bytes UTF-8 reales — `.length` daría UTF-16 y subestimaría
+justo los acentos que el PJN usa en todo) y, si no entra, lo rearma sin ellas. **Degrada el detalle
+extra, nunca los movimientos actuales ni un caso.** Es conservador por diseño: el payload que el
+servidor mide es más chico que el medido en el cliente (`normalizarCaso` re-expande los JSON
+serializados y elimina los escapes), así que sobreestimar juega a favor.
+
+**Efecto medido:** el punto de corte real con el fixture real pasa de 50 a **entre 110 y 120 casos**
+— más del doble de capacidad, y sin riesgo de rechazo.
+
+### Otras decisiones del agente que conviene conocer
+
+- **No aplicó la limpieza de intervinientes a vinculados/recursos/notas.** Correcto: son formatos
+  distintos y `testM2.js` tampoco los trata igual. Un normalizador genérico los habría roto.
+- **Detectó un bug sutil antes de escribirlo:** `exps.map(campoDeCaso)` habría pasado el **índice**
+  como 2º argumento (`incluirSecciones`), dejando el primer caso sin secciones y el resto con ellas,
+  en silencio. Usa un wrapper explícito.
+- **`MAX_CASOS_LOTE` 200 → 120** en los 2 archivos que lo declaran (el bug preexistente de §4-D).
+- Separó `MAX_EXPEDIENTES_EXPORT` (200, sin tocar) del cap de capture-lote: compartían constante por
+  conveniencia, no por compartir la razón de fondo — exportar no pasa por `captureDrafts.js`.
+
+### Verificación
+
+| Qué | Resultado |
+|---|---|
+| Suite completa de Electron (8 archivos, corrida por mí) | **267 PASS, 0 FAIL** |
+| 3 harnesses nuevos del backend | **31 PASS, 0 FAIL** |
+| `verify-secciones-snapshot-live.js` **contra staging real, Postgres real** | **6 PASS, 0 FAIL** |
+| `node --check` + JS inline del template + `npm start` | limpio |
+
+El harness contra staging cierra el gap que el agente reportó explícitamente: `datosSnapshot()` solo
+se había probado en aislamiento (función pura) y `capture.js` sobre un Express in-process, ninguno
+con Postgres. Prueba el **round-trip real por JSONB** (las 6 secciones se persisten y se leen igual,
+el `\n` interno de intervinientes sobrevive) y que un snapshot de **procuración** no gana las claves
+nuevas aunque el payload se las mande — control negativo.
+
+### Estado de despliegue
+
+| Pieza | Staging | Producción |
+|---|---|---|
+| `capture.js` · `bitacora.js` | ✅ desplegado y verificado | ⏳ **pendiente** |
+| `public/usuarios/app.js` (render) | ✅ | ✅ (va con la versión visible; inofensivo sin el backend) |
+| Cliente Electron | — | ✅ **release `electron-v2.7.58`** |
+
+⚠️ **Con el backend sin desplegar a producción, la feature NO funciona todavía.** Un cliente 2.7.58
+manda las 5 secciones y el `capture.js` de prod las ignora (no las conoce) → el snapshot se guarda
+como hasta ahora. Degradación limpia, sin error, pero sin la feature.
+
+**Release:** el bug crónico de assets se repitió (**22ª vez seguida desde v2.7.38**) — el release
+quedó con solo el `.blockmap` **y `releases/latest` ya resolvía a v2.7.58**, así que durante unos
+minutos la descarga del instalador apuntó a un `.exe` inexistente. Corregido sin rebuild: SHA512
+recalculado, `latest.yml` a mano sin BOM (el de `dist/` había quedado **stale apuntando a 2.7.57**,
+la trampa de siempre), `.exe` de 134 MB subido con `HttpClient`. Verificado: 3 assets, `latest.yml`
+servido == SHA512 local, y `/client/download/electron` → **302** al `.exe` correcto.
+
+### Lo que falta
+
+1. **Deploy de backend a producción** (`capture.js` + `bitacora.js`, `scp` + `pm2 restart`).
+2. **F3** — un informe real **tildando todas las secciones** (ninguna corrida existente las tiene),
+   guardarlo a Bitácora y confirmar el modal. Consume **3 usos** de cupo.
+3. **F4** — cierre en `CLAUDE.md` (esta entrada ya lo cubre en parte).
