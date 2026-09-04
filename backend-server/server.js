@@ -258,6 +258,17 @@ app.use('/users', generalAuthLimiter, require('./routes/users'));
 // D4 (revisión 2026-07-25): activado — antes nunca se montaba (código muerto). POST /event
 // (público) tiene su propio rate limit; GET /data y DELETE /events exigen admin.
 app.use('/analytics', require('./routes/analytics'));
+// B.7 (fase E5) — página de aceptación de términos.
+//
+// ⚠️ ESTE `express.static` TIENE QUE QUEDAR ANTES DEL `app.use('/legal', ...)` DE
+// LA LÍNEA DE ABAJO. Express resuelve por orden de registro: el router de
+// `routes/legal.js` define `POST /accept` pero ningún `GET /accept`, así que hoy
+// un GET a /legal/accept/ atraviesa el router sin matchear y termina en 404 — que
+// es exactamente por qué la página existía desde mayo y era inalcanzable, con el
+// email de publicación linkeando a ella (`acceptUrl` en legal.js). Montado acá, el
+// estático gana antes de que el router tenga oportunidad de no responder, y queda
+// blindado contra que alguien agregue un `router.get('/accept')` más adelante.
+app.use('/legal/accept', express.static(path.join(__dirname, 'public', 'legal', 'accept')));
 app.use('/legal', require('./routes/legal'));
 
 // ── Fase 5: Cobranza — rutas detrás de feature flag ──────────────────────────
@@ -1003,6 +1014,119 @@ cron.schedule('30 11 * * *', async () => {
         if (grace.rowCount > 0) logger.info(`[CRON] payment_failed_suspended: ${okCount}/${grace.rowCount} usuarios suspendidos`);
     } catch (err) {
         logger.error('[CRON] Error en suspensión por pago:', err.message);
+    }
+}, { timezone: 'America/Argentina/Buenos_Aires' });
+
+// 5i. B.7 (fase E5) — suspensión por términos no aceptados (diario 08:35 ART)
+//
+// Cierra la mitad que faltaba de la política legal: `routes/legal.js` ya arrancaba
+// el plazo al publicar (`legal_pending_since = COALESCE(legal_pending_since, NOW())`)
+// y el email ya decía "tu acceso quedará suspendido en 15 días", pero NADA ponía
+// `users.legal_suspended` en true. El email amenazaba con algo que no pasaba.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+//  ESTE JOB NO ARRANCA NINGÚN RELOJ — solo lo lee
+// ═══════════════════════════════════════════════════════════════════════════
+// `legal_pending_since` lo escribe EXCLUSIVAMENTE el loop de publicación de
+// `routes/legal.js`, y lo escribe con NOW() (el momento de publicar), nunca con la
+// fecha del documento. Este job jamás lo setea. Es deliberado: si acá se poblara
+// la columna —aunque fuera con NOW()— el primer día de vida del job todos los
+// usuarios sin aceptación entrarían al plazo a la vez, y si además se poblara con
+// una fecha vieja (la de publicación del documento, por ejemplo) los 15 días ya
+// estarían vencidos y la primera corrida los suspendería a todos de golpe.
+// Con `legal_pending_since IS NOT NULL` como condición, un usuario solo puede ser
+// suspendido si en algún momento se publicó un documento estando él activo.
+//
+// Consecuencia hoy, medida en producción el 2026-09-03: los 3 usuarios reales
+// tienen `legal_pending_since` en NULL, así que este job NO toca a ninguno. Empieza
+// a tener efecto recién en la primera publicación posterior a este deploy, y sobre
+// esos usuarios, 15 días después de esa publicación.
+cron.schedule('35 11 * * *', async () => {
+    // ── (a) Recordatorio a los 12 días — solo email, NO escribe nada ──────────
+    // La ventana es de exactamente un día para no repetir el mail los días 12, 13,
+    // 14 y 15 (no hay columna donde marcar "recordatorio enviado" y esta fase va sin
+    // migración). Si el proceso estuviera caído ese día puntual el recordatorio se
+    // pierde: es una cortesía, no un requisito del plazo.
+    try {
+        const aviso = await pool.query(`
+            SELECT u.id, u.email, u.nombre, u.legal_pending_since
+            FROM users u
+            WHERE COALESCE(u.legal_suspended, FALSE) = FALSE
+              AND COALESCE(u.role, 'user') <> 'admin'
+              AND u.legal_pending_since IS NOT NULL
+              AND u.legal_pending_since <  NOW() - INTERVAL '12 days'
+              AND u.legal_pending_since >= NOW() - INTERVAL '13 days'
+              AND EXISTS (
+                  SELECT 1 FROM legal_documents ld
+                  WHERE ld.is_current = TRUE AND ld.requires_acceptance = TRUE
+                    AND NOT EXISTS (
+                        SELECT 1 FROM user_legal_acceptances a
+                        WHERE a.user_id = u.id AND a.document_id = ld.id))
+        `);
+        for (const u of aviso.rows) {
+            const limite = new Date(new Date(u.legal_pending_since).getTime() + 15 * 24 * 60 * 60 * 1000);
+            mailerCron.sendLegalDeadlineReminderEmail(u.email, u.nombre, limite).catch(() => {});
+        }
+        if (aviso.rowCount > 0) logger.info(`[CRON] legal-reminder: ${aviso.rowCount} recordatorio(s) a 3 días del vencimiento`);
+    } catch (err) {
+        logger.error('[CRON] legal-reminder error:', err.message);
+    }
+
+    // ── (b) Suspensión a los 15 días ─────────────────────────────────────────
+    try {
+        // El `EXISTS` es lo que evita suspender a quien YA aceptó pero quedó con un
+        // `legal_pending_since` sucio: sin él, alcanzaría con la fecha vencida.
+        // `COALESCE(legal_suspended, FALSE)` porque la columna no es NOT NULL y
+        // `NULL = FALSE` no es TRUE — sin el COALESCE, una fila con NULL nunca
+        // entraría al UPDATE y quedaría fuera de la política en silencio.
+        // Los admins quedan afuera: un admin suspendido no podría publicar la
+        // corrección del documento que lo suspendió.
+        // Idempotente: correrlo dos veces no cambia nada (la segunda corrida ya no
+        // matchea `legal_suspended = FALSE`), y el email va solo con el RETURNING,
+        // así que tampoco se duplicaría si algún día se escalara a varias instancias.
+        const susp = await pool.query(`
+            UPDATE users u SET legal_suspended = TRUE
+            WHERE COALESCE(u.legal_suspended, FALSE) = FALSE
+              AND COALESCE(u.role, 'user') <> 'admin'
+              AND u.legal_pending_since IS NOT NULL
+              AND u.legal_pending_since < NOW() - INTERVAL '15 days'
+              AND EXISTS (
+                  SELECT 1 FROM legal_documents ld
+                  WHERE ld.is_current = TRUE AND ld.requires_acceptance = TRUE
+                    AND NOT EXISTS (
+                        SELECT 1 FROM user_legal_acceptances a
+                        WHERE a.user_id = u.id AND a.document_id = ld.id))
+            RETURNING u.id, u.email, u.nombre
+        `);
+
+        for (const u of susp.rows) {
+            try {
+                // 'legal_update' es uno de los 5 valores que admite el CHECK de
+                // user_notifications.type — verificado contra schema.sql:1461 antes de
+                // escribir esto. Un valor nuevo haría fallar el INSERT recién en
+                // producción, con el usuario ya suspendido y sin aviso.
+                await pool.query(`
+                    INSERT INTO user_notifications (user_id, title, message, type, action_url, expires_at)
+                    VALUES ($1, $2, $3, 'legal_update', $4, NOW() + INTERVAL '90 days')
+                `, [
+                    u.id,
+                    'Tu acceso quedó suspendido',
+                    'No aceptaste los términos actualizados dentro del plazo de 15 días. Aceptalos para restablecer el acceso al instante.',
+                    `${process.env.BASE_URL || 'https://api.procuradortool.com'}/legal/accept/`
+                ]);
+                mailerCron.sendLegalSuspendedEmail(u.email, u.nombre).catch(() => {});
+            } catch (iterErr) {
+                // Mismo criterio que los otros crons con loop (E3-1): un usuario que
+                // falla no puede frenar a los demás.
+                logger.error(`[CRON] legal-suspend: error notificando user_id=${u.id}:`, iterErr.message);
+            }
+        }
+
+        if (susp.rowCount > 0) {
+            logger.warn(`[CRON] legal-suspend: ${susp.rowCount} usuario(s) suspendido(s) por términos no aceptados — ids: ${susp.rows.map(r => r.id).join(', ')}`);
+        }
+    } catch (err) {
+        logger.error('[CRON] legal-suspend error:', err.message);
     }
 }, { timezone: 'America/Argentina/Buenos_Aires' });
 

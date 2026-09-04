@@ -7,6 +7,11 @@ const { getDecryptedScript } = require('../utils/scriptEncryption');
 const authenticateToken = require('../middleware/authenticateToken');
 const { getLatestAsset } = require('../utils/githubRelease');   // H-BE-08
 const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
+// B.7 (fase E5): gate de suspensión por términos no aceptados. Va sobre
+// scripts/check y scripts/download —sin script no hay ejecución posible—, NO sobre
+// verify-session ni account: el suspendido tiene que poder mantener la sesión viva
+// y ver su estado para llegar a /legal/accept/.
+const requireLegalOk = require('../middleware/requireLegalOk');
 
 // A.1 (revisión 2026-07-27, hallazgo E5-1/P-1): whitelist de scripts que el cliente
 // (Electron) realmente descarga y ejecuta. Antes /scripts/download y /scripts/available
@@ -126,7 +131,7 @@ router.post('/verify-session', authenticateToken, async (req, res) => {
 });
 
 // Verificar si el hash local del script coincide con el del servidor (version check liviano)
-router.get('/scripts/check/:scriptName', authenticateToken, async (req, res) => {
+router.get('/scripts/check/:scriptName', authenticateToken, requireLegalOk(), async (req, res) => {
     const { scriptName } = req.params;
     const db = req.app.get('db');
     const userId = req.user.id;
@@ -181,7 +186,7 @@ router.get('/scripts/check/:scriptName', authenticateToken, async (req, res) => 
 });
 
 // Descargar script encriptado para ejecutar en cliente
-router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLimiter, async (req, res) => {
+router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLimiter, requireLegalOk(), async (req, res) => {
     const { scriptName } = req.params;
     const db = req.app.get('db');
     const userId = req.user.id;

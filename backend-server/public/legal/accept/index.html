@@ -94,7 +94,7 @@
     .doc-list { list-style: none; margin: 0 0 24px; }
     .doc-item {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 14px;
       padding: 16px 18px;
       background: #f9fafb;
@@ -108,6 +108,17 @@
     .doc-version { font-size: 12px; color: #6b7280; margin-top: 2px; }
     .doc-link { color: #d97706; font-size: 12px; text-decoration: none; }
     .doc-link:hover { text-decoration: underline; }
+
+    /* B.7 — visor del documento real (el de la base, no el estático) */
+    .doc-toggle {
+      background: none; border: none; padding: 0; margin-top: 6px;
+      color: #d97706; font-size: 12px; font-family: inherit; cursor: pointer;
+    }
+    .doc-toggle:hover { text-decoration: underline; }
+    .doc-frame {
+      width: 100%; height: 340px; margin-top: 12px;
+      border: 1px solid #e5e7eb; border-radius: 8px; background: #fff;
+    }
 
     /* Success state */
     .success-state { text-align: center; padding: 16px 0; }
@@ -218,7 +229,7 @@
     <button id="btn-accept" class="btn btn-primary" onclick="doAccept()">
       Acepto todos los documentos →
     </button>
-    <a href="/dashboard" class="btn btn-secondary">Recordármelo más tarde</a>
+    <a href="/usuarios/" class="btn btn-secondary">Recordármelo más tarde</a>
   </div>
 
   <!-- PASO 3: Todo al día -->
@@ -227,8 +238,8 @@
       <div class="success-icon">✅</div>
       <div class="success-title">¡Todo al día!</div>
       <p class="success-msg">No tenés documentos pendientes de aceptación.</p>
-      <a href="/dashboard" class="btn btn-primary" style="margin-top:24px;display:inline-block;width:auto;padding:12px 32px">
-        Ir al dashboard →
+      <a href="/usuarios/" class="btn btn-primary" style="margin-top:24px;display:inline-block;width:auto;padding:12px 32px">
+        Ir a mi portal →
       </a>
     </div>
   </div>
@@ -239,8 +250,8 @@
       <div class="success-icon">🎉</div>
       <div class="success-title">¡Documentos aceptados!</div>
       <p class="success-msg">Gracias. Tu acceso al servicio está activo.</p>
-      <a href="/dashboard" class="btn btn-primary" style="margin-top:24px;display:inline-block;width:auto;padding:12px 32px">
-        Ir al dashboard →
+      <a href="/usuarios/" class="btn btn-primary" style="margin-top:24px;display:inline-block;width:auto;padding:12px 32px">
+        Ir a mi portal →
       </a>
     </div>
   </div>
@@ -319,23 +330,79 @@ async function loadPending() {
             showView('view-allgood'); return;
         }
 
-        // Rellenar lista
+        // Rellenar lista.
+        //
+        // cand-Z6 / B.7: esto interpolaba `doc.version` y `doc.title` dentro de una
+        // plantilla de HTML crudo que se inyectaba en el DOM. Los dos salen de `legal_documents`, que escribe
+        // un admin desde el panel — el mismo origen del payload de S5. Ahora todo
+        // texto entra por `textContent`, que no interpreta HTML por definición: no
+        // hay escape que se pueda olvidar porque no hay concatenación de markup.
         const list = document.getElementById('doc-list');
-        list.innerHTML = '';
+        list.textContent = '';
         for (const doc of data.pending) {
-            const icon = doc.type === 'tyc' ? '📄' : '🔒';
-            const href = doc.type === 'tyc' ? '/terminos/' : '/privacidad/';
-            const label = doc.type === 'tyc' ? 'Términos y Condiciones' : 'Política de Privacidad';
-            list.insertAdjacentHTML('beforeend', `
-                <li class="doc-item">
-                    <div class="doc-icon">${icon}</div>
-                    <div class="doc-info">
-                        <div class="doc-title">${label}</div>
-                        <div class="doc-version">Versión ${doc.version} — ${doc.title}</div>
-                        <a href="${href}" target="_blank" class="doc-link">Leer documento →</a>
-                    </div>
-                </li>
-            `);
+            const esTyc = doc.type === 'tyc';
+
+            const li = document.createElement('li');
+            li.className = 'doc-item';
+
+            const ico = document.createElement('div');
+            ico.className = 'doc-icon';
+            ico.textContent = esTyc ? '\u{1F4C4}' : '\u{1F512}';
+
+            const info = document.createElement('div');
+            info.className = 'doc-info';
+
+            const tit = document.createElement('div');
+            tit.className = 'doc-title';
+            tit.textContent = esTyc ? 'Términos y Condiciones' : 'Política de Privacidad';
+
+            const ver = document.createElement('div');
+            ver.className = 'doc-version';
+            ver.textContent = 'Versión ' + doc.version + ' — ' + doc.title;
+
+            // B.7 pieza 4 (mínimo): el texto que se acepta es EL DE LA BASE.
+            //
+            // Acá había un link a /terminos/ o /privacidad/, que son archivos HTML
+            // fijos y desconectados del panel: el usuario firmaba la aceptación de la
+            // versión N de `legal_documents` mientras leía un texto escrito a mano que
+            // podía decir otra cosa (hallazgo colateral de A.2).
+            //
+            // El documento va dentro de un <iframe sandbox> APUNTANDO a
+            // /legal/page?type=..., nunca inyectado con innerHTML: `html_content` es el
+            // mismo payload de S5 y en esta página vive el token del usuario en
+            // localStorage. `sandbox` SIN `allow-scripts` es lo que impide que corra JS
+            // del documento; `allow-same-origin` va a propósito, es la misma
+            // combinación que /legal/page ya manda en su propia CSP (ver legal.js).
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'doc-toggle';
+            btn.textContent = 'Leer el documento 2192';
+
+            const frame = document.createElement('iframe');
+            frame.className = 'doc-frame';
+            frame.setAttribute('sandbox', 'allow-same-origin');
+            frame.setAttribute('loading', 'lazy');
+            frame.title = tit.textContent;
+            frame.hidden = true;
+
+            btn.addEventListener('click', () => {
+                const abrir = frame.hidden;
+                // El src se asigna recién al primer despliegue: con 2 documentos
+                // pendientes, cargarlos de entrada son 2 requests que quizá nadie mire.
+                if (abrir && !frame.getAttribute('src')) {
+                    frame.setAttribute('src', API + '/legal/page?type=' + encodeURIComponent(doc.type));
+                }
+                frame.hidden = !abrir;
+                btn.textContent = abrir ? 'Ocultar el documento' : 'Leer el documento 2192';
+            });
+
+            info.appendChild(tit);
+            info.appendChild(ver);
+            info.appendChild(btn);
+            info.appendChild(frame);
+            li.appendChild(ico);
+            li.appendChild(info);
+            list.appendChild(li);
         }
 
         // Deadline
@@ -346,8 +413,12 @@ async function loadPending() {
             show('deadline-info');
         }
 
-        // Verificar si está suspendido (solo si hay token, hacemos quick check)
-        checkSuspended();
+        // B.7: el aviso de suspensión sale del mismo `/legal/pending` que ya trajo la
+        // lista. Antes esto llamaba a un `checkSuspended()` que preguntaba a
+        // `/client/verify-session` por un campo `legal_suspended` que ese endpoint
+        // NUNCA devolvió → la condición era siempre falsa y el cartel no se mostraba
+        // jamás, sin dejar rastro (el fetch iba envuelto en un catch vacío).
+        if (data.suspended) show('suspended-warn');
 
         showView('view-docs');
     } catch(e) {
@@ -357,18 +428,6 @@ async function loadPending() {
         errEl.textContent = e.message;
         errEl.style.display = 'block';
     }
-}
-
-async function checkSuspended() {
-    try {
-        const res = await fetch(`${API}/client/verify-session`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authToken },
-            body: JSON.stringify({ machineId: 'web' })
-        });
-        const data = await res.json();
-        if (data.legal_suspended) show('suspended-warn');
-    } catch { /* non-critical */ }
 }
 
 async function doAccept() {

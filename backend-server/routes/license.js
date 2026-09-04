@@ -1,6 +1,10 @@
 const express = require('express');
 const router  = express.Router();
 const authenticateToken = require('../middleware/authenticateToken');
+// B.7 (fase E5): gate de suspensión por términos no aceptados. Va sobre `start`
+// porque es el candado por el que pasa TODA ejecución. Es fail-open a propósito:
+// ver el encabezado del middleware.
+const requireLegalOk = require('../middleware/requireLegalOk');
 
 const TTL_MINUTES = 5;
 const HEARTBEAT_INTERVAL_S = 30;
@@ -8,7 +12,7 @@ const HEARTBEAT_INTERVAL_S = 30;
 // ─── POST /license/execution/start ────────────────────────────────────────────
 // Adquiere el lock de ejecución para el dispositivo actual.
 // Rechaza si hay una ejecución activa en otro dispositivo.
-router.post('/execution/start', authenticateToken, async (req, res) => {
+router.post('/execution/start', authenticateToken, requireLegalOk(), async (req, res) => {
     const db       = req.app.get('db');
     const userId   = req.user.id;
     const { machineId, scriptName } = req.body;

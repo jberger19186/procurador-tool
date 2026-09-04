@@ -87,13 +87,24 @@ router.get('/pending', authenticateUser, async (req, res) => {
                   )
                 ORDER BY ld.type
             `, [userId]),
-            db.query('SELECT legal_pending_since FROM users WHERE id=$1', [userId])
+            // B.7 (fase E5): se suma `legal_suspended` acá y no en un endpoint nuevo.
+            // La página de aceptación ya llamaba a `/client/verify-session` solo para
+            // averiguarlo, y ese endpoint NUNCA devolvió el campo → el aviso "tu cuenta
+            // está suspendida" no se mostraba nunca (fallaba en silencio por el catch
+            // vacío). Devolverlo desde acá lo resuelve con la llamada que la página ya
+            // hace, sin tocar verify-session, que es el heartbeat de la app (cada 30 s
+            // durante toda ejecución) y no conviene mover por esto.
+            db.query('SELECT legal_pending_since, legal_suspended FROM users WHERE id=$1', [userId])
         ]);
         const pendingSince = userRow.rows[0]?.legal_pending_since;
         const deadline = pendingSince
             ? new Date(new Date(pendingSince).getTime() + 15 * 24 * 60 * 60 * 1000)
             : null;
-        res.json({ pending: pendingDocs.rows, deadline: deadline?.toISOString() || null });
+        res.json({
+            pending:   pendingDocs.rows,
+            deadline:  deadline?.toISOString() || null,
+            suspended: userRow.rows[0]?.legal_suspended === true
+        });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

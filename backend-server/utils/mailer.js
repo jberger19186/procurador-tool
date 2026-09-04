@@ -362,6 +362,44 @@ async function sendAdminSuspendedEmail(email, nombre, reason) {
     );
 }
 
+// ── B.7 (fase E5) — términos no aceptados ────────────────────────────────────
+// Los dispara el cron `legal-suspend` de server.js. El link va a /legal/accept/,
+// que desde esta fase está montado (antes existía el HTML pero no la ruta).
+const ACCEPT_URL = () => `${process.env.BASE_URL || 'https://api.procuradortool.com'}/legal/accept/`;
+
+// Recordatorio a los 12 días — la cuenta TODAVÍA NO está suspendida.
+async function sendLegalDeadlineReminderEmail(email, nombre, fechaLimite) {
+    await sendEmail(
+        email,
+        'Te quedan 3 días para aceptar los términos — Procurador SCW',
+        emailLayout(`
+          ${p(`Hola <strong>${escapeHtml(nombre || '')}</strong>,`)}
+          ${p('Todavía no aceptaste los términos actualizados.')}
+          ${infoBox(`Tenés tiempo hasta el <strong>${dateAR(fechaLimite)}</strong>. Pasada esa fecha, tu acceso queda suspendido hasta que los aceptes.`, '#d97706')}
+          ${btnPrimary(ACCEPT_URL(), 'Revisar y aceptar →')}
+          ${p('Aceptarlos toma menos de un minuto y no perdés ningún dato.')}
+        `, '#d97706')
+    );
+}
+
+// Suspensión efectiva — la cuenta YA está suspendida.
+// El texto es deliberadamente concreto sobre cómo salir: la suspensión se revierte
+// sola al aceptar (POST /legal/accept pone legal_suspended=FALSE), sin intervención
+// del administrador ni espera.
+async function sendLegalSuspendedEmail(email, nombre) {
+    await sendEmail(
+        email,
+        'Tu acceso quedó suspendido — Procurador SCW',
+        emailLayout(`
+          ${p(`Hola <strong>${escapeHtml(nombre || '')}</strong>,`)}
+          ${infoBox('Venció el plazo de 15 días para aceptar los términos actualizados, así que <strong>tu acceso quedó suspendido</strong>.', '#dc2626')}
+          ${p('Podés seguir ingresando a tu cuenta y consultar tus datos. Lo que queda bloqueado es ejecutar procesos y cargar información nueva.')}
+          ${btnPrimary(ACCEPT_URL(), 'Aceptar y restablecer el acceso →')}
+          ${p('El acceso se restablece en el momento en que aceptás — no hay que esperar ni escribir a soporte.')}
+        `, '#dc2626')
+    );
+}
+
 async function sendReactivationResultEmail(email, nombre, approved, reason) {
     const subject = approved ? 'Tu acceso fue restaurado — Procurador SCW' : 'Tu solicitud fue revisada — Procurador SCW';
     const accent = approved ? '#16a34a' : '#dc2626';
@@ -619,6 +657,8 @@ module.exports = {
     sendAdminReactivationRequest,
     sendTicketReplyEmail,
     sendPasswordResetEmail,
+    sendLegalDeadlineReminderEmail,
+    sendLegalSuspendedEmail,
     sendVerificationAlert,
     sendHealthAlert,
     // Fase 5

@@ -674,7 +674,14 @@ router.post('/login', loginLimiter, async (req, res) => {
             user: {
                 id: user.id,
                 role: user.role,
-                registrationStatus: user.registration_status
+                registrationStatus: user.registration_status,
+                // B.7 (fase E5): informativo, NO bloqueante. El login del suspendido
+                // por términos tiene que seguir funcionando: es la única forma de
+                // llegar a /legal/accept/, que necesita este mismo token. Lo que se
+                // bloquea es operar (execution/start, scripts, escrituras de Bitácora).
+                // El cliente muestra el aviso con el link; hasta que lo implemente
+                // (release 2.7.55, fase E8) el campo simplemente se ignora.
+                legalSuspended: user.legal_suspended === true
             },
             subscription: {
                 plan: subscription.plan,

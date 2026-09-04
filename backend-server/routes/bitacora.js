@@ -38,6 +38,7 @@ const multer = require('multer');
 const ExcelJS = require('exceljs');
 const authenticateToken = require('../middleware/authenticateToken');
 const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
+const requireLegalOk = require('../middleware/requireLegalOk');
 const { expedienteKey, esExpedienteValido } = require('../utils/expedienteKey');
 const { reclamarDraft } = require('../utils/captureDrafts');
 
@@ -1965,9 +1966,18 @@ sugerencias.post('/descartar-todas', async (req, res) => {
 //  MONTAJE — ver el recuadro P1 del encabezado antes de tocar esto
 // ═══════════════════════════════════════════════════════════════════════════
 // El gate va acá, sobre cada sub-path. NUNCA sobre el router.
-router.use('/bitacora',    authenticateToken, checkBitacoraPlan(), entradas);
-router.use('/expedientes', authenticateToken, checkBitacoraPlan(), expedientes);
-router.use('/feriados',    authenticateToken, checkBitacoraPlan(), feriados);
-router.use('/sugerencias', authenticateToken, checkBitacoraPlan(), sugerencias);
+//
+// B.7 (fase E5): `requireLegalOk({ soloEscrituras: true })` se suma en la misma
+// posición, con la MISMA regla del recuadro P1 — sobre los sub-paths, jamás sobre
+// el router (alcanzaría /profile, /payments, /invoices de usuarios.js).
+// `soloEscrituras` deja pasar GET/HEAD/OPTIONS sin tocar la base: al suspendido se
+// le corta agregar cosas nuevas, no leer ni exportar lo que ya es suyo. Se monta
+// acá y no en cada `entradas.post(...)` a propósito: son 12 definiciones de
+// escritura repartidas en 4 sub-routers, y un olvido en una sola de ellas sería
+// invisible. Un `router.use` no se puede olvidar.
+router.use('/bitacora',    authenticateToken, checkBitacoraPlan(), requireLegalOk({ soloEscrituras: true }), entradas);
+router.use('/expedientes', authenticateToken, checkBitacoraPlan(), requireLegalOk({ soloEscrituras: true }), expedientes);
+router.use('/feriados',    authenticateToken, checkBitacoraPlan(), requireLegalOk({ soloEscrituras: true }), feriados);
+router.use('/sugerencias', authenticateToken, checkBitacoraPlan(), requireLegalOk({ soloEscrituras: true }), sugerencias);
 
 module.exports = router;
