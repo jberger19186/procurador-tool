@@ -1,8 +1,8 @@
 # Propuesta — el snapshot de informe guarda solo movimientos actuales
 
-> ✅ **ESTADO: F1+F2 EJECUTADAS Y DESPLEGADAS. Release `electron-v2.7.58` publicado.**
-> ⏳ **Falta F3** (corrida real tildando las secciones) — y falta el **deploy de backend a producción**:
-> hoy solo está en staging, así que la feature todavía NO funciona para nadie.
+> ✅ **ESTADO: CERRADA — F1, F2, F3 y F4 hechas. En producción y verificada con datos reales.**
+> Release `electron-v2.7.58` + backend en staging y producción. Corrida real del operador el
+> 2026-09-04 23:05: snapshot **46** con las 6 secciones pobladas. Detalle en §10.
 > Diagnóstico hecho el 2026-09-04 contra los backups reales de corridas del operador y el código real.
 > Implementada por un agente independiente; el corte por tamaño lo corregí yo después (§9).
 > Continuación de [`propuesta-fix-snapshot-informe-bitacora-2026-09-04.md`](propuesta-fix-snapshot-informe-bitacora-2026-09-04.md),
@@ -304,3 +304,69 @@ servido == SHA512 local, y `/client/download/electron` → **302** al `.exe` cor
 2. **F3** — un informe real **tildando todas las secciones** (ninguna corrida existente las tiene),
    guardarlo a Bitácora y confirmar el modal. Consume **3 usos** de cupo.
 3. **F4** — cierre en `CLAUDE.md` (esta entrada ya lo cubre en parte).
+
+
+---
+
+## 10. F3 — corrida real (2026-09-04 23:05)
+
+Ejecutada por el operador con la app **2.7.58** ya instalada, informe de `FCR 18745/2017` contra el
+PJN real, tildando las secciones.
+
+**Resultado, verificado por SQL en producción** — el contraste con el snapshot de esa misma tarde es
+lo que prueba la feature:
+
+| Snapshot | Hora | movs | históricos | intervinientes | vinculados | recursos | notas | pdf |
+|---|---|---|---|---|---|---|---|---|
+| **45** (antes del cambio) | 17:31 | 15 | 0 | 0 | 0 | 0 | 0 | ✅ |
+| **46** (después) | 23:05 | 15 | **15** | **6** | **2** | **2** | **1** | ✅ |
+
+Los históricos llegaron al **tope de 15**, así que el recorte se ejercitó de verdad.
+
+**Corrida real confirmada por los contadores del servidor**, no por impresión: `informe_usage`
+63→64 y una fila en `usage_logs` a las 23:04 con `subsystem='informe'` y `success=true`.
+
+### 🎯 Lo más importante del resultado: los intervinientes salieron limpios
+
+```
+"ACTOR|NOMBRE :
+AFIP-DGI (BD 7570/10/2017)||"
+"LETRADO APODERADO|JONATHAN ANDRES BERGER|Tomo: 122 Folio: 68 - Federal|27320694359"
+"LETRADO APODERADO|FLORENCIA DE DIOS|Tomo: 122 Folio: 15 - Federal|27327439192"
+"DEMANDADO|NOMBRE :
+PARDO MONTOYA SHIRLEY LICET||"
+"FISCALIA|FISCAL|I.E.J."
+"FISCALIA DE CAMARA DE COMODORO RIVADAVIA|DRA. VERONICA RAQUEL ESCRIBANO|23213552554"
+```
+
+6 entradas reales: **sin la fila de encabezado `TIPO|NOMBRE|TOMO/FOLIO :`, sin filas vacías y sin la
+duplicación completa de la tabla** que trae el backup crudo. Confirma con datos reales del PJN que la
+réplica de `testM2.js:2156-2177` hace lo mismo que el original — que era el riesgo principal de haber
+tenido que duplicar esa lógica.
+
+### ⚠️ Observación honesta, NO corregida
+
+En **`vinculados` y `recursos` la fila de encabezado de la tabla del PJN se guarda como un item más**:
+
+```
+"EXPEDIENTE|DEPENDENCIA|SITUACION|CARATULA|ULT. ACT.|"      ← encabezado, se cuenta como vinculado
+"FCR 018745/2017/1|JUZGADO FEDERAL DE RIO GALLEGOS - ...|"  ← el vinculado real
+```
+
+Así que el modal muestra **"Vinculados (2)"** donde solo **1** es real.
+
+**No es un bug del fix ni un descuido:** la limpieza de encabezados existe solo para intervinientes,
+y aplicarle esa misma heurística a las otras 3 secciones se descartó a propósito en F1 (formatos
+distintos, y `testM2.js` tampoco lo hace — **el PDF muestra exactamente lo mismo**). Es un detalle de
+calidad de dato, no de integridad: el contenido real está y es correcto.
+
+**Candidato a pulir** si molesta en el uso real. El arreglo natural sería descartar la primera fila
+cuando todas sus celdas son nombres de columna, pero es heurística sobre texto libre del PJN y
+merece medirse contra varios expedientes antes de aplicarla — exactamente el error que esta misma
+propuesta advertía evitar (§F1: "un normalizador genérico que arregla intervinientes de más").
+
+### Lo que quedó sin verificar
+
+**El modal del portal a ojo, por mí**: la extensión de Chrome se desconectó al final de la sesión.
+Está cubierto por 9 tests que extraen las funciones reales del fuente (`mexp-snapshot-render.test.js`)
+y el operador confirmó haberlo visto. No se afirma más que eso.
