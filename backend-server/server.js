@@ -168,7 +168,12 @@ app.use(express.json({
 // evaluado y DESCARTADO (§4.1.1 del plan): reabriría el problema que motivó el cap
 // de longitud de POST /tickets (hallazgo C5) — un límite global generoso habilita
 // abuso en todo endpoint que hoy depende de esos 100 KB como techo implícito.
-app.use('/usuarios/capture', express.urlencoded({ extended: false, limit: '5mb' }));
+// H-BE-02 (auditoría 2026-09): el límite baja de 5 MB a 1 MB. El tope REAL por
+// borrador son los 256 KB de utils/captureDrafts.js; este parser es la primera
+// barrera y su único trabajo es no bufferear en memoria un cuerpo que después se
+// va a rechazar igual. Un lote real (200 casos × 15 movimientos) mide < 200 KB.
+// ⚠️ Solo cambia el límite: la POSICIÓN de esta línea es la de siempre (ver arriba).
+app.use('/usuarios/capture', express.urlencoded({ extended: false, limit: '1mb' }));
 
 app.use(express.urlencoded({ extended: false })); // Para formularios HTML (reset-password, etc.)
 

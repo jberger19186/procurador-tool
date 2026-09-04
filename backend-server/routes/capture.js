@@ -20,9 +20,10 @@
  *
  * Lo que sostiene que eso no sea un agujero:
  *   · Rate-limit dedicado (captureLimiter, 30/5min por IP).
- *   · Parser de body propio y acotado (5 MB) — ver el montaje en server.js (P2).
- *   · Borradores con id de 32 bytes aleatorios, TTL de 10 min, uso único y tope
- *     de simultáneos (utils/captureDrafts.js).
+ *   · Parser de body propio y acotado (1 MB desde H-BE-02) — ver el montaje en
+ *     server.js (P2).
+ *   · Borradores con id de 32 bytes aleatorios, TTL de 10 min, uso único y topes
+ *     de simultáneos Y de bytes retenidos (utils/captureDrafts.js, H-BE-02).
  *   · NADA se persiste acá. El payload es entrada no confiable: se valida y se
  *     acota, pero vive solo en un buffer hasta que un usuario autenticado lo reclama.
  *   · El redirect se arma ÍNTEGRAMENTE del lado del servidor. El campo `goto` que
@@ -130,7 +131,20 @@ router.post('/', (req, res) => {
         casos = casos.filter(c => c.expediente.length > 0);
         if (casos.length === 0) return redirigir(res, { captura: 'error' });
 
-        const draftId = crearDraft({ accion, tipo, origen, casos, creado: new Date().toISOString() });
+        // H-BE-02: el tope de BYTES vive en captureDrafts.js (no acá) porque es el
+        // módulo que retiene la memoria. Un payload que lo excede se rechaza ANTES de
+        // guardar nada — se avisa con el mismo código que el lote de más de 200 filas,
+        // que es el mismo mensaje útil para el usuario: "achicá la selección".
+        let draftId;
+        try {
+            draftId = crearDraft({ accion, tipo, origen, casos, creado: new Date().toISOString() });
+        } catch (e) {
+            if (e && e.code === 'DRAFT_TOO_LARGE') {
+                console.warn(`⚠️ Captura rechazada por tamaño: ${e.bytes} bytes (máx ${e.max})`);
+                return redirigir(res, { captura: 'lote_grande', max: String(MAX_CASOS_LOTE) });
+            }
+            throw e;
+        }
         return redirigir(res, { draft: draftId });
     } catch (error) {
         console.error('Error recibiendo captura de bitácora:', error);

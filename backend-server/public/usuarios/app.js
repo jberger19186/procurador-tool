@@ -64,6 +64,20 @@ function saveToken(t) {
     state.token = t;
 }
 
+// H-COV-Z2-01 (auditoría 2026-09) — lee el payload de un JWT SIN verificar la firma.
+// Es para ENRUTAR del lado del cliente (¿este token es mío? ¿está vencido?), nunca
+// para autorizar: la verificación real la hace el servidor en cada request. Devuelve
+// null si no es un JWT bien formado.
+// El `replace` de base64url (`-`→`+`, `_`→`/`) es necesario: atob() no lo entiende.
+function parseJwtPayload(t) {
+    try {
+        const b64 = String(t).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        return JSON.parse(atob(b64));
+    } catch (_) {
+        return null;
+    }
+}
+
 function clearToken() {
     localStorage.removeItem(TOKEN_KEY);
     state.token = null;
@@ -3110,18 +3124,51 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Auto-login desde Electron (token en hash #sso=..., sección ya capturada arriba)
+    //
+    // H-COV-Z2-01 (auditoría 2026-09): antes esto guardaba CUALQUIER cosa que viniera
+    // después de `#sso=` como sesión, sin mirarla. El fragmento no llega al servidor,
+    // así que ningún control de `routes/` interviene: mandarle a alguien logueado un
+    // link `…/usuarios/#sso=<jwt del atacante>` le reemplazaba la sesión en silencio
+    // (y `history.replaceState` borraba el rastro). Todo lo que esa persona cargara
+    // después —expedientes, entradas de Bitácora, importaciones de backup— quedaba en
+    // la cuenta del atacante. Ahora: se exige que sea un JWT bien formado y vigente, y
+    // si cambia de cuenta se pide confirmación.
+    //
+    // ⚠️ El `return` de abajo solo se ejecuta cuando el token se ACEPTA. Si se rechaza
+    // se cae al flujo normal del final de este handler (`getToken()` → sesión existente
+    // o pantalla de login), que es justamente lo que hace que "no pise". No mover
+    // wiring detrás de ese return (lección del fix a71987b).
     const hash = window.location.hash;
     if (hash && hash.startsWith('#sso=')) {
         const ssoToken = hash.slice(5);
-        if (ssoToken) {
+        // Limpiar hash y query para no exponerlos en el historial del navegador.
+        // Se hace siempre, se acepte o no el token: no tiene por qué quedar a la vista.
+        history.replaceState(null, '', window.location.pathname);
+
+        const entrante = parseJwtPayload(ssoToken);
+        const vigente  = !!entrante && typeof entrante.exp === 'number' && entrante.exp * 1000 > Date.now();
+        const actual   = parseJwtPayload(getToken() || '');
+        const cambiaDeCuenta = !!actual && !!entrante && actual.id !== entrante.id;
+
+        let aceptar = !!ssoToken && vigente;
+        if (aceptar && cambiaDeCuenta) {
+            // El JWT de Electron trae { id, role } sin email — de ahí el fallback.
+            aceptar = await showConfirm(
+                'Este enlace inicia sesión como ' + (entrante.email || 'otro usuario') +
+                ' y cierra tu sesión actual. ¿Continuar?',
+                { confirmLabel: 'Cambiar de cuenta' }
+            );
+        }
+
+        if (aceptar) {
             saveToken(ssoToken);
-            // Limpiar hash y query para no exponerlos en el historial del navegador
-            history.replaceState(null, '', window.location.pathname);
             state.token = ssoToken;
             await initDashboard();
             // initDashboard() ya consume pending_goto y navega
             return;
         }
+        // Token ausente, malformado, vencido, o el usuario canceló el cambio de cuenta:
+        // sigue el flujo normal de abajo con la sesión que ya hubiera (o el login).
     }
 
     // Si solo había ?goto=/draft=/captura= sin SSO, limpiar la URL (ya están en sessionStorage)
@@ -4893,7 +4940,7 @@ async function descargarExportBitacora() {
 // plan del endpoint— se reclama y se decide qué hacer según `accion`.
 
 function mensajeCapturaError(code) {
-    if (code === 'lote_grande') return 'La selección tenía demasiados casos para capturar de una vez (máximo 200). Probá con una selección más chica.';
+    if (code === 'lote_grande') return 'La selección era demasiado grande para capturar de una vez (máximo 200 casos, y hasta 256 KB de datos). Probá con una selección más chica.';
     return 'No se pudo procesar la captura desde el visor. Volvé al visor y probá de nuevo.';
 }
 
@@ -4922,10 +4969,29 @@ async function aplicarCaptureDraft(draft) {
         showToast('El borrador de captura llegó vacío.', 'error');
         return;
     }
-    if (accion === 'ficha' || accion === 'ficha-lote') {
-        await guardarFichasDesdeDraft(casos, origen, 'ficha-lote');
-    } else if (accion === 'snapshot' || accion === 'snapshot-lote') {
-        await guardarFichasDesdeDraft(casos, origen, 'snapshot-lote');
+    // H-COV-Z2-02 parte 1 / decisión B.5 (auditoría 2026-09): confirmación antes de
+    // escribir. El borrador de captura es anónimo por diseño y HOY no tiene dueño:
+    // `reclamarDraft(id)` se lo entrega a cualquier usuario autenticado que presente
+    // el id, y el id se lo lleva el atacante del `Location` de su propio POST. Sin
+    // este diálogo, abrir un link `?draft=…` ajeno escribía hasta 200 expedientes
+    // elegidos por otro en "Mis Expedientes" del que lo abriera, sin preguntar nada
+    // — justo lo contrario de lo que declara routes/capture.js ("recién cuando el
+    // usuario confirma en el portal, algo se escribe").
+    // `entrada-lote` ya tenía su pantalla de revisión; `entrada` abre un modal que el
+    // usuario tiene que guardar. Las que escribían solas son estas dos.
+    // La otra mitad (que el borrador nazca atado a su dueño) necesita la llave de
+    // captura y va en la fase de B.3/B.5.
+    if (accion === 'ficha' || accion === 'ficha-lote' || accion === 'snapshot' || accion === 'snapshot-lote') {
+        const lista = casos.slice(0, 5)
+            .map(c => '• ' + c.expediente + ' — ' + String(c.caratula || '').slice(0, 60))
+            .join('\n');
+        const ok = await showConfirm(
+            'Se van a guardar ' + casos.length + ' caso(s) en Mis Expedientes:\n' +
+            lista + (casos.length > 5 ? '\n…' : '') + '\n\n¿Confirmás?',
+            { confirmLabel: 'Guardar' }
+        );
+        if (!ok) { showToast('Captura descartada.', 'info'); return; }
+        await guardarFichasDesdeDraft(casos, origen, accion.startsWith('snapshot') ? 'snapshot-lote' : 'ficha-lote');
     } else if (accion === 'entrada') {
         await abrirEntradaIndividualDesdeDraft(casos[0], origen, tipo);
     } else if (accion === 'entrada-lote') {

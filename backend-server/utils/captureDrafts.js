@@ -17,8 +17,9 @@
  *   · id de 32 bytes aleatorios (crypto.randomBytes) — no adivinable, mismo
  *     patrón que los tokens de verificación de email de auth.js.
  *   · TTL corto (10 min) + USO ÚNICO: reclamar un borrador lo borra.
- *   · Tope de borradores simultáneos — sin él, esto sería un sumidero de memoria
- *     alimentable desde internet (el rate-limit acota la frecuencia, no el total).
+ *   · Tope de borradores simultáneos Y de bytes retenidos (H-BE-02) — sin ellos,
+ *     esto sería un sumidero de memoria alimentable desde internet (el rate-limit
+ *     acota la frecuencia, no el volumen).
  *
  * ⚠️ VIVE EN MEMORIA DEL PROCESO — igual que la blacklist de tokens, y con la
  * misma condición: `ecosystem.config.js` corre `procurador-api` con
@@ -33,32 +34,83 @@ const crypto = require('crypto');
 const TTL_MS = 10 * 60 * 1000;   // 10 minutos
 const MAX_DRAFTS = 100;          // tope de borradores vivos simultáneos
 
-const drafts = new Map();        // id → { payload, expiresAt }
+// H-BE-02 (auditoría 2026-09) — topes de BYTES, no solo de cantidad.
+// El tope de 100 borradores no acota la memoria: con el parser de captura
+// aceptando cuerpos grandes, 100 borradores al tope daban cientos de MB
+// retenidos, y `ecosystem.config.js` reinicia el proceso en `max_memory_restart:
+// 400M`. O sea: un endpoint anónimo podía reiniciar la API. Ahora hay dos cotas:
+//   · MAX_DRAFT_BYTES — por borrador. Un lote real (200 casos × 15 movimientos)
+//     mide menos de 200 KB, así que 256 KB deja margen y rechaza lo patológico.
+//   · MAX_TOTAL_BYTES — presupuesto global de todo lo retenido. Al superarlo se
+//     desaloja el más viejo hasta que entre, igual que con MAX_DRAFTS.
+// El techo real de memoria de este módulo pasa a ser MAX_TOTAL_BYTES + overhead.
+const MAX_DRAFT_BYTES = 256 * 1024;        // 256 KB por borrador
+const MAX_TOTAL_BYTES = 16 * 1024 * 1024;  // 16 MB retenidos entre todos
 
-/** Descarta los vencidos. Se llama en cada operación (evita un timer que mantenga vivo el proceso). */
+const drafts = new Map();        // id → { payload, bytes, expiresAt }
+let totalBytes = 0;              // suma de `bytes` de los vivos (invariante del Map)
+
+/** Baja del presupuesto y borra. Único punto que toca `totalBytes` al eliminar. */
+function borrar(id) {
+    const d = drafts.get(id);
+    if (!d) return;
+    totalBytes -= d.bytes;
+    drafts.delete(id);
+}
+
+/** Descarta los vencidos. Se llama en cada operación y también por timer (ver abajo). */
 function purgarVencidos() {
     const ahora = Date.now();
     for (const [id, d] of drafts.entries()) {
-        if (d.expiresAt <= ahora) drafts.delete(id);
+        if (d.expiresAt <= ahora) borrar(id);
     }
 }
 
+/** Desaloja el más viejo por vencimiento (FIFO). Devuelve false si no quedaba ninguno. */
+function desalojarMasViejo() {
+    let masViejo = null;
+    for (const [id, d] of drafts.entries()) {
+        if (!masViejo || d.expiresAt < masViejo[1].expiresAt) masViejo = [id, d];
+    }
+    if (!masViejo) return false;
+    borrar(masViejo[0]);
+    return true;
+}
+
+// H-BE-02 — purga por timer, además de la purga oportunista de cada operación.
+// Sin esto, un pico de borradores sube la memoria y ahí se queda hasta la próxima
+// captura: si nadie vuelve a capturar, nada libera. `unref()` es lo que impide que
+// este intervalo mantenga vivo el proceso (la razón por la que el diseño original
+// no tenía timer).
+const purgaTimer = setInterval(purgarVencidos, 60 * 1000);
+if (typeof purgaTimer.unref === 'function') purgaTimer.unref();
+
 /**
  * Guarda un borrador y devuelve su id opaco.
- * Si se llegó al tope, descarta el más viejo (FIFO por vencimiento) — preferible
- * a rechazar la captura del usuario legítimo que llega último.
+ * Si se llegó a algún tope (cantidad o bytes), descarta los más viejos (FIFO por
+ * vencimiento) — preferible a rechazar la captura del usuario legítimo que llega último.
+ * Si el borrador por sí solo excede MAX_DRAFT_BYTES, lanza `DRAFT_TOO_LARGE`: no se
+ * desaloja a nadie ni se retiene nada (el llamador responde `captura=lote_grande`).
  */
 function crearDraft(payload) {
-    purgarVencidos();
-    if (drafts.size >= MAX_DRAFTS) {
-        let masViejo = null;
-        for (const [id, d] of drafts.entries()) {
-            if (!masViejo || d.expiresAt < masViejo[1].expiresAt) masViejo = [id, d];
-        }
-        if (masViejo) drafts.delete(masViejo[0]);
+    const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    if (bytes > MAX_DRAFT_BYTES) {
+        const err = new Error('Borrador de captura demasiado grande');
+        err.code = 'DRAFT_TOO_LARGE';
+        err.bytes = bytes;
+        err.max = MAX_DRAFT_BYTES;
+        throw err;   // NADA queda en memoria: el rechazo es antes del `set`.
     }
+
+    purgarVencidos();
+    while ((drafts.size >= MAX_DRAFTS || totalBytes + bytes > MAX_TOTAL_BYTES) && desalojarMasViejo()) {
+        // desalojarMasViejo() devuelve false con el Map vacío, así que el bucle
+        // siempre termina: un borrador de <= MAX_DRAFT_BYTES entra en MAX_TOTAL_BYTES.
+    }
+
     const id = crypto.randomBytes(32).toString('hex');
-    drafts.set(id, { payload, expiresAt: Date.now() + TTL_MS });
+    drafts.set(id, { payload, bytes, expiresAt: Date.now() + TTL_MS });
+    totalBytes += bytes;
     return id;
 }
 
@@ -70,7 +122,7 @@ function reclamarDraft(id) {
     if (typeof id !== 'string' || id.length === 0) return null;
     const d = drafts.get(id);
     if (!d) return null;
-    drafts.delete(id);                       // uso único, incluso si estaba vencido
+    borrar(id);                              // uso único, incluso si estaba vencido
     if (d.expiresAt <= Date.now()) return null;
     return d.payload;
 }
@@ -78,7 +130,17 @@ function reclamarDraft(id) {
 /** Solo para tests/diagnóstico. */
 function _stats() {
     purgarVencidos();
-    return { vivos: drafts.size, max: MAX_DRAFTS, ttlMs: TTL_MS };
+    return {
+        vivos: drafts.size,
+        max: MAX_DRAFTS,
+        ttlMs: TTL_MS,
+        bytes: totalBytes,
+        maxDraftBytes: MAX_DRAFT_BYTES,
+        maxTotalBytes: MAX_TOTAL_BYTES,
+    };
 }
 
-module.exports = { crearDraft, reclamarDraft, _stats, TTL_MS, MAX_DRAFTS };
+module.exports = {
+    crearDraft, reclamarDraft, _stats,
+    TTL_MS, MAX_DRAFTS, MAX_DRAFT_BYTES, MAX_TOTAL_BYTES,
+};

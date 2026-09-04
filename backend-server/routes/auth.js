@@ -24,6 +24,23 @@ function validarCuit(cuit) {
     return check === parseInt(clean[10]);
 }
 
+// ─── Validación de formato de email (H-FE-02 / H-FE-14, auditoría 2026-09) ───
+// El registro validaba contraseña, CUIT, plan y TyC — el email, no. Un email con
+// HTML adentro se guardaba tal cual y salía sin escapar en el detalle de ticket
+// del dashboard admin (`author_email`), completando un XSS almacenado de usuario
+// común a sesión de administrador. El escape del sink ya está puesto; esto es la
+// otra mitad: que el dato sucio no entre.
+// Deliberadamente estrecho, no RFC 5322: rechaza espacios, `<`, `>`, comillas y
+// paréntesis. Un email RFC exótico con esos caracteres pasaría a rechazarse; es
+// el compromiso aceptado en el hallazgo.
+// ⚠️ Copia gemela en routes/admin.js (misma convención que validarCuit/validarCuitAdmin).
+// Si cambia una, cambiar la otra.
+const EMAIL_RE = /^[^\s@<>"'()]+@[^\s@<>"'()]+\.[^\s@<>"'()]+$/;
+function validarEmail(email) {
+    const v = String(email || '').trim();
+    return v.length > 0 && v.length <= 254 && EMAIL_RE.test(v);
+}
+
 // ─── Helper: verificar disponibilidad de promo de un plan ────────────────────
 function isPromoAvailable(plan) {
     if (!plan.active) return false;
@@ -145,6 +162,10 @@ router.post('/register', registerLimiter, async (req, res) => {
 
         if (!domicilio || !domicilio.calle || !domicilio.numero || !domicilio.localidad || !domicilio.provincia) {
             return res.status(400).json({ error: 'El domicilio debe incluir calle, numeración, localidad y provincia' });
+        }
+
+        if (!validarEmail(email)) {
+            return res.status(400).json({ error: 'El email no tiene un formato válido' });
         }
 
         const pwdCheck = validatePassword(password, email);
@@ -1009,10 +1030,25 @@ router.post('/admin/send-password-reset', authenticateToken, async (req, res) =>
 
     const db = req.app.get('db');
     try {
+        // H-BE-04 (auditoría 2026-09): `AND role <> 'admin'`. Sin eso, un admin le
+        // disparaba un reset a OTRO admin y —antes del fix de la proyección de
+        // GET /admin/users/:id— leía el `password_reset_token` recién emitido en la
+        // ficha del destinatario: takeover admin→admin sin acceso al email de la
+        // víctima. Los dos extremos se cierran; este es el que impide siquiera emitir
+        // el token. Un admin que necesita recuperar su propia contraseña usa el flujo
+        // público de /auth/forgot-password, que manda el link al email real.
         const userResult = await db.query(
-            'SELECT id, email, nombre FROM users WHERE id = $1', [userId]
+            "SELECT id, email, nombre FROM users WHERE id = $1 AND role <> 'admin'", [userId]
         );
-        if (userResult.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+        if (userResult.rows.length === 0) {
+            const existe = await db.query('SELECT role FROM users WHERE id = $1', [userId]);
+            if (existe.rows.length > 0) {
+                return res.status(400).json({
+                    error: 'No se puede enviar un reset de contraseña a una cuenta de administrador. Usá "Olvidé mi contraseña" desde el login.'
+                });
+            }
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
 
         const u     = userResult.rows[0];
         const token = crypto.randomBytes(32).toString('hex');

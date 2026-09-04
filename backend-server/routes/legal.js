@@ -12,6 +12,31 @@ const { sendEmail } = require('../utils/mailer');
 const authenticateAdmin = require('../middleware/authenticateAdmin');
 const authenticateUser  = require('../middleware/authenticateToken');
 
+// ─── H-COV-Z6-01 (auditoría 2026-09) ─────────────────────────────────────────
+// `GET /legal/page` devuelve `legal_documents.html_content` crudo, sin auth, en el
+// mismo origen que el portal y el dashboard. La CSP global de helmet permite
+// `'unsafe-inline'`, así que un `<script>` o un `onerror=` guardado por un admin
+// (o por quien le robe la sesión con un XSS del dashboard) se ejecutaba en el
+// navegador de cualquier visitante, con acceso a `localStorage.psc_user_token` y
+// `admin_token`. S5 cerró exactamente este payload en la vista previa del
+// dashboard con un iframe `sandbox`; esta ruta pública había quedado afuera.
+//
+// Se cierra por dos lados:
+//   (1) al SERVIR: cabecera CSP propia que pisa la global (abajo, en /page).
+//   (2) al GUARDAR: este tripwire, que rechaza el documento antes del INSERT/UPDATE.
+// El sanitizador con allowlist (dependencia nueva) queda para cuando se toque el
+// editor legal — decisión D.2 de la planilla.
+const HTML_PELIGROSO = /<\s*(script|iframe|object|embed)\b|\son\w+\s*=|javascript:/i;
+function rechazarHtmlPeligroso(html_content, res) {
+    if (HTML_PELIGROSO.test(String(html_content || ''))) {
+        res.status(400).json({
+            error: 'html_content no puede contener scripts, frames ni handlers inline'
+        });
+        return true;
+    }
+    return false;
+}
+
 // ── PUBLIC — contenido actual para /terminos/ y /privacidad/ ─────────────────
 // GET /legal/page?type=tyc|pyp
 router.get('/page', async (req, res) => {
@@ -25,6 +50,20 @@ router.get('/page', async (req, res) => {
         if (!result.rows.length) return res.status(404).send(null); // caerá al estático
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
+        // H-COV-Z6-01 — mismo aislamiento que S5 le puso a la vista previa del
+        // dashboard, pero para la ruta pública. `sandbox` sin `allow-scripts` es lo
+        // que impide que corra JS embebido en el documento; el resto del HTML de
+        // presentación (títulos, listas, tablas, links, estilos inline) sigue igual.
+        // `allow-same-origin` va A PROPÓSITO: la página de aceptación (B.7) muestra
+        // esta ruta dentro de un iframe del mismo origen y necesita leer
+        // `contentDocument` para calcular el alto. Con `allow-same-origin` y SIN
+        // `allow-scripts` eso funciona y los scripts siguen bloqueados.
+        // ⚠️ Si algún documento usa links `target="_blank"`, hay que sumar
+        // `allow-popups` a la directiva.
+        res.setHeader('Content-Security-Policy',
+            "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; " +
+            "sandbox allow-same-origin; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
         res.send(result.rows[0].html_content);
     } catch (e) {
         res.status(500).send(null);
@@ -172,6 +211,7 @@ router.post('/admin/documents', authenticateAdmin, async (req, res) => {
         if (!type || !['tyc','pyp'].includes(type)) return res.status(400).json({ error: 'Tipo inválido (tyc o pyp)' });
         if (!version?.trim() || !title?.trim() || !html_content?.trim())
             return res.status(400).json({ error: 'Faltan campos: version, title, html_content' });
+        if (rechazarHtmlPeligroso(html_content, res)) return;   // H-COV-Z6-01
 
         const result = await db.query(`
             INSERT INTO legal_documents
@@ -202,6 +242,7 @@ router.put('/admin/documents/:id', authenticateAdmin, async (req, res) => {
             return res.status(400).json({ error: 'No se puede editar un documento publicado. Creá una nueva versión.' });
 
         const { version, title, html_content, summary_of_changes, requires_acceptance, effective_date } = req.body;
+        if (rechazarHtmlPeligroso(html_content, res)) return;   // H-COV-Z6-01
         await db.query(`
             UPDATE legal_documents
             SET version=$1, title=$2, html_content=$3, summary_of_changes=$4,
@@ -238,11 +279,34 @@ router.put('/admin/documents/:id/publish', authenticateAdmin, async (req, res) =
         const doc = docResult.rows[0];
         if (doc.is_current) return res.status(400).json({ error: 'Ya está publicado' });
 
-        // Transacción: marcar como actual, desmarcar anterior
-        await db.query('BEGIN');
-        await db.query('UPDATE legal_documents SET is_current=false WHERE type=$1 AND is_current=true', [doc.type]);
-        await db.query('UPDATE legal_documents SET is_current=true WHERE id=$1', [doc.id]);
-        await db.query('COMMIT');
+        // H-BE-05 (auditoría 2026-09): esto era `db.query('BEGIN')` sobre el POOL, no
+        // sobre una conexión. Cada `db.query()` toma una conexión cualquiera del pool
+        // y la devuelve al terminar, así que la transacción era ficticia: el BEGIN
+        // podía quedar en una conexión y los UPDATE ejecutarse (auto-commit) en otras.
+        // Peor todavía, la conexión que recibió el BEGIN volvía al pool CON LA
+        // TRANSACCIÓN ABIERTA: el siguiente request que la tomara escribía adentro de
+        // esa transacción ajena, y esas escrituras se perdían con el ROLLBACK
+        // implícito. Por eso el ROLLBACK del catch exterior también se elimina: sobre
+        // el pool podía abortar la transacción de OTRO request.
+        // Patrón correcto (el mismo de auth.js:179-251): connect → BEGIN → COMMIT →
+        // release en finally.
+        const client = await db.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('UPDATE legal_documents SET is_current=false WHERE type=$1 AND is_current=true', [doc.type]);
+            await client.query('UPDATE legal_documents SET is_current=true WHERE id=$1', [doc.id]);
+            await client.query('COMMIT');
+        } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw e;
+        } finally {
+            client.release();
+        }
+        // A partir de acá la publicación YA está confirmada. Las notificaciones van
+        // fuera de la transacción a propósito: es un bucle sobre todos los usuarios y
+        // mantener una conexión tomada durante todo eso sería peor que el bug que se
+        // acaba de arreglar. Si algo falla notificando, el documento queda publicado
+        // (que es lo correcto) y el error se loguea.
 
         // Usuarios activos que no aceptaron este documento
         const usersResult = await db.query(`
@@ -310,7 +374,9 @@ router.put('/admin/documents/:id/publish', authenticateAdmin, async (req, res) =
         logger.info(`📢 [Legal] Publicado ${doc.type} v${doc.version} — ${notified} usuarios notificados`);
         res.json({ success: true, notified });
     } catch (e) {
-        await db.query('ROLLBACK').catch(() => {});
+        // Sin ROLLBACK acá: la transacción se abre y se cierra sobre `client`, dentro
+        // de su propio try/finally. Un ROLLBACK sobre el pool desde este catch es
+        // exactamente el defecto que se corrigió arriba.
         logger.error('[Legal] Error al publicar:', e.message);
         res.status(500).json({ error: e.message });
     }

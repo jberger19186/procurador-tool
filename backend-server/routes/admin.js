@@ -24,6 +24,23 @@ function validarCuitAdmin(cuit) {
     return check === parseInt(clean[10]);
 }
 
+// ─── Validación de formato de email (H-FE-02 / H-FE-14, auditoría 2026-09) ───
+// El registro validaba contraseña, CUIT, plan y TyC — el email, no. Un email con
+// HTML adentro se guardaba tal cual y salía sin escapar en el detalle de ticket
+// del dashboard admin (`author_email`), completando un XSS almacenado de usuario
+// común a sesión de administrador. El escape del sink ya está puesto; esto es la
+// otra mitad: que el dato sucio no entre.
+// Deliberadamente estrecho, no RFC 5322: rechaza espacios, `<`, `>`, comillas y
+// paréntesis. Un email RFC exótico con esos caracteres pasaría a rechazarse; es
+// el compromiso aceptado en el hallazgo.
+// ⚠️ Copia gemela en routes/auth.js (misma convención que validarCuit/validarCuitAdmin).
+// Si cambia una, cambiar la otra.
+const EMAIL_RE = /^[^\s@<>"'()]+@[^\s@<>"'()]+\.[^\s@<>"'()]+$/;
+function validarEmail(email) {
+    const v = String(email || '').trim();
+    return v.length > 0 && v.length <= 254 && EMAIL_RE.test(v);
+}
+
 // F10 (2026-08-31): payments.status no tiene CHECK constraint en el schema (character
 // varying(30) sin enum) — mismos 4 valores que ofrece el <select> del dashboard.
 const PAYMENT_STATUSES = ['approved', 'pending', 'rejected', 'refunded'];
@@ -254,6 +271,7 @@ router.post('/users', authenticateAdmin, async (req, res) => {
     for (const [k, v] of Object.entries(required)) {
         if (!v || String(v).trim() === '') return res.status(400).json({ error: `El campo '${k}' es requerido` });
     }
+    if (!validarEmail(email)) return res.status(400).json({ error: 'El email no tiene un formato válido' });
     const pwdCheck = validatePassword(password, email);
     if (!pwdCheck.valid) return res.status(400).json({ error: pwdCheck.error });
     if (!validarCuitAdmin(cuit)) return res.status(400).json({ error: 'CUIT/CUIL inválido. Verificá el formato y dígito verificador.' });
@@ -911,14 +929,54 @@ router.get('/users/:userId', authenticateAdmin, async (req, res) => {
     const db = req.app.get('db');
 
     try {
+        // H-BE-04 (auditoría 2026-09): antes era `SELECT u.*, s.*`, que mandaba al
+        // navegador del admin `password_hash`, `password_reset_token` y
+        // `email_verify_token`. Con eso, un admin (o cualquiera con la sesión admin
+        // robada por un XSS del dashboard) leía de la ficha el token de reset recién
+        // emitido para OTRO admin y completaba un takeover admin→admin sin tocar el
+        // email de la víctima. Ahora es una proyección explícita: los tres secretos
+        // quedan fuera y un `ALTER TABLE users ADD COLUMN <token nuevo>` no vuelve a
+        // exponerse solo.
+        //
+        // `machine_id` sale reemplazado por `machine_bound` (booleano): el dashboard
+        // solo lo usa para "¿está vinculado?" y para mostrar el botón de desvincular
+        // — no necesita el identificador de hardware en sí.
+        //
+        // ⚠️ `created_at`/`updated_at` se toman de `subscriptions` A PROPÓSITO: en el
+        // `SELECT *` anterior las columnas de `s` pisaban a las de `u` (mismo nombre,
+        // gana la última), así que eso es lo que el dashboard viene mostrando en
+        // "Registrado:". Cambiarlo a `u.created_at` sería más correcto pero altera lo
+        // que se ve en pantalla; queda como está para no mezclar un cambio de
+        // comportamiento con un fix de seguridad.
         const userResult = await db.query(`
-            SELECT u.*, s.*,
+            SELECT u.id AS id,
+                   u.email, u.role, u.last_login, u.cuit, u.nombre, u.apellido,
+                   u.domicilio, u.registration_status, u.toc_accepted_at,
+                   u.email_verified, u.email_verify_expires, u.password_reset_expires,
+                   u.legal_pending_since, u.legal_suspended, u.cuit_deleted_at,
+                   u.telefono, u.email_change_prev_status, u.admin_created,
+                   u.home_section, u.bitacora_prefs, u.bitacora_lost_access_at,
+                   (u.machine_id IS NOT NULL) AS machine_bound,
+                   s.user_id, s.plan, s.status, s.expires_at,
+                   s.usage_count, s.usage_limit,
+                   s.created_at, s.updated_at,
+                   s.plan_id, s.period_start,
+                   s.proc_usage, s.informe_usage, s.monitor_novedades_usage, s.batch_usage,
+                   s.proc_bonus, s.informe_bonus, s.monitor_novedades_bonus,
+                   s.monitor_partes_bonus, s.batch_bonus,
+                   s.suspension_cause, s.suspended_at, s.suspended_by,
+                   s.billing_paused, s.suspension_reason,
+                   s.plan_expiry_date, s.plan_changes_this_cycle,
+                   s.next_billing_date, s.payment_provider, s.cancel_at,
+                   s.scheduled_plan, s.plan_change_history, s.reactivation_request,
+                   s.payment_grace_ends_at, s.external_subscription_id,
+                   s.payment_method_id, s.last_payment_at, s.auto_renewal,
+                   s.trial_bonus_until, s.checkout_initiated_at,
                    p.display_name AS plan_display_name,
                    p.proc_executions_limit, p.proc_expedientes_limit,
                    p.batch_executions_limit, p.batch_expedientes_limit,
                    p.informe_limit, p.monitor_partes_limit, p.monitor_novedades_limit,
-                   p.period_days,
-                   u.id AS id
+                   p.period_days
             FROM users u
             LEFT JOIN subscriptions s ON u.id = s.user_id
             LEFT JOIN plans p ON s.plan_id = p.id

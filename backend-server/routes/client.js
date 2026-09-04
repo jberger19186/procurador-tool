@@ -5,6 +5,7 @@ const { scriptDownloadLimiter } = require('../middleware/rateLimiter');
 const { getSignatureCache } = require('../src/security/signatureCache');
 const { getDecryptedScript } = require('../utils/scriptEncryption');
 const authenticateToken = require('../middleware/authenticateToken');
+const { getLatestAsset } = require('../utils/githubRelease');   // H-BE-08
 const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
 
 // A.1 (revisión 2026-07-27, hallazgo E5-1/P-1): whitelist de scripts que el cliente
@@ -1087,35 +1088,15 @@ router.post('/ai/chat', authenticateToken, async (req, res) => {
 // Redirige siempre al instalador más reciente en GitHub Releases.
 // El portal usa esta URL fija — no necesita actualizarse con cada versión.
 router.get('/download/electron', authenticateToken, async (req, res) => {
+    // H-BE-08 (auditoría 2026-09): antes esto tenía su propia copia del fetch a
+    // GitHub —con el guard del JSON.parse y el timeout del fix B7 (2026-07-24), pero
+    // SIN caché—, mientras routes/extension.js tenía la caché y no el guard. Las dos
+    // mitades se unificaron en utils/githubRelease.js. La caché ahora es compartida
+    // entre los dos endpoints, que es lo que importa: la API anónima de GitHub da 60
+    // req/hora POR IP y esa IP es la misma que la de producción.
     try {
-        const https = require('https');
-        // B7 (revisión 2026-07-24): el JSON.parse corría dentro del callback del evento
-        // 'end', fuera del alcance de este try/catch — si GitHub devolvía algo que no era
-        // JSON (error 5xx, corte de respuesta), el throw era una excepción NO capturada
-        // que tumbaba el proceso entero (server.js no tiene handler de uncaughtException).
-        // Ahora el parse está envuelto en su propio try/catch que rechaza la promesa en
-        // vez de tirar. También se agrega timeout: sin él, si GitHub no respondía, la
-        // request del usuario quedaba colgada indefinidamente.
-        const data = await new Promise((resolve, reject) => {
-            const req2 = https.get(
-                'https://api.github.com/repos/jberger19186/procurador-tool/releases/latest',
-                { headers: { 'User-Agent': 'procurador-api', 'Accept': 'application/vnd.github+json' } },
-                (r) => {
-                    let body = '';
-                    r.on('data', c => body += c);
-                    r.on('end', () => {
-                        try { resolve(JSON.parse(body)); }
-                        catch (e) { reject(new Error('Respuesta inválida de GitHub Releases')); }
-                    });
-                }
-            );
-            req2.setTimeout(8000, () => req2.destroy(new Error('Timeout consultando GitHub Releases')));
-            req2.on('error', reject);
-        });
-
-        const asset = data.assets?.find(a => a.name.endsWith('.exe') && !a.name.endsWith('.blockmap'));
+        const asset = await getLatestAsset();
         if (!asset) return res.status(404).json({ error: 'Instalador no disponible.' });
-
         res.redirect(asset.browser_download_url);
     } catch (e) {
         res.status(500).json({ error: 'Error al obtener el instalador.' });

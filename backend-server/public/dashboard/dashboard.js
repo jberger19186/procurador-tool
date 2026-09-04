@@ -593,11 +593,14 @@ async function renderUserDetail(userId) {
                         <div class="detail-item"><label>Email</label><span>${escHtml(u.email)}</span></div>
                         <div class="detail-item"><label>Rol</label><span>${roleBadge(u.role)}</span></div>
                         <div class="detail-item"><label>CUIT</label><span>${escHtml(u.cuit || '—')}</span></div>
-                        <div class="detail-item"><label>Hardware vinculado</label><span>${u.machine_id ? '✅ Sí' : '❌ No'}</span></div>
+                        <!-- H-BE-04: la ficha ya no recibe machine_id (ni password_hash ni los
+                             tokens de reset/verificación). El backend manda machine_bound,
+                             que es lo único que esta pantalla necesitaba del hardware. -->
+                        <div class="detail-item"><label>Hardware vinculado</label><span>${u.machine_bound ? '✅ Sí' : '❌ No'}</span></div>
                         <div class="detail-item"><label>Último login</label><span>${u.last_login ? fmtDate(u.last_login) : '—'}</span></div>
                     </div>
                     <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-                        ${u.machine_id ? `<button class="btn btn-sm btn-secondary" onclick="unbindHardware(${u.id})">🔓 Desvincular hardware</button>` : ''}
+                        ${u.machine_bound ? `<button class="btn btn-sm btn-secondary" onclick="unbindHardware(${u.id})">🔓 Desvincular hardware</button>` : ''}
                         <button class="btn btn-sm btn-secondary" onclick="toggleRole(${u.id},'${u.role}')">
                             ${u.role === 'admin' ? '👤 Quitar admin' : '🔐 Hacer admin'}
                         </button>
@@ -1536,12 +1539,12 @@ async function renderTicketDetail(ticketId) {
                                 const bgStyle = isInternal ? 'background:#fef9c3;border-left:3px solid #ca8a04;padding:10px;border-radius:6px;margin-bottom:8px' : '';
                                 const isAdmin = c.author_role === 'admin';
                                 return `
-                            <div class="comment ${c.author_role}" style="${bgStyle}">
+                            <div class="comment ${escAttr(c.author_role)}" style="${bgStyle}">
                                 <div class="comment-avatar">${isInternal ? '🔒' : (isAdmin ? '👑' : '👤')}</div>
                                 <div class="comment-body">
                                     <div class="comment-meta">
                                         ${isInternal ? '<span class="badge badge-yellow" style="font-weight:700">🔒 NOTA INTERNA</span> ' : ''}
-                                        <strong>${c.author_email}</strong>
+                                        <strong>${escHtml(c.author_email)}</strong>
                                         ${!isInternal ? `<span class="badge badge-${isAdmin ? 'yellow' : 'blue'}" style="margin-left:6px">${isAdmin ? 'Admin' : 'Usuario'}</span>` : ''}
                                         · ${fmtDate(c.created_at)}
                                         ${c.edited_at ? '<span style="font-size:11px;color:var(--text-muted);font-style:italic"> · editado</span>' : ''}

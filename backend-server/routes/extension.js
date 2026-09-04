@@ -53,41 +53,14 @@ router.get('/electron-token', authenticateToken, (req, res) => {
     res.json({ token });
 });
 
-// ── S7 (2026-09-01): cache de la respuesta de GitHub, 5 minutos ────────────────
-// Ver el comentario de arriba: sin esto, cada descarga real consume 1/60 del cupo
-// horario anónimo compartido con producción. Un release nuevo tarda minutos en
-// publicarse y el usuario que actualiza justo en ese margen simplemente recibe el
-// asset anterior por unos segundos más — no hay downside real de correctitud.
-let _releaseCache = { asset: null, fetchedAt: 0 };
-const RELEASE_CACHE_TTL_MS = 5 * 60 * 1000;
-
-async function fetchLatestAsset() {
-    const https = require('https');
-    const data = await new Promise((resolve, reject) => {
-        const r2 = https.get(
-            'https://api.github.com/repos/jberger19186/procurador-tool/releases/latest',
-            { headers: { 'User-Agent': 'procurador-api', 'Accept': 'application/vnd.github+json' } },
-            (r) => { let b = ''; r.on('data', c => b += c); r.on('end', () => resolve(JSON.parse(b))); }
-        );
-        r2.on('error', reject);
-    });
-    return data.assets?.find(a => a.name.endsWith('.exe') && !a.name.endsWith('.blockmap')) || null;
-}
-
-async function getLatestAsset() {
-    const fresco = _releaseCache.asset && (Date.now() - _releaseCache.fetchedAt) < RELEASE_CACHE_TTL_MS;
-    if (fresco) return _releaseCache.asset;
-    try {
-        const asset = await fetchLatestAsset();
-        if (asset) _releaseCache = { asset, fetchedAt: Date.now() };
-        return asset;
-    } catch (e) {
-        // GitHub caído/lento: si hay una copia vieja en memoria, mejor servirla
-        // (aunque haya vencido el TTL) que romper la descarga por completo.
-        if (_releaseCache.asset) return _releaseCache.asset;
-        throw e;
-    }
-}
+// ── S7 (2026-09-01) + H-BE-08 (auditoría 2026-09) ──────────────────────────────
+// La caché de la respuesta de GitHub (5 min) y el fetch con guard de JSON.parse y
+// timeout viven ahora en utils/githubRelease.js, compartidos con
+// GET /client/download/electron. Ver el encabezado de ese módulo: acá había caché
+// sin guard (una respuesta no-JSON de GitHub tumbaba el proceso) y allá guard sin
+// caché (cada descarga gastaba 1/60 del cupo horario anónimo, compartido con
+// producción). Una sola copia, con las dos mitades buenas.
+const { getLatestAsset } = require('../utils/githubRelease');
 
 // GET /api/extension/electron-download?token=xxx — descarga directa sin blob.
 // El token (60s, un solo uso) reemplaza al header Authorization para que la
