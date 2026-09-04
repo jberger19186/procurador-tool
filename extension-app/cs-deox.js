@@ -107,8 +107,9 @@ if (typeof chrome === 'undefined' || !chrome?.runtime?.id) throw new Error('[PJN
     if (!location.href.includes("sso.pjn.gov.ar") && !document.querySelector("input#username")) return;
     console.log("PJN deox: página SSO detectada");
     try {
-      const userInput = await waitFor("#username");
-      userInput.value = "27320694359";
+      // B.1 (2026-09-02): el CUIT ya no se autocompleta (ver cs-scw.js). El campo queda
+      // vacío y lo completa el usuario; se conserva la espera como señal de carga.
+      await waitFor("#username");
       const passInput = await waitFor('input[type="password"]');
       passInput.focus();
       passInput.dispatchEvent(new Event("input", { bubbles: true }));

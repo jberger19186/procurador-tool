@@ -83,8 +83,12 @@ console.log("✅ cs-scw inyectado en", location.href);
       console.log("PJN: Contexto LOGIN detectado");
       try { await getExpediente(); } catch {}
 
-      const userInput = await waitFor("#username");
-      userInput.value = "27320694359";
+      // B.1 (2026-09-02): el CUIT ya no se autocompleta. Antes se escribía uno fijo
+      // —el del operador— en la extensión que instalan todos los usuarios. Ahora el
+      // campo queda vacío: el usuario lo escribe una vez y Chrome lo recuerda con su
+      // autocompletado normal. Se conserva la espera del campo como señal de que la
+      // pantalla de login del SSO terminó de cargar.
+      await waitFor("#username");
 
       const passInput = await waitFor('input[type="password"]');
       passInput.focus();

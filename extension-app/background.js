@@ -95,7 +95,10 @@ const FLOW_CONTENT_SCRIPT = {
 
 const FLOW_NEEDS_FILL = new Set(["escritos2", "notif"]);
 
-chrome.runtime.onMessage.addListener(async (msg) => {
+chrome.runtime.onMessage.addListener(async (msg, sender) => {
+  // H-FE-12: solo se atienden mensajes originados en esta misma extensión (popup y
+  // content scripts propios). Cualquier otro emisor se descarta antes de mirar el mensaje.
+  if (sender?.id !== chrome.runtime.id) return;
   if (msg?.type !== "START_FLOW") return;
 
   try {

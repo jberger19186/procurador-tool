@@ -44,8 +44,9 @@ function reactSet(input, value) {
     });
 
   try {
-    const userInput = await waitFor("#username");
-    userInput.value = "27320694359";
+    // B.1 (2026-09-02): el CUIT ya no se autocompleta (ver cs-scw.js). El campo queda
+    // vacío y lo completa el usuario; se conserva la espera como señal de carga.
+    await waitFor("#username");
     const passInput = await waitFor('input[type="password"]');
     passInput.focus();
     passInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -64,7 +65,9 @@ function reactSet(input, value) {
 })();
 
 // ── LLENADO DE FORMULARIO en notif.pjn.gov.ar ─────────────────────────────
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  // H-FE-12: solo mensajes de esta misma extensión (los manda background.js).
+  if (sender?.id !== chrome.runtime.id) return;
   if (msg.action !== "fillFields" || !msg.payload) return;
   // Guard: solo ejecutar en notif.pjn.gov.ar, no en SSO
   if (!location.href.includes("notif.pjn.gov.ar")) return;

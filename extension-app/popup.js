@@ -35,6 +35,13 @@ function escHtml(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// B.2: la contraseña recordada sigue guardada en el storage (decisión del 2026-09-02),
+// pero se decodifica solo en el momento de usarla. Un valor corrupto no rompe el popup.
+function decodeSavedPw(pw) {
+  if (!pw) return '';
+  try { return atob(pw); } catch (_) { return ''; }
+}
+
 async function getSavedUsers() {
   const data = await chrome.storage.local.get([SAVED_USERS_KEY, 'pjn_saved_credentials']);
   if (data[SAVED_USERS_KEY]) return data[SAVED_USERS_KEY];
@@ -72,7 +79,7 @@ function renderSavedUsers(users) {
 
   panel.style.display = 'block';
   list.innerHTML = users.map(u => `
-    <div class="saved-user-item" data-email="${escHtml(u.email)}" data-pw="${escHtml(u.pw)}">
+    <div class="saved-user-item" data-email="${escHtml(u.email)}">
       <div class="saved-user-avatar">${escHtml(u.email[0].toUpperCase())}</div>
       <span class="saved-user-email">${escHtml(u.email)}</span>
       <button class="saved-user-remove" data-email="${escHtml(u.email)}" title="Olvidar cuenta">✕</button>
@@ -90,8 +97,13 @@ document.getElementById('saved-users-list').addEventListener('click', async e =>
   }
   const item = e.target.closest('.saved-user-item');
   if (item) {
-    document.getElementById('login-email').value = item.dataset.email;
-    document.getElementById('login-password').value = atob(item.dataset.pw);
+    // B.2 (2026-09-02): la contraseña ya no viaja en el DOM (antes iba como atributo
+    // de la tarjeta de cada cuenta). Se lee del storage recién en el clic, buscando
+    // por email. Mismo comportamiento para el usuario, una exposición menos.
+    const email = item.dataset.email;
+    const saved = (await getSavedUsers()).find(u => u.email === email);
+    document.getElementById('login-email').value = email;
+    document.getElementById('login-password').value = decodeSavedPw(saved?.pw);
     document.getElementById('chk-remember').checked = true;
     document.getElementById('btn-login-submit').click();
   }

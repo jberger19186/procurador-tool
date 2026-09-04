@@ -56,12 +56,23 @@ async function clearSession() {
   try { await chrome.alarms.clear(AUTH_REFRESH_ALARM); } catch (_) {}
 }
 
+// ── Decodificar base64url ────────────────────────────────────────────────────
+// H-FE-10: el payload de un JWT viene en base64url (usa '-' y '_' en vez de '+' y '/',
+// y sin relleno). `atob` solo entiende base64 clásico: ante un payload con esos
+// caracteres tiraba excepción, el catch de isTokenExpired lo tomaba como vencido y la
+// sesión se cerraba sola sin motivo. Se traduce el alfabeto y se repone el relleno.
+function base64UrlDecode(str) {
+  const b64 = String(str).replace(/-/g, '+').replace(/_/g, '/');
+  const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+  return atob(b64 + pad);
+}
+
 // ── Verificar si el token está vigente ───────────────────────────────────────
 function isTokenExpired(session) {
   if (!session?.token) return true;
   try {
     // Decodificar payload (sin verificar firma — el backend lo verifica en cada request)
-    const payload = JSON.parse(atob(session.token.split('.')[1]));
+    const payload = JSON.parse(base64UrlDecode(session.token.split('.')[1]));
     return (payload.exp * 1000) < Date.now();
   } catch (_) {
     return true;
