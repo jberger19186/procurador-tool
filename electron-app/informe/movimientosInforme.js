@@ -234,10 +234,48 @@ function limpiarIntervinientes(raw) {
  * `vinculados`/`recursos`/`notas`: SIN la limpieza de intervinientes (ver la
  * nota grande de arriba, "LAS SECCIONES DE TEXTO NO SON HOMOGÉNEAS") — solo
  * recorte de espacios, filtro de vacíos, y el mismo centinela de sección vacía.
+ *
+ * `descartarEncabezado` (2026-09-04, tras la corrida real): `vinculados` y
+ * `recursos` traen la fila de ENCABEZADO de la tabla del PJN como un item más
+ * (`"EXPEDIENTE|DEPENDENCIA|SITUACION|CARATULA|ULT. ACT.|"`), así que el modal
+ * mostraba "Vinculados (2)" cuando había 1 solo real, y el encabezado gastaba
+ * uno de los 15 lugares.
+ *
+ * NO se detecta por el texto: es ESTRUCTURAL y por eso se descarta por posición.
+ * El extractor de `testM2.js:1504-1510` hace
+ * `table.querySelectorAll('tr')` sobre la tabla ENTERA y `querySelectorAll('th, td')`
+ * por fila — o sea recorre también el `<thead>` y captura celdas `<th>`. Como el
+ * `<thead>` va primero en el DOM, el encabezado es SIEMPRE la primera fila, en
+ * cualquier expediente y cualquier fuero. Y a diferencia de `intervinientes`
+ * —que concatena 3 tablas (`tablaIntervinientes`+`tablaPartes`+`tablaFiscales`)
+ * y por eso repite su encabezado 3 veces, motivo por el cual `testM2.js` sí lo
+ * limpia allá— estas dos secciones tienen UNA tabla, así que aparece una vez.
+ *
+ * `notas` queda afuera a propósito: la extrae `extraerTablaNotas()`, otro
+ * camino con sus propios selectores, y su salida real NO trae encabezado
+ * (verificado en el backup de la corrida del 2026-09-04).
+ *
+ * ⚠️ El orden importa: el centinela de sección vacía se evalúa ANTES. Si no,
+ * un `["El expediente no posee recursos"]` perdería su único elemento por
+ * "encabezado" y la sección quedaría vacía por el motivo equivocado.
+ *
+ * ⚠️ Y solo se descarta si hay MÁS DE UNA fila. Con una sola, "encabezado" y
+ * "único registro real" son indistinguibles desde el texto, y equivocarse ahí
+ * borra el dato entero en vez de una fila de más. La asimetría está elegida a
+ * propósito: una tabla con N registros trae N+1 filas (thead + N), así que el
+ * caso "solo encabezado" no se da — cuando no hay nada que listar, el script
+ * ni llega a la tabla: detecta la alerta del PJN y devuelve el centinela
+ * (`testM2.js:1463-1468`, `tablas = []`). O sea que una sección de una sola
+ * fila que no es el centinela es un caso anómalo, y ante la duda se conserva.
+ *
+ * Riesgo residual asumido: si el PJN sirviera una de estas tablas sin `<thead>`
+ * Y con 2+ registros, se perdería el primero. Poco probable (el HTML sale del
+ * mismo componente) y acotado a 1 fila, pero no es cero.
  */
-function limpiarSeccionTexto(raw) {
+function limpiarSeccionTexto(raw, descartarEncabezado = false) {
     const limpio = raw.map(item => String(item ?? '').trim()).filter(item => item !== '');
     if (limpio.length === 1 && esMensajeSeccionVacia(limpio[0])) return [];
+    if (descartarEncabezado && limpio.length > 1) return limpio.slice(1);
     return limpio;
 }
 
@@ -354,12 +392,14 @@ function leerSeccionesInforme(descargasDir, expediente, opciones = {}) {
             intervinientes: limpiarIntervinientes(
                 leerArraySeguro(archivo('intervinientes.json'))
             ).slice(0, max),
+            // `true` = descartar la fila de encabezado (ver `limpiarSeccionTexto`).
             vinculados: limpiarSeccionTexto(
-                leerArraySeguro(archivo('vinculados.json'))
+                leerArraySeguro(archivo('vinculados.json')), true
             ).slice(0, max),
             recursos: limpiarSeccionTexto(
-                leerArraySeguro(archivo('recursos.json'))
+                leerArraySeguro(archivo('recursos.json')), true
             ).slice(0, max),
+            // `notas` NO: otro extractor, su salida real no trae encabezado.
             notas: limpiarSeccionTexto(
                 leerArraySeguro(archivo('notas.json'))
             ).slice(0, max),

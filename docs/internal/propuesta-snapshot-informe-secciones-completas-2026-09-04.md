@@ -344,7 +344,7 @@ duplicación completa de la tabla** que trae el backup crudo. Confirma con datos
 réplica de `testM2.js:2156-2177` hace lo mismo que el original — que era el riesgo principal de haber
 tenido que duplicar esa lógica.
 
-### ⚠️ Observación honesta, NO corregida
+### ⚠️ Observación detectada en F3 — ✅ CORREGIDA el mismo día (pendiente de release)
 
 En **`vinculados` y `recursos` la fila de encabezado de la tabla del PJN se guarda como un item más**:
 
@@ -360,10 +360,49 @@ y aplicarle esa misma heurística a las otras 3 secciones se descartó a propós
 distintos, y `testM2.js` tampoco lo hace — **el PDF muestra exactamente lo mismo**). Es un detalle de
 calidad de dato, no de integridad: el contenido real está y es correcto.
 
-**Candidato a pulir** si molesta en el uso real. El arreglo natural sería descartar la primera fila
-cuando todas sus celdas son nombres de columna, pero es heurística sobre texto libre del PJN y
-merece medirse contra varios expedientes antes de aplicarla — exactamente el error que esta misma
-propuesta advertía evitar (§F1: "un normalizador genérico que arregla intervinientes de más").
+**Se corrigió**, pero no como se pensó al principio. La primera lectura fue *"hay una sola muestra,
+escribir una regla sobre eso es heurística riesgosa"*. Al mirar el **extractor** apareció que no hace
+falta ninguna heurística — el encabezado es **estructural**:
+
+```js
+// testM2.js:1504-1510
+Array.from(table.querySelectorAll('tr'))               // la tabla ENTERA, incluye el <thead>
+  .map(row => Array.from(row.querySelectorAll('th, td'))  // celdas th Y td
+    .map(cell => cell.innerText.trim()).join('|'))
+```
+
+Recorre todas las `<tr>` sin distinguir `thead` de `tbody` y toma también las `<th>`. Como el
+`<thead>` va primero en el DOM, **el encabezado es siempre la primera fila, en cualquier expediente
+y cualquier fuero** — no depende de la muestra. Y a diferencia de `intervinientes`, que concatena 3
+tablas (`tablaIntervinientes`+`tablaPartes`+`tablaFiscales`) y por eso repite el encabezado 3 veces
+—motivo por el que `testM2.js` sí lo limpia allá—, estas dos tienen **una** tabla: aparece una vez.
+
+**El fix:** `limpiarSeccionTexto(raw, descartarEncabezado)` descarta la primera fila en `vinculados`
+y `recursos`. `notas` queda afuera (otro extractor, `extraerTablaNotas`, y su salida real no trae
+encabezado — verificado en el backup).
+
+**Dos decisiones de diseño que salieron de los tests, no del diseño previo:**
+
+1. **El centinela se evalúa ANTES.** Si no, un `["El expediente no posee recursos"]` perdería su
+   único elemento *como si fuera encabezado* y la sección quedaría vacía por el motivo equivocado.
+2. **Solo se descarta si hay más de una fila.** Esto lo impuso un test preexistente que el fix rompió
+   (`D6`): con una sola fila, "encabezado" y "único registro real" son indistinguibles por texto, y
+   equivocarse ahí **borra el dato entero** en vez de una fila de más. La asimetría es deliberada y
+   está justificada: una tabla con N registros trae N+1 filas, y el caso "solo encabezado" no ocurre
+   —cuando no hay nada que listar el script detecta la alerta del PJN y ni llega a la tabla
+   (`testM2.js:1463-1468`, `tablas = []`)—, así que una sección de una sola fila que no es el
+   centinela es anómala y ante la duda se conserva.
+
+**Riesgo residual asumido:** si el PJN sirviera una de estas tablas sin `<thead>` **y** con 2+
+registros, se perdería el primero. Poco probable y acotado a 1 fila, pero no es cero.
+
+**Verificado contra el backup real de la corrida de F3:** `vinculados` y `recursos` pasan de 2 a
+**1**, y el que queda es el registro real (`FCR 018745/2017/1` y `FCR 018745/2017/CA001`), no el
+encabezado. 5 casos nuevos (E1-E5) + el caso de datos reales reescrito. **33/33 en ese archivo.**
+
+⏳ **Es código de cliente: no llega a nadie hasta el próximo release de Electron.** Queda listo para
+viajar en el que se corte por cualquier otro motivo — decisión del operador de no cortar uno solo
+para esto.
 
 ### Lo que quedó sin verificar
 

@@ -238,22 +238,39 @@ async function main() {
             assert.notStrictEqual(lote[0].movs, undefined, 'movs SI sigue viajando -- eso lo usa la ficha');
         });
 
-        check('C3 . [lo que un umbral por CANTIDAD hacía mal] 51 casos livianos SI llevan las secciones -- caben, no hay razón para negarlas', () => {
-            // Con el umbral viejo (<=50 casos) este lote perdía las secciones aunque
-            // entrara de sobra. El criterio por bytes lo permite, que es lo correcto.
+        check('C3 . [el criterio es el PESO, no la cantidad] el corte lo fija el presupuesto: cuantos entran depende de cuanto pesan, no de una constante', () => {
+            // Este caso probaba "51 casos livianos igual llevan las secciones", con
+            // 51 elegido para superar el viejo umbral de 50. Dejó de servir cuando la
+            // corrida real del 2026-09-04 pobló las 6 secciones del fixture: el mismo
+            // caso pasó de ~1,6 KB a ~4 KB y 51 ya no entran. El sistema hizo lo
+            // correcto -- el que asumía un peso fijo era el test. Reformulado para
+            // medir la relación peso↔corte en vez de fiarse de un número.
             const uno = DB.expedientes[0];
-            DB.expedientes = Array.from({ length: 51 }, () => uno);
-            capturas.length = 0;
-            seleccionados.clear();
-            for (let i = 0; i < 51; i++) seleccionados.add(i);
+            const cabenConSecciones = (n) => {
+                DB.expedientes = Array.from({ length: n }, () => uno);
+                capturas.length = 0;
+                seleccionados.clear();
+                for (let i = 0; i < n; i++) seleccionados.add(i);
+                accionLote('snapshot-lote', null);
+                return 'interv' in JSON.parse(capturas[0].lote)[0];
+            };
+
+            // Peso real de UN caso con secciones, medido del fixture actual.
+            DB.expedientes = [uno];
+            capturas.length = 0; seleccionados.clear(); seleccionados.add(0);
             accionLote('snapshot-lote', null);
-            const lote = JSON.parse(capturas[0].lote);
-            assert.strictEqual(lote.length, 51);
-            const bytes = api.pesoEnBytes(capturas[0].lote);
-            console.log('       (51 casos livianos = ' + Math.round(bytes / 1024) + ' KB, presupuesto ' +
-                Math.round(api.PRESUPUESTO / 1024) + ' KB)');
-            assert.ok(bytes <= api.PRESUPUESTO, 'el fixture dejo de ser liviano; el caso ya no prueba lo que dice');
-            assert.ok('interv' in lote[0], 'entran en el presupuesto: no hay motivo para degradarlos');
+            const bytesUno = api.pesoEnBytes(capturas[0].lote);
+            const esperado = Math.floor(api.PRESUPUESTO / bytesUno);
+
+            console.log('       (1 caso = ' + bytesUno + ' B -> deberian entrar ~' + esperado +
+                ' casos con las 6 secciones)');
+
+            // Lo que se afirma: en el borde predicho por el peso, el comportamiento
+            // cambia. Ni antes ni mucho despues.
+            assert.ok(cabenConSecciones(Math.max(1, esperado - 2)),
+                'justo por debajo del borde predicho deberia seguir llevandolas');
+            assert.ok(!cabenConSecciones(esperado + 5),
+                'bastante por encima del borde predicho NO deberia llevarlas');
         });
 
         check('C4 . [control negativo del BORDE, en bytes] agregando casos de a uno, existe un N exacto donde deja de incluirlas -- y N-1 todavia las lleva', () => {

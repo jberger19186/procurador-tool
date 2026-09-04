@@ -172,14 +172,43 @@ if (fs.existsSync(path.join(backup9391, 'listaMovimientosHistoricos.json'))) {
     omitir('C4-C5 . historicos reales (FCR 9391/2018)', 'no existe ' + backup9391);
 }
 
-check('C6 . expediente SIN ninguna sección extra (solo datosGenerales+listaMovimientos, ej. FCR 18745/2017 de ayer) -> las 5 extra en []', () => {
+check('C6 . [datos REALES, corrida del 2026-09-04 con las secciones tildadas] las 6 vienen pobladas y sin basura', () => {
+    // Este caso medía "expediente sin secciones extra" cuando el backup real de
+    // FCR 18745/2017 solo tenía datosGenerales+listaMovimientos. La corrida del
+    // operador del 2026-09-04 23:05 lo regeneró CON las secciones tildadas, así
+    // que el fixture cambió y el caso pasa a verificar lo contrario -- que es
+    // más valioso: el resultado real, ya limpio.
     const secs = leerSeccionesInforme(REAL, REAL_EXP);
-    assert.deepStrictEqual(secs.historicos, []);
-    assert.deepStrictEqual(secs.intervinientes, []);
-    assert.deepStrictEqual(secs.vinculados, []);
-    assert.deepStrictEqual(secs.recursos, []);
-    assert.deepStrictEqual(secs.notas, []);
-    assert.ok(secs.movimientos.length > 0, 'movimientos SÍ debe tener datos -- este expediente lo tiene');
+    assert.ok(secs.movimientos.length > 0, 'movimientos deberia tener datos');
+
+    // Si la corrida real todavía no tuviera secciones (máquina distinta, backup
+    // viejo), no se afirma nada: se avisa en vez de dar un falso OK.
+    const tieneSecciones = secs.vinculados.length || secs.recursos.length || secs.intervinientes.length;
+    if (!tieneSecciones) {
+        console.log('       AVISO: el backup real no tiene secciones extra -- caso no ejercitado en esta maquina');
+        return;
+    }
+
+    // 🎯 El fix, contra datos reales: ninguna fila puede ser el encabezado.
+    for (const fila of secs.vinculados) {
+        assert.ok(!fila.startsWith('EXPEDIENTE|DEPENDENCIA|'),
+            'quedo la fila de encabezado en vinculados: ' + fila);
+    }
+    for (const fila of secs.recursos) {
+        assert.ok(!/^Recurso\|Oficina de Elevacion\|/.test(fila),
+            'quedo la fila de encabezado en recursos: ' + fila);
+    }
+    // Y la limpieza de intervinientes sigue haciendo lo suyo con datos reales.
+    for (const fila of secs.intervinientes) {
+        assert.notStrictEqual(fila.trim(), '', 'interviniente vacio');
+        assert.ok(!fila.startsWith('TIPO|NOMBRE|TOMO/FOLIO'),
+            'quedo el encabezado de intervinientes: ' + fila);
+    }
+    assert.strictEqual(new Set(secs.intervinientes).size, secs.intervinientes.length,
+        'hay intervinientes duplicados: la deduplicacion no corrio');
+    console.log('       (real: ' + secs.movimientos.length + ' movs, ' + secs.historicos.length +
+        ' hist, ' + secs.intervinientes.length + ' interv, ' + secs.vinculados.length +
+        ' vinc, ' + secs.recursos.length + ' rec, ' + secs.notas.length + ' notas)');
 });
 
 // ---------------------------------------------------------------------------
@@ -353,6 +382,84 @@ try {
             movimientos: [], historicos: [], intervinientes: [],
             vinculados: [], recursos: [], notas: [],
         });
+    });
+
+    // ─── E. Fila de ENCABEZADO en vinculados/recursos (2026-09-04) ──────────
+    // El extractor de testM2.js recorre `table.querySelectorAll('tr')` y toma
+    // `th, td`, o sea incluye el <thead>: la 1ª fila es SIEMPRE el encabezado.
+
+    check('E1 . [EL FIX] vinculados y recursos descartan la fila de encabezado; el conteo deja de mentir', () => {
+        const raiz = path.join(tmpD, 'e1');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        // Filas EXACTAS de la corrida real del 2026-09-04 (FCR 18745/2017).
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'vinculados.json', JSON.stringify([
+            'EXPEDIENTE|DEPENDENCIA|SITUACION|CARATULA|ULT. ACT.|',
+            'FCR 018745/2017/1|JUZGADO FEDERAL DE RIO GALLEGOS|EN LETRA|Recurso Queja Nº 1|19/09/2023|',
+        ]), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'recursos.json', JSON.stringify([
+            'Recurso|Oficina de Elevacion|Fecha de Presentacion|Tipo de Recurso|Estado Actual|MAS INFO.',
+            'FCR 018745/2017/CA001|14_RCF|6/05/2021|APEL. DECRETOS de TRAMITE|RESUELTO|',
+        ]), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        assert.strictEqual(secs.vinculados.length, 1, 'vinculados deberia quedar en 1 (era 2 con el encabezado)');
+        assert.strictEqual(secs.recursos.length, 1, 'recursos deberia quedar en 1');
+        assert.ok(secs.vinculados[0].startsWith('FCR 018745/2017/1'), 'se descarto la fila EQUIVOCADA en vinculados');
+        assert.ok(secs.recursos[0].startsWith('FCR 018745/2017/CA001'), 'se descarto la fila EQUIVOCADA en recursos');
+    });
+
+    check('E2 . [el orden importa] el centinela de sección vacía se evalúa ANTES: un "no posee..." no se pierde como encabezado', () => {
+        const raiz = path.join(tmpD, 'e2');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'vinculados.json',
+            JSON.stringify(['El expediente no posee vinculados posibles de ser visualizados.']), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'recursos.json',
+            JSON.stringify(['El expediente no posee recursos']), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        // Si el encabezado se descartara primero, tambien darian [] -- pero por el
+        // motivo equivocado. Lo que se comprueba es que no quede basura ni un resto.
+        assert.deepStrictEqual(secs.vinculados, []);
+        assert.deepStrictEqual(secs.recursos, []);
+    });
+
+    check('E3 . [no-regresión] `notas` NO descarta su primera fila: otro extractor, sin encabezado', () => {
+        const raiz = path.join(tmpD, 'e3');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        // Fila real de la corrida del 2026-09-04: es DATO, no encabezado.
+        const notaReal = 'Página 1 | Fila 1 | FECHA: 30/03/2021 | INTERVINIENTE: JUAN PEREZ | DESCRIPCION / DETALLE: 09:33 Hs,';
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'notas.json', JSON.stringify([notaReal]), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        assert.strictEqual(secs.notas.length, 1, 'la unica nota real se perdio');
+        assert.strictEqual(secs.notas[0], notaReal);
+    });
+
+    check('E4 . [la asimetría, a propósito] con UNA sola fila NO se descarta nada: ante la duda se conserva el dato', () => {
+        // Con 1 fila, "encabezado" y "único registro real" son indistinguibles por
+        // texto. Equivocarse borra el dato entero, no una fila de más -- por eso el
+        // corte exige length > 1. Y el caso "tabla con solo thead" no ocurre: si no
+        // hay nada que listar, el script devuelve el centinela sin tocar la tabla.
+        const raiz = path.join(tmpD, 'e4');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'vinculados.json',
+            JSON.stringify(['FCR 00099/2020|JUZGADO FEDERAL|EN LETRA|UN VINCULADO REAL|01/01/2026|']), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        assert.strictEqual(secs.vinculados.length, 1, 'un unico registro real NO debe perderse');
+        assert.ok(secs.vinculados[0].startsWith('FCR 00099/2020'));
+    });
+
+    check('E5 . el tope de 15 se cuenta sobre filas REALES, ya descartado el encabezado', () => {
+        const raiz = path.join(tmpD, 'e5');
+        const ahora = Date.now();
+        sembrar(raiz, 'x_temp', 'FCR_1_2020', MOV(1), ahora);
+        const filas = ['EXPEDIENTE|DEPENDENCIA|SITUACION|CARATULA|ULT. ACT.|'];
+        for (let i = 0; i < 20; i++) filas.push('FCR 00' + i + '/2020|JUZGADO|EN LETRA|CARATULA ' + i + '|01/01/2026|');
+        sembrarArchivo(raiz, 'x_temp', 'FCR_1_2020', 'vinculados.json', JSON.stringify(filas), ahora);
+        const secs = leerSeccionesInforme(raiz, 'FCR 1/2020');
+        assert.strictEqual(secs.vinculados.length, 15, 'deberian ser 15 reales');
+        assert.ok(secs.vinculados[0].startsWith('FCR 000/2020'), 'el 1er item deberia ser el 1er vinculado real');
     });
 } finally {
     fs.rmSync(tmpD, { recursive: true, force: true });
