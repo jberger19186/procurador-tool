@@ -785,13 +785,71 @@ router.post('/log', async (req, res) => {
         // Consumo del límite monitor_novedades: se cuenta UNA por consulta de
         // novedades EJECUTADA (encuentre o no novedades), no por novedad detectada.
         // La consulta inicial (línea base) NO consume. Solo cuentan las exitosas.
+        //
+        // ── B.8 (fase E7) ────────────────────────────────────────────────────
+        // Este es el OTRO canal de conteo del producto: lo llama el propio script
+        // `procesarMonitoreo.js`, una vez por parte consultada. Hoy `run-monitoreo`
+        // de `electron-app/main.js` NO pide permiso en `execution/start` (llama a
+        // `executeRemoteScriptAsLocal` directo), así que este camino tiene que
+        // seguir contando: quitarlo dejaría el monitoreo gratis e ilimitado hasta
+        // el release de cliente de E8.
+        //
+        // Se le aplica la misma regla que a `log-execution`: si el permiso de la
+        // ejecución ya descontó ESTE cupo, acá no se cuenta.
+        //
+        // ⚠️ La condición es `subsystem = 'monitor_novedades'`, NO "existe un permiso
+        // para procesarMonitoreo.js". La diferencia no es cosmética: hoy ese script
+        // resuelve a subsistema NULL en `utils/subsystems.js` —el monitoreo se cobra
+        // por PARTE consultada, no por corrida, y `start` entrega un permiso por
+        // corrida—, así que un permiso suyo NO descuenta `monitor_novedades_usage`.
+        // Suprimir el conteo por la sola existencia del permiso dejaría el monitoreo
+        // gratis en cuanto E8 lo haga pasar por `start`. Preguntando por el subsistema
+        // realmente cobrado, la supresión ocurre exactamente cuando corresponde: hoy
+        // nunca (ningún permiso lleva ese subsistema) y el comportamiento queda
+        // idéntico al anterior; y el día que se decida cobrar el monitoreo en `start`,
+        // deja de contar acá solo, sin tocar el servidor.
+        //
+        // Que el monitoreo pase o no por `start` —y con qué unidad de cobro, corrida
+        // o parte— es una decisión de producto de E8, no de esta fase.
         if (modo === 'novedades' && !error) {
             try {
-                await db.query(`
-                    UPDATE subscriptions
-                    SET monitor_novedades_usage = COALESCE(monitor_novedades_usage, 0) + 1
-                    WHERE user_id = $1 AND status = 'active'
-                `, [userId]);
+                const { rows: permiso } = await db.query(
+                    `SELECT 1 FROM active_executions
+                     WHERE user_id = $1
+                       AND quota_counted = true
+                       AND subsystem = 'monitor_novedades'
+                       AND started_at > NOW() - INTERVAL '35 minutes'
+                     LIMIT 1`,
+                    [userId]
+                );
+                if (permiso.length === 0) {
+                    // La guarda `AND ... < limite` es nueva: hasta E7 este UPDATE no
+                    // tenía tope, así que `monitor_novedades_usage` podía superar el
+                    // límite del plan (el único freno era el pre-chequeo del cliente,
+                    // que es justamente lo que B.8 dejó de considerar confiable). Es
+                    // la misma forma de guarda atómica que usa el resto del cupo.
+                    // -1 / NULL siguen significando "sin límite".
+                    //
+                    // El límite se resuelve con una SUBCONSULTA, no con `FROM plans p`:
+                    // un `UPDATE ... FROM` es un INNER JOIN, así que una suscripción con
+                    // `plan_id` NULL dejaría de contar por completo. Con la subconsulta,
+                    // los tres casos de "sin límite" (plan inexistente, límite NULL y
+                    // límite -1) colapsan al mismo centinela y el UPDATE sigue corriendo.
+                    // El bonus va DENTRO del COALESCE para que NULL + bonus no desarme
+                    // el centinela ni desborde el entero.
+                    await db.query(`
+                        UPDATE subscriptions s
+                        SET monitor_novedades_usage = COALESCE(s.monitor_novedades_usage, 0) + 1
+                        WHERE s.user_id = $1
+                          AND s.status = 'active'
+                          AND COALESCE(s.monitor_novedades_usage, 0) < COALESCE(
+                                (SELECT NULLIF(p.monitor_novedades_limit, -1)
+                                   FROM plans p WHERE p.id = s.plan_id)
+                                + COALESCE(s.monitor_novedades_bonus, 0),
+                                1000000000
+                              )
+                    `, [userId]);
+                }
             } catch (_) {}
         }
 

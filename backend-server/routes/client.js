@@ -12,6 +12,10 @@ const { checkBitacoraPlan } = require('../middleware/checkBitacoraPlan');
 // verify-session ni account: el suspendido tiene que poder mantener la sesión viva
 // y ver su estado para llegar a /legal/accept/.
 const requireLegalOk = require('../middleware/requireLegalOk');
+// B.8 (fase E7): mapa único script → subsistema, compartido con routes/license.js
+// y routes/monitor.js. El subsistema lo decide el SERVIDOR desde el nombre del
+// script; el campo `subsystem` del cuerpo del request ya no lo elige.
+const { isKnownScript, subsystemForScript, usageColumnFor, subsystemLabel, VALID_SUBSYSTEMS } = require('../utils/subsystems');
 
 // A.1 (revisión 2026-07-27, hallazgo E5-1/P-1): whitelist de scripts que el cliente
 // (Electron) realmente descarga y ejecuta. Antes /scripts/download y /scripts/available
@@ -322,8 +326,26 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
 });
 
 // Registrar ejecución de script desde cliente
+//
+// ═══════════════════════════════════════════════════════════════════════════════
+//  B.8 (fase E7) — ESTE ENDPOINT YA NO ES LA FUENTE DE VERDAD DEL CUPO
+// ═══════════════════════════════════════════════════════════════════════════════
+// El cupo se cobra al entregar el permiso, en `POST /license/execution/start`.
+// Acá quedan dos cosas:
+//
+//   1. La BITÁCORA (`usage_logs`), que es lo que este endpoint siempre debió ser.
+//   2. Un camino de conteo RESIDUAL, para las ejecuciones que hoy NO piden
+//      permiso: `run-informe` y `run-monitoreo` de `electron-app/main.js` llaman
+//      a `executeRemoteScriptAsLocal` sin pasar por `execution/start`. Si se
+//      quitara el conteo de acá antes del release de cliente de E8, informes y
+//      monitoreo quedarían gratis e ilimitados. Ese camino se retira cuando E8
+//      esté desplegado y los clientes viejos hayan sido reemplazados.
+//
+// `quota_counted` de `active_executions` es lo que decide: si el permiso de esta
+// ejecución YA descontó, acá no se descuenta nada. Es la única fuente de verdad
+// y es lo que impide el doble conteo en los dos sentidos de la transición.
 router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
-    const { scriptName, success, errorMessage, executionTime, subsystem, expedientesCount } = req.body;
+    const { scriptName, success, errorMessage, executionTime, subsystem, expedientesCount, executionId } = req.body;
     const db = req.app.get('db');
     const userId = req.user.id;
 
@@ -337,22 +359,74 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
     }
     // Mismas 4 claves que el mapa `usageCol` de abajo. `null`/ausente sigue siendo válido
     // (backendClient.js:140 manda null cuando el script no mapea a ningún subsistema).
-    const VALID_SUBSYSTEMS = ['proc', 'batch', 'informe', 'monitor_novedades'];
+    // La validación se conserva para no aceptar basura en `usage_logs.subsystem`, aunque
+    // el valor que efectivamente se use ya no salga de acá (ver justo abajo).
     if (subsystem != null && !VALID_SUBSYSTEMS.includes(subsystem)) {
         return res.status(400).json({ error: 'subsystem inválido' });
     }
     // Diagnóstico: se acota, no se rechaza (un mensaje largo legítimo no debe perder el log).
     const safeErrorMessage = String(errorMessage || '').slice(0, 500) || null;
 
-    // Determinar columna de uso según subsistema
-    const usageCol = {
-        'proc':               'proc_usage',
-        'batch':              'batch_usage',
-        'informe':            'informe_usage',
-        'monitor_novedades':  'monitor_novedades_usage'
-    }[subsystem] || null;
+    // B.8: el subsistema lo resuelve el SERVIDOR desde el nombre del script. Antes se
+    // tomaba `req.body.subsystem` tal cual, así que un cliente modificado podía cobrarse
+    // la ejecución contra el contador más barato (o contra ninguno). El mapa compartido
+    // reproduce exactamente `getSubsystemForScript()` del cliente para los 13 scripts
+    // distribuibles, así que ningún flujo real cambia de contador.
+    // Un script fuera del mapa NO se rechaza acá (a diferencia de `execution/start`):
+    // este endpoint es la bitácora, y perder el registro de una ejecución rara es peor
+    // que registrarla sin subsistema. Cae a null → solo contador global.
+    const effSubsystem = isKnownScript(scriptName) ? subsystemForScript(scriptName) : null;
+    const usageCol     = usageColumnFor(effSubsystem);
+
+    // Id del permiso, si el cliente lo manda (lo hace a partir de E8).
+    const execId = Number.isInteger(executionId)
+        ? executionId
+        : (/^\d{1,12}$/.test(String(executionId ?? '')) ? Number(executionId) : null);
 
     try {
+        // ── ¿El cupo de esta ejecución ya lo cobró `execution/start`? ─────────
+        // Dos caminos, según qué versión de cliente esté hablando:
+        //
+        //  (1) Cliente NUEVO (E8+): manda `executionId`. Su sola presencia significa
+        //      que `start` entregó un permiso, y `start` solo entrega permisos que ya
+        //      descontó. Se confirma contra la fila cuando todavía existe; si ya no
+        //      existe (un `end` que se adelantó), igual NO se cuenta. Que un cliente
+        //      pueda inventar un `executionId` para evitar el conteo no agrega ningún
+        //      riesgo: un cliente modificado ya puede, hoy y siempre, no llamar a este
+        //      endpoint. Por eso el cobro se movió a `start`.
+        //
+        //  (2) Cliente VIEJO (los instalados hoy): no manda nada. Se busca un permiso
+        //      reciente del mismo usuario para el mismo script que YA descontó
+        //      (transición opción (a) de la spec). Funciona porque el orden real de
+        //      llamadas del cliente instalado es start → … → log-execution → end
+        //      (verificado en main.js: `executeRemoteScriptAsLocal`, que hace el
+        //      log-execution, resuelve ANTES del `releaseExecutionLock()` del
+        //      `finally`), así que la fila del permiso sigue viva cuando llega acá.
+        //      La ventana de 35 min es holgada respecto del TTL de 5 min del candado,
+        //      que el heartbeat renueva mientras la ejecución dura.
+        let yaContado = false;
+        if (execId !== null) {
+            yaContado = true;
+            try {
+                const { rows } = await db.query(
+                    `SELECT 1 FROM active_executions
+                     WHERE id = $1 AND user_id = $2 AND quota_counted = true`,
+                    [execId, userId]
+                );
+                if (rows.length === 0) {
+                    console.warn(`[B.8] log-execution con executionId=${execId} sin permiso vivo (user=${userId}); no se cuenta igual`);
+                }
+            } catch (_) { /* la confirmación es informativa: no cambia la decisión */ }
+        } else {
+            const { rows } = await db.query(
+                `SELECT 1 FROM active_executions
+                 WHERE user_id = $1 AND script_name = $2 AND quota_counted = true
+                   AND started_at > NOW() - INTERVAL '35 minutes'
+                 LIMIT 1`,
+                [userId, scriptName]
+            );
+            yaContado = rows.length > 0;
+        }
         // Verificar suscripción. Permite el TRIAL (suspended + pending_activation):
         // las ejecuciones de prueba SÍ deben contar contra los 20 usos.
         const subResult = await db.query(`
@@ -375,8 +449,11 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
 
         const sub = subResult.rows[0];
 
-        // Verificar límite por subsistema si aplica
-        if (usageCol && success) {
+        // Verificar límite por subsistema si aplica.
+        // B.8: `!yaContado` es lo que evita el doble descuento. Si el permiso de esta
+        // ejecución ya cobró en `execution/start`, acá no se toca ningún contador y el
+        // request queda como pura bitácora.
+        if (!yaContado && usageCol && success) {
             const limitVal = {
                 'proc_usage':               sub.proc_executions_limit,
                 'batch_usage':              sub.batch_executions_limit,
@@ -396,7 +473,7 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
 
             if (effectiveLimit !== null && currentUsage >= effectiveLimit) {
                 return res.status(403).json({
-                    error: `Has alcanzado el límite de ${subsystem === 'proc' ? 'procuraciones' : subsystem === 'batch' ? 'ejecuciones de batch' : subsystem === 'informe' ? 'informes' : 'consultas de monitoreo'}`,
+                    error: `Has alcanzado el límite de ${subsystemLabel(effSubsystem)}`,
                     action: 'upgrade'
                 });
             }
@@ -436,7 +513,7 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
             if (updateResult.rows.length === 0 && effectiveLimit !== null) {
                 return res.status(403).json({ error: 'Límite alcanzado', action: 'upgrade' });
             }
-        } else if (success) {
+        } else if (!yaContado && success) {
             // Backward compat: solo incrementar usage_count global.
             // Solo cuentan las ejecuciones EXITOSAS — errores y detenciones del usuario
             // no consumen usos (quedan registradas en usage_logs igualmente).
@@ -447,11 +524,13 @@ router.post('/scripts/log-execution', authenticateToken, async (req, res) => {
             `, [userId]);
         }
 
-        // Registrar log con subsistema
+        // Registrar log con subsistema. B.8: se guarda el subsistema RESUELTO POR EL
+        // SERVIDOR (no el del cuerpo) y el id del permiso que habilitó la ejecución,
+        // para poder correlacionar bitácora ↔ cupo cobrado en una auditoría.
         await db.query(`
-            INSERT INTO usage_logs (user_id, script_name, success, error_message, subsystem, expedientes_count)
-            VALUES ($1, $2, $3, $4, $5, $6)
-        `, [userId, scriptName, success, safeErrorMessage, subsystem || null, expedientesCount || null]);
+            INSERT INTO usage_logs (user_id, script_name, success, error_message, subsystem, expedientes_count, execution_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [userId, scriptName, success, safeErrorMessage, effSubsystem || null, expedientesCount || null, execId]);
 
         // Obtener estado actualizado
         const updatedSub = await db.query(`
