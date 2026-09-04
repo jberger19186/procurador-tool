@@ -222,9 +222,17 @@ function generarVisorMonitoreo(modo, resultados, bitacoraInfo = null) {
     // F3 (2026-08-31, code-review): reemplazo de '<' por su escape Unicode — mismo
     // fix que generador_visor.js, mismo motivo. bit.seguidos trae números de
     // expediente/nombres de parte (texto libre); sin esto, un valor con la secuencia
-    // literal '</script>' termina el <script> ahí mismo. Confirmado con la función
-    // real + parse5. JSON.parse() del lado del cliente no lo necesita — nunca llega
-    // a existir uno, el objeto se lee directo como literal, no se re-parsea.
+    // literal de cierre de script corta el bloque ahí mismo. Confirmado con la
+    // función real + parse5. JSON.parse() del lado del cliente no lo necesita —
+    // nunca llega a existir uno, el objeto se lee directo como literal, no se
+    // re-parsea.
+    //
+    // ⚠️ NO escribir acá la secuencia de cierre de script literal, ni siquiera
+    // entre comillas dentro de un comentario: el navegador NO parsea JS para
+    // encontrar el cierre del bloque, hace una búsqueda textual. Este comentario
+    // la tenía y cerraba el <script> en esta misma línea (2026-09-04): el resto
+    // del JS quedaba afuera y fallaba con "Unexpected identifier", dejando el
+    // visor sin zócalo, sin acordeones y sin botonera de Bitácora.
     window.BITACORA_RUNTIME = ${JSON.stringify(bit).replace(/</g, '\\u003c')};
 
     function toggleCard(idx) {
