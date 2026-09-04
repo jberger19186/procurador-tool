@@ -2134,11 +2134,27 @@ const FLOW_ALIASES = { 'notif': 'notificaciones' };
 // 'notif' es la key interna; 'notificaciones' es como está en la DB
 ```
 
-### Generar ZIP para el store
+### Generar ZIP para el store — convención de dónde queda cada versión
+> **Regla (desde 2026-09-04): en la raíz del repo vive SIEMPRE un solo ZIP — el de la última
+> versión.** Los anteriores se archivan en `extension-app/versiones-anteriores/`, sin tocarlos
+> más (son solo historial, ninguna herramienta los lee). El patrón `*.zip` de `.gitignore` ya
+> cubre subcarpetas — no hace falta tocar `.gitignore` al agregar la carpeta.
+>
+> **Al generar una versión nueva, en este orden:**
+> 1. Mover el ZIP que hoy está en la raíz a `extension-app/versiones-anteriores/` (si hay uno).
+> 2. Generar el ZIP nuevo en la raíz con el script de abajo.
+>
+> Resultado: la raíz nunca acumula más de un ZIP, y `versiones-anteriores/` queda como el
+> archivo histórico completo (útil para diffear entre versiones o reinstalar una vieja a mano).
+
 ```powershell
+# Paso 1 — archivar el ZIP anterior de la raíz (si existe)
+Get-ChildItem -Path . -Filter 'pjn-extension-*.zip' -File | Move-Item -Destination 'extension-app/versiones-anteriores/'
+
+# Paso 2 — generar el ZIP nuevo en la raíz
 $source = Resolve-Path 'extension-app'
-$dest   = (Resolve-Path '.').Path + '\pjn-extension-X.X.X.zip'
-$files  = Get-ChildItem -Path $source -Recurse -File | Where-Object { $_.FullName -notmatch 'imagenes' }
+$dest   = Join-Path (Resolve-Path '.').Path 'pjn-extension-X.X.X.zip'
+$files  = Get-ChildItem -Path $source -Recurse -File | Where-Object { $_.FullName -notmatch 'imagenes' -and $_.FullName -notmatch 'versiones-anteriores' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [System.IO.Compression.ZipFile]::Open($dest, 'Create')
 foreach ($file in $files) {
@@ -2146,7 +2162,7 @@ foreach ($file in $files) {
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $entryName) | Out-Null
 }
 $zip.Dispose()
-# Siempre excluir carpeta imagenes/ (solo para store assets)
+# Siempre excluir carpeta imagenes/ (solo para store assets) y versiones-anteriores/ (no es parte de la extensión)
 ```
 
 ### Fix clave: setReactVal para inputs MUI
