@@ -28,7 +28,9 @@ const { isKnownScript, subsystemForScript, usageColumnFor, subsystemLabel, VALID
 // del lado del cliente.
 // E9: se mudó a utils/scriptsDistribuibles.js porque `processScripts` también la necesita
 // (decide qué ofuscar). Una copia en cada lado se desincroniza; el módulo es la fuente única.
-const { SCRIPTS_DISTRIBUIBLES } = require('../utils/scriptsDistribuibles');
+// E14 (C.1 capa 3): la whitelist deja de ser global. `scriptsPermitidos(sub)` decide
+// por plan; el detalle de la tabla y del orden de las preguntas vive en el módulo.
+const { scriptsPermitidos } = require('../utils/scriptsDistribuibles');
 
 function buildExtPromoStatus(sub) {
     const { plan_type, promo_type, promo_end_date, promo_max_users, promo_used_count, promo_alert_days } = sub;
@@ -138,8 +140,16 @@ router.get('/scripts/check/:scriptName', authenticateToken, requireLegalOk(), as
 
     try {
         // Verificar suscripción activa (mismo criterio que el download)
+        // E14: se suman `payment_provider` y `plan_type` porque de ellos depende qué
+        // scripts ve este usuario. `plan_type` vive en `plans`, no en `subscriptions`
+        // (`schema.sql:930`), y el JOIN es LEFT a propósito: una suscripción con
+        // `plan_id` NULL debe seguir devolviendo su fila; con un JOIN interno
+        // desaparecería y el usuario recibiría un 403 de "sin suscripción activa".
         const subResult = await db.query(`
-            SELECT 1 FROM subscriptions s JOIN users u ON u.id = s.user_id
+            SELECT s.payment_provider, p.plan_type
+            FROM subscriptions s
+            JOIN users u ON u.id = s.user_id
+            LEFT JOIN plans p ON p.id = s.plan_id
             WHERE s.user_id = $1 AND s.expires_at > NOW()
               AND (s.status = 'active' OR (s.status = 'suspended' AND u.registration_status = 'pending_activation'))
         `, [userId]);
@@ -158,7 +168,11 @@ router.get('/scripts/check/:scriptName', authenticateToken, requireLegalOk(), as
         // al crearse en agosto). No entrega contenido, pero confirma qué scripts de
         // operación corren en el servidor y da un oráculo para verificar byte a byte
         // una copia sospechada — justo lo que P-1 quiso cerrar.
-        if (!SCRIPTS_DISTRIBUIBLES.has(normalizedName)) {
+        // E14: mismo 404 de siempre, pero la lista ahora depende del plan. Un
+        // EXTENSION_PROMO pago recibe 404 también para los 13 distribuibles — no
+        // distinguir "no existe" de "no te corresponde" es deliberado: el 404 no
+        // confirma qué scripts corren en el servidor (mismo criterio que F6).
+        if (!scriptsPermitidos(subResult.rows[0]).has(normalizedName)) {
             return res.status(404).json({ error: 'Script no encontrado' });
         }
 
@@ -193,8 +207,15 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
 
     try {
         // Verificar suscripción activa
+        // E14: `s.*` ya trae `payment_provider`; falta `plan_type`, que vive en
+        // `plans`. LEFT JOIN por la misma razón que en /scripts/check. No hay colisión
+        // de nombres: `subscriptions` no tiene columna `plan_type` (sí `plan` y
+        // `plan_id`), así que `s.*, p.plan_type` no es ambiguo.
         const subResult = await db.query(`
-            SELECT s.* FROM subscriptions s JOIN users u ON u.id = s.user_id
+            SELECT s.*, p.plan_type
+            FROM subscriptions s
+            JOIN users u ON u.id = s.user_id
+            LEFT JOIN plans p ON p.id = s.plan_id
             WHERE s.user_id = $1 AND s.expires_at > NOW()
               AND (s.status = 'active' OR (s.status = 'suspended' AND u.registration_status = 'pending_activation'))
         `, [userId]);
@@ -209,8 +230,9 @@ router.get('/scripts/download/:scriptName', authenticateToken, scriptDownloadLim
         // Normalizar nombre: agregar .js si no tiene extensión
         const normalizedName = scriptName.endsWith('.js') ? scriptName : `${scriptName}.js`;
 
-        // A.1 (E5-1/P-1): solo los scripts que el cliente realmente ejecuta son descargables
-        if (!SCRIPTS_DISTRIBUIBLES.has(normalizedName)) {
+        // A.1 (E5-1/P-1): solo los scripts que el cliente realmente ejecuta son descargables.
+        // E14 (C.1 capa 3): y solo los que le corresponden a su plan.
+        if (!scriptsPermitidos(subResult.rows[0]).has(normalizedName)) {
             return res.status(404).json({ error: 'Script no encontrado' });
         }
 
@@ -326,8 +348,14 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
 
     try {
         // Verificar suscripción
+        // E14: se suman `payment_provider` y `plan_type` (LEFT JOIN a `plans`, ver
+        // /scripts/check). `s.plan` se conserva: es el nombre que la respuesta ya
+        // devolvía y que el cliente muestra.
         const subResult = await db.query(`
-            SELECT s.plan FROM subscriptions s JOIN users u ON u.id = s.user_id
+            SELECT s.plan, s.payment_provider, p.plan_type
+            FROM subscriptions s
+            JOIN users u ON u.id = s.user_id
+            LEFT JOIN plans p ON p.id = s.plan_id
             WHERE s.user_id = $1 AND s.expires_at > NOW()
               AND (s.status = 'active' OR (s.status = 'suspended' AND u.registration_status = 'pending_activation'))
         `, [userId]);
@@ -339,6 +367,10 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
         }
 
         const plan = subResult.rows[0].plan;
+        // E14: la lista que este usuario puede bajar. Se calcula una vez y se usa como
+        // filtro; así `available` y `download` no pueden discrepar (si `available`
+        // listara algo que `download` rechaza, el cliente reintentaría en cada arranque).
+        const permitidos = scriptsPermitidos(subResult.rows[0]);
 
         // A.1 (E5-1/P-1): listar solo los scripts distribuibles al cliente
         const scriptsResult = await db.query(`
@@ -352,7 +384,7 @@ router.get('/scripts/available', authenticateToken, async (req, res) => {
             success: true,
             plan: plan,
             scripts: scriptsResult.rows
-                .filter(s => SCRIPTS_DISTRIBUIBLES.has(s.script_name))
+                .filter(s => permitidos.has(s.script_name))
                 .map(s => ({
                     name: s.script_name,
                     version: s.version,
