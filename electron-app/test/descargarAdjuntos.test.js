@@ -36,6 +36,7 @@ const {
     procesarAdjuntosDeInforme,
     MAX_BYTES_POR_ADJUNTO,
     MAX_BYTES_TOTAL,
+    TIMEOUT_TOTAL_MS,
 } = require('../markdown/descargarAdjuntos');
 
 let ok = 0, fail = 0;
@@ -150,6 +151,51 @@ async function testDescargaMockeada() {
         check('descargarAdjuntos: un adjunto que excede el tope de bytes queda en errores, no en adjuntos',
             r3.adjuntos.length === 0 && r3.errores.length === 1 && /máximo/.test(r3.errores[0].motivo),
             JSON.stringify(r3));
+
+        // ── 3c-bis. H-EL-12 (fase E8): tope de tiempo TOTAL de la corrida ──
+        // El timeout de 30 s es POR ADJUNTO: con 100 enlaces y un servidor que
+        // responde justo por debajo del corte, el módulo quedaba colgado hasta 50
+        // minutos, con el modal bloqueado por el guard de concurrencia y sin forma
+        // de cancelar. Se ejercita con un reloj simulado (no se esperan 10 min
+        // reales): la primera descarga pasa, y antes de la segunda el reloj ya
+        // saltó por encima del tope.
+        check('H-EL-12: TIMEOUT_TOTAL_MS está exportado y vale 10 min',
+            TIMEOUT_TOTAL_MS === 10 * 60 * 1000, String(TIMEOUT_TOTAL_MS));
+
+        const nowOriginal = Date.now;
+        let fetchsHechos = 0;
+        try {
+            const t0 = nowOriginal();
+            let llamadasANow = 0;
+            Date.now = () => {
+                llamadasANow++;
+                // 1ª llamada = el `iniciadoEn` del módulo; 2ª = el chequeo del 1er
+                // link (aún dentro del plazo); de ahí en más, plazo vencido.
+                return llamadasANow <= 2 ? t0 : t0 + TIMEOUT_TOTAL_MS + 1000;
+            };
+            global.fetch = async () => {
+                fetchsHechos++;
+                return respuestaFake({ filename: `doc-lento-${fetchsHechos}.pdf`, bytes: Buffer.from('%PDF-') });
+            };
+            const rT = await descargarAdjuntos(
+                [
+                    { url: 'https://scw.pjn.gov.ar/scw/viewer.seam?id=T1', tipoDoc: 'despacho', pagina: 1 },
+                    { url: 'https://scw.pjn.gov.ar/scw/viewer.seam?id=T2', tipoDoc: 'despacho', pagina: 2 },
+                    { url: 'https://scw.pjn.gov.ar/scw/viewer.seam?id=T3', tipoDoc: 'despacho', pagina: 3 },
+                ],
+                { tempDir }
+            );
+            check('H-EL-12: pasado el tope total, los links restantes quedan en errores',
+                rT.adjuntos.length === 1 && rT.errores.length === 2,
+                JSON.stringify({ adj: rT.adjuntos.length, err: rT.errores.length }));
+            check('H-EL-12: el motivo dice que se alcanzó el tope de minutos',
+                rT.errores.every(e => /tope de 10 min/.test(e.motivo)),
+                JSON.stringify(rT.errores));
+            check('H-EL-12: el corte es ANTES de la petición de red (no se descargan y se borran)',
+                fetchsHechos === 1, `fetchs=${fetchsHechos}`);
+        } finally {
+            Date.now = nowOriginal;
+        }
 
         // ── 3d. Un fallo puntual no aborta el resto del lote ──
         let llamada = 0;

@@ -332,7 +332,25 @@ app.on('activate', () => {
 });
 
 // Limpiar al cerrar la app
-app.on('before-quit', () => {
+//
+// H-EL-10 ampliado (fase E8): matar el hijo NO cierra Chrome en Windows. La
+// documentación de Node es explícita: `subprocess.kill('SIGTERM')` en Windows
+// ignora la señal y termina el proceso "de forma forzada y abrupta" (similar a
+// SIGKILL) → los `process.on('SIGTERM')` que los scripts tienen para cerrar el
+// navegador NUNCA corren. Resultado medido: tras cerrar la app quedaba en el
+// escritorio un Chrome con la sesión judicial autenticada, hasta la próxima
+// corrida (que es el único momento en que se llamaba `closeChromeProfile()`).
+// Por eso acá se cierra explícitamente, y no se confía en el hijo.
+let cierreLimpiezaHecha = false;
+app.on('before-quit', (event) => {
+    // `closeChromeProfile()` es async (espera hasta 2 s a que Chrome libere el
+    // perfil), así que el cierre se difiere UNA vez y se vuelve a llamar a
+    // `app.quit()` al terminar. Este guard va PRIMERO: el segundo `before-quit`
+    // —el que dispara nuestro propio `app.quit()`— no debe repetir el shutdown ni
+    // volver a diferir el cierre (bucle infinito).
+    if (cierreLimpiezaHecha) return;
+    cierreLimpiezaHecha = true;
+
     // A6: matar el script hijo en curso y ejecutar el shutdown completo (limpieza de
     // carpetas temporales seguras con los .enc/wrappers). Antes solo se llamaba logout()
     // → activeChild + Chrome quedaban vivos y shutdown() no se invocaba nunca.
@@ -341,6 +359,11 @@ app.on('before-quit', () => {
         authManager.shutdown();
         authManager.logout();
     }
+
+    event.preventDefault();
+    closeChromeProfile()
+        .catch(() => { /* mejor esfuerzo: nunca impedir que la app cierre */ })
+        .finally(() => app.quit());
 });
 
 // ============ IPC HANDLERS - ONBOARDING ============
@@ -435,7 +458,13 @@ function launchChromeWithProfile(profilePath) {
         '--no-first-run',
         '--no-default-browser-check',
         '--disable-default-apps',
-        'http://scw.pjn.gov.ar'
+        // H-COV-Z4-01 (fase E8): era `http://`. Esta es la pantalla del onboarding
+        // donde el usuario guarda su contraseña del PJN en Chrome — arrancar en
+        // texto plano deja la primera request (y la redirección al SSO) expuesta a
+        // cualquiera en la misma red. Los 3 lanzadores de `backend-server/scripts/`
+        // se corrigieron en E3; este quedó afuera porque vive en `electron-app/`,
+        // que es otro vector de despliegue (release, no reencrypt).
+        'https://scw.pjn.gov.ar'
     ], { detached: true, stdio: 'ignore' }).unref();
 }
 
@@ -942,8 +971,80 @@ ipcMain.handle('load-config', async () => {
     }
 });
 
+// H-EL-07 (fase E8): `fechaLimite` viaja del renderer al archivo de configuración
+// y de ahí al script de Puppeteer. Un solo formato es válido — DD/MM/YYYY — y hasta
+// acá NADA lo validaba del lado del proceso principal: la validación de la UI
+// (v2.7.42) vive en el renderer y el IPC es un canal aparte.
+const RE_FECHA_DDMMYYYY = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+
+/**
+ * H-EL-07 — misma validación que `esFechaValidaDDMMYYYY()` del renderer, del lado
+ * del proceso principal: formato Y calendario real (31/02/2026 no existe). Se
+ * duplica a propósito — el renderer y main.js son dos procesos distintos y el IPC
+ * es un canal independiente de la UI; que la UI valide no valida el canal.
+ */
+function esFechaDDMMYYYYValida(str) {
+    const m = String(str ?? '').trim().match(RE_FECHA_DDMMYYYY);
+    if (!m) return false;
+    const dia = +m[1], mes = +m[2], anio = +m[3];
+    if (mes < 1 || mes > 12 || dia < 1 || dia > 31 || anio < 1900 || anio > 2999) return false;
+    const d = new Date(anio, mes - 1, dia);
+    return d.getFullYear() === anio && d.getMonth() === mes - 1 && d.getDate() === dia;
+}
+
+/**
+ * H-EL-07 — esquema MÍNIMO de `config_proceso.json`.
+ * No valida el archivo entero (tiene ramas opcionales que ninguna UI escribe):
+ * valida los campos que salen del renderer y terminan gobernando una corrida real.
+ * Rechaza en vez de sanear: si el objeto no tiene la forma esperada, algo está mal
+ * aguas arriba y guardarlo "corregido" enmascara el problema.
+ * @returns {string|null} motivo del rechazo, o null si es válido
+ */
+function validarConfigProceso(config) {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+        return 'La configuración debe ser un objeto.';
+    }
+    const g = config.general;
+    if (g !== undefined) {
+        if (!g || typeof g !== 'object' || Array.isArray(g)) return 'general debe ser un objeto.';
+        if (g.fechaLimite !== undefined && g.fechaLimite !== '' && !esFechaDDMMYYYYValida(g.fechaLimite)) {
+            return 'La fecha límite debe tener el formato DD/MM/YYYY.';
+        }
+        if (g.maxMovimientos !== undefined) {
+            // Se compara el VALOR, no el tipo JS: un config viejo puede traerlo como
+            // "15" (string) y eso no es un problema de seguridad ni de corrección.
+            const n = Number(g.maxMovimientos);
+            if (!Number.isInteger(n) || n < 1 || n > 500) {
+                return 'maxMovimientos debe ser un entero entre 1 y 500.';
+            }
+        }
+        if (g.identificador !== undefined && !/^\d{0,11}$/.test(String(g.identificador))) {
+            return 'El identificador (CUIT) solo admite hasta 11 dígitos.';
+        }
+    }
+    // Los bloques de toggles: cualquier clave presente tiene que ser booleana.
+    for (const bloque of ['opciones', 'secciones', 'visor', 'seguridad', 'notificaciones', 'excel']) {
+        const b = config[bloque];
+        if (b === undefined) continue;
+        if (!b || typeof b !== 'object' || Array.isArray(b)) return `${bloque} debe ser un objeto.`;
+        for (const [k, v] of Object.entries(b)) {
+            if (typeof v !== 'boolean' && bloque !== 'opciones') return `${bloque}.${k} debe ser booleano.`;
+        }
+    }
+    if (config.opciones && config.opciones.formatoSalida !== undefined &&
+        !['ambos', 'excel', 'json', 'html'].includes(String(config.opciones.formatoSalida))) {
+        return 'formatoSalida inválido.';
+    }
+    return null;
+}
+
 ipcMain.handle('save-config', async (event, config) => {
     try {
+        const motivo = validarConfigProceso(config);
+        if (motivo) {
+            console.error(`⛔ save-config rechazado: ${motivo}`);
+            return { success: false, error: motivo };
+        }
         const configPath = getConfigPath();
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
         return { success: true };
@@ -993,7 +1094,24 @@ function updateRunStats(tipo, exitoso) {
 
 async function acquireExecutionLock(scriptName) {
     const result = await authManager.backendClient.startExecution(scriptName);
-    if (!result.success) return result;
+    if (!result.success) {
+        // B.7 (fase E5 del lado servidor): si la cuenta quedó suspendida por no
+        // haber aceptado los términos, el 403 trae `action:'accept_terms'` y la
+        // ruta de la pantalla que la destraba. Se abre acá, en el proceso
+        // principal, y no en cada uno de los 4 llamadores: así los 6 flujos
+        // quedan cubiertos por una sola vía y no se puede olvidar en uno.
+        if (result.action === 'accept_terms') {
+            try {
+                const base = authManager.backendClient.baseURL.replace(/\/+$/, '');
+                const ruta = String(result.url || '/legal/accept/');
+                const destino = base + (ruta.startsWith('/') ? ruta : `/${ruta}`);
+                if (isSafeHttpUrl(destino)) {
+                    await shell.openExternal(destino);
+                }
+            } catch (_) { /* si no se puede abrir, el mensaje igual llega a la UI */ }
+        }
+        return result;
+    }
 
     // Iniciar heartbeat cada 30 s para mantener el lock activo
     executionLockTimer = setInterval(async () => {
@@ -1138,8 +1256,13 @@ async function runProcessLogic(options = {}) {
             mainWindow?.webContents.send('batch-progress', { done: true });
             return {
                 success: false,
-                error: lockResult.error,
-                code:  lockResult.code
+                error:  lockResult.error,
+                code:   lockResult.code,
+                // B.8/B.7: `action` decide qué ve el usuario. Sin propagarlo, un 403
+                // de cupo o de términos cae al toast genérico "Error al iniciar
+                // proceso" y el motivo real queda solo en el log de consola.
+                action: lockResult.action,
+                url:    lockResult.url
             };
         }
 
@@ -1187,6 +1310,13 @@ ipcMain.handle('run-process', async (event, options = {}) => runProcessLogic(opt
 
 // Handler: run-process-custom-date
 ipcMain.handle('run-process-custom-date', async (event, fecha) => {
+    // H-EL-07: la fecha llega del renderer y termina escrita en config_proceso.json,
+    // que es lo que lee el script de Puppeteer. La validación de la UI (v2.7.42) vive
+    // del otro lado del puente; este canal IPC no la tenía y aceptaba cualquier cosa
+    // (incluida una fecha imposible como 31/02/2026, o un objeto).
+    if (typeof fecha !== 'string' || !esFechaDDMMYYYYValida(fecha)) {
+        return { success: false, error: 'Fecha inválida — usá el formato DD/MM/YYYY.' };
+    }
     if (isExecuting) {
         return { success: false, error: 'Ya hay un proceso en ejecución' };
     }
@@ -1249,7 +1379,7 @@ ipcMain.handle('run-process-custom-date', async (event, fecha) => {
         if (!lockResult.success) {
             mainWindow.webContents.send('batch-progress', { done: true });
             fs.writeFileSync(configPath, originalConfig);
-            return { success: false, error: lockResult.error, code: lockResult.code };
+            return { success: false, error: lockResult.error, code: lockResult.code, action: lockResult.action, url: lockResult.url };
         }
         await closeChromeProfile();
         let result;
@@ -1364,7 +1494,7 @@ ipcMain.handle('run-process-custom', async (event, { lines, fechaLimite }) => {
         const lockResult = await acquireExecutionLock(scriptName);
         if (!lockResult.success) {
             mainWindow.webContents.send('batch-progress', { done: true });
-            return { success: false, error: lockResult.error, code: lockResult.code };
+            return { success: false, error: lockResult.error, code: lockResult.code, action: lockResult.action, url: lockResult.url };
         }
         await closeChromeProfile();
         let result;
@@ -1424,9 +1554,14 @@ ipcMain.handle('stop-process', async () => {
     try {
         stopRequested = true;
         const stopped = authManager.stopCurrentProcess();
+        // H-EL-10 ampliado: `stopCurrentProcess()` hace `kill('SIGTERM')`, que en
+        // Windows mata el hijo sin dejarle correr su handler → el Chrome del perfil
+        // ProcuradorSCW, con la sesión del PJN abierta, sobrevivía a "Detener".
+        await closeChromeProfile();
         await releaseExecutionLock();
         return { success: stopped };
     } catch (error) {
+        await closeChromeProfile().catch(() => {});
         await releaseExecutionLock();
         return { success: false, error: error.message };
     }
@@ -1461,7 +1596,7 @@ ipcMain.handle('list-expedientes', async (event, fechaLimite) => {
 
         const lockResult = await acquireExecutionLock(scriptName);
         if (!lockResult.success) {
-            return { success: false, error: lockResult.error, code: lockResult.code };
+            return { success: false, error: lockResult.error, code: lockResult.code, action: lockResult.action, url: lockResult.url };
         }
 
         await closeChromeProfile();
@@ -1502,7 +1637,14 @@ ipcMain.handle('list-expedientes', async (event, fechaLimite) => {
 // se valida igual, como defensa en profundidad (documentado junto a P-2/E4-1 en el informe
 // de revisión: si esos hallazgos alguna vez se combinaran, este handler no debe ser el
 // eslabón que complete la cadena).
-const EXTENSIONES_EJECUTABLES = new Set(['.exe', '.bat', '.cmd', '.scr', '.ps1', '.msi', '.com', '.vbs', '.js']);
+// H-EL-08 (fase E8, residual de E2-3): la denylist de arriba era incompleta —
+// Windows ejecuta muchas más extensiones que esas 9 (`.hta`, `.jar`, `.msc`,
+// `.reg`, `.lnk`, `.pif`, `.wsf`, `.cpl`, `.jse`, `.vbe`, `.ps2`, `.url`…), y la
+// lista crece con cada versión del sistema operativo. Una denylist de esta clase
+// solo puede ir por detrás. Se invierte a ALLOWLIST: exactamente los 6 tipos que
+// la app genera y que sus 8 call sites reales abren (visor .html, Excel .xlsx,
+// PDF de informe, y los 3 de Markdown: .md, .txt del mapping, .json).
+const EXTENSIONES_ABRIBLES = new Set(['.pdf', '.html', '.xlsx', '.md', '.txt', '.json']);
 ipcMain.handle('open-file', async (event, filePath) => {
     try {
         const { shell } = require('electron');
@@ -1512,7 +1654,7 @@ ipcMain.handle('open-file', async (event, filePath) => {
         if (!resolved.startsWith(userDataRoot + path.sep) && resolved !== userDataRoot) {
             return { success: false, error: 'Ruta no permitida' };
         }
-        if (EXTENSIONES_EJECUTABLES.has(path.extname(resolved).toLowerCase())) {
+        if (!EXTENSIONES_ABRIBLES.has(path.extname(resolved).toLowerCase())) {
             return { success: false, error: 'Tipo de archivo no permitido' };
         }
         if (!fs.existsSync(resolved)) {
@@ -1840,13 +1982,22 @@ async function fetchBitacoraRuntimeInfo() {
         if (segRes.status === 'fulfilled' && Array.isArray(segRes.value?.data?.seguidos)) {
             seguidos = segRes.value.data.seguidos;
         }
-        // Solo si el módulo está habilitado: sin esto, TODO visor de procuración/informe
-        // por lote (se generan siempre, tengan o no el flag) quedaría con un JWT vivo
-        // embebido en el HTML aunque la botonera ni se renderice — exposición sin
-        // ninguna función, para el 100% de las cuentas que hoy no tienen Bitácora.
-        if (enabled) {
-            ssoToken = authManager?.backendClient?.token || null;
-        }
+        // ── B.3 paso (D) — decisión del operador del 2026-09-02, fase E8 ──────
+        // Acá se embebía `authManager.backendClient.token`: el JWT de LOGIN, con
+        // 8 h de vida y acceso completo a la API, dentro de un archivo .html que
+        // queda en la carpeta de descargas del usuario y que el producto lo invita
+        // a compartir. El fragmento `#sso=` no lo ve el servidor, pero el archivo
+        // sí lo tiene, en claro, para siempre.
+        //
+        // El visor ya NO lleva ninguna llave. Consecuencia aceptada: la primera
+        // captura del día pide login manual en el portal si no había sesión; las
+        // siguientes andan solas porque el portal ya tiene su sesión de 8 h. El
+        // borrador sobrevive ese ciclo (flujo "sin sesión" de F2.3).
+        //
+        // La llave chica vuelve en la Fase 6 / B.3 (A): un JWT de 30 min con
+        // `scope: 'capture'` y un solo uso, fabricado al generar el visor. NO
+        // reponer el token de login acá.
+        ssoToken = null;
     } catch (_) {
         // fail-closed: sin botonera, el visor se abre igual sin este bloque
     }
@@ -1870,8 +2021,22 @@ async function postProcesarVisorProcuracion(visorPath) {
         let html = fs.readFileSync(visorPath, 'utf8');
         if (!html.includes(marcador)) return; // versión vieja del template, sin marcador
         const runtimeInfo = await fetchBitacoraRuntimeInfo();
-        const runtimeScript = `<script>window.BITACORA_RUNTIME = ${JSON.stringify(runtimeInfo)};</script>`;
-        html = html.replace(marcador, runtimeScript);
+        // H-EL-03 (fase E8): dos defectos en una línea.
+        //  (1) `JSON.stringify` NO escapa `<`, así que un `expediente` de `seguidos`
+        //      con `</script><script>…` cerraba el bloque y ejecutaba en el visor.
+        //      Ese campo admite hasta 60 caracteres del lado del servidor
+        //      (`capture.js:53`), suficiente. Mismo escape que ya aplican los otros
+        //      tres generadores (F3 #1 y E3): `<` → `<`, más U+2028/U+2029,
+        //      que son saltos de línea válidos en JS y romperían el literal.
+        //  (2) `String.replace(str, str)` interpreta `$&`, `$'` y `` $` `` en el
+        //      REEMPLAZO como patrones. Con una función de reemplazo el string se
+        //      inserta literal.
+        const runtimeJson = JSON.stringify(runtimeInfo)
+            .replace(/</g, '\\u003c')
+            .replace(/\u2028/g, '\\u2028')
+            .replace(/\u2029/g, '\\u2029');
+        const runtimeScript = `<script>window.BITACORA_RUNTIME = ${runtimeJson};</script>`;
+        html = html.replace(marcador, () => runtimeScript);
         fs.writeFileSync(visorPath, html, 'utf8');
     } catch (error) {
         console.error('Bitácora: post-procesado del visor falló (no crítico, el visor se abre igual):', error.message);
@@ -2012,6 +2177,39 @@ ipcMain.handle('select-batch-file', async () => {
 //  de esto pasa por nuestro backend salvo la lectura de account.markdownEnabled.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ─── H-EL-06 (fase E8): allowlist de PDFs elegidos por el usuario ────────────
+// `procesar-markdown-pdf` recibía una ruta del renderer y solo comprobaba
+// `existsSync` — o sea que aceptaba CUALQUIER archivo del disco del abogado y lo
+// parseaba, extraía su texto y lo dejaba escrito en la carpeta de descargas
+// (además de disparar la descarga de los enlaces que contuviera). El handler debe
+// operar únicamente sobre los PDFs que el propio usuario entregó, por una de las
+// dos vías legítimas: el diálogo nativo o un drop real sobre la dropzone.
+//
+// Por qué esto es una frontera y no un placebo: el renderer NO puede fabricar una
+// entrada de este Set. `select-markdown-pdf` la puebla desde el resultado del
+// diálogo (lo elige el usuario, no el renderer), y el drop la puebla desde
+// `preload.js`, donde `webUtils.getPathForFile(file)` exige un objeto `File`
+// genuino del DOM. Con `contextIsolation: true` y sin `ipcRenderer` expuesto, el
+// renderer no tiene forma de invocar el canal de registro con una ruta arbitraria.
+const pdfsMarkdownPermitidos = new Set();
+const MAX_PDFS_MARKDOWN_PERMITIDOS = 50;   // no crecer sin techo en una sesión larga
+
+function registrarPdfMarkdownPermitido(ruta) {
+    try {
+        if (typeof ruta !== 'string' || !ruta) return null;
+        const resolved = path.resolve(ruta);
+        if (path.extname(resolved).toLowerCase() !== '.pdf') return null;
+        if (!fs.existsSync(resolved)) return null;
+        if (pdfsMarkdownPermitidos.size >= MAX_PDFS_MARKDOWN_PERMITIDOS) {
+            pdfsMarkdownPermitidos.delete(pdfsMarkdownPermitidos.values().next().value);
+        }
+        pdfsMarkdownPermitidos.add(resolved);
+        return resolved;
+    } catch (_) {
+        return null;
+    }
+}
+
 ipcMain.handle('select-markdown-pdf', async () => {
     const { dialog } = require('electron');
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -2022,7 +2220,19 @@ ipcMain.handle('select-markdown-pdf', async () => {
     if (result.canceled || result.filePaths.length === 0) {
         return { success: false, canceled: true };
     }
-    return { success: true, path: result.filePaths[0] };
+    const elegido = registrarPdfMarkdownPermitido(result.filePaths[0]);
+    if (!elegido) {
+        return { success: false, error: 'El archivo elegido no es un PDF accesible.' };
+    }
+    return { success: true, path: elegido };
+});
+
+// Registro de la ruta de un archivo SOLTADO en la dropzone. Solo lo invoca
+// `preload.js` (ver el comentario de `pdfsMarkdownPermitidos`), con el resultado
+// de `webUtils.getPathForFile()` sobre un `File` real.
+ipcMain.handle('markdown-register-dropped-path', (_event, ruta) => {
+    const registrado = registrarPdfMarkdownPermitido(ruta);
+    return { success: !!registrado, path: registrado };
 });
 
 // Defensa en profundidad — el botón del topbar ya está oculto sin el flag,
@@ -2067,6 +2277,11 @@ ipcMain.handle('procesar-markdown-pdf', async (event, pdfPath) => {
         }
         if (!pdfPath || !fs.existsSync(pdfPath)) {
             return { success: false, error: 'El archivo no existe.' };
+        }
+        // H-EL-06: solo PDFs entregados por el usuario (diálogo nativo o drop real).
+        if (!pdfsMarkdownPermitidos.has(path.resolve(String(pdfPath)))) {
+            console.error(`⛔ procesar-markdown-pdf: ruta no entregada por el usuario — ${pdfPath}`);
+            return { success: false, error: 'Ruta no permitida. Elegí el PDF con el botón o arrastralo a la zona de carga.' };
         }
 
         const enviarProgreso = (evento) => {

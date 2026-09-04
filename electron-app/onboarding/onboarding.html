@@ -3,6 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--
+      H-COV-Z3-01 (fase E8): este era el ÚNICO documento de la app sin CSP
+      (`index.html:6` y `renderer/login.html:6` sí la tienen). Importa acá más que
+      en otros lados porque `preload-onboarding.js:19-21` expone `safeStorageGet`
+      sobre `psc_accounts`, que devuelve las credenciales en claro: si algún día un
+      dato dinámico de origen externo llegara a un `innerHTML` de esta ventana, sin
+      CSP el robo sería inmediato. Misma política que la ventana principal. El
+      documento no tiene handlers inline y carga un solo <script src>, así que
+      aplicarla no cambia nada de lo que ya funciona.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
     <title>Configuración inicial — Procurador SCW</title>
     <link rel="stylesheet" href="onboarding.css">
 </head>

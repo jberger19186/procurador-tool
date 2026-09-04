@@ -105,10 +105,13 @@ class SecurityAudit {
             this.counters[eventType]++;
         }
 
-        // Persistir a disco (async, no bloquea)
-        this._persistEvent(event);
+        // Persistir a disco. H-COV-Z3-02: el resultado se expone en el evento
+        // devuelto (`persisted`) para que un llamador con eventos críticos
+        // (firma inválida, checksum alterado) pueda enterarse de que la
+        // evidencia NO llegó al .jsonl — antes se perdía en silencio.
+        const persisted = this._persistEvent(event);
 
-        return event;
+        return { ...event, persisted };
     }
 
     // ══════════════════════════════════════════════════
@@ -200,6 +203,9 @@ class SecurityAudit {
 
     /**
      * Persistir evento a archivo JSON (append)
+     * H-COV-Z3-02: devuelve true/false. Sigue sin propagar la excepción (el
+     * logging no debe tumbar una ejecución), pero ahora el llamador PUEDE saber.
+     * @returns {boolean}
      */
     _persistEvent(event) {
         try {
@@ -215,10 +221,13 @@ class SecurityAudit {
 
             // Append como línea JSON (JSONL format)
             fs.appendFileSync(logFile, JSON.stringify(event) + '\n', 'utf8');
+            return true;
 
         } catch (error) {
             // No propagar errores de logging
+            this.persistFailures = (this.persistFailures || 0) + 1;
             console.warn(`⚠️ [SecurityAudit] Error persistiendo evento: ${error.message}`);
+            return false;
         }
     }
 

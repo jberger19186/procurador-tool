@@ -12,10 +12,20 @@ class FileEncryption {
     constructor() {
         // Generar clave única al iniciar la app (SOLO existe en RAM)
         this.sessionKey = crypto.randomBytes(32); // 256 bits AES
-        this.iv = crypto.randomBytes(16);         // IV único para GCM
+
+        // H-EL-04 (fase E8, 2026-09-04): acá había un `this.iv` ÚNICO por sesión,
+        // reusado en cada `encrypt()`. Reutilizar el IV con la misma clave en
+        // AES-GCM es la falla clásica del modo: dos textos cifrados con el mismo
+        // (key, iv) permiten obtener el XOR de los planos y, peor, comprometen la
+        // clave de autenticación GHASH — o sea que el authTag deja de garantizar
+        // integridad. En esta app se cifran ~13 scripts por sesión con la misma
+        // clave, así que la condición se cumplía siempre. Ahora el IV se genera
+        // POR MENSAJE dentro de `encrypt()` y viaja con el ciphertext
+        // (formato `iv|||encrypted|||authTag`, ver `createWrapperScript`).
 
         console.log('🔐 Sistema de encriptación v2.0 inicializado (clave en memoria)');
         console.log('   ✅ Modo: AES-256-GCM (con autenticación)');
+        console.log('   ✅ IV: único por archivo');
         console.log('   ✅ Contexto: vm (aislado)');
         console.log('   ✅ Wrapper: Ofuscado');
     }
@@ -23,12 +33,13 @@ class FileEncryption {
     /**
      * Encriptar código JavaScript con AES-256-GCM
      * @param {string} code - Código en texto plano
-     * @returns {Object} - { encrypted: string, authTag: string }
+     * @returns {Object} - { iv: string, encrypted: string, authTag: string }
      */
     encrypt(code) {
         try {
-            // Usar GCM en lugar de CBC
-            const cipher = crypto.createCipheriv('aes-256-gcm', this.sessionKey, this.iv);
+            // H-EL-04: IV nuevo en CADA llamada, nunca uno de sesión.
+            const iv = crypto.randomBytes(16);
+            const cipher = crypto.createCipheriv('aes-256-gcm', this.sessionKey, iv);
 
             let encrypted = cipher.update(code, 'utf8', 'hex');
             encrypted += cipher.final('hex');
@@ -37,6 +48,7 @@ class FileEncryption {
             const authTag = cipher.getAuthTag().toString('hex');
 
             return {
+                iv: iv.toString('hex'),
                 encrypted: encrypted,
                 authTag: authTag
             };
@@ -50,11 +62,13 @@ class FileEncryption {
      * Desencriptar código JavaScript con AES-256-GCM
      * @param {string} encrypted - Código encriptado en hex
      * @param {string} authTag - Tag de autenticación
+     * @param {string} iv - IV en hex, el que devolvió `encrypt()` para ESTE mensaje
      * @returns {string} - Código en texto plano
      */
-    decrypt(encrypted, authTag) {
+    decrypt(encrypted, authTag, iv) {
         try {
-            const decipher = crypto.createDecipheriv('aes-256-gcm', this.sessionKey, this.iv);
+            if (!iv) throw new Error('IV requerido (H-EL-04: el IV es por archivo, no de sesión)');
+            const decipher = crypto.createDecipheriv('aes-256-gcm', this.sessionKey, Buffer.from(iv, 'hex'));
 
             // ✅ NUEVO: Establecer tag de autenticación
             decipher.setAuthTag(Buffer.from(authTag, 'hex'));
@@ -71,12 +85,13 @@ class FileEncryption {
 
     /**
      * Obtener credenciales de sesión (para pasar a child process)
-     * @returns {Object} - { key: string, iv: string }
+     * H-EL-04: ya NO devuelve `iv` — el IV es por archivo y viaja dentro del
+     * propio `.enc` (`iv|||encrypted|||authTag`), no por variable de entorno.
+     * @returns {Object} - { key: string }
      */
     getSessionCredentials() {
         return {
-            key: this.sessionKey.toString('hex'),
-            iv: this.iv.toString('hex')
+            key: this.sessionKey.toString('hex')
         };
     }
 
@@ -95,20 +110,24 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-// Obtener credenciales desde variables de entorno
+// Obtener la clave desde variable de entorno. El IV NO viaja por env
+// (H-EL-04): es único por archivo y va como primer campo del .enc.
 const key = Buffer.from(process.env.DECRYPT_KEY, 'hex');
-const iv = Buffer.from(process.env.DECRYPT_IV, 'hex');
 
 try {
     // Leer archivo encriptado
     const encryptedPath = path.join(__dirname, '${encryptedFilename}');
     const fileContent = fs.readFileSync(encryptedPath, 'utf8');
-    
-    // Separar datos encriptados y authTag
+
+    // Separar IV, datos encriptados y authTag  →  iv|||encrypted|||authTag
     const parts = fileContent.split('|||');
-    const encrypted = parts[0];
-    const authTag = parts[1];
-    
+    if (parts.length !== 3) {
+        throw new Error('Formato de archivo encriptado inválido');
+    }
+    const iv = Buffer.from(parts[0], 'hex');
+    const encrypted = parts[1];
+    const authTag = parts[2];
+
     // Desencriptar con verificación de autenticidad
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(Buffer.from(authTag, 'hex'));
@@ -204,12 +223,13 @@ try {
      * Validar integridad de archivo encriptado
      * @param {string} encrypted - Datos encriptados
      * @param {string} authTag - Tag de autenticación
+     * @param {string} iv - IV en hex de ESE archivo (H-EL-04)
      * @returns {boolean} - true si es válido
      */
-    validateIntegrity(encrypted, authTag) {
+    validateIntegrity(encrypted, authTag, iv) {
         try {
             // Intentar desencriptar, si falla el tag = archivo manipulado
-            this.decrypt(encrypted, authTag);
+            this.decrypt(encrypted, authTag, iv);
             return true;
         } catch (error) {
             return false;

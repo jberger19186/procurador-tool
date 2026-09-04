@@ -20,6 +20,24 @@ const ERROR_INTEGRIDAD = 'No se pudo verificar la integridad de los componentes 
     'Cerrá y volvé a abrir; si el problema persiste, contactá a soporte.';
 
 /**
+ * H-COV-Z3-02 (fase E8): `securityAudit._persistEvent()` traga cualquier error de
+ * escritura (disco lleno, perfil móvil, antivirus, carpeta de logs no escribible) y
+ * el llamador nunca se enteraba — una firma inválida quedaba registrada solo en la
+ * consola volátil y el `.jsonl` no la recibía. No cambia el control (el rechazo del
+ * script ya es fail-closed), cambia que la PÉRDIDA DE EVIDENCIA deje de ser silenciosa.
+ * @param {object|null} ev - lo que devuelve un `log*()` de SecurityAudit
+ * @param {string} scriptName
+ */
+function avisarSiEventoNoPersistido(ev, scriptName) {
+    if (ev && ev.persisted === false) {
+        console.error(
+            `🚨 [SecurityAudit] evento CRÍTICO no persistido (${scriptName}): ` +
+            `revisar permisos/espacio de la carpeta security-logs`
+        );
+    }
+}
+
+/**
  * Determina el subsistema al que pertenece un script para el tracking granular
  * @param {string} scriptName
  * @returns {string|null} 'proc', 'informe', o null
@@ -253,19 +271,21 @@ class AuthManager {
 
                 } catch (verifyError) {
                     if (verifyError instanceof SignatureVerificationError) {
-                        this.securityAudit.logSignatureFailed(scriptName, {
+                        const ev = this.securityAudit.logSignatureFailed(scriptName, {
                             expectedChecksum: security.checksum,
                             error: verifyError.message
                         });
+                        avisarSiEventoNoPersistido(ev, scriptName);
                         console.error(`🚨 FIRMA INVÁLIDA: ${scriptName} - Script rechazado`);
                         return { success: false, error: `Firma digital inválida: ${scriptName}` };
                     }
 
                     if (verifyError instanceof ChecksumMismatchError) {
-                        this.securityAudit.logChecksumMismatch(scriptName, verifyError.stage, {
+                        const ev = this.securityAudit.logChecksumMismatch(scriptName, verifyError.stage, {
                             expected: verifyError.expected,
                             actual: verifyError.actual
                         });
+                        avisarSiEventoNoPersistido(ev, scriptName);
                         console.error(`🚨 CHECKSUM MISMATCH: ${scriptName} - Script rechazado`);
                         return { success: false, error: `Integridad comprometida: ${scriptName}` };
                     }
@@ -516,7 +536,8 @@ class AuthManager {
 
                             // Guardar archivo encriptado con authTag
                             const encPath = path.join(tempDir, `${dep}.enc`);
-                            const encryptedContent = `${encryptionResult.encrypted}|||${encryptionResult.authTag}`;
+                            // H-EL-04: formato `iv|||encrypted|||authTag` — el IV es por archivo.
+                            const encryptedContent = `${encryptionResult.iv}|||${encryptionResult.encrypted}|||${encryptionResult.authTag}`;
                             fs.writeFileSync(encPath, encryptedContent, 'utf8');
 
                             // Crear wrapper que desencripta (ofuscado)
@@ -538,10 +559,11 @@ class AuthManager {
                     this.securityAudit.logScriptVerified(scriptName, { stage: 2 });
                 } catch (checksumError) {
                     if (checksumError instanceof ChecksumMismatchError) {
-                        this.securityAudit.logChecksumMismatch(scriptName, 2, {
+                        const ev = this.securityAudit.logChecksumMismatch(scriptName, 2, {
                             expected: checksumError.expected,
                             actual: checksumError.actual
                         });
+                        avisarSiEventoNoPersistido(ev, scriptName);
                         console.error(`🚨 CHECKSUM ETAPA 2 FALLIDO: ${scriptName}`);
                         return reject({ success: false, error: ERROR_INTEGRIDAD });
                     }
@@ -556,7 +578,8 @@ class AuthManager {
 
                 // Guardar archivo encriptado con authTag
                 const encScriptPath = path.join(tempDir, `${scriptName}.enc`);
-                const encryptedContent = `${encryptionResult.encrypted}|||${encryptionResult.authTag}`;
+                // H-EL-04: formato `iv|||encrypted|||authTag` — el IV es por archivo.
+                const encryptedContent = `${encryptionResult.iv}|||${encryptionResult.encrypted}|||${encryptionResult.authTag}`;
                 fs.writeFileSync(encScriptPath, encryptedContent, 'utf8');
 
                 // Q6 (Fase 3, C7/F6): hash del contenido cifrado tal como quedó
@@ -578,7 +601,7 @@ class AuthManager {
                 // La etapa 3 verificaba el .enc (datos) y dejaba sin verificar el .js
                 // (código): un atacante capaz de reescribir el .enc en esa ventana —el
                 // modelo de amenaza que la propia etapa 3 declara defender— puede reescribir
-                // el wrapper, que además corre con DECRYPT_KEY/DECRYPT_IV en su env y con
+                // el wrapper, que además corre con DECRYPT_KEY en su env y con
                 // NODE_PATH apuntando a los node_modules de la app. El .enc está autenticado
                 // por GCM (manipularlo sin la clave de sesión hace fallar el descifrado);
                 // el wrapper es texto plano y no lo protegía nada.
@@ -613,10 +636,11 @@ class AuthManager {
                     const diskChecksum = this.scriptVerifier.calculateChecksum(encOnDisk);
 
                     if (diskChecksum !== encDiskHash) {
-                        this.securityAudit.logChecksumMismatch(scriptName, 3, {
+                        const ev = this.securityAudit.logChecksumMismatch(scriptName, 3, {
                             expected: encDiskHash,
                             actual: diskChecksum
                         });
+                        avisarSiEventoNoPersistido(ev, scriptName);
                         console.error(`🚨 CHECKSUM ETAPA 3 FALLIDO (archivo en disco manipulado): ${scriptName}`);
                         return reject({ success: false, error: ERROR_INTEGRIDAD });
                     }
@@ -627,7 +651,7 @@ class AuthManager {
                     const wrapperChecksum = this.scriptVerifier.calculateChecksum(wrapperOnDisk);
 
                     if (wrapperChecksum !== wrapperDiskHash) {
-                        this.securityAudit.logChecksumMismatch(scriptName, 3, {
+                        const ev = this.securityAudit.logChecksumMismatch(scriptName, 3, {
                             expected: wrapperDiskHash,
                             actual: wrapperChecksum
                         });
@@ -656,7 +680,6 @@ class AuthManager {
                         APPDATA: app.getPath('userData'),
                         LOCALAPPDATA: process.env.LOCALAPPDATA,
                         DECRYPT_KEY: credentials.key,
-                        DECRYPT_IV: credentials.iv,
                         ...(options.extraEnv || {})
                     }
                 });

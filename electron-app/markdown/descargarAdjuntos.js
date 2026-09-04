@@ -44,6 +44,12 @@ const MAX_ADJUNTOS_POR_INFORME = 100;      // generoso frente al máximo medido 
 const MAX_BYTES_POR_ADJUNTO = 20 * 1024 * 1024;   // 20 MB — un escaneo pesado cabe holgado
 const MAX_BYTES_TOTAL = 200 * 1024 * 1024;        // 200 MB por corrida completa
 const TIMEOUT_POR_ADJUNTO_MS = 30000;
+// H-EL-12 (fase E8): el timeout de arriba es POR ADJUNTO, así que con 100 enlaces
+// un servidor que responde justo por debajo del corte deja el módulo colgado hasta
+// 100 × 30 s = 50 minutos, con el modal bloqueado por el guard de concurrencia
+// (`isProcesandoMarkdown`) y sin forma de cancelar. El tope total corta la corrida.
+// 10 min es holgado frente a lo medido por M0 (1 a 37 adjuntos de ~86 KB).
+const TIMEOUT_TOTAL_MS = 10 * 60 * 1000;
 
 const ESQUEMA_PERMITIDO = 'https:';
 const HOST_PERMITIDO = 'scw.pjn.gov.ar';
@@ -324,9 +330,25 @@ async function descargarAdjuntos(links, opts) {
     const errores = [];
     let bytesTotales = 0;
     let topeTotalAlcanzado = false;
+    // H-EL-12: reloj de pared de toda la corrida. Se mide desde acá y se chequea
+    // ANTES de cada petición, con el mismo patrón que `topeTotalAlcanzado` (afuera
+    // del try, para que el corte no se confunda con el error de un adjunto).
+    const iniciadoEn = Date.now();
+    let timeoutTotalAlcanzado = false;
 
     for (let i = 0; i < links.length; i++) {
         const link = links[i];
+
+        if (!timeoutTotalAlcanzado && (Date.now() - iniciadoEn) > TIMEOUT_TOTAL_MS) {
+            timeoutTotalAlcanzado = true;
+        }
+        if (timeoutTotalAlcanzado) {
+            errores.push({
+                url: link.url,
+                motivo: `Se alcanzó el tope de ${TIMEOUT_TOTAL_MS / 60000} min de descarga — no se descargó`
+            });
+            continue;
+        }
 
         // 🚨 F5 (2026-08-31): el chequeo del tope TOTAL estaba DENTRO del
         // try/catch de abajo, así que su `throw` se capturaba como un error más
@@ -489,4 +511,5 @@ module.exports = {
     MAX_ADJUNTOS_POR_INFORME,
     MAX_BYTES_POR_ADJUNTO,
     MAX_BYTES_TOTAL,
+    TIMEOUT_TOTAL_MS,
 };

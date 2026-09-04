@@ -9,6 +9,10 @@ class BackendClient {
         this.sessionKey = null;
         this.user = null;
         this.machineId = getMachineId();
+        // B.8: id del permiso de ejecución vigente (lo devuelve `execution/start`).
+        // Vive entre `startExecution()` y `endExecution()`; `logExecution()` lo manda
+        // para que el servidor NO vuelva a descontar cupo.
+        this.currentExecutionId = null;
 
         const httpsAgent = new https.Agent({
             rejectUnauthorized: true
@@ -145,7 +149,13 @@ class BackendClient {
                 errorMessage,
                 executionTime,
                 subsystem,
-                expedientesCount
+                expedientesCount,
+                // B.8: con `executionId` el servidor SOLO registra en usage_logs; el
+                // cupo ya lo descontó `execution/start`. Se lee de la propiedad y no
+                // de un parámetro nuevo para no tener que hilarlo por main.js →
+                // authManager → acá: el ciclo start/…/end es uno por vez (lo garantiza
+                // `isExecuting` en main.js y el candado por usuario del servidor).
+                executionId: this.currentExecutionId ?? null
             });
             return response.data;
         } catch (error) {
@@ -344,7 +354,18 @@ class BackendClient {
     }
 
     /**
-     * Adquirir lock de ejecución multi-dispositivo
+     * Adquirir lock de ejecución multi-dispositivo.
+     *
+     * B.8 (fase E7 en el servidor, E8 acá): `start` dejó de ser solo un candado —
+     * ahora es el ÚNICO lugar que descuenta cupo, y por eso puede responder
+     * 403 `QUOTA_EXCEEDED` (con `action:'upgrade'` y `subsystem`) o, desde B.7,
+     * 403 `accept_terms`. En los dos casos NO hay que ejecutar: quien llama debe
+     * mirar `success` (ya lo hace `main.js:acquireExecutionLock`).
+     *
+     * Devuelve además `executionId`, que se guarda acá para que `end` y
+     * `log-execution` puedan correlacionar la ejecución. Sin ese id el servidor
+     * (compatibilidad con clientes viejos) vuelve a descontar en `log-execution`
+     * → DOBLE conteo. Es la razón por la que este release existe.
      */
     async startExecution(scriptName) {
         try {
@@ -352,10 +373,23 @@ class BackendClient {
                 machineId: this.machineId,
                 scriptName
             });
-            return response.data;
+            const data = response.data || {};
+            this.currentExecutionId = data.executionId ?? null;
+            return data;
         } catch (error) {
             const data = error.response?.data;
-            return { success: false, code: data?.code, error: data?.error || error.message };
+            this.currentExecutionId = null;
+            return {
+                success:   false,
+                code:      data?.code,
+                error:     data?.error || error.message,
+                // B.8 / B.7: sin propagar `action` y `url`, la UI muestra el toast
+                // genérico ("Error al iniciar proceso") y el motivo real queda solo
+                // en el log de consola.
+                action:    data?.action,
+                url:       data?.url,
+                subsystem: data?.subsystem
+            };
         }
     }
 
@@ -374,16 +408,26 @@ class BackendClient {
     }
 
     /**
-     * Liberar lock de ejecución al finalizar
+     * Liberar lock de ejecución al finalizar.
+     * B.8: manda el `executionId` que devolvió `start` para que el servidor acote
+     * el borrado a ESA fila (y no a un candado que otro flujo acaba de tomar), y
+     * `outcome` como bitácora. El cupo NO se devuelve acá — un permiso entregado
+     * está consumido, por diseño (regla 3 de la spec B.8).
+     * @param {'ok'|'error'|null} [outcome]
      */
-    async endExecution() {
+    async endExecution(outcome = null) {
+        const executionId = this.currentExecutionId ?? null;
         try {
             const response = await this.client.post('/license/execution/end', {
-                machineId: this.machineId
+                machineId: this.machineId,
+                executionId,
+                outcome
             });
             return response.data;
         } catch (error) {
             return { success: false, error: error.response?.data?.error || error.message };
+        } finally {
+            this.currentExecutionId = null;
         }
     }
 

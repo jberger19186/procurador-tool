@@ -144,6 +144,20 @@ function check(nombre, cond, detalle) {
         parsearMapping('# comentario\n\nA = B\n').length === 1);
     check('parsearMapping: un reemplazo con "=" adentro se parte solo en el primero',
         parsearMapping('A = B = C')[0].reemplazo === 'B = C');
+
+    // H-EL-13 (fase E8): una línea con el lado derecho vacío producía
+    // `reemplazo: ''` y `aplicarMapping` BORRABA el término del .md anonimizado,
+    // sin dejar rastro. En un documento judicial, borrar en silencio es peor que
+    // no enmascarar: el usuario revisa el mapping, no el diff.
+    check('H-EL-13: una línea sin reemplazo se descarta (no genera una entrada vacía)',
+        parsearMapping('JUAN PEREZ =\n').length === 0);
+    check('H-EL-13: "NOMBRE =   " (solo espacios) también se descarta',
+        parsearMapping('JUAN PEREZ =    \n').length === 0);
+    check('H-EL-13: una línea vacía no arrastra a las válidas de la misma tanda',
+        parsearMapping('JUAN PEREZ =\nMARIA LOPEZ = Mar### Lop###\n').length === 1);
+    check('H-EL-13: con la línea vacía descartada, el texto original NO desaparece del .md',
+        aplicarMapping('Compareció JUAN PEREZ ante el juzgado.', parsearMapping('JUAN PEREZ =\n'))
+            === 'Compareció JUAN PEREZ ante el juzgado.');
 })();
 
 (function testReemplazoLiteralF5() {

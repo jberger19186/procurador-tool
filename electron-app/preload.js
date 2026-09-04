@@ -129,7 +129,21 @@ try {
         // Drag&drop: desde Electron 32, `File.path` ya no existe en el renderer
         // por seguridad — `webUtils.getPathForFile()` es la vía oficial, y solo
         // está disponible en preload/main (no en el contexto aislado del DOM).
-        getPathForFile: (file) => webUtils.getPathForFile(file),
+        //
+        // H-EL-06 (fase E8): además de resolver la ruta, la REGISTRA en el proceso
+        // principal como "entregada por el usuario". Es el segundo poblador de la
+        // allowlist de `procesar-markdown-pdf` (el primero es el diálogo nativo).
+        // Esto es una frontera real y no un placebo: el renderer no puede llamar al
+        // canal de registro por su cuenta (no tiene `ipcRenderer`, hay
+        // `contextIsolation`), y `webUtils.getPathForFile()` exige un `File` genuino
+        // del DOM — con un string arbitrario lanza. Pasa a ser async por el registro.
+        getPathForFile: async (file) => {
+            const ruta = webUtils.getPathForFile(file);
+            try {
+                await ipcRenderer.invoke('markdown-register-dropped-path', ruta);
+            } catch (_) { /* si el registro falla, el handler rechazará la ruta */ }
+            return ruta;
+        },
 
         // ============ CUENTA Y TICKETS ============
         getLocalUser: () => ipcRenderer.invoke('get-local-user'),

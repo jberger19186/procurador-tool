@@ -750,6 +750,16 @@ function parsearMapping(texto) {
         const original = limpia.slice(0, idx).trim();
         const reemplazo = limpia.slice(idx + 1).trim();
         if (!original) continue;
+        // H-EL-13 (fase E8): una línea `NOMBRE =` sin nada a la derecha producía
+        // `reemplazo: ''`, y `aplicarMapping` reemplazaba el término por la cadena
+        // vacía: el texto DESAPARECÍA del .md anonimizado, en silencio, sin quedar
+        // registrado en ningún lado. En un documento judicial borrar sin avisar es
+        // peor que no enmascarar — el usuario revisa el mapping, no el diff. Se
+        // descarta la entrada y se avisa.
+        if (!reemplazo) {
+            console.warn(`⚠️ mapping: "${original}" no tiene reemplazo — la línea se ignora (habría borrado el texto).`);
+            continue;
+        }
         entradas.push({ original, reemplazo, tipo: 'manual' });
     }
     return entradas;

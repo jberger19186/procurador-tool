@@ -1116,7 +1116,14 @@ async function runProcess() {
         if (!result.success) {
             addLog('error', `❌ Error: ${result.error}`);
             setProcessRunning(false);
-            if (result.action === 'upgrade') showNotification(result.error, 'warning');
+            // B.8/B.7 (fase E8): `upgrade` = cupo agotado (el servidor ahora lo
+            // frena en execution/start, no en log-execution); `accept_terms` =
+            // cuenta suspendida por términos sin aceptar. En los dos casos el
+            // motivo REAL tiene que verse en pantalla, no solo en el log: antes
+            // caían al toast genérico porque `action` no se propagaba desde main.
+            if (result.action === 'upgrade' || result.action === 'accept_terms') {
+                showNotification(result.error, 'warning');
+            }
             else showNotification('Error al iniciar proceso', 'error');
         }
     } catch (error) {
@@ -1166,7 +1173,14 @@ async function runProcessCustomDate() {
         if (!result.success) {
             addLog('error', `❌ Error: ${result.error}`);
             setProcessRunning(false);
-            if (result.action === 'upgrade') showNotification(result.error, 'warning');
+            // B.8/B.7 (fase E8): `upgrade` = cupo agotado (el servidor ahora lo
+            // frena en execution/start, no en log-execution); `accept_terms` =
+            // cuenta suspendida por términos sin aceptar. En los dos casos el
+            // motivo REAL tiene que verse en pantalla, no solo en el log: antes
+            // caían al toast genérico porque `action` no se propagaba desde main.
+            if (result.action === 'upgrade' || result.action === 'accept_terms') {
+                showNotification(result.error, 'warning');
+            }
             else showNotification('Error al iniciar proceso', 'error');
         }
     } catch (error) {
@@ -1207,7 +1221,14 @@ async function runProcessFromSidebarFecha(fecha) {
         if (!result.success) {
             addLog('error', `❌ Error: ${result.error}`);
             setProcessRunning(false);
-            if (result.action === 'upgrade') showNotification(result.error, 'warning');
+            // B.8/B.7 (fase E8): `upgrade` = cupo agotado (el servidor ahora lo
+            // frena en execution/start, no en log-execution); `accept_terms` =
+            // cuenta suspendida por términos sin aceptar. En los dos casos el
+            // motivo REAL tiene que verse en pantalla, no solo en el log: antes
+            // caían al toast genérico porque `action` no se propagaba desde main.
+            if (result.action === 'upgrade' || result.action === 'accept_terms') {
+                showNotification(result.error, 'warning');
+            }
             else showNotification('Error al iniciar proceso', 'error');
         }
     } catch (error) {
@@ -1919,7 +1940,14 @@ function showNotification(message, type = 'info') {
         'box-shadow:0 4px 20px rgba(0,0,0,0.5)',
         'cursor:pointer', 'transition:opacity 0.3s'
     ].join(';');
-    toast.innerHTML = `<strong>${style.icon} ${type.toUpperCase()}</strong><br>${message}`;
+    // H-COV-Z3-01 (fase E8): `message` llega de 12 call sites que lo toman de
+    // `res.error`/`result.error`, es decir del backend (`backendClient.js` lo pasa
+    // sin filtrar) — por ejemplo el nombre de un plan, que hoy el servidor no valida.
+    // El sink era `innerHTML` crudo: no ejecuta script (`index.html:6` tiene
+    // `script-src 'self'` sin `'unsafe-inline'`), pero sí inyecta maquetado y links
+    // falsos en una ventana nativa. `escapeHtml()` ya existía en este archivo y la
+    // usa `addLog()`, el sink hermano.
+    toast.innerHTML = `<strong>${style.icon} ${type.toUpperCase()}</strong><br>${escapeHtml(String(message ?? ''))}`;
     toast.title = 'Clic para cerrar';
     toast.addEventListener('click', () => toast.remove());
     document.body.appendChild(toast);
@@ -3040,7 +3068,7 @@ function setupMarkdownModal() {
         dropzone.classList.add('md-dropzone-over');
     });
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('md-dropzone-over'));
-    dropzone.addEventListener('drop', (e) => {
+    dropzone.addEventListener('drop', async (e) => {
         e.preventDefault();
         dropzone.classList.remove('md-dropzone-over');
         if (markdownProcesando) {   // F5 — ver el comentario de `markdownProcesando`
@@ -3059,7 +3087,10 @@ function setupMarkdownModal() {
         if (archivos.length > 1) {
             markdownMostrarError(`Se soltaron ${archivos.length} archivos — se toma solo el primero (${file.name}).`);
         }
-        const rutaReal = window.electronAPI.getPathForFile(file);
+        // H-EL-06: `getPathForFile` pasó a ser async (registra la ruta en main como
+        // "entregada por el usuario"). Sin el await, `markdownSetArchivo` recibiría
+        // una Promise y el botón Procesar mandaría "[object Promise]".
+        const rutaReal = await window.electronAPI.getPathForFile(file);
         markdownSetArchivo(rutaReal);
     });
 
@@ -4015,7 +4046,14 @@ async function runMonitoreo(modo, partes) {
         if (!result.success) {
             addLog('error', 'Error: ' + result.error);
             setProcessRunning(false);
-            if (result.action === 'upgrade') showNotification(result.error, 'warning');
+            // B.8/B.7 (fase E8): `upgrade` = cupo agotado (el servidor ahora lo
+            // frena en execution/start, no en log-execution); `accept_terms` =
+            // cuenta suspendida por términos sin aceptar. En los dos casos el
+            // motivo REAL tiene que verse en pantalla, no solo en el log: antes
+            // caían al toast genérico porque `action` no se propagaba desde main.
+            if (result.action === 'upgrade' || result.action === 'accept_terms') {
+                showNotification(result.error, 'warning');
+            }
             else showNotification('Error al iniciar el monitoreo', 'error');
         } else if (result.totalNuevos > 0) {
             showNotification(result.totalNuevos + ' novedad(es) detectada(s)', 'success');

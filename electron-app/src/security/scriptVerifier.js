@@ -8,6 +8,22 @@
  * - Verificar firmas RSA-2048 con clave pública embebida
  * - Checksums en 3 etapas del ciclo de vida del script
  * - Clases de error específicas para cada tipo de fallo
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ⚠️ ZONA PROTEGIDA · FAIL-CLOSED desde el 2026-09-02 (decisión B.6 del operador)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Hasta la fase E8 este módulo tenía tres ramas que DEJABAN PASAR cuando no podía
+ * verificar (`verifySignature` sin clave pública, etapa 2 sin ancla de etapa 1,
+ * etapa 3 sin referencia). El plan Q6 las había tapado desde el llamador
+ * (`authManager.isReady()`) por ser zona protegida; el operador decidió el
+ * 2026-09-02 corregirlas también acá — "una pieza que verifica no debería ser más
+ * permisiva que aquello que está protegiendo".
+ *
+ * A partir de acá, si la verificación NO SE PUEDE COMPLETAR, este módulo LANZA.
+ * Todos los llamadores (`authManager.loadScript` y las etapas 2/3 de
+ * `executeRemoteScriptAsLocal`) ya tratan cualquier excepción como rechazo, así
+ * que lanzar equivale a no ejecutar el script. NO reintroducir "degradación
+ * elegante" acá sin una decisión explícita del operador.
  */
 
 const crypto = require('crypto');
@@ -108,8 +124,18 @@ class ScriptVerifier {
      */
     verifySignature(checksum, signature, scriptName = 'unknown') {
         if (!this.initialized || !this.publicKey) {
-            console.warn(`⚠️ [ScriptVerifier] Verificación de firma omitida (no inicializado): ${scriptName}`);
-            return true; // Degradación elegante: no bloquear si no hay clave
+            // B.6 (decisión del operador, 2026-09-02) — FAIL-CLOSED.
+            // Acá había una "degradación elegante" que devolvía `true` para
+            // CUALQUIER firma cuando la clave pública no se había podido cargar:
+            // un verificador que aprueba todo cuando no puede verificar nada.
+            // El plan Q6 (C4/F7) lo tapó desde el llamador (`authManager.isReady()`),
+            // sin tocar esta zona protegida; ahora se cierra también acá, para que
+            // el módulo no sea más permisivo que lo que protege.
+            console.error(`🚨 [ScriptVerifier] Verificador no inicializado — no se puede validar: ${scriptName}`);
+            throw new SignatureVerificationError(
+                scriptName,
+                'El verificador de firmas no está inicializado (clave pública ausente o ilegible).'
+            );
         }
 
         try {
@@ -196,13 +222,15 @@ class ScriptVerifier {
                 const registry = this.checksumRegistry.get(scriptName);
 
                 if (!registry || !registry.stage1) {
-                    console.warn(`⚠️ [ScriptVerifier] No hay registro de etapa 1 para: ${scriptName}. Usando checksum actual.`);
-                    this.checksumRegistry.set(scriptName, {
-                        ...(registry || {}),
-                        stage2: currentChecksum,
-                        stage2At: Date.now()
-                    });
-                    break;
+                    // B.6 (2026-09-02) — FAIL-CLOSED. Antes esta rama adoptaba el
+                    // checksum ACTUAL como si fuera el de referencia: sin ancla de
+                    // etapa 1, la etapa 2 se comparaba contra sí misma y siempre
+                    // pasaba. Sin ese ancla no se puede afirmar que el contenido sea
+                    // el que el servidor firmó, así que se frena.
+                    console.error(`🚨 [ScriptVerifier] Sin registro de etapa 1 para: ${scriptName} — no se puede verificar la etapa 2`);
+                    throw new Error(
+                        `[ScriptVerifier] Falta el checksum de etapa 1 de "${scriptName}": no hay contra qué verificar la etapa 2.`
+                    );
                 }
 
                 if (currentChecksum !== registry.stage1) {
@@ -230,8 +258,13 @@ class ScriptVerifier {
                 const referenceChecksum = registry?.stage2 || registry?.stage1 || expectedChecksum;
 
                 if (!referenceChecksum) {
-                    console.warn(`⚠️ [ScriptVerifier] No hay referencia para etapa 3: ${scriptName}. Solo registrando.`);
-                    break;
+                    // B.6 (2026-09-02) — FAIL-CLOSED. La etapa 3 es la última antes
+                    // de ejecutar; "solo registrando" significaba ejecutar sin haber
+                    // verificado nada.
+                    console.error(`🚨 [ScriptVerifier] Sin referencia de etapas previas para: ${scriptName} — no se puede verificar la etapa 3`);
+                    throw new Error(
+                        `[ScriptVerifier] Falta el checksum de referencia de "${scriptName}": no hay contra qué verificar la etapa 3.`
+                    );
                 }
 
                 if (currentChecksum !== referenceChecksum) {

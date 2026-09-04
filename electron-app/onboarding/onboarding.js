@@ -3,6 +3,21 @@
  * Runs inside the onboarding BrowserWindow (context-isolated, preload: preload-onboarding.js)
  */
 
+// ── Escape ─────────────────────────────────────────────────────────────────
+// H-COV-Z3-01 (fase E8): misma función que `renderer/login.js:19-26`. Este
+// documento tiene dos `innerHTML` con dato dinámico (el email que el usuario tipeó
+// y la ruta del perfil de Chrome). Hoy ninguno viene de un tercero, pero la ventana
+// expone `safeStorageGet('psc_accounts')` por el bridge, así que el costo de un
+// futuro dato externo acá sería el robo de credenciales, no un defacement.
+function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 let currentStep = 1;
 const TOTAL_STEPS = 4;
@@ -285,7 +300,7 @@ function showS2Success(email) {
         <div class="ob-status-icon ok" style="animation:popIn 0.4s cubic-bezier(0.34,1.56,0.64,1)">✅</div>
         <div class="ob-status-text">
             <strong>Sesión iniciada correctamente</strong>
-            <span>${email}</span>
+            <span>${esc(email)}</span>
         </div>
     `;
     document.getElementById('s2Error').before(card);
@@ -367,7 +382,9 @@ async function runStep3() {
     profileExists = profileRes.exists;
 
     if (profileExists) {
-        setS3Profile('ok', '✅', 'Perfil dedicado encontrado', profileRes.path);
+        // H-COV-Z3-01: `setS3Profile` escribe `detail` con innerHTML (los otros
+        // call sites pasan HTML literal a propósito); este es el único con dato dinámico.
+        setS3Profile('ok', '✅', 'Perfil dedicado encontrado', esc(profileRes.path));
         document.getElementById('btnRecreatePerfil').style.display = 'inline-flex';
         setStepDone(3);
     } else {
